@@ -3,7 +3,7 @@
 **Status:** Concept / pre-development planning  
 **Project type:** Experimental cooperative multiplayer fork of Exult  
 **Initial target:** macOS development, Mac/Windows cross-play  
-**Players:** 2 initially, up to 4 eventually
+**Players:** 2 initially, eventually one active player per eligible party actor plus spectators
 
 ## Vision
 
@@ -24,13 +24,50 @@ The emphasis is on preserving the original game: its story, handcrafted world, c
 ## Intended player experience
 
 - The host loads an Ultima VII save and starts a Friend Mode session.
-- A second player joins and takes control of an eligible member of the Avatar's active party.
+- A guest selects an unclaimed eligible member of the Avatar's active party.
 - Both players move independently, initially within a shared camera/view area.
 - Only the Avatar controller initiates story dialogue, quest decisions, and scripted story interactions.
 - Players communicate through **Ultima Online-style overhead text**, rendered above their characters and fading after a few seconds.
 - Companions can eventually interact with objects, manage their own equipment and inventory, and participate in combat.
 - Any guest can request control of the Avatar. The current Avatar controller accepts or declines. On acceptance, the two players swap their assigned actors, **not** the underlying actor identities.
 - Later, companions can explore distant areas with independent cameras.
+
+## Joining, party capacity, and spectators
+
+The planned guest flow is:
+
+1. Select **Connect to Host**.
+2. Enter the host address. The final address/discovery experience is still to
+   be decided.
+3. After compatibility and session validation, receive the host's current list
+   of eligible, unclaimed party companions.
+4. Select a companion and request control. The host grants the claim
+   atomically so two guests cannot take the same actor.
+5. If no companion is available, join as a spectator and wait for one to
+   become available.
+
+The Avatar is never offered as an ordinary join choice. Active guest capacity
+is determined by the eligible companions currently in the party, not by a
+separate fixed multiplayer limit. The traditional target is the Avatar plus up
+to seven companions; Exult currently reserves eight non-Avatar party slots
+internally, so the implementation must use the live eligible roster rather than
+hard-code either number.
+
+Spectators follow the Avatar's view and cannot move actors, interact with the
+world, open inventories, or initiate transactions. They can use player chat.
+When an unclaimed eligible companion becomes available, waiting spectators may
+request control. If a controlled companion leaves the party or otherwise
+becomes ineligible, its player returns to spectator mode. On disconnect, the
+companion returns to normal AI and becomes available again.
+
+Spectator support and spectator chat are lower priority than the normal case of
+joining an available companion, but the connection and assignment state model
+should leave room for them from the start:
+
+`Connecting -> Spectating -> Selecting -> Controlling companion -> Spectating`
+
+The host may eventually expose a session option to reject excess connections
+instead of allowing spectators, with spectators allowed as the default.
 
 ## Avatar control and character switching
 
@@ -119,6 +156,8 @@ The host maintains a mapping of **connection → assigned actor** and accepts in
 Suggested early network messages:
 
 - `JoinRequest`, `JoinAccepted`, `SessionRejected`
+- `PartyRoster`, `ActorClaimRequest`, `ActorClaimAccepted`, `ActorClaimRejected`
+- `SpectatorState`, `ActorAvailable`
 - `ActorAssignment`, `MovementInput`, `ActorState`
 - `ChatMessage`
 - `ControlSwapRequest`, `ControlSwapDecision`, `ControlSwapCommitted`
@@ -154,7 +193,11 @@ Protocol considerations: versioning, explicit serialization (no raw C++ structs)
 ### Phase 2 — Two-player network movement
 
 - [ ] Start a LAN listen-server session from the host.
-- [ ] Connect a second Exult client and assign it an existing companion.
+- [ ] Add host-address entry after **Connect to Host**.
+- [ ] Send the eligible, unclaimed party roster to a connected guest.
+- [ ] Let the guest select a companion and have the host atomically assign it.
+- [ ] Keep an unassigned guest in a non-interactive spectator state when no
+      companion is available.
 - [ ] Synchronize independent movement and actor positions.
 - [ ] Keep a shared Avatar-centered camera initially.
 - [ ] Implement distance-based companion return.
@@ -165,6 +208,7 @@ Protocol considerations: versioning, explicit serialization (no raw C++ structs)
 ### Phase 3 — Overhead chat and Avatar handoff
 
 - [ ] Add UO-style overhead text chat.
+- [ ] Permit connected spectators to use chat while they wait for an actor.
 - [ ] Implement request/accept/decline for Avatar control.
 - [ ] Atomically swap controller assignments without swapping actor identities.
 - [ ] Test host remains authoritative after handing over Avatar control.
