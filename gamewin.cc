@@ -2571,6 +2571,16 @@ void Game_window::double_clicked(
 			}
 		}
 	}
+	// Opening the controlled companion's own paperdoll is a safe, local
+	// interaction.  Handle it explicitly so Actor::activate() cannot fall
+	// through to dialogue/usecode and so friend-mode control stays put.
+	Actor* clicked_actor = obj->as_actor();
+	if (!gump && clicked_actor && clicked_actor == get_controlled_actor() && clicked_actor != main_actor &&
+		clicked_actor->is_in_party()) {
+		effects->remove_text_effects();
+		clicked_actor->show_inventory();
+		return;
+	}
 	effects->remove_text_effects();    // Remove text msgs. from screen.
 #ifdef DEBUG
 	cout << "Object name is " << obj->get_name() << endl;
