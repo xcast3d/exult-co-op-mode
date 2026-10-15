@@ -1065,7 +1065,7 @@ TileRect Text_effect::Figure_text_pos() {
 			if (chat_style) {
 				r.x += (r.w - width) / 2;
 				// Sit just above the head; the shape rect includes headroom.
-				constexpr int chat_drop = 20;
+				constexpr int chat_drop = 16;
 				r.y -= height + 2 + stack_offset - chat_drop;
 				r.w = width;
 				r.h = height;
