@@ -352,29 +352,180 @@ static bool Friend_actor_is_eligible(uint32 npc_num) {
 	return false;
 }
 
-static int Select_friend_actor(const std::vector<uint32>& roster) {
-	MenuList menu;
-	auto     font = fontManager.get_font("MENU_FONT");
-	const int centerx = gwin->get_width() / 2 + 30;
-	int       y = std::max(16, (gwin->get_height() - static_cast<int>(roster.size()) * 55) / 2);
-	int       choices = 0;
-	for (uint32 npc_num : roster) {
-		Actor* actor = gwin->get_npc(npc_num);
-		if (!actor) {
-			continue;
-		}
-		Shape_frame* portrait = ShapeID(actor->get_face_shapenum(), 0, SF_FACES_VGA).get_shape();
-		auto* entry = new MenuGameEntry(font, font, actor->get_name().c_str(), portrait, centerx, y);
-		entry->set_id(static_cast<int>(npc_num));
-		menu.add_entry(entry);
-		y += std::max(55, entry->get_height() + 8);
-		++choices;
+static std::string Friend_actor_description(const Actor* actor) {
+	if (!actor) {
+		return "Available party companion";
 	}
-	if (!choices) {
+	const std::string& name = actor->get_name();
+	if (name == "Iolo") {
+		return "Bard and archer\nLongtime friend of the Avatar";
+	}
+	if (name == "Shamino") {
+		return "Ranger and tracker\nTrusted companion";
+	}
+	if (name == "Dupre") {
+		return "Knight and swordsman\nLoyal friend";
+	}
+	if (name == "Jaana") {
+		return "Healer\nDevoted companion";
+	}
+	if (name == "Julia") {
+		return "Tinker and skilled mechanic";
+	}
+	if (name == "Katrina") {
+		return "Shepherd\nSteadfast ally";
+	}
+	if (name == "Sentri") {
+		return "Trainer\nAccomplished fighter";
+	}
+	if (name == "Spark") {
+		return "Young adventurer from Trinsic";
+	}
+	return "Available party companion";
+}
+
+class Friend_actor_card final : public MenuObject {
+	Actor*                actor;
+	Shape_frame*          portrait;
+	std::shared_ptr<Font> font;
+	std::shared_ptr<Font> hot_font;
+	std::string           description;
+
+public:
+	Friend_actor_card(Actor* npc, Shape_frame* face, std::shared_ptr<Font> normal, std::shared_ptr<Font> hot,
+			int centerx, int top, int width, int height)
+			: actor(npc), portrait(face), font(std::move(normal)), hot_font(std::move(hot)),
+			  description(Friend_actor_description(npc)) {
+		x = centerx;
+		y = y1 = top;
+		x1 = centerx - width / 2;
+		x2 = x1 + width;
+		y2 = y1 + height;
+		selected = false;
+		dirty = true;
+	}
+
+	void paint(Game_window* window) override {
+		if (!dirty) {
+			return;
+		}
+		dirty = false;
+		Image_buffer8* buffer = window->get_win()->get_ib8();
+		const uint8 background = selected ? 138 : 142;
+		buffer->draw_box(x1, y1, x2 - x1, y2 - y1, 1, background, 0);
+		buffer->draw_beveled_box(x1 + 2, y1 + 2, x2 - x1 - 4, y2 - y1 - 4, 2, background,
+				background - 4, background - 2, background + 2, background + 4);
+
+		const int portrait_x = x1 + 10;
+		const int portrait_y = y1 + ((y2 - y1) - portrait->get_height()) / 2;
+		Shape_manager::get_instance()->paint_shape(
+				portrait_x + portrait->get_xleft(), portrait_y + portrait->get_yabove(), portrait);
+		const int text_left = portrait_x + portrait->get_width() + 10;
+		const int text_width = x2 - text_left - 8;
+		auto name_font = selected ? hot_font : font;
+		name_font->center_text(buffer, text_left + text_width / 2, y1 + 13, actor->get_name().c_str());
+		int line_y = y1 + 34;
+		std::size_t line_start = 0;
+		while (line_start <= description.size()) {
+			const std::size_t line_end = description.find('\n', line_start);
+			const std::string line = description.substr(line_start, line_end - line_start);
+			std::vector<std::string> words;
+			std::istringstream line_stream(line);
+			std::string word;
+			int line_width = 0;
+			const int space_width = font->get_text_width(" ");
+			while (line_stream >> word) {
+				if (!words.empty()) {
+					line_width += space_width;
+				}
+				line_width += font->get_text_width(word.c_str());
+				words.push_back(word);
+			}
+			int word_x = text_left + (text_width - line_width) / 2;
+			for (const std::string& current_word : words) {
+				font->paint_text(buffer, current_word.c_str(), word_x, line_y);
+				word_x += font->get_text_width(current_word.c_str()) + space_width;
+			}
+			line_y += font->get_text_height() + 2;
+			if (line_end == std::string::npos) {
+				break;
+			}
+			line_start = line_end + 1;
+		}
+		window->get_win()->show(x1, y1, x2 - x1, y2 - y1);
+	}
+
+	bool handle_event(SDL_Event& event) override {
+		return (event.type == SDL_EVENT_KEY_DOWN && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER))
+			   || event.type == SDL_EVENT_MOUSE_BUTTON_UP;
+	}
+};
+
+static int Select_friend_actor(const std::vector<uint32>& roster) {
+	std::vector<uint32> choices;
+	for (uint32 npc_num : roster) {
+		if (gwin->get_npc(npc_num)) {
+			choices.push_back(npc_num);
+		}
+	}
+	if (choices.empty()) {
 		return -1;
 	}
-	menu.set_selection(0);
-	return menu.handle_events(gwin);
+
+	auto font = fontManager.get_font("MENU_FONT");
+	auto hot_font = fontManager.get_font("HOT_FONT");
+	if (!hot_font) {
+		hot_font = font;
+	}
+	const int centerx = gwin->get_width() / 2;
+	const int title_y = std::max(12, gwin->get_height() / 7);
+	std::size_t selected = 0;
+
+	for (;;) {
+		Actor* actor = gwin->get_npc(choices[selected]);
+		if (!actor) {
+			return -1;
+		}
+		gwin->clear_screen(true);
+		font->center_text(gwin->get_win()->get_ib8(), centerx, title_y, "Select Your Character");
+		const std::string availability = std::to_string(choices.size()) + " travel companion"
+				+ (choices.size() == 1 ? " available" : "s available");
+		font->center_text(gwin->get_win()->get_ib8(), centerx, title_y + 14, availability.c_str());
+
+		MenuList menu;
+		Shape_frame* portrait = ShapeID(actor->get_face_shapenum(), 0, SF_FACES_VGA).get_shape();
+		const int card_width = std::min(280, gwin->get_width() - 52);
+		const int card_height = std::max(88, portrait->get_height() + 16);
+		auto* card = new Friend_actor_card(actor, portrait, font, hot_font, centerx, title_y + 36, card_width, card_height);
+		card->set_id(static_cast<int>(choices[selected]));
+		menu.add_entry(card);
+
+		Shape_frame* left_shape = ShapeID(EXULT_FLX_SCROLL_LEFT_SHP, choices.size() > 1 ? 1 : 0, SF_EXULT_FLX).get_shape();
+		Shape_frame* right_shape = ShapeID(EXULT_FLX_SCROLL_RIGHT_SHP, choices.size() > 1 ? 1 : 0, SF_EXULT_FLX).get_shape();
+		auto* previous = new MenuEntry(left_shape, left_shape, centerx - card_width / 2 - 14, title_y + 67);
+		previous->set_id(-2);
+		menu.add_entry(previous);
+		auto* next = new MenuEntry(right_shape, right_shape, centerx + card_width / 2 + 14, title_y + 67);
+		next->set_id(-3);
+		menu.add_entry(next);
+		menu.set_cancel(-1);
+		menu.set_selection(0);
+		const int choice = menu.handle_events(gwin);
+		if (choice == -2) {
+			if (choices.size() > 1) {
+				selected = selected == 0 ? choices.size() - 1 : selected - 1;
+			}
+			continue;
+		}
+		if (choice == -3) {
+			if (choices.size() > 1) {
+				selected = (selected + 1) % choices.size();
+			}
+			continue;
+		}
+		gwin->set_all_dirty();
+		return choice;
+	}
 }
 
 static string arg_installmod  = {};

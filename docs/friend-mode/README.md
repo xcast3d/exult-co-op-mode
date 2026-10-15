@@ -40,11 +40,12 @@ The temporary local guest profile and copied runtime data live under
 `.friend-mode-local/`, which is ignored by Git.
 
 The next assignment slice now transfers the host's eligible companion roster,
-shows the guest a selector using the companions' existing portraits and names,
+shows the guest a **Select Your Character** carousel using the companions'
+existing framed portraits, names, short descriptions, and Exult arrow artwork,
 and has the host validate the requested assignment. The guest then takes local
 input and camera control of the accepted companion. This has been verified with
-Iolo over two local instances. Moving this selector from the loaded world into
-the pre-game connection flow is a later UI refinement.
+Iolo over two local instances. Moving connection-address entry and this selector
+into one uninterrupted pre-game flow remains a later UI refinement.
 
 The current synchronization prototype has also been verified for Avatar and
 companion position/facing, nearby NPC and creature position/facing, companion
@@ -110,5 +111,7 @@ replicated to guests.
   spawned/despawned creature replication needs a durable network identity.
 - The companion selector still appears after loading rather than in the
   pre-game connection flow.
+- The host does not yet display an in-world notice when a companion player is
+  entering the world.
 - Returning a disconnected guest to the title menu remains unfinished; the
   current prototype displays a disconnect prompt and can close the session.
