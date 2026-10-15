@@ -2351,16 +2351,19 @@ void Game_window::find_nearby_objects(Game_object_map_xy& mobjxy, int x, int y, 
 }
 
 static inline string Get_object_name(const Game_object* obj) {
+	string name;
 	if (obj == Game_window::get_instance()->get_main_actor()) {
 		if (GAME_BG) {
-			return get_misc_name(0x42);
+			name = get_misc_name(0x42);
 		} else if (GAME_SI) {
-			return get_misc_name(0x4e);
+			name = get_misc_name(0x4e);
 		} else {
-			return obj->get_name();
+			name = obj->get_name();
 		}
+	} else {
+		name = obj->get_name();
 	}
-	return obj->get_name();
+	return Friend_mode_display_name(obj, name);
 }
 
 /*

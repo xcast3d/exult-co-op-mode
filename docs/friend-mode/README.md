@@ -66,6 +66,26 @@ choices are mirrored, and only the host can choose a response. The guest
 resumes control of the same companion when the conversation ends. All four
 behaviors have been verified together over two local instances.
 
+## Phase 3 checkpoint: player identity and overhead chat
+
+**Connect to Host** now asks for a player name (up to 20 characters) and a host
+address before loading. The host uses the Avatar's name. Both peers exchange
+names after the handshake, and clicking a player-controlled actor or its party
+portrait shows `Character (Player)`.
+
+While connected, press **Enter** to open the `Say:` line, **Enter** again to
+send, or **Escape** to cancel. Messages are limited to 80 printable ASCII
+characters and are filtered again on receipt. Text appears centred above the
+speaker in the shadowed font, wraps by pixel width (long words are split), and
+stays up longer for longer messages. Up to three recent messages per speaker
+stack upward; older ones are dropped. Players without an actor (spectators)
+appear near the top of the view as `Name: text`.
+
+Chat packets carry the sender's NPC number. The host ignores the guest's claim
+and uses its own assignment; guests trust the host. Chat never runs Usecode.
+The protocol version is now 5. Relaying chat between multiple guests waits on
+multi-peer sessions.
+
 ## Local possession prototype
 
 Launch the modified build with `./exult --bg --nocrc`, load a save with an
@@ -115,3 +135,5 @@ replicated to guests.
   entering the world.
 - Returning a disconnected guest to the title menu remains unfinished; the
   current prototype displays a disconnect prompt and can close the session.
+- Sessions have a single peer, so chat is not yet relayed among several
+  guests.

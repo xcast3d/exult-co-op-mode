@@ -246,8 +246,156 @@ static bool   arg_verify_files = false;    // Verify a game's files.
 static bool   arg_friend_host  = false;
 static string arg_friend_join;
 static int    arg_friend_port = 1987;
+static string friend_player_name = "Player";
 static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
+static bool friend_chat_active = false;
+static std::string friend_chat_text;
+
+// The actor this machine's player speaks through, or null while spectating.
+static Actor* Friend_mode_local_speaker() {
+	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
+		return gwin->has_network_friend_control() ? gwin->get_controlled_actor() : nullptr;
+	}
+	return gwin->get_main_actor();
+}
+
+// Resolve the speaker of incoming chat.  The host trusts only its own
+// assignment for the guest; guests trust the host's NPC number.
+static Actor* Friend_mode_remote_speaker(uint32 claimed) {
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		return gwin->get_remote_friend_actor();
+	}
+	return claimed == Friend_mode_session::chat_spectator ? nullptr : gwin->get_npc(static_cast<int>(claimed));
+}
+
+static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, const std::string& text) {
+	if (text.empty()) {
+		return;
+	}
+	if (speaker) {
+		gwin->get_effects()->add_chat_text(text.c_str(), speaker);
+	} else {
+		const std::string line = (sender.empty() ? std::string("Spectator") : sender) + ": " + text;
+		gwin->get_effects()->add_chat_text(line.c_str(), nullptr);
+	}
+}
+
+static void Friend_mode_paint_chat_input() {
+	if (!friend_chat_active) {
+		return;
+	}
+	auto font = fontManager.get_font("MENU_FONT");
+	if (!font) {
+		return;
+	}
+	Image_buffer8* buffer = gwin->get_win()->get_ib8();
+	const int x = 8;
+	const int h = font->get_text_height() + 8;
+	const int y = gwin->get_height() - h - 8;
+	const int w = std::max(120, gwin->get_width() - 16);
+	buffer->draw_box(x, y, w, h, 1, 0, 15);
+	std::string shown = "Say: " + friend_chat_text + "_";
+	while (shown.size() > 6 && font->get_text_width(shown.c_str()) > w - 10) {
+		shown.erase(5, 1);
+	}
+	font->draw_text(buffer, x + 5, y + 4, shown.c_str());
+	gwin->set_painted();
+}
+
+std::string Friend_mode_display_name(const Game_object* object, const std::string& character_name) {
+	const Actor* actor = object ? object->as_actor() : nullptr;
+	if (!actor || friend_session.mode() == Friend_mode_session::Mode::off) {
+		return character_name;
+	}
+
+	// Guests see the host's Avatar by role, not as "yourself".
+	const bool  guest_sees_avatar = friend_session.mode() == Friend_mode_session::Mode::guest
+								   && actor == gwin->get_main_actor();
+	const std::string shown_name = guest_sees_avatar ? std::string("Avatar") : character_name;
+
+	std::string player_name;
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		if (actor == gwin->get_main_actor()) {
+			player_name = friend_player_name;
+		} else if (actor == gwin->get_remote_friend_actor()) {
+			player_name = friend_session.remote_player_name_value();
+		}
+	} else {
+		if (actor == gwin->get_main_actor()) {
+			player_name = friend_session.remote_player_name_value();
+		} else if (gwin->has_network_friend_control() && actor == gwin->get_controlled_actor()) {
+			player_name = friend_player_name;
+		}
+	}
+
+	return player_name.empty() ? shown_name : shown_name + " (" + player_name + ")";
+}
+
+bool Friend_mode_collect_connection_details() {
+	auto font = fontManager.get_font("MENU_FONT");
+	if (!font) {
+		return true;
+	}
+	std::array<std::string, 2> values{friend_player_name, arg_friend_join.empty() ? "127.0.0.1" : arg_friend_join};
+	int active = 0;
+	SDL_Window* window = gwin->get_win()->get_screen_window();
+	SDL_StartTextInput(window);
+	for (;;) {
+		gwin->clear_screen(true);
+		Image_buffer8* buffer = gwin->get_win()->get_ib8();
+		const int centerx = gwin->get_width() / 2;
+		const int top = std::max(20, gwin->get_height() / 4);
+		font->center_text(buffer, centerx, top, "Connect to Host");
+		const std::array<const char*, 2> labels{"Player name", "Host address"};
+		for (int i = 0; i < 2; ++i) {
+			const int y = top + 28 + i * 36;
+			font->draw_text(buffer, centerx - 120, y, labels[i]);
+			const uint8 background = i == active ? 138 : 142;
+			buffer->draw_box(centerx - 25, y - 4, 145, 20, 1, background, i == active ? 15 : 0);
+			font->draw_text(buffer, centerx - 18, y, values[i].c_str());
+			if (i == active) {
+				const int cursor_x = centerx - 18 + font->get_text_width(values[i].c_str());
+				buffer->fill8(15, 1, font->get_text_height(), cursor_x + 1, y);
+			}
+		}
+		font->center_text(buffer, centerx, top + 104, "Tab changes field");
+		font->center_text(buffer, centerx, top + 118, "Enter connects   Esc cancels");
+		gwin->show(true);
+
+		SDL_Event event;
+		while (SDL_PollEvent(&event)) {
+			if (event.type == SDL_EVENT_TEXT_INPUT) {
+				const std::size_t limit = active == 0 ? 20 : 128;
+				for (const char* ch = event.text.text; *ch && values[active].size() < limit; ++ch) {
+					if (static_cast<unsigned char>(*ch) >= 32 && static_cast<unsigned char>(*ch) < 127) {
+						values[active].push_back(*ch);
+					}
+				}
+			} else if (event.type == SDL_EVENT_KEY_DOWN) {
+				if (event.key.key == SDLK_ESCAPE) {
+					SDL_StopTextInput(window);
+					return false;
+				}
+				if (event.key.key == SDLK_TAB || event.key.key == SDLK_UP || event.key.key == SDLK_DOWN) {
+					active = 1 - active;
+				} else if (event.key.key == SDLK_BACKSPACE && !values[active].empty()) {
+					values[active].pop_back();
+				} else if ((event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)
+						   && !values[0].empty() && !values[1].empty()) {
+					friend_player_name = values[0];
+					arg_friend_join = values[1];
+					SDL_StopTextInput(window);
+					return true;
+				}
+			} else if (event.type == SDL_EVENT_QUIT) {
+				SDL_StopTextInput(window);
+				throw quit_exception();
+			}
+		}
+		Delay();
+	}
+}
 
 static void Friend_mode_ensure_dialogue() {
 	if (friend_session.mode() == Friend_mode_session::Mode::host && friend_session.connected()
@@ -1473,8 +1621,14 @@ static void Init() {
 	gwin->read_gwin();
 	gwin->setup_game(arg_edit_mode);    // This will start the scene.
 	if (arg_friend_host) {
+		friend_player_name = gwin->get_main_actor()->get_name();
+		if (friend_player_name.empty()) {
+			friend_player_name = "Host";
+		}
+		friend_session.set_local_player_name(friend_player_name);
 		friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode());
 	} else if (!arg_friend_join.empty()) {
+		friend_session.set_local_player_name(friend_player_name.empty() ? "Player" : friend_player_name);
 		friend_session.start_guest(arg_friend_join, arg_friend_port, Game::Get_unique_gamecode());
 	}
 										// Get scale factor for mouse.
@@ -1697,6 +1851,13 @@ static void Handle_events() {
 	std::unordered_set<uint32> guest_frozen_creatures;
 	while (!quitting_time) {
 		friend_session.poll();
+		std::string incoming_chat;
+		uint32      incoming_speaker;
+		while (friend_session.take_chat(incoming_speaker, incoming_chat)) {
+			Friend_mode_show_chat(
+					Friend_mode_remote_speaker(incoming_speaker), friend_session.remote_player_name_value(),
+					incoming_chat);
+		}
 		if (arg_friend_host) {
 			if (!friend_session.connected()) {
 				friend_host_dialogue_active = false;
@@ -2110,6 +2271,7 @@ static void Handle_events() {
 		}
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
+		Friend_mode_paint_chat_input();
 
 		if (!gwin->show() &&          // Blit to screen if necessary.
 			Mouse::mouse_update) {    // If not, did mouse change?
@@ -2286,6 +2448,58 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
  */
 
 static void Handle_event(SDL_Event& event) {
+	if (friend_session.connected()) {
+		if (friend_chat_active) {
+			if (event.type == SDL_EVENT_TEXT_INPUT) {
+				for (const char* ch = event.text.text; *ch && friend_chat_text.size() < 80; ++ch) {
+					if (static_cast<unsigned char>(*ch) >= 32 && static_cast<unsigned char>(*ch) < 127) {
+						friend_chat_text.push_back(*ch);
+					}
+				}
+				gwin->set_all_dirty();
+				return;
+			}
+			if (event.type == SDL_EVENT_KEY_DOWN) {
+				if (event.key.key == SDLK_ESCAPE) {
+					friend_chat_active = false;
+					friend_chat_text.clear();
+					SDL_StopTextInput(gwin->get_win()->get_screen_window());
+					gwin->set_all_dirty();
+				} else if (event.key.key == SDLK_BACKSPACE) {
+					if (!friend_chat_text.empty()) {
+						friend_chat_text.pop_back();
+						gwin->set_all_dirty();
+					}
+				} else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
+					if (!friend_chat_text.empty()) {
+						Actor* speaker = Friend_mode_local_speaker();
+						Friend_mode_show_chat(speaker, friend_player_name, friend_chat_text);
+						friend_session.send_chat(
+								speaker ? static_cast<uint32>(speaker->get_npc_num())
+										: Friend_mode_session::chat_spectator,
+								friend_chat_text);
+						friend_session.poll();
+					}
+					friend_chat_active = false;
+					friend_chat_text.clear();
+					SDL_StopTextInput(gwin->get_win()->get_screen_window());
+					gwin->set_all_dirty();
+				}
+				return;
+			}
+			if (event.type == SDL_EVENT_KEY_UP) {
+				return;
+			}
+		} else if (event.type == SDL_EVENT_KEY_DOWN
+				   && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)) {
+			friend_chat_active = true;
+			friend_chat_text.clear();
+			gwin->stop_actor();
+			SDL_StartTextInput(gwin->get_win()->get_screen_window());
+			gwin->set_all_dirty();
+			return;
+		}
+	}
 	// Mouse scale factor
 	const bool dont_move_mode = gwin->main_actor_dont_move();
 	const bool avatar_can_act = gwin->main_actor_can_act();

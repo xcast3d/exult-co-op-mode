@@ -786,6 +786,10 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			break;
 		case 7:    // Connect to Friend Mode host.
 			menu_scene.reset();
+			if (!Friend_mode_collect_connection_details()) {
+				menu = nullptr;
+				break;
+			}
 			created = gwin->init_gamedat(false);
 			if (!created) {
 				show_journey_failed();

@@ -36,6 +36,10 @@ class ShortcutBar_gump;
 class TouchUI;
 class Game_object;
 
+// Friend Mode connection identity is collected before the guest world loads.
+bool Friend_mode_collect_connection_details();
+std::string Friend_mode_display_name(const Game_object* object, const std::string& character_name);
+
 // Allows world-object speech to enter the host's Friend Mode event stream.
 void Friend_mode_note_speech(Game_object* source, const char* text);
 void Friend_mode_note_dialogue_reset();

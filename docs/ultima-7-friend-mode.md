@@ -207,8 +207,8 @@ Protocol considerations: versioning, explicit serialization (no raw C++ structs)
 
 ### Phase 3 — Overhead chat and Avatar handoff
 
-- [ ] Add UO-style overhead text chat.
-- [ ] Permit connected spectators to use chat while they wait for an actor.
+- [x] Add UO-style overhead text chat.
+- [x] Permit connected spectators to use chat while they wait for an actor.
 - [ ] Implement request/accept/decline for Avatar control.
 - [ ] Atomically swap controller assignments without swapping actor identities.
 - [ ] Test host remains authoritative after handing over Avatar control.

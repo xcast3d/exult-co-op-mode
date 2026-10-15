@@ -30,7 +30,9 @@
 #include <list>
 #include <memory>
 #include <string>
+#include <vector>
 
+class Image_buffer8;
 class Xform_palette;
 class PathFinder;
 class Game_object;
@@ -56,6 +58,8 @@ public:
 	~Effects_manager();
 	// Add text item.
 	void add_text(const char* msg, Game_object* item);
+	// Player chat over speaker, or near the top of the view when null.
+	void add_chat_text(const char* msg, Game_object* speaker);
 	void add_text(const char* msg, int x, int y);
 	void center_text(const char* msg);
 	void add_effect(std::unique_ptr<Special_effect> effect);
@@ -230,29 +234,48 @@ public:
 class Text_effect : public Time_sensitive, public Game_singletons {
 	Game_window*     gwin;
 	std::string      msg;     // What to print.
+	std::vector<std::string> chat_lines;
 	Game_object_weak item;    // Item text is on.  May be null.
 	Tile_coord       tpos;    // Position to display it at.
 	TileRect         pos;
 	short            width, height;    // Dimensions of rectangle.
 	int              num_ticks;        // # ticks passed.
+	bool             chat_style;       // Centered player chat with preserved shadow.
+	int              lifetime_ticks = 10;    // Ticks before removal.
+	int              stack_offset   = 0;     // Pixels above speaker for older chat.
 	// Each text snippet is drawn onto its own layer so it can be scaled
 	// by the text-effect UI size while staying anchored over its object.
 	int      text_layer = -1;
 	int      layer_w    = 0;
 	int      layer_h    = 0;
-	void     add_dirty();
 	void     init();
+	void     wrap_chat_lines();
+	void     paint_chat_lines(Image_buffer8* buffer, int x, int y);
 	void     free_layer();    // Destroy this text's layer.
 	TileRect Figure_text_pos();
 
 public:
-	Text_effect(const std::string& m, Game_object* it, Game_window* gwin_);
-	Text_effect(const std::string& m, int t_x, int t_y, Game_window* gwin_);
+	Text_effect(const std::string& m, Game_object* it, Game_window* gwin_, bool chat = false);
+	Text_effect(const std::string& m, int t_x, int t_y, Game_window* gwin_, bool chat = false);
 	// At timeout, remove from screen.
 	void handle_event(unsigned long curtime, uintptr udata) override;
 	// Render (legacy direct paint into the current target).
 	virtual void paint();
 	void         paint_to_layer();
+
+	void add_dirty();
+	bool is_chat() const {
+		return chat_style;
+	}
+	int get_height() const {
+		return height;
+	}
+	void set_stack_offset(int offset) {
+		add_dirty();
+		stack_offset = offset;
+		pos          = Figure_text_pos();
+		add_dirty();
+	}
 
 	// Check for matching item.
 	bool is_text(Game_object* it) {

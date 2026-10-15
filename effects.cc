@@ -39,6 +39,7 @@
 #include "gamemap.h"
 #include "gamewin.h"
 #include "ignore_unused_variable_warning.h"
+#include "palette.h"
 #include "shapeinf.h"
 #include "ucmachine.h"
 #include "weaponinf.h"
@@ -51,6 +52,8 @@
 #		pragma GCC diagnostic ignored "-Wuseless-cast"
 #	endif
 #endif    // __GNUC__
+
+#include <sstream>
 #include <SDL3/SDL.h>
 #ifdef __GNUC__
 #	pragma GCC diagnostic pop
@@ -102,6 +105,43 @@ void Effects_manager::add_text(const char* msg, Game_object* item) {
 	//	txt->paint(this);        // Draw it.
 	//	painted = 1;
 	texts.emplace_front(std::make_unique<Text_effect>(msg, item, gwin));
+}
+
+void Effects_manager::add_chat_text(const char* msg, Game_object* speaker) {
+	if (!msg || !*msg) {
+		return;
+	}
+	std::unique_ptr<Text_effect> bubble;
+	if (speaker) {
+		// Drop any ordinary label on the speaker; chat replaces it.
+		texts.remove_if([speaker](const auto& el) {
+			return el->is_text(speaker) && !el->is_chat();
+		});
+		bubble = std::make_unique<Text_effect>(msg, speaker, gwin, true);
+	} else {
+		// Players without an actor (spectators) chat near the top of the view.
+		bubble = std::make_unique<Text_effect>(
+				msg, gwin->get_scrolltx() + gwin->get_width() / (2 * c_tilesize), gwin->get_scrollty() + 4, gwin, true);
+	}
+	// Older messages from the same speaker stack upward above the newest.
+	constexpr int max_stacked = 3;
+	int           offset      = bubble->get_height();
+	int           count       = 1;
+	for (auto it = texts.begin(); it != texts.end();) {
+		if ((*it)->is_text(speaker) && (*it)->is_chat()) {
+			if (count >= max_stacked) {
+				(*it)->add_dirty();
+				it = texts.erase(it);
+				continue;
+			}
+			(*it)->set_stack_offset(offset);
+			offset += (*it)->get_height();
+			++count;
+		}
+		++it;
+	}
+	texts.emplace_front(std::move(bubble));
+	gwin->set_all_dirty();
 }
 
 /**
@@ -1022,12 +1062,23 @@ TileRect Text_effect::Figure_text_pos() {
 			TileRect r = gwin->get_shape_rect(outer);
 			r.x -= gwin->get_scrolltx_lo();
 			r.y -= gwin->get_scrollty_lo();
+			if (chat_style) {
+				r.x += (r.w - width) / 2;
+				// Sit just above the head; the shape rect includes headroom.
+				constexpr int chat_drop = 20;
+				r.y -= height + 2 + stack_offset - chat_drop;
+				r.w = width;
+				r.h = height;
+			}
 			return r;
 		}
 	} else {
 		int x;
 		int y;
 		gwin->get_shape_location(tpos, x, y);
+		if (chat_style) {
+			return TileRect(x + (c_tilesize - width) / 2, y - height - 2 - stack_offset, width, height);
+		}
 		return TileRect(x, y, c_tilesize, c_tilesize);
 	}
 }
@@ -1049,8 +1100,20 @@ void Text_effect::add_dirty() {
 void Text_effect::init() {
 	set_always(true);    // Always execute in time queue, even
 	//   when paused.
-	width  = 8 + sman->get_text_width(0, msg.c_str());
-	height = 8 + sman->get_text_height(0);
+	if (chat_style) {
+		wrap_chat_lines();
+		width = 8;
+		for (const std::string& chat_line : chat_lines) {
+			width = std::max<int>(width, 8 + sman->get_text_width(0, chat_line.c_str()));
+		}
+		height = 8 + static_cast<int>(chat_lines.size()) * sman->get_text_height(0);
+		// Longer messages stay up longer so they can be read.
+		lifetime_ticks = 25 + 8 * static_cast<int>(chat_lines.size());
+	} else {
+		width  = 8 + sman->get_text_width(0, msg.c_str());
+		height = 8 + sman->get_text_height(0);
+	}
+	pos = Figure_text_pos();
 	add_dirty();    // Force first paint.
 	// Start immediately.
 	gwin->get_tqueue()->add(Game::get_ticks(), this);
@@ -1064,15 +1127,78 @@ void Text_effect::init() {
 }
 
 /**
+ *  Break chat text into lines no wider than chat_wrap_width, splitting
+ *  words that are too long to fit on a line by themselves.
+ */
+
+void Text_effect::wrap_chat_lines() {
+	constexpr int      chat_wrap_width = 140;
+	std::istringstream words(msg);
+	std::string        word;
+	std::string        line;
+	auto               fits = [](const std::string& text) {
+        return sman->get_text_width(0, text.c_str()) <= chat_wrap_width;
+	};
+	while (words >> word) {
+		const std::string candidate = line.empty() ? word : line + ' ' + word;
+		if (fits(candidate)) {
+			line = candidate;
+			continue;
+		}
+		if (!line.empty()) {
+			chat_lines.push_back(line);
+			line.clear();
+		}
+		while (!fits(word)) {
+			std::size_t cut = 1;
+			while (cut < word.size() && fits(word.substr(0, cut + 1))) {
+				++cut;
+			}
+			chat_lines.push_back(word.substr(0, cut));
+			word.erase(0, cut);
+		}
+		line = word;
+	}
+	if (!line.empty()) {
+		chat_lines.push_back(line);
+	}
+}
+
+/**
+ *  Paint chat lines centred within the bubble at (x, y), recolouring the
+ *  yellow glyph body so only the font's dark shadow and outline remain.
+ */
+
+void Text_effect::paint_chat_lines(Image_buffer8* buffer, int x, int y) {
+	unsigned char  translation[256];
+	const Palette* palette = gwin->get_pal();
+	for (int i = 0; i < 256; ++i) {
+		translation[i] = static_cast<unsigned char>(i);
+		if (palette->get_red(i) > 35 && palette->get_green(i) > 35 && palette->get_blue(i) < 30) {
+			translation[i] = sman->get_special_pixel(PROTECT_PIXEL);
+		}
+	}
+	const int line_height = sman->get_text_height(0);
+	for (std::size_t i = 0; i < chat_lines.size(); ++i) {
+		const std::string& line = chat_lines[i];
+		const int          lx   = x + (width - sman->get_text_width(0, line.c_str())) / 2;
+		sman->get_font(0)->paint_text(
+				buffer, line.c_str(), static_cast<int>(line.size()), lx, y + static_cast<int>(i) * line_height,
+				translation);
+	}
+}
+
+/**
  *  Create a text effect for a given object.
  */
 
 Text_effect::Text_effect(
 		const string& m,       // A copy is made.
 		Game_object*  it,      // Item text is on, or null.
-		Game_window*  gwin_    // Back-reference to gwin from Effects_manager
+		Game_window*  gwin_,   // Back-reference to gwin from Effects_manager
+		bool          chat
 		)
-		: gwin(gwin_), msg(m), item(weak_from_obj(it)), pos(Figure_text_pos()), num_ticks(0) {
+		: gwin(gwin_), msg(m), item(weak_from_obj(it)), num_ticks(0), chat_style(chat) {
 	init();
 }
 
@@ -1083,9 +1209,10 @@ Text_effect::Text_effect(
 Text_effect::Text_effect(
 		const string& m,      // A copy is made.
 		int t_x, int t_y,     // Abs. tile coords.
-		Game_window* gwin_    // Back-reference to gwin from Effects_manager
+		Game_window* gwin_,   // Back-reference to gwin from Effects_manager
+		bool         chat
 		)
-		: gwin(gwin_), msg(m), tpos(t_x, t_y, 0), pos(Figure_text_pos()), num_ticks(0) {
+		: gwin(gwin_), msg(m), tpos(t_x, t_y, 0), num_ticks(0), chat_style(chat) {
 	init();
 }
 
@@ -1098,7 +1225,7 @@ void Text_effect::handle_event(
 		uintptr       udata       // Ignored.
 ) {
 	ignore_unused_variable_warning(curtime, udata);
-	if (++num_ticks == 10) {    // About 1-2 seconds.
+	if (++num_ticks >= lifetime_ticks) {    // About 1-2 seconds for ordinary text.
 		// All done.
 		add_dirty();
 		eman->remove_text_effect(this);
@@ -1152,7 +1279,11 @@ void Text_effect::free_layer() {
 void Text_effect::paint() {
 	const char* ptr = msg.c_str();
 	const int   len = strlen(ptr);
-	sman->paint_text(0, ptr, len, pos.x, pos.y);
+	if (chat_style) {
+		paint_chat_lines(gwin->get_win()->get_ib8(), pos.x, pos.y);
+	} else {
+		sman->paint_text(0, ptr, len, pos.x, pos.y);
+	}
 }
 
 /**
@@ -1196,7 +1327,11 @@ void Text_effect::paint_to_layer() {
 	// Paint the text at the layer's local origin.
 	const char* ptr = msg.c_str();
 	const int   len = strlen(ptr);
-	sman->paint_text(0, ptr, len, 0, 0);
+	if (chat_style) {
+		paint_chat_lines(lbuf, 0, 0);
+	} else {
+		sman->paint_text(0, ptr, len, 0, 0);
+	}
 	gwin->pop_render_target(prev);
 	gwin->layer_set_dirty(text_layer);
 

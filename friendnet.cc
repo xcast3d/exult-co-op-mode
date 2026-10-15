@@ -20,7 +20,7 @@
 #endif
 
 namespace {
-constexpr unsigned short protocol_version = 2;
+constexpr unsigned short protocol_version = 5;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -48,6 +48,19 @@ constexpr unsigned char  dialogue_choices_begin_packet = 24;
 constexpr unsigned char  dialogue_choice_begin_packet = 25;
 constexpr unsigned char  dialogue_choices_show_packet = 26;
 constexpr unsigned char  dialogue_clear_choices_packet = 27;
+constexpr unsigned char  identity_begin_packet = 28;
+constexpr unsigned char  identity_chunk_packet = 29;
+constexpr unsigned char  chat_begin_packet = 30;
+constexpr unsigned char  chat_chunk_packet = 31;
+
+// Keep only printable ASCII from peer-supplied text.
+void append_printable(std::string& out, const unsigned char* data, std::size_t count) {
+	for (std::size_t i = 0; i < count; ++i) {
+		if (data[i] >= 32 && data[i] < 127) {
+			out.push_back(static_cast<char>(data[i]));
+		}
+	}
+}
 
 void close_socket(int socket) {
 	if (socket < 0) {
@@ -185,6 +198,17 @@ void Friend_mode_session::queue_packet(unsigned char type) {
 			static_cast<unsigned char>(protocol_version), type, 0, 0, 0, 0, 0};
 	write_u32(packet.data() + 8, local_game_code);
 	outgoing.push_back(packet);
+}
+
+void Friend_mode_session::send_identity() {
+	const std::size_t length = std::min<std::size_t>(local_player_name.size(), 20);
+	queue_packet(identity_begin_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(length));
+	for (std::size_t offset = 0; offset < length; offset += 12) {
+		queue_packet(identity_chunk_packet);
+		const std::size_t count = std::min<std::size_t>(12, length - offset);
+		std::memcpy(outgoing.back().data() + 8, local_player_name.data() + offset, count);
+	}
 }
 
 void Friend_mode_session::send_party_roster(const std::vector<uint32>& actors) {
@@ -337,6 +361,28 @@ bool Friend_mode_session::take_speech(uint32& source, bool& creature, std::strin
 	return true;
 }
 
+void Friend_mode_session::send_chat(uint32 speaker, const std::string& text) {
+	const std::size_t length = std::min<std::size_t>(text.size(), 80);
+	queue_packet(chat_begin_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(length));
+	write_u32(outgoing.back().data() + 12, speaker);
+	for (std::size_t offset = 0; offset < length; offset += 12) {
+		queue_packet(chat_chunk_packet);
+		const std::size_t count = std::min<std::size_t>(12, length - offset);
+		std::memcpy(outgoing.back().data() + 8, text.data() + offset, count);
+	}
+}
+
+bool Friend_mode_session::take_chat(uint32& speaker, std::string& text) {
+	if (chat_events.empty()) {
+		return false;
+	}
+	speaker = chat_events.front().speaker;
+	text    = std::move(chat_events.front().text);
+	chat_events.pop_front();
+	return true;
+}
+
 void Friend_mode_session::send_dialogue_begin() {
 	queue_packet(dialogue_begin_packet);
 }
@@ -422,6 +468,7 @@ void Friend_mode_session::handle_packet() {
 		if (valid_header && version == protocol_version && game == local_game_code) {
 			handshake_complete = true;
 			queue_packet(accepted_packet);
+			send_identity();
 			std::cout << "Friend Mode: guest accepted" << std::endl;
 		} else {
 			queue_packet(rejected_packet);
@@ -430,6 +477,7 @@ void Friend_mode_session::handle_packet() {
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == accepted_packet
 			   && game == local_game_code) {
 		handshake_complete = true;
+		send_identity();
 		std::cout << "Friend Mode: session accepted by host" << std::endl;
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == roster_begin_packet) {
 		roster.clear();
@@ -548,6 +596,49 @@ void Friend_mode_session::handle_packet() {
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
 			   && type == dialogue_clear_choices_packet) {
 		dialogue_events.push_back({Dialogue_event_type::clear_choices});
+	} else if (valid_header && version == protocol_version && type == identity_begin_packet) {
+		pending_identity_length = std::min<uint32>(game, 20);
+		pending_identity.clear();
+		pending_identity.reserve(pending_identity_length);
+		pending_identity_received = 0;
+		identity_pending          = true;
+		if (pending_identity_length == 0) {
+			remote_player_name.clear();
+			identity_pending = false;
+		}
+	} else if (valid_header && version == protocol_version && type == identity_chunk_packet && identity_pending) {
+		const std::size_t remaining = pending_identity_length - pending_identity_received;
+		const std::size_t count     = std::min<std::size_t>(12, remaining);
+		append_printable(pending_identity, receive_buffer.data() + 8, count);
+		pending_identity_received += count;
+		if (pending_identity_received == pending_identity_length) {
+			remote_player_name = std::move(pending_identity);
+			pending_identity.clear();
+			identity_pending = false;
+			std::cout << "Friend Mode: connected player " << remote_player_name << std::endl;
+		}
+	} else if (valid_header && version == protocol_version && type == chat_begin_packet) {
+		pending_chat_length   = std::min<uint32>(game, 80);
+		pending_chat_speaker  = read_u32(receive_buffer.data() + 12);
+		pending_chat_received = 0;
+		pending_chat_text.clear();
+		pending_chat_text.reserve(pending_chat_length);
+		chat_pending = true;
+		if (pending_chat_length == 0) {
+			chat_pending = false;
+		}
+	} else if (valid_header && version == protocol_version && type == chat_chunk_packet && chat_pending) {
+		const std::size_t remaining = pending_chat_length - pending_chat_received;
+		const std::size_t count     = std::min<std::size_t>(12, remaining);
+		append_printable(pending_chat_text, receive_buffer.data() + 8, count);
+		pending_chat_received += count;
+		if (pending_chat_received == pending_chat_length) {
+			if (!pending_chat_text.empty()) {
+				chat_events.push_back({pending_chat_speaker, std::move(pending_chat_text)});
+			}
+			pending_chat_text.clear();
+			chat_pending = false;
+		}
 	} else {
 		std::cerr << "Friend Mode: handshake rejected" << std::endl;
 		close_peer();
@@ -622,10 +713,18 @@ void Friend_mode_session::close_peer() {
 	speech_events.clear();
 	speech_pending = false;
 	pending_speech_text.clear();
+	chat_events.clear();
+	chat_pending = false;
+	pending_chat_text.clear();
+	pending_chat_length = 0;
 	dialogue_events.clear();
 	dialogue_text_pending = false;
 	pending_dialogue_text.clear();
 	pending_dialogue_choices.clear();
+	remote_player_name.clear();
+	pending_identity.clear();
+	pending_identity_length = 0;
+	identity_pending = false;
 }
 
 void Friend_mode_session::stop() {

@@ -620,6 +620,12 @@ public:
 	Actor* get_controlled_actor() const {
 		return controlled_actor;
 	}
+	Actor* get_remote_friend_actor() const {
+		return remote_friend_actor;
+	}
+	bool has_network_friend_control() const {
+		return network_friend_control;
+	}
 	bool release_friend_mode_control();
 	void enforce_friend_mode_control_safety();
 	bool toggle_friend_mode_control();

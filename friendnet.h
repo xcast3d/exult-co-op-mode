@@ -33,6 +33,12 @@ public:
 
 	bool start_host(int port, uint32 game_code);
 	bool start_guest(const std::string& address, int port, uint32 game_code);
+	void set_local_player_name(const std::string& name) {
+		local_player_name = name;
+	}
+	const std::string& remote_player_name_value() const {
+		return remote_player_name;
+	}
 	void poll();
 	void stop();
 	void send_party_roster(const std::vector<uint32>& actors);
@@ -59,6 +65,10 @@ public:
 	bool take_creature_state(uint32& creature, int& tx, int& ty, int& tz, int& frame);
 	void send_speech(uint32 source, bool creature, const std::string& text);
 	bool take_speech(uint32& source, bool& creature, std::string& text);
+	// Speaker is the sender's controlled NPC number, or chat_spectator.
+	static constexpr uint32 chat_spectator = 0xffffffffU;
+	void send_chat(uint32 speaker, const std::string& text);
+	bool take_chat(uint32& speaker, std::string& text);
 	void send_dialogue_begin();
 	void send_dialogue_end();
 	void send_dialogue_face(int shape, int frame, int slot);
@@ -120,6 +130,16 @@ private:
 	uint32                               pending_speech_source = 0;
 	uint32                               pending_speech_length = 0;
 	std::string                          pending_speech_text;
+	struct Chat_event {
+		uint32      speaker;
+		std::string text;
+	};
+	std::deque<Chat_event>               chat_events;
+	bool                                 chat_pending = false;
+	uint32                               pending_chat_speaker = 0;
+	uint32                               pending_chat_length = 0;
+	uint32                               pending_chat_received = 0;
+	std::string                          pending_chat_text;
 	std::deque<Dialogue_event>           dialogue_events;
 	bool                                 dialogue_text_pending = false;
 	Dialogue_event_type                  pending_dialogue_text_type = Dialogue_event_type::message;
@@ -128,9 +148,16 @@ private:
 	std::string                          pending_dialogue_text;
 	std::vector<std::string>             pending_dialogue_choices;
 	bool                              connection_lost = false;
+	std::string                       local_player_name;
+	std::string                       remote_player_name;
+	std::string                       pending_identity;
+	uint32                            pending_identity_length = 0;
+	uint32                            pending_identity_received = 0;
+	bool                              identity_pending = false;
 
 	void close_peer();
 	void queue_packet(unsigned char type);
+	void send_identity();
 	void handle_packet();
 };
 

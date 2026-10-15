@@ -28,6 +28,8 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "actors.h"
 #include "cheat.h"
 #include "combat_opts.h"
+#include "effects.h"
+#include "exult.h"
 #include "exult_flx.h"
 #include "game.h"
 #include "gamewin.h"
@@ -178,6 +180,7 @@ protected:
 public:
 	Portrait_button(Gump* par, int px, int py, Actor* a);
 	~Portrait_button() override;
+	bool activate(MouseButton button) override;
 	void double_clicked(int x, int y) override;
 	void paint() override;
 	void paintBadge(int frame, int position);
@@ -218,6 +221,15 @@ Portrait_button::Portrait_button(Gump* par, int px, int py, Actor* a)
 Portrait_button::~Portrait_button() {
 	delete hp;
 	delete mana;
+}
+
+bool Portrait_button::activate(MouseButton button) {
+	if (button == MouseButton::Left) {
+		const std::string name = Friend_mode_display_name(actor, actor->get_name());
+		gwin->get_effects()->add_text(name.c_str(), actor);
+		return true;
+	}
+	return false;
 }
 
 void Portrait_button::double_clicked(int x, int y) {
