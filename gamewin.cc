@@ -2615,14 +2615,24 @@ void Game_window::double_clicked(
 			}
 		}
 	}
-	// Opening the controlled companion's own paperdoll is a safe, local
-	// interaction.  Handle it explicitly so Actor::activate() cannot fall
-	// through to dialogue/usecode and so friend-mode control stays put.
+	Actor* controlled = get_controlled_actor();
+	if (gump && controlled && controlled != main_actor && !obj->as_actor()) {
+		Container_game_object* container = obj->as_container();
+		if (container && obj->get_outermost() == controlled && container->show_gump()) {
+			effects->remove_text_effects();
+			return;
+		}
+	}
 	Actor* clicked_actor = obj->as_actor();
-	if (!gump && clicked_actor && clicked_actor == get_controlled_actor() && clicked_actor != main_actor &&
-		clicked_actor->is_in_party()) {
-		effects->remove_text_effects();
-		clicked_actor->show_inventory();
+	if (!gump && controlled && controlled != main_actor && clicked_actor && clicked_actor->is_in_party()) {
+		// Companion control can inspect only its own paperdoll.  The Avatar
+		// remains the party administrator and retains normal access to all.
+		if (clicked_actor == controlled) {
+			effects->remove_text_effects();
+			clicked_actor->show_inventory();
+		} else {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		}
 		return;
 	}
 	effects->remove_text_effects();    // Remove text msgs. from screen.

@@ -92,7 +92,7 @@ Dragging_info::Dragging_info(
 			// Save location info.
 			gump->get_shape_location(to_drag, paintx, painty);
 			old_pos = Tile_coord(to_drag->get_tx(), to_drag->get_ty(), 0);
-			if (Main_actor* act = gwin->get_main_actor()) {
+			if (Actor* act = gwin->get_controlled_actor()) {
 				old_lift = act->get_lift();
 			}
 		} else if ((button = gump->on_button(gx, gy)) != nullptr) {
@@ -183,7 +183,7 @@ bool Dragging_info::start(
 		}
 		Game_object* owner = obj->get_outermost();
 		if (owner == obj.get()) {
-			if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(gwin->get_main_actor(), obj.get())) {
+			if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(gwin->get_controlled_actor(), obj.get())) {
 				Mouse::mouse()->flash_shape(Mouse::redx);
 				obj  = nullptr;
 				okay = false;
@@ -212,9 +212,9 @@ bool Dragging_info::start(
 			Container_game_object* owner = gump->get_cont_or_actor(gx, gy);
 			// Get the object
 			Game_object* owner_obj  = gump->get_owner()->get_outermost();
-			Main_actor*  main_actor = gwin->get_main_actor();
+			Actor*       actor      = gwin->get_controlled_actor();
 			// Check the range
-			if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(main_actor, owner_obj)) {
+			if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(actor, owner_obj)) {
 				obj  = nullptr;
 				gump = nullptr;
 				okay = false;
@@ -577,7 +577,7 @@ bool Dragging_info::drop_on_gump(
 	if (owner_obj) {
 		owner_obj = owner_obj->get_outermost();
 	}
-	Main_actor* main_actor = gwin->get_main_actor();
+	Actor* actor = gwin->get_controlled_actor();
 	// always red X and ding when putting into itself
 	if (owner_obj == obj.get()) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
@@ -585,7 +585,7 @@ bool Dragging_info::drop_on_gump(
 		return false;
 	}
 	// Check the range
-	if (owner_obj && !cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(main_actor, owner_obj)) {
+	if (owner_obj && !cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(actor, owner_obj)) {
 		// Object was not grabable
 		Mouse::mouse()->flash_shape(Mouse::outofrange);
 		return false;
@@ -641,7 +641,7 @@ bool Dragging_info::drop_on_map(
 		return false;
 	}
 
-	int       max_lift = cheat.in_hack_mover() ? 255 : gwin->get_main_actor()->get_lift() + 5;
+	int       max_lift = cheat.in_hack_mover() ? 255 : gwin->get_controlled_actor()->get_lift() + 5;
 	const int skip     = gwin->get_render_skip_lift();
 	if (max_lift >= skip) {    // Don't drop where we cannot see.
 		max_lift = skip - 1;
@@ -888,9 +888,10 @@ int Game_window::drop_at_lift(
 	// Needs to be reachable, except when it is just lower, so the object can
 	// fall down.
 	if (!cheat.in_hack_mover()) {
-		bool grabbable = Fast_pathfinder_client::is_grabable(main_actor, Tile_coord(tx, ty, lift));
-		if (!grabbable && main_actor->get_lift() > lift) {
-			grabbable = Fast_pathfinder_client::is_grabable(main_actor, Tile_coord(tx, ty, main_actor->get_lift()));
+		Actor* actor     = get_controlled_actor();
+		bool   grabbable = Fast_pathfinder_client::is_grabable(actor, Tile_coord(tx, ty, lift));
+		if (!grabbable && actor->get_lift() > lift) {
+			grabbable = Fast_pathfinder_client::is_grabable(actor, Tile_coord(tx, ty, actor->get_lift()));
 		}
 		if (!grabbable) {
 			return 0;

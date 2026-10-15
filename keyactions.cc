@@ -339,6 +339,17 @@ void ActionInventory(const int* params) {
 	Game_window* gwin           = Game_window::get_instance();
 	static int   inventory_page = -1;
 	Actor*       actor;
+	Actor*       controlled = gwin->get_controlled_actor();
+
+	// A controlled companion owns only its paperdoll.  Ignore party-page
+	// cycling and explicit member bindings until control returns to Avatar.
+	if (controlled && controlled != gwin->get_main_actor()) {
+		if (controlled->can_act_charmed()) {
+			controlled->show_inventory();
+		}
+		Mouse::mouse()->set_speed_cursor();
+		return;
+	}
 
 	if (params[0] == -1) {
 		Gump_manager* gump_man    = gwin->get_gump_man();

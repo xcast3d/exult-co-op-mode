@@ -10,7 +10,7 @@ request a limited set of safe actions without becoming the story Avatar.
 | --- | --- | --- | --- |
 | View own paperdoll and inventory | Allow | Allow | Never changes story identity. |
 | Equip or move own inventory items | Allow | Allow | Host validates ownership, capacity, and equipment rules. |
-| View another party member's paperdoll | Allow | Allow read-only initially | Revisit item transfers separately. |
+| View another party member's paperdoll | Allow | Deny | The Avatar is the party inventory administrator. |
 | Open ordinary containers | Allow | Allow | Host validates reach, locks, and container state. |
 | Take, move, or drop ordinary items | Allow | Allow | Synchronize object ownership and resolve simultaneous actions. |
 | Buy and sell with a shopkeeper | Allow | Allow | Restrict the conversation to commerce paths and the acting companion's inventory/funds. |

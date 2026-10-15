@@ -49,6 +49,9 @@ tests before the prototype is considered safe.
 
 The first runtime story-safety test passed: activating dialogue while Iolo was
 controlled returned input and camera focus to the Avatar, completed dialogue as
-the Avatar, and restored Iolo's follow behavior afterward. Paperdoll activation
-currently crosses the same conservative boundary; it must be separated as a
-safe UI-only action before multiplayer inventory work.
+the Avatar, and restored Iolo's follow behavior afterward.
+
+Safe UI and inventory paths are now separate from arbitrary Usecode. Iolo can
+open his own paperdoll and bags, inspect ordinary containers, and move loot
+using his own reach. Companion control cannot open another party member's
+inventory; Avatar control retains normal access to all party inventories.
