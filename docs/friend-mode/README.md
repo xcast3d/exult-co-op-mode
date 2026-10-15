@@ -29,6 +29,17 @@ See [macOS setup](macos-setup.md) and [control-point notes](control-points.md).
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md).
 
+## Phase 2 checkpoint
+
+The first loopback networking slice is in place. A host can listen on a local
+TCP port and a guest can use a dedicated **Connect to Host** title-menu entry.
+The peers exchange a versioned handshake and reject incompatible game variants.
+This has been verified with two isolated Exult instances on one Mac.
+
+This checkpoint does not yet synchronize world state, assign the guest to a
+companion, or replicate movement. The temporary local guest profile and copied
+runtime data live under `.friend-mode-local/`, which is ignored by Git.
+
 ## Local possession prototype
 
 Launch the modified build with `./exult --bg --nocrc`, load a save with an

@@ -54,6 +54,7 @@
 #include "fnames.h"
 #include "font.h"
 #include "font_map.h"
+#include "friendnet.h"
 #include "game.h"
 #include "gamemap.h"
 #include "gamemgr/modmgr.h"
@@ -210,6 +211,10 @@ static bool   arg_edit_mode    = false;    // Start up ExultStudio.
 static bool   arg_write_xml    = false;    // Write out game's config. as XML.
 static bool   arg_reset_video  = false;    // Resets the video setings.
 static bool   arg_verify_files = false;    // Verify a game's files.
+static bool   arg_friend_host  = false;
+static string arg_friend_join;
+static int    arg_friend_port = 1987;
+static Friend_mode_session friend_session;
 
 static string arg_installmod  = {};
 static string arg_installdata = {};
@@ -308,6 +313,9 @@ int main(int argc, char* argv[]) {
 	parameters.declare("--write-xml", &arg_write_xml, true);
 	parameters.declare("--reset-video", &arg_reset_video, true);
 	parameters.declare("--verify-files", &arg_verify_files, true);
+	parameters.declare("--friend-host", &arg_friend_host, true);
+	parameters.declare("--friend-join", &arg_friend_join, "");
+	parameters.declare("--friend-port", &arg_friend_port, 1987);
 	parameters.declare("--installdata", &arg_installdata);
 	parameters.declare("--installmod", &arg_installmod);
 #if defined _WIN32
@@ -333,6 +341,7 @@ int main(int argc, char* argv[]) {
 			 << endl
 			 << "             [--nomenu] [--buildmap 0|1|2] [--mapnum <num>]" << endl
 			 << "             [--nocrc] [--edit] [--write-xml] [--reset-video]" << endl
+			 << "             [--friend-host|--friend-join <address>] [--friend-port <port>]" << endl
 			 << "--help\t\tShow this information" << endl
 			 << "--version\tShow version info" << endl
 			 << " -c configfile\tSpecify alternate config file" << endl
@@ -386,7 +395,11 @@ int main(int argc, char* argv[]) {
 				"way)"
 			 << endl;
 #endif
-		cerr << "--write-xml\tWrite 'patch/exultgame.xml'" << endl << "--reset-video\tResets to the default video settings" << endl;
+		cerr << "--write-xml\tWrite 'patch/exultgame.xml'" << endl
+			 << "--reset-video\tResets to the default video settings" << endl
+			 << "--friend-host\tStart an experimental Friend Mode listen server" << endl
+			 << "--friend-join <address>\tConnect to an experimental Friend Mode host" << endl
+			 << "--friend-port <port>\tFriend Mode TCP port (default 1987)" << endl;
 
 		exit(1);
 	}
@@ -428,6 +441,14 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	} else if (arg_mapnum < 0) {
 		arg_mapnum = 0;    // Sane default.
+	}
+	if (arg_friend_host && !arg_friend_join.empty()) {
+		cerr << "Error: --friend-host and --friend-join cannot be used together" << endl;
+		exit(1);
+	}
+	if (arg_friend_port < 1 || arg_friend_port > 65535) {
+		cerr << "Error: --friend-port must be between 1 and 65535" << endl;
+		exit(1);
 	}
 
 	if (arg_modname != "default" && !gameparam) {
@@ -1124,7 +1145,7 @@ static void Init() {
 				midi->set_timbre_lib(MyMidiPlayer::TIMBRE_LIB_MAINMENU);
 			}
 		}
-	} while (!game || !game->show_menu(arg_nomenu));
+	} while (!game || !game->show_menu(arg_nomenu, !arg_friend_join.empty()));
 
 	// Should not be needed anymore:
 	delete gamemanager;
@@ -1139,6 +1160,11 @@ static void Init() {
 	gwin->init_files();
 	gwin->read_gwin();
 	gwin->setup_game(arg_edit_mode);    // This will start the scene.
+	if (arg_friend_host) {
+		friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode());
+	} else if (!arg_friend_join.empty()) {
+		friend_session.start_guest(arg_friend_join, arg_friend_port, Game::Get_unique_gamecode());
+	}
 										// Get scale factor for mouse.
 #ifdef USE_EXULTSTUDIO
 	Server_init();    // Initialize server (for map-editor).
@@ -1346,6 +1372,7 @@ static void Handle_events() {
 	// step so it only ever fires once per stop.
 	bool lerp_stop_anchored = false;
 	while (!quitting_time) {
+		friend_session.poll();
 #ifdef USE_EXULTSTUDIO
 		Server_delay();    // Handle requests.
 #else

@@ -63,6 +63,8 @@ EXULTSOURCES =	\
 	exult_constants.h	\
 	fnames.h	\
 	frameseq.h	\
+	friendnet.cc	\
+	friendnet.h	\
 	game.cc		\
 	game.h		\
 	gameclk.cc	\

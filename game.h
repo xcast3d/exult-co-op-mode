@@ -166,7 +166,7 @@ public:
 	void                write_game_xml();
 	bool                read_game_xml(const char* name1 = nullptr);
 
-	bool show_menu(bool skip = false);
+	bool show_menu(bool skip = false, bool friend_guest = false);
 	void journey_failed_text();
 
 	void set_jive() {

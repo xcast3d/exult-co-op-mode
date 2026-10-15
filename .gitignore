@@ -3,6 +3,7 @@ update.bat
 ed.bat
 add.bat
 exult.cfg
+.friend-mode-local/
 
 *.sav
 exult???.pcx

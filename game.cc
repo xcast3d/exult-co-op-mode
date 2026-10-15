@@ -569,7 +569,7 @@ bool Game::read_game_xml(const char* name1) {
 	return true;
 }
 
-bool Game::show_menu(bool skip) {
+bool Game::show_menu(bool skip, bool friend_guest) {
 	// Brand-new game in development?
 	if (skip || (is_editing() && !U7exists(MAINSHP_FLX))) {
 		const bool first = !U7exists(IDENTITY);
@@ -635,7 +635,13 @@ bool Game::show_menu(bool skip) {
 		if (menu == nullptr) {
 			menu       = new MenuList();
 			int offset = 0;
-			for (size_t i = 0; i < menuchoices.size(); i++) {
+			if (friend_guest) {
+				std::shared_ptr<Font> font = fontManager.get_font("MENU_FONT");
+				auto* entry = new MenuTextEntry(font, font, "Connect to Host", centerx, menuy + offset);
+				entry->set_id(7);
+				menu->add_entry(entry);
+			} else {
+				for (size_t i = 0; i < menuchoices.size(); i++) {
 				// Skip menu options based on mod settings
 				bool skip_option = false;
 
@@ -664,7 +670,8 @@ bool Game::show_menu(bool skip) {
 					offset += f1->get_ybelow() + 3;
 				}
 			}
-			menu->set_selection(2);
+			}
+			menu->set_selection(friend_guest ? 0 : 2);
 		}
 
 		bool created = false;
@@ -776,6 +783,17 @@ bool Game::show_menu(bool skip) {
 			play     = false;
 			exitmenu = true;
 			fadeout  = true;
+			break;
+		case 7:    // Connect to Friend Mode host.
+			menu_scene.reset();
+			created = gwin->init_gamedat(false);
+			if (!created) {
+				show_journey_failed();
+				break;
+			}
+			exitmenu = true;
+			fadeout  = true;
+			play     = true;
 			break;
 		default:
 			break;
