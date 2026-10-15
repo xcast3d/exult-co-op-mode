@@ -819,13 +819,7 @@ public:
 	// Scroll if necessary.
 	bool scroll_if_needed(Tile_coord t);
 
-	bool scroll_if_needed(const Actor* a, const Tile_coord& t) {
-		if (a == camera_actor) {
-			return scroll_if_needed(t);
-		} else {
-			return false;
-		}
-	}
+	bool scroll_if_needed(const Actor* a, const Tile_coord& t);
 
 	// Show abs. location of mouse.
 	void show_game_location(int x, int y);

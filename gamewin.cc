@@ -50,6 +50,7 @@
 #include "chunkter.h"
 #include "combat.h"
 #include "combat_opts.h"
+#include "contain.h"
 #include "dir.h"
 #include "drag.h"
 #include "effects.h"
@@ -1259,6 +1260,33 @@ bool Game_window::scroll_if_needed(Tile_coord t) {
 		scrolled = true;
 	}
 	return scrolled;
+}
+
+/*
+ * Keep roof and dungeon rendering tied to the actor driving the camera.  This
+ * is normally the Avatar, but Friend Mode can temporarily use a companion.
+ */
+bool Game_window::scroll_if_needed(const Actor* a, const Tile_coord& t) {
+	if (a != camera_actor) {
+		return false;
+	}
+
+	const int  cx    = t.tx / c_tiles_per_chunk;
+	const int  cy    = t.ty / c_tiles_per_chunk;
+	const int  tx    = t.tx % c_tiles_per_chunk;
+	const int  ty    = t.ty % c_tiles_per_chunk;
+	Map_chunk* nlist = map->get_chunk(cx, cy);
+	const bool ice   = nlist->is_ice_dungeon(tx, ty);
+	bool       changed = set_above_main_actor(nlist->is_roof(tx, ty, t.tz));
+	changed            = set_in_dungeon(nlist->has_dungeon() ? nlist->is_dungeon(tx, ty) : 0) || changed;
+	if (ice_dungeon != ice) {
+		set_ice_dungeon(ice);
+		changed = true;
+	}
+	if (changed) {
+		set_all_dirty();
+	}
+	return scroll_if_needed(t);
 }
 
 /*
@@ -2534,6 +2562,22 @@ void Game_window::double_clicked(
 		if (!avatar_can_act && obj && obj->as_actor() && obj->as_actor() == main_actor->as_actor()) {
 			ActionFileGump(nullptr);
 			return;
+		}
+		Actor* controlled = get_controlled_actor();
+		if (obj && controlled && controlled != main_actor && !obj->as_actor()) {
+			Container_game_object* container = obj->as_container();
+			if (container) {
+				if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(controlled, obj)) {
+					Mouse::mouse()->flash_shape(Mouse::blocked);
+					return;
+				}
+				// Only the gump-only container path is guest-safe.  Containers
+				// requiring Usecode fall through to the Avatar-owned path below.
+				if (container->show_gump()) {
+					effects->remove_text_effects();
+					return;
+				}
+			}
 		}
 		// Check path, except if an NPC, sign, or if editing.
 		if (obj && !obj->as_actor() && !cheat.in_hack_mover() &&
