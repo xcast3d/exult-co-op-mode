@@ -37,6 +37,17 @@ constexpr unsigned char  npc_state_packet = 13;
 constexpr unsigned char  creature_state_packet = 14;
 constexpr unsigned char  speech_begin_packet = 15;
 constexpr unsigned char  speech_chunk_packet = 16;
+constexpr unsigned char  dialogue_begin_packet = 17;
+constexpr unsigned char  dialogue_end_packet = 18;
+constexpr unsigned char  dialogue_face_packet = 19;
+constexpr unsigned char  dialogue_face_frame_packet = 20;
+constexpr unsigned char  dialogue_remove_face_packet = 21;
+constexpr unsigned char  dialogue_message_begin_packet = 22;
+constexpr unsigned char  dialogue_text_chunk_packet = 23;
+constexpr unsigned char  dialogue_choices_begin_packet = 24;
+constexpr unsigned char  dialogue_choice_begin_packet = 25;
+constexpr unsigned char  dialogue_choices_show_packet = 26;
+constexpr unsigned char  dialogue_clear_choices_packet = 27;
 
 void close_socket(int socket) {
 	if (socket < 0) {
@@ -326,6 +337,73 @@ bool Friend_mode_session::take_speech(uint32& source, bool& creature, std::strin
 	return true;
 }
 
+void Friend_mode_session::send_dialogue_begin() {
+	queue_packet(dialogue_begin_packet);
+}
+
+void Friend_mode_session::send_dialogue_end() {
+	queue_packet(dialogue_end_packet);
+}
+
+void Friend_mode_session::send_dialogue_face(int shape, int frame, int slot) {
+	queue_packet(dialogue_face_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(shape));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(frame));
+	write_u32(outgoing.back().data() + 16, static_cast<uint32>(slot));
+}
+
+void Friend_mode_session::send_dialogue_face_frame(int frame, int slot) {
+	queue_packet(dialogue_face_frame_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(frame));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(slot));
+}
+
+void Friend_mode_session::send_dialogue_remove_face(int shape) {
+	queue_packet(dialogue_remove_face_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(shape));
+}
+
+void Friend_mode_session::send_dialogue_message(const std::string& text) {
+	const std::size_t length = std::min<std::size_t>(text.size(), 4096);
+	queue_packet(dialogue_message_begin_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(length));
+	for (std::size_t offset = 0; offset < length; offset += 12) {
+		queue_packet(dialogue_text_chunk_packet);
+		const std::size_t count = std::min<std::size_t>(12, length - offset);
+		std::memcpy(outgoing.back().data() + 8, text.data() + offset, count);
+	}
+}
+
+void Friend_mode_session::send_dialogue_choices(const std::vector<std::string>& choices) {
+	queue_packet(dialogue_choices_begin_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(choices.size()));
+	for (std::size_t index = 0; index < choices.size(); ++index) {
+		const std::size_t length = std::min<std::size_t>(choices[index].size(), 1024);
+		queue_packet(dialogue_choice_begin_packet);
+		write_u32(outgoing.back().data() + 8, static_cast<uint32>(index));
+		write_u32(outgoing.back().data() + 12, static_cast<uint32>(length));
+		for (std::size_t offset = 0; offset < length; offset += 12) {
+			queue_packet(dialogue_text_chunk_packet);
+			const std::size_t count = std::min<std::size_t>(12, length - offset);
+			std::memcpy(outgoing.back().data() + 8, choices[index].data() + offset, count);
+		}
+	}
+	queue_packet(dialogue_choices_show_packet);
+}
+
+void Friend_mode_session::send_dialogue_clear_choices() {
+	queue_packet(dialogue_clear_choices_packet);
+}
+
+bool Friend_mode_session::take_dialogue_event(Dialogue_event& event) {
+	if (dialogue_events.empty()) {
+		return false;
+	}
+	event = std::move(dialogue_events.front());
+	dialogue_events.pop_front();
+	return true;
+}
+
 bool Friend_mode_session::take_connection_lost() {
 	const bool lost = connection_lost;
 	connection_lost = false;
@@ -405,6 +483,71 @@ void Friend_mode_session::handle_packet() {
 			pending_speech_text.clear();
 			speech_pending = false;
 		}
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == dialogue_begin_packet) {
+		dialogue_events.push_back({Dialogue_event_type::begin});
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == dialogue_end_packet) {
+		dialogue_events.push_back({Dialogue_event_type::end});
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == dialogue_face_packet) {
+		dialogue_events.push_back({Dialogue_event_type::face, static_cast<int>(game),
+				static_cast<int>(read_u32(receive_buffer.data() + 12)),
+				static_cast<int>(read_u32(receive_buffer.data() + 16))});
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == dialogue_face_frame_packet) {
+		dialogue_events.push_back({Dialogue_event_type::face_frame, static_cast<int>(game),
+				static_cast<int>(read_u32(receive_buffer.data() + 12))});
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == dialogue_remove_face_packet) {
+		dialogue_events.push_back({Dialogue_event_type::remove_face, static_cast<int>(game)});
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == dialogue_message_begin_packet) {
+		pending_dialogue_text_type = Dialogue_event_type::message;
+		pending_dialogue_text_index = 0;
+		pending_dialogue_text_length = std::min<uint32>(game, 4096);
+		pending_dialogue_text.clear();
+		pending_dialogue_text.reserve(pending_dialogue_text_length);
+		dialogue_text_pending = true;
+		if (pending_dialogue_text_length == 0) {
+			dialogue_events.push_back({Dialogue_event_type::message, 0, 0, 0, std::string()});
+			dialogue_text_pending = false;
+		}
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == dialogue_choices_begin_packet) {
+		pending_dialogue_choices.assign(std::min<uint32>(game, 64), std::string());
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == dialogue_choice_begin_packet) {
+		pending_dialogue_text_type = Dialogue_event_type::choices;
+		pending_dialogue_text_index = game;
+		pending_dialogue_text_length = std::min<uint32>(read_u32(receive_buffer.data() + 12), 1024);
+		pending_dialogue_text.clear();
+		pending_dialogue_text.reserve(pending_dialogue_text_length);
+		dialogue_text_pending = true;
+		if (pending_dialogue_text_length == 0) {
+			if (pending_dialogue_text_index < pending_dialogue_choices.size()) {
+				pending_dialogue_choices[pending_dialogue_text_index].clear();
+			}
+			dialogue_text_pending = false;
+		}
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == dialogue_text_chunk_packet && dialogue_text_pending) {
+		const std::size_t remaining = pending_dialogue_text_length - pending_dialogue_text.size();
+		pending_dialogue_text.append(
+				reinterpret_cast<const char*>(receive_buffer.data() + 8), std::min<std::size_t>(12, remaining));
+		if (pending_dialogue_text.size() == pending_dialogue_text_length) {
+			if (pending_dialogue_text_type == Dialogue_event_type::message) {
+				dialogue_events.push_back({Dialogue_event_type::message, 0, 0, 0, std::move(pending_dialogue_text)});
+			} else if (pending_dialogue_text_index < pending_dialogue_choices.size()) {
+				pending_dialogue_choices[pending_dialogue_text_index] = std::move(pending_dialogue_text);
+			}
+			pending_dialogue_text.clear();
+			dialogue_text_pending = false;
+		}
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == dialogue_choices_show_packet) {
+		Dialogue_event event{Dialogue_event_type::choices};
+		event.choices = std::move(pending_dialogue_choices);
+		dialogue_events.push_back(std::move(event));
+		pending_dialogue_choices.clear();
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == dialogue_clear_choices_packet) {
+		dialogue_events.push_back({Dialogue_event_type::clear_choices});
 	} else {
 		std::cerr << "Friend Mode: handshake rejected" << std::endl;
 		close_peer();
@@ -424,7 +567,7 @@ void Friend_mode_session::poll() {
 	if (peer_socket < 0) {
 		return;
 	}
-	if (!outgoing.empty()) {
+	while (!outgoing.empty() && peer_socket >= 0) {
 		const int count = static_cast<int>(send(peer_socket, reinterpret_cast<const char*>(outgoing.front().data() + sent),
 				packet_size - sent, 0));
 		if (count > 0) {
@@ -433,22 +576,30 @@ void Friend_mode_session::poll() {
 				outgoing.pop_front();
 				sent = 0;
 			}
-		} else if (count < 0 && !would_block()) {
-			close_peer();
-			return;
+		} else if (count < 0) {
+			if (!would_block()) {
+				close_peer();
+				return;
+			}
+			break;
 		}
 	}
-	const int count = static_cast<int>(recv(peer_socket, reinterpret_cast<char*>(receive_buffer.data() + received),
-			packet_size - received, 0));
-	if (count > 0) {
-		received += static_cast<std::size_t>(count);
-		if (received == packet_size) {
-			handle_packet();
+	while (peer_socket >= 0) {
+		const int count = static_cast<int>(recv(peer_socket, reinterpret_cast<char*>(receive_buffer.data() + received),
+				packet_size - received, 0));
+		if (count > 0) {
+			received += static_cast<std::size_t>(count);
+			if (received == packet_size) {
+				handle_packet();
+			}
+		} else if (count == 0 || (count < 0 && !would_block())) {
+			std::cout << "Friend Mode: peer disconnected" << std::endl;
+			connection_lost = handshake_complete;
+			close_peer();
+			break;
+		} else {
+			break;
 		}
-	} else if (count == 0 || (count < 0 && !would_block())) {
-		std::cout << "Friend Mode: peer disconnected" << std::endl;
-		connection_lost = handshake_complete;
-		close_peer();
 	}
 }
 
@@ -471,6 +622,10 @@ void Friend_mode_session::close_peer() {
 	speech_events.clear();
 	speech_pending = false;
 	pending_speech_text.clear();
+	dialogue_events.clear();
+	dialogue_text_pending = false;
+	pending_dialogue_text.clear();
+	pending_dialogue_choices.clear();
 }
 
 void Friend_mode_session::stop() {

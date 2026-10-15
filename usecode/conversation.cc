@@ -22,6 +22,8 @@
 
 #include "conversation.h"
 
+#include "exult.h"
+
 #include "Face_stats.h"
 #include "Gump_manager.h"
 #include "ShortcutBar_gump.h"
@@ -173,6 +175,7 @@ void Conversation::remove_answer(Usecode_value& val) {
  */
 
 void Conversation::init_faces() {
+	Friend_mode_note_dialogue_reset();
 	for (Npc_face_info*& finfo : face_info) {
 		delete finfo;
 		finfo = nullptr;
@@ -397,6 +400,7 @@ void Conversation::set_face_rect(Npc_face_info* info, Npc_face_info* prev) {
  */
 
 void Conversation::show_face(int shape, int frame, int slot) {
+	Friend_mode_note_dialogue_face(shape, frame, slot);
 	ShapeID face_sid(shape, frame, SF_FACES_VGA);
 
 	// Make sure mode is set right.
@@ -454,6 +458,7 @@ void Conversation::show_face(int shape, int frame, int slot) {
  */
 
 void Conversation::change_face_frame(int frame, int slot) {
+	Friend_mode_note_dialogue_face_frame(frame, slot);
 	// Make sure mode is set right.
 	Palette* pal = gwin->get_pal();    // Watch for weirdness (lightning).
 	if (pal->get_brightness() >= 300) {
@@ -486,6 +491,7 @@ void Conversation::change_face_frame(int frame, int slot) {
  */
 
 void Conversation::remove_face(int shape) {
+	Friend_mode_note_dialogue_remove_face(shape);
 	for (size_t i = 0; i < face_info.size(); i++) {
 		if (face_info[i] && face_info[i]->face_num == shape) {
 			remove_slot_face(i);
@@ -557,6 +563,7 @@ void Conversation::show_npc_message(const char* msg) {
 	string translated(msg);
 	translate_usecode_text(translated);
 	msg = translated.c_str();
+	Friend_mode_note_dialogue_message(msg);
 	// Wait for any sprite effects to finish before showing text.
 	Effects_manager* eman = gwin->get_effects();
 	if (eman->has_active_sprites()) {
@@ -848,14 +855,25 @@ void Conversation::build_avatar_choices() {
  */
 
 void Conversation::show_avatar_choices() {
+	Friend_mode_note_dialogue_choices(answers);
 	choices_active = true;
 	repaint_conversation();
 }
 
 void Conversation::clear_avatar_choices() {
+	Friend_mode_note_dialogue_clear_choices();
 	choices_active = false;
 	avatar_face.w  = 0;
 	repaint_conversation();    // Repaint the faces without the choices.
+}
+
+void Conversation::show_remote_choices(const std::vector<std::string>& choices) {
+	clear_answers();
+	for (const std::string& choice : choices) {
+		add_answer(choice.c_str());
+	}
+	choices_active = true;
+	repaint_conversation();
 }
 
 /*

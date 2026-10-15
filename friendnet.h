@@ -18,6 +18,15 @@
 class Friend_mode_session {
 public:
 	enum class Mode { off, host, guest };
+	enum class Dialogue_event_type { begin, end, face, face_frame, remove_face, message, choices, clear_choices };
+	struct Dialogue_event {
+		Dialogue_event_type type;
+		int a = 0;
+		int b = 0;
+		int c = 0;
+		std::string text;
+		std::vector<std::string> choices;
+	};
 
 	Friend_mode_session() = default;
 	~Friend_mode_session();
@@ -50,6 +59,15 @@ public:
 	bool take_creature_state(uint32& creature, int& tx, int& ty, int& tz, int& frame);
 	void send_speech(uint32 source, bool creature, const std::string& text);
 	bool take_speech(uint32& source, bool& creature, std::string& text);
+	void send_dialogue_begin();
+	void send_dialogue_end();
+	void send_dialogue_face(int shape, int frame, int slot);
+	void send_dialogue_face_frame(int frame, int slot);
+	void send_dialogue_remove_face(int shape);
+	void send_dialogue_message(const std::string& text);
+	void send_dialogue_choices(const std::vector<std::string>& choices);
+	void send_dialogue_clear_choices();
+	bool take_dialogue_event(Dialogue_event& event);
 	bool take_connection_lost();
 
 	Mode mode() const {
@@ -102,6 +120,13 @@ private:
 	uint32                               pending_speech_source = 0;
 	uint32                               pending_speech_length = 0;
 	std::string                          pending_speech_text;
+	std::deque<Dialogue_event>           dialogue_events;
+	bool                                 dialogue_text_pending = false;
+	Dialogue_event_type                  pending_dialogue_text_type = Dialogue_event_type::message;
+	uint32                               pending_dialogue_text_index = 0;
+	uint32                               pending_dialogue_text_length = 0;
+	std::string                          pending_dialogue_text;
+	std::vector<std::string>             pending_dialogue_choices;
 	bool                              connection_lost = false;
 
 	void close_peer();

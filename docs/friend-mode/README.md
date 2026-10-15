@@ -58,6 +58,13 @@ them. Network guests can use their own inventory and ordinary containers, but
 NPC/sign activations that could start Avatar-owned story Usecode are currently
 blocked without revoking companion control.
 
+Host-generated NPC remarks and animal barks are now replicated to the guest.
+Host-started conversations also place the guest in a temporary spectator
+state: movement and interaction are paused, portraits, text, and response
+choices are mirrored, and only the host can choose a response. The guest
+resumes control of the same companion when the conversation ends. All four
+behaviors have been verified together over two local instances.
+
 ## Local possession prototype
 
 Launch the modified build with `./exult --bg --nocrc`, load a save with an
@@ -93,14 +100,12 @@ and only the host may choose responses. Guest control resumes on the same
 companion when dialogue ends.
 
 Inspection labels, including single-click object names, remain local to each
-client and are not replicated. Host NPC remarks and animal barks have a draft
-transport but are a known open issue: they are not yet reliably displayed on
-the guest and must be fixed before dialogue spectator mode is implemented.
+client and are not replicated. Spoken world text—including scheduled NPC
+remarks, animal barks, and scripted item speech—is host-authoritative and is
+replicated to guests.
 
 ## Known prototype gaps
 
-- Host NPC remarks and animal barks do not reliably appear on guests.
-- Host-started dialogue does not yet pause guests or mirror conversation UI.
 - Creature identity currently relies on deterministic loaded-world ordering;
   spawned/despawned creature replication needs a durable network identity.
 - The companion selector still appears after loading rather than in the

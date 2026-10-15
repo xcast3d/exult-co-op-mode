@@ -77,6 +77,7 @@
 #include "sdlrwopsostream.h"
 #include "touchui.h"
 #include "u7drag.h"
+#include "usecode/conversation.h"
 #include "ucmachine.h"
 #include "utils.h"
 #include "verify.h"
@@ -246,6 +247,15 @@ static bool   arg_friend_host  = false;
 static string arg_friend_join;
 static int    arg_friend_port = 1987;
 static Friend_mode_session friend_session;
+static bool friend_host_dialogue_active = false;
+
+static void Friend_mode_ensure_dialogue() {
+	if (friend_session.mode() == Friend_mode_session::Mode::host && friend_session.connected()
+			&& !friend_host_dialogue_active) {
+		friend_host_dialogue_active = true;
+		friend_session.send_dialogue_begin();
+	}
+}
 
 void Friend_mode_note_speech(Game_object* source, const char* text) {
 	if (!source || !text || friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()) {
@@ -268,6 +278,63 @@ void Friend_mode_note_speech(Game_object* source, const char* text) {
 		creature = true;
 	}
 	friend_session.send_speech(source_id, creature, text);
+	// Conversations and scripted speech may wait in nested input loops, so do
+	// not rely on the outer game loop to flush the event.
+	friend_session.poll();
+}
+
+void Friend_mode_note_dialogue_reset() {
+	if (friend_session.mode() == Friend_mode_session::Mode::host && friend_session.connected()
+			&& friend_host_dialogue_active) {
+		friend_session.send_dialogue_end();
+		friend_session.poll();
+		friend_host_dialogue_active = false;
+	}
+}
+
+void Friend_mode_note_dialogue_face(int shape, int frame, int slot) {
+	Friend_mode_ensure_dialogue();
+	if (friend_host_dialogue_active) {
+		friend_session.send_dialogue_face(shape, frame, slot);
+		friend_session.poll();
+	}
+}
+
+void Friend_mode_note_dialogue_face_frame(int frame, int slot) {
+	if (friend_host_dialogue_active) {
+		friend_session.send_dialogue_face_frame(frame, slot);
+		friend_session.poll();
+	}
+}
+
+void Friend_mode_note_dialogue_remove_face(int shape) {
+	if (friend_host_dialogue_active) {
+		friend_session.send_dialogue_remove_face(shape);
+		friend_session.poll();
+	}
+}
+
+void Friend_mode_note_dialogue_message(const char* text) {
+	Friend_mode_ensure_dialogue();
+	if (friend_host_dialogue_active && text) {
+		friend_session.send_dialogue_message(text);
+		friend_session.poll();
+	}
+}
+
+void Friend_mode_note_dialogue_choices(const std::vector<std::string>& choices) {
+	Friend_mode_ensure_dialogue();
+	if (friend_host_dialogue_active) {
+		friend_session.send_dialogue_choices(choices);
+		friend_session.poll();
+	}
+}
+
+void Friend_mode_note_dialogue_clear_choices() {
+	if (friend_host_dialogue_active) {
+		friend_session.send_dialogue_clear_choices();
+		friend_session.poll();
+	}
 }
 
 static bool Friend_actor_is_eligible(uint32 npc_num) {
@@ -1481,6 +1548,7 @@ static void Handle_events() {
 		friend_session.poll();
 		if (arg_friend_host) {
 			if (!friend_session.connected()) {
+				friend_host_dialogue_active = false;
 				friend_roster_sent = false;
 				last_avatar_state = Tile_coord(-1, -1, -1);
 				last_avatar_frame = -1;
@@ -1582,6 +1650,7 @@ static void Handle_events() {
 			}
 		} else if (!arg_friend_join.empty()) {
 			if (friend_session.take_connection_lost()) {
+				gwin->set_network_dialogue_paused(false);
 				gwin->release_friend_mode_control();
 				guest_assigned_actor = -1;
 				if (Yesno_gump::ask("Host disconnected. Close this guest session?")) {
@@ -1675,7 +1744,39 @@ static void Handle_events() {
 					speaker->say(speech_text.c_str());
 				}
 			}
-			if (guest_assigned_actor >= 0) {
+			Friend_mode_session::Dialogue_event dialogue_event;
+			Conversation* conversation = gwin->get_usecode()->get_conversation();
+			while (friend_session.take_dialogue_event(dialogue_event)) {
+				switch (dialogue_event.type) {
+				case Friend_mode_session::Dialogue_event_type::begin:
+					gwin->set_network_dialogue_paused(true);
+					conversation->init_faces();
+					break;
+				case Friend_mode_session::Dialogue_event_type::end:
+					conversation->init_faces();
+					gwin->set_network_dialogue_paused(false);
+					break;
+				case Friend_mode_session::Dialogue_event_type::face:
+					conversation->show_face(dialogue_event.a, dialogue_event.b, dialogue_event.c);
+					break;
+				case Friend_mode_session::Dialogue_event_type::face_frame:
+					conversation->change_face_frame(dialogue_event.a, dialogue_event.b);
+					break;
+				case Friend_mode_session::Dialogue_event_type::remove_face:
+					conversation->remove_face(dialogue_event.a);
+					break;
+				case Friend_mode_session::Dialogue_event_type::message:
+					conversation->show_npc_message(dialogue_event.text.c_str());
+					break;
+				case Friend_mode_session::Dialogue_event_type::choices:
+					conversation->show_remote_choices(dialogue_event.choices);
+					break;
+				case Friend_mode_session::Dialogue_event_type::clear_choices:
+					conversation->clear_avatar_choices();
+					break;
+				}
+			}
+			if (guest_assigned_actor >= 0 && !gwin->is_network_dialogue_paused()) {
 				Actor* actor = gwin->get_npc(guest_assigned_actor);
 				if (actor && actor->get_tile() != last_guest_request) {
 					last_guest_request = actor->get_tile();

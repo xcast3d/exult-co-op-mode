@@ -21,6 +21,9 @@
 
 #include "mouse.h"
 
+#include <string>
+#include <vector>
+
 class Actor;
 class Cheat;
 class Configuration;
@@ -35,6 +38,13 @@ class Game_object;
 
 // Allows world-object speech to enter the host's Friend Mode event stream.
 void Friend_mode_note_speech(Game_object* source, const char* text);
+void Friend_mode_note_dialogue_reset();
+void Friend_mode_note_dialogue_face(int shape, int frame, int slot);
+void Friend_mode_note_dialogue_face_frame(int frame, int slot);
+void Friend_mode_note_dialogue_remove_face(int shape);
+void Friend_mode_note_dialogue_message(const char* text);
+void Friend_mode_note_dialogue_choices(const std::vector<std::string>& choices);
+void Friend_mode_note_dialogue_clear_choices();
 
 /*
  *  Get a click, or, optionally, a keyboard char.

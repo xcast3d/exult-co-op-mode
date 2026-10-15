@@ -133,6 +133,7 @@ class Game_window {
 	Actor*                    controlled_actor; // Actor receiving local player input.
 	int                       controlled_actor_previous_schedule;
 	bool                      network_friend_control;
+	bool                      network_dialogue_paused;
 	Actor*                    remote_friend_actor;
 	int                       remote_friend_actor_previous_schedule;
 	Actor*                    camera_actor;    // What to center view around.
@@ -623,6 +624,10 @@ public:
 	void enforce_friend_mode_control_safety();
 	bool toggle_friend_mode_control();
 	bool take_friend_mode_control(int npc_num, bool network_guest = false);
+	bool is_network_dialogue_paused() const {
+		return network_dialogue_paused;
+	}
+	void set_network_dialogue_paused(bool paused);
 	bool reserve_friend_mode_actor(int npc_num);
 	void release_remote_friend_mode_actor();
 

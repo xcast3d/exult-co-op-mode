@@ -903,6 +903,9 @@ void Usecode_internal::item_say(Usecode_value& objval, Usecode_value& strval) {
 		}
 		std::string translated(str);
 		translate_usecode_text(translated);
+		// Usecode ITEM_SAY is used for remarks such as "Good doggy" and
+		// bypasses Game_object::say(), so replicate it explicitly.
+		Friend_mode_note_speech(obj, translated.c_str());
 		eman->add_text(translated.c_str(), obj);
 	}
 }

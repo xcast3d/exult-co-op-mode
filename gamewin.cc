@@ -313,7 +313,8 @@ Game_window::Game_window(
 		  focus(true), ice_dungeon(false), painted(false), ambient_light(false), infravision_active(false), skip_above_actor(31),
 		  in_dungeon(0), num_npcs1(0), std_delay(c_std_delay), time_stopped(0), special_light(0), theft_warnings(0), theft_cx(255),
 		  theft_cy(255), moving_barge(nullptr), main_actor(nullptr), controlled_actor(nullptr),
-		  controlled_actor_previous_schedule(-1), network_friend_control(false), remote_friend_actor(nullptr),
+		  controlled_actor_previous_schedule(-1), network_friend_control(false), network_dialogue_paused(false),
+		  remote_friend_actor(nullptr),
 		  remote_friend_actor_previous_schedule(-1),
 		  camera_actor(nullptr), npcs(0), bodies(0), scrolltx(0),
 		  scrollty(0), dirty(0, 0, 0, 0), save_names{}, mouse3rd(false), fastmouse(false), double_click_closes_gumps(false),
@@ -1210,6 +1211,13 @@ bool Game_window::take_friend_mode_control(int npc_num, bool network_guest) {
 	return true;
 }
 
+void Game_window::set_network_dialogue_paused(bool paused) {
+	network_dialogue_paused = paused;
+	if (paused && network_friend_control && controlled_actor) {
+		controlled_actor->stop();
+	}
+}
+
 bool Game_window::reserve_friend_mode_actor(int npc_num) {
 	Actor* companion = get_npc(npc_num);
 	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()) {
@@ -1253,6 +1261,7 @@ bool Game_window::release_friend_mode_control() {
 	controlled_actor = main_actor;
 	controlled_actor_previous_schedule = -1;
 	network_friend_control = false;
+	network_dialogue_paused = false;
 	set_camera_actor(main_actor);
 	cout << "Friend Mode: controlling the Avatar" << endl;
 	return true;
@@ -1897,6 +1906,9 @@ void Game_window::start_actor_alt(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
+	if (network_dialogue_paused) {
+		return;
+	}
 	Actor* actor = get_controlled_actor();
 	// Avatar can move, don't sync the barge anymore.
 	if (actor == main_actor) {
@@ -2018,6 +2030,9 @@ void Game_window::start_actor(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
+	if (network_dialogue_paused) {
+		return;
+	}
 	Actor* actor = get_controlled_actor();
 	if (actor->get_flag(Obj_flags::asleep)) {
 		return;    // Zzzzz....
@@ -2081,6 +2096,9 @@ void Game_window::start_actor_along_path(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
+	if (network_dialogue_paused) {
+		return;
+	}
 	Actor* actor = get_controlled_actor();
 	if (actor->get_flag(Obj_flags::asleep) || actor->get_flag(Obj_flags::paralyzed)
 		|| actor->get_schedule_type() == Schedule::sleep || (moving_barge && actor == main_actor)) {    // For now, don't do barges.
@@ -2593,6 +2611,9 @@ ShapeID Game_window::get_flat(
 void Game_window::double_clicked(
 		int x, int y    // Coords in window.
 ) {
+	if (network_dialogue_paused) {
+		return;
+	}
 	// Animation in progress?
 	if (main_actor_dont_move()) {
 		return;

@@ -69,6 +69,7 @@ public:
 	void clear_text_pending();
 	void show_avatar_choices();
 	void clear_avatar_choices();
+	void show_remote_choices(const std::vector<std::string>& choices);
 	int  conversation_choice(int x, int y);
 
 	void set_slot(int i) {
