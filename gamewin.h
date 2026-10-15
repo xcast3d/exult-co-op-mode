@@ -132,6 +132,9 @@ class Game_window {
 	Main_actor*               main_actor;      // Main sprite to move around.
 	Actor*                    controlled_actor; // Actor receiving local player input.
 	int                       controlled_actor_previous_schedule;
+	bool                      network_friend_control;
+	Actor*                    remote_friend_actor;
+	int                       remote_friend_actor_previous_schedule;
 	Actor*                    camera_actor;    // What to center view around.
 	std::vector<Actor_shared> npcs;            // Array of NPC's + the Avatar.
 	std::vector<Dead_body*>   bodies;          // Corresponding Dead_body's.
@@ -619,7 +622,9 @@ public:
 	bool release_friend_mode_control();
 	void enforce_friend_mode_control_safety();
 	bool toggle_friend_mode_control();
-	bool take_friend_mode_control(int npc_num);
+	bool take_friend_mode_control(int npc_num, bool network_guest = false);
+	bool reserve_friend_mode_actor(int npc_num);
+	void release_remote_friend_mode_actor();
 
 	bool is_main_actor_inside() const {
 		return skip_above_actor < 31;

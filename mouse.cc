@@ -448,15 +448,16 @@ void Mouse::set_speed_cursor() {
 	}
 	if (cursor == dontchange) {
 		int           ax;
-		int           ay;    // Get Avatar/barge screen location.
+		int           ay;    // Get controlled actor/barge screen location.
+		Actor*        controlled = gwin->get_controlled_actor();
 		Barge_object* barge = gwin->get_moving_barge();
-		if (barge) {
+		if (barge && controlled == gwin->get_main_actor()) {
 			// Use center of barge.
 			gwin->get_shape_location(barge, ax, ay);
 			ax -= barge->get_xtiles() * (c_tilesize / 2);
 			ay -= barge->get_ytiles() * (c_tilesize / 2);
 		} else {
-			gwin->get_shape_location(gwin->get_main_actor(), ax, ay);
+			gwin->get_shape_location(controlled, ax, ay);
 		}
 
 		const int       dy  = ay - mousey;
@@ -484,7 +485,7 @@ void Mouse::set_speed_cursor() {
 		const bool      nearby_hostile        = gwin->is_hostile_nearby() && !cheat.in_god_mode();
 		bool            has_active_nohalt_scr = false;
 		Usecode_script* scr                   = nullptr;
-		Actor*          act                   = gwin->get_main_actor();
+		Actor*          act                   = controlled;
 		while ((scr = Usecode_script::find_active(act, scr)) != nullptr) {
 			// We should only be here if scripts are nohalt, but just
 			// in case...

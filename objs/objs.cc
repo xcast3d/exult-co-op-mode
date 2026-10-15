@@ -35,6 +35,7 @@
 #include "dir.h"
 #include "effects.h"
 #include "egg.h"
+#include "exult.h"
 #include "find_nearby.h"
 #include "frflags.h"
 #include "frusefun.h"
@@ -923,6 +924,9 @@ void Game_object::say(const char* text) {
 	if (gwin->failed_copy_protection()) {
 		text = get_text_msg(0x6F0 - msg_file_start);    // "Oink!"
 	}
+	// Spoken world text is authoritative host state in Friend Mode. Object
+	// names and other inspection labels bypass say() and remain local UI.
+	Friend_mode_note_speech(this, text);
 	eman->add_text(text, this);
 }
 

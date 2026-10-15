@@ -39,6 +39,7 @@
 #include "U7file.h"
 #include "U7fileman.h"
 #include "VideoOptions_gump.h"
+#include "Yesno_gump.h"
 #include "actors.h"
 #include "args.h"
 #include "barge.h"
@@ -67,8 +68,10 @@
 #include "keys.h"
 #include "menulist.h"
 #include "mouse.h"
+#include "monsters.h"
 #include "palette.h"
 #include "party.h"
+#include "schedule.h"
 #include "shapeid.h"
 #include "sdlrwopsistream.h"
 #include "sdlrwopsostream.h"
@@ -85,8 +88,10 @@
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iomanip>
 #include <sstream>
+#include <unordered_set>
 
 #ifdef __GNUC__
 #	pragma GCC diagnostic push
@@ -197,6 +202,28 @@ static void Handle_event(SDL_Event& event);
 static bool Friend_actor_is_eligible(uint32 npc_num);
 static int  Select_friend_actor(const std::vector<uint32>& roster);
 
+static int Friend_creature_index(const Actor* actor) {
+	int index = 0;
+	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
+			 creature = creature->get_next_in_world(), ++index) {
+		if (creature == actor) {
+			return index;
+		}
+	}
+	return -1;
+}
+
+static Monster_actor* Friend_creature_by_index(uint32 wanted) {
+	uint32 index = 0;
+	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
+			 creature = creature->get_next_in_world(), ++index) {
+		if (index == wanted) {
+			return creature;
+		}
+	}
+	return nullptr;
+}
+
 /*
  *  Statics:
  */
@@ -219,6 +246,29 @@ static bool   arg_friend_host  = false;
 static string arg_friend_join;
 static int    arg_friend_port = 1987;
 static Friend_mode_session friend_session;
+
+void Friend_mode_note_speech(Game_object* source, const char* text) {
+	if (!source || !text || friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()) {
+		return;
+	}
+	Actor* actor = source->as_actor();
+	if (!actor) {
+		return;
+	}
+	uint32 source_id = 0;
+	bool creature = false;
+	if (actor->get_npc_num() >= 0) {
+		source_id = static_cast<uint32>(actor->get_npc_num());
+	} else {
+		const int index = Friend_creature_index(actor);
+		if (index < 0) {
+			return;
+		}
+		source_id = static_cast<uint32>(index);
+		creature = true;
+	}
+	friend_session.send_speech(source_id, creature, text);
+}
 
 static bool Friend_actor_is_eligible(uint32 npc_num) {
 	Actor* actor = gwin->get_npc(npc_num);
@@ -1417,11 +1467,30 @@ static void Handle_events() {
 	bool lerp_stop_anchored = false;
 	bool friend_roster_sent = false;
 	bool friend_selection_shown = false;
+	int  host_assigned_actor = -1;
+	Tile_coord last_host_state(-1, -1, -1);
+	int last_host_frame = -1;
+	Tile_coord last_avatar_state(-1, -1, -1);
+	int last_avatar_frame = -1;
+	uint32 last_npc_snapshot = 0;
+	int  guest_assigned_actor = -1;
+	Tile_coord last_guest_request(-1, -1, -1);
+	std::unordered_set<int> guest_frozen_npcs;
+	std::unordered_set<uint32> guest_frozen_creatures;
 	while (!quitting_time) {
 		friend_session.poll();
 		if (arg_friend_host) {
 			if (!friend_session.connected()) {
 				friend_roster_sent = false;
+				last_avatar_state = Tile_coord(-1, -1, -1);
+				last_avatar_frame = -1;
+				last_npc_snapshot = 0;
+				if (host_assigned_actor >= 0) {
+					gwin->release_remote_friend_mode_actor();
+					host_assigned_actor = -1;
+					last_host_state = Tile_coord(-1, -1, -1);
+					last_host_frame = -1;
+				}
 			} else if (!friend_roster_sent) {
 				std::vector<uint32> roster;
 				Party_manager* party = gwin->get_party_man();
@@ -1437,13 +1506,88 @@ static void Handle_events() {
 			}
 			uint32 requested_actor = 0;
 			if (friend_session.take_actor_request(requested_actor)) {
-				if (Friend_actor_is_eligible(requested_actor)) {
+				if (host_assigned_actor < 0 && Friend_actor_is_eligible(requested_actor)
+					&& gwin->reserve_friend_mode_actor(static_cast<int>(requested_actor))) {
+					host_assigned_actor = static_cast<int>(requested_actor);
 					friend_session.accept_actor(requested_actor);
+					Actor* actor = gwin->get_npc(host_assigned_actor);
+					last_host_state = actor->get_tile();
+					last_host_frame = actor->get_framenum();
+					friend_session.send_actor_state(
+							last_host_state.tx, last_host_state.ty, last_host_state.tz, last_host_frame);
 				} else {
 					friend_session.reject_actor(requested_actor);
 				}
 			}
+			int tx = 0;
+			int ty = 0;
+			int tz = 0;
+			int requested_frame = 0;
+			if (host_assigned_actor >= 0 && friend_session.take_move_request(tx, ty, tz, requested_frame)) {
+				Actor* actor = gwin->get_npc(host_assigned_actor);
+				const Tile_coord requested(tx, ty, tz);
+				if (actor && actor->get_tile().distance(requested) <= 2) {
+					cout << "Friend Mode: host accepted move to " << tx << ',' << ty << ',' << tz << endl;
+					// The guest already collision-tested this adjacent step. Applying it
+					// directly avoids a second pathfinder disagreeing about door state.
+					actor->move(requested.tx, requested.ty, requested.tz);
+					actor->change_frame(requested_frame);
+				} else {
+					cout << "Friend Mode: host rejected out-of-range move to " << tx << ',' << ty << ',' << tz << endl;
+				}
+			}
+			if (host_assigned_actor >= 0) {
+				Actor* actor = gwin->get_npc(host_assigned_actor);
+				if (actor && (actor->get_tile() != last_host_state || actor->get_framenum() != last_host_frame)) {
+					last_host_state = actor->get_tile();
+					last_host_frame = actor->get_framenum();
+					friend_session.send_actor_state(
+							last_host_state.tx, last_host_state.ty, last_host_state.tz, last_host_frame);
+				}
+			}
+			if (friend_session.connected()) {
+				Main_actor* avatar = gwin->get_main_actor();
+				const Tile_coord avatar_state = avatar->get_tile();
+				const int avatar_frame = avatar->get_framenum();
+				if (avatar_state != last_avatar_state || avatar_frame != last_avatar_frame) {
+					last_avatar_state = avatar_state;
+					last_avatar_frame = avatar_frame;
+					friend_session.send_avatar_state(
+							avatar_state.tx, avatar_state.ty, avatar_state.tz, avatar_frame);
+				}
+				const uint32 now = SDL_GetTicks();
+				if (last_npc_snapshot == 0 || now - last_npc_snapshot >= 100) {
+					last_npc_snapshot = now;
+					Actor_vector nearby;
+					gwin->get_nearby_npcs(nearby);
+					for (Actor* npc : nearby) {
+						if (!npc || npc == gwin->get_main_actor() || npc->get_npc_num() == host_assigned_actor) {
+							continue;
+						}
+						const Tile_coord state = npc->get_tile();
+						if (npc->get_npc_num() > 0) {
+							friend_session.send_npc_state(
+									static_cast<uint32>(npc->get_npc_num()), state.tx, state.ty, state.tz,
+									npc->get_framenum());
+						} else {
+							const int creature = Friend_creature_index(npc);
+							if (creature >= 0) {
+								friend_session.send_creature_state(
+										static_cast<uint32>(creature), state.tx, state.ty, state.tz,
+										npc->get_framenum());
+							}
+						}
+					}
+				}
+			}
 		} else if (!arg_friend_join.empty()) {
+			if (friend_session.take_connection_lost()) {
+				gwin->release_friend_mode_control();
+				guest_assigned_actor = -1;
+				if (Yesno_gump::ask("Host disconnected. Close this guest session?")) {
+					quitting_time = QUIT_TIME_YES;
+				}
+			}
 			if (friend_session.roster_ready() && !friend_selection_shown) {
 				friend_selection_shown = true;
 				const int selected = Select_friend_actor(friend_session.party_roster());
@@ -1455,8 +1599,91 @@ static void Handle_events() {
 			}
 			uint32 assigned_actor = 0;
 			if (friend_session.take_actor_assignment(assigned_actor)) {
-				if (!gwin->take_friend_mode_control(static_cast<int>(assigned_actor))) {
+				if (!gwin->take_friend_mode_control(static_cast<int>(assigned_actor), true)) {
 					cerr << "Friend Mode: assigned companion is unavailable in the local world" << endl;
+				} else {
+					guest_assigned_actor = static_cast<int>(assigned_actor);
+					last_guest_request = gwin->get_controlled_actor()->get_tile();
+				}
+			}
+			int tx = 0;
+			int ty = 0;
+			int tz = 0;
+			int frame = 0;
+			if (guest_assigned_actor >= 0 && friend_session.take_actor_state(tx, ty, tz, frame)) {
+				Actor* actor = gwin->get_npc(guest_assigned_actor);
+				const Tile_coord state(tx, ty, tz);
+				if (actor && actor->get_tile() != state) {
+					actor->move(state.tx, state.ty, state.tz);
+					gwin->set_camera_actor(actor);
+				}
+				if (actor && actor->get_framenum() != frame) {
+					actor->change_frame(frame);
+				}
+				last_guest_request = state;
+			}
+			if (friend_session.take_avatar_state(tx, ty, tz, frame)) {
+				Main_actor* avatar = gwin->get_main_actor();
+				const Tile_coord state(tx, ty, tz);
+				if (avatar && avatar->get_tile() != state) {
+					// This is a remote visual update, not local camera movement.
+					// Bypass Main_actor::move so Iolo's roof state remains local.
+					avatar->Actor::move(state.tx, state.ty, state.tz);
+				}
+				if (avatar && avatar->get_framenum() != frame) {
+					avatar->change_frame(frame);
+				}
+			}
+			uint32 npc_num = 0;
+			while (friend_session.take_npc_state(npc_num, tx, ty, tz, frame)) {
+				Actor* npc = gwin->get_npc(static_cast<int>(npc_num));
+				const Tile_coord state(tx, ty, tz);
+				if (npc && guest_frozen_npcs.insert(static_cast<int>(npc_num)).second) {
+					npc->set_schedule_type(Schedule::wait);
+					npc->stop();
+				}
+				if (npc && npc->get_tile() != state) {
+					npc->move(state.tx, state.ty, state.tz);
+				}
+				if (npc && npc->get_framenum() != frame) {
+					npc->change_frame(frame);
+				}
+			}
+			uint32 creature_num = 0;
+			while (friend_session.take_creature_state(creature_num, tx, ty, tz, frame)) {
+				Monster_actor* creature = Friend_creature_by_index(creature_num);
+				const Tile_coord state(tx, ty, tz);
+				if (creature && guest_frozen_creatures.insert(creature_num).second) {
+					creature->set_schedule_type(Schedule::wait);
+					creature->stop();
+				}
+				if (creature && creature->get_tile() != state) {
+					creature->move(state.tx, state.ty, state.tz);
+				}
+				if (creature && creature->get_framenum() != frame) {
+					creature->change_frame(frame);
+				}
+			}
+			uint32 speech_source = 0;
+			std::string speech_text;
+			bool speech_creature = false;
+			while (friend_session.take_speech(speech_source, speech_creature, speech_text)) {
+				Actor* speaker = speech_creature
+						? static_cast<Actor*>(Friend_creature_by_index(speech_source))
+						: gwin->get_npc(static_cast<int>(speech_source));
+				if (speaker) {
+					speaker->say(speech_text.c_str());
+				}
+			}
+			if (guest_assigned_actor >= 0) {
+				Actor* actor = gwin->get_npc(guest_assigned_actor);
+				if (actor && actor->get_tile() != last_guest_request) {
+					last_guest_request = actor->get_tile();
+					cout << "Friend Mode: guest requested move to " << last_guest_request.tx << ','
+						 << last_guest_request.ty << ',' << last_guest_request.tz << endl;
+					friend_session.send_move_request(
+							last_guest_request.tx, last_guest_request.ty, last_guest_request.tz,
+							actor->get_framenum());
 				}
 			}
 		}
@@ -2209,10 +2436,17 @@ static void Handle_event(SDL_Event& event) {
 		break;
 	}
 	case SDL_EVENT_WINDOW_FOCUS_GAINED:
-		gwin->get_focus();
+		if (friend_session.mode() == Friend_mode_session::Mode::off) {
+			gwin->get_focus();
+		}
 		break;
 	case SDL_EVENT_WINDOW_FOCUS_LOST:
-		gwin->lose_focus();
+		// A listen server and local guest must continue simulating while the
+		// other window has focus. This is also required for ordinary remote
+		// play when the host briefly switches to another application.
+		if (friend_session.mode() == Friend_mode_session::Mode::off) {
+			gwin->lose_focus();
+		}
 		break;
 	case SDL_EVENT_QUIT:
 		gwin->get_gump_man()->okay_to_quit();

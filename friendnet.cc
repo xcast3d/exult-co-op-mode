@@ -4,6 +4,7 @@
 
 #include "friendnet.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <iostream>
@@ -19,7 +20,7 @@
 #endif
 
 namespace {
-constexpr unsigned short protocol_version = 1;
+constexpr unsigned short protocol_version = 2;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -29,6 +30,13 @@ constexpr unsigned char  roster_end_packet = 6;
 constexpr unsigned char  actor_request_packet = 7;
 constexpr unsigned char  actor_accepted_packet = 8;
 constexpr unsigned char  actor_rejected_packet = 9;
+constexpr unsigned char  move_request_packet = 10;
+constexpr unsigned char  actor_state_packet = 11;
+constexpr unsigned char  avatar_state_packet = 12;
+constexpr unsigned char  npc_state_packet = 13;
+constexpr unsigned char  creature_state_packet = 14;
+constexpr unsigned char  speech_begin_packet = 15;
+constexpr unsigned char  speech_chunk_packet = 16;
 
 void close_socket(int socket) {
 	if (socket < 0) {
@@ -71,6 +79,17 @@ uint32 read_u32(const unsigned char* in) {
 	return (static_cast<uint32>(in[0]) << 24) | (static_cast<uint32>(in[1]) << 16)
 		   | (static_cast<uint32>(in[2]) << 8) | static_cast<uint32>(in[3]);
 }
+
+uint32 pack_position(int tx, int ty, int tz) {
+	return (static_cast<uint32>(tx) & 0xfffU) | ((static_cast<uint32>(ty) & 0xfffU) << 12)
+		   | ((static_cast<uint32>(tz) & 0x1fU) << 24);
+}
+
+void unpack_position(uint32 packed, int& tx, int& ty, int& tz) {
+	tx = packed & 0xfffU;
+	ty = (packed >> 12) & 0xfffU;
+	tz = (packed >> 24) & 0x1fU;
+}
 }    // namespace
 
 Friend_mode_session::~Friend_mode_session() {
@@ -79,6 +98,7 @@ Friend_mode_session::~Friend_mode_session() {
 
 bool Friend_mode_session::start_host(int port, uint32 game_code) {
 	stop();
+	connection_lost = false;
 	local_game_code = game_code;
 
 	addrinfo hints{};
@@ -117,6 +137,7 @@ bool Friend_mode_session::start_host(int port, uint32 game_code) {
 
 bool Friend_mode_session::start_guest(const std::string& address, int port, uint32 game_code) {
 	stop();
+	connection_lost = false;
 	local_game_code = game_code;
 
 	addrinfo hints{};
@@ -197,6 +218,120 @@ bool Friend_mode_session::take_actor_assignment(uint32& actor) {
 	return true;
 }
 
+void Friend_mode_session::send_move_request(int tx, int ty, int tz, int frame) {
+	queue_packet(move_request_packet);
+	write_u32(outgoing.back().data() + 8, pack_position(tx, ty, tz));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(frame));
+}
+
+bool Friend_mode_session::take_move_request(int& tx, int& ty, int& tz, int& frame) {
+	if (!move_request_pending) {
+		return false;
+	}
+	move_request_pending = false;
+	unpack_position(requested_position, tx, ty, tz);
+	frame = static_cast<int>(requested_frame);
+	return true;
+}
+
+void Friend_mode_session::send_actor_state(int tx, int ty, int tz, int frame) {
+	queue_packet(actor_state_packet);
+	write_u32(outgoing.back().data() + 8, pack_position(tx, ty, tz));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(frame));
+}
+
+bool Friend_mode_session::take_actor_state(int& tx, int& ty, int& tz, int& frame) {
+	if (!actor_state_pending) {
+		return false;
+	}
+	actor_state_pending = false;
+	unpack_position(authoritative_position, tx, ty, tz);
+	frame = static_cast<int>(authoritative_frame);
+	return true;
+}
+
+void Friend_mode_session::send_avatar_state(int tx, int ty, int tz, int frame) {
+	queue_packet(avatar_state_packet);
+	write_u32(outgoing.back().data() + 8, pack_position(tx, ty, tz));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(frame));
+}
+
+bool Friend_mode_session::take_avatar_state(int& tx, int& ty, int& tz, int& frame) {
+	if (!avatar_state_pending) {
+		return false;
+	}
+	avatar_state_pending = false;
+	unpack_position(authoritative_avatar_position, tx, ty, tz);
+	frame = static_cast<int>(authoritative_avatar_frame);
+	return true;
+}
+
+void Friend_mode_session::send_npc_state(uint32 npc, int tx, int ty, int tz, int frame) {
+	queue_packet(npc_state_packet);
+	write_u32(outgoing.back().data() + 8, npc);
+	write_u32(outgoing.back().data() + 12, pack_position(tx, ty, tz));
+	write_u32(outgoing.back().data() + 16, static_cast<uint32>(frame));
+}
+
+bool Friend_mode_session::take_npc_state(uint32& npc, int& tx, int& ty, int& tz, int& frame) {
+	if (npc_states.empty()) {
+		return false;
+	}
+	npc = npc_states.front().npc;
+	unpack_position(npc_states.front().position, tx, ty, tz);
+	frame = static_cast<int>(npc_states.front().frame);
+	npc_states.pop_front();
+	return true;
+}
+
+void Friend_mode_session::send_creature_state(uint32 creature, int tx, int ty, int tz, int frame) {
+	queue_packet(creature_state_packet);
+	write_u32(outgoing.back().data() + 8, creature);
+	write_u32(outgoing.back().data() + 12, pack_position(tx, ty, tz));
+	write_u32(outgoing.back().data() + 16, static_cast<uint32>(frame));
+}
+
+bool Friend_mode_session::take_creature_state(uint32& creature, int& tx, int& ty, int& tz, int& frame) {
+	if (creature_states.empty()) {
+		return false;
+	}
+	creature = creature_states.front().npc;
+	unpack_position(creature_states.front().position, tx, ty, tz);
+	frame = static_cast<int>(creature_states.front().frame);
+	creature_states.pop_front();
+	return true;
+}
+
+void Friend_mode_session::send_speech(uint32 source, bool creature, const std::string& text) {
+	const std::size_t length = std::min<std::size_t>(text.size(), 1024);
+	queue_packet(speech_begin_packet);
+	write_u32(outgoing.back().data() + 8, source | (creature ? 0x80000000U : 0U));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(length));
+	for (std::size_t offset = 0; offset < length; offset += 12) {
+		queue_packet(speech_chunk_packet);
+		const std::size_t count = std::min<std::size_t>(12, length - offset);
+		std::memcpy(outgoing.back().data() + 8, text.data() + offset, count);
+	}
+}
+
+bool Friend_mode_session::take_speech(uint32& source, bool& creature, std::string& text) {
+	if (speech_events.empty()) {
+		return false;
+	}
+	const uint32 encoded = speech_events.front().source;
+	source = encoded & 0x7fffffffU;
+	creature = (encoded & 0x80000000U) != 0;
+	text = std::move(speech_events.front().text);
+	speech_events.pop_front();
+	return true;
+}
+
+bool Friend_mode_session::take_connection_lost() {
+	const bool lost = connection_lost;
+	connection_lost = false;
+	return lost;
+}
+
 void Friend_mode_session::handle_packet() {
 	const bool valid_header = receive_buffer[0] == 'U' && receive_buffer[1] == '7' && receive_buffer[2] == 'F'
 						  && receive_buffer[3] == 'M';
@@ -234,6 +369,42 @@ void Friend_mode_session::handle_packet() {
 		std::cout << "Friend Mode: companion assignment accepted" << std::endl;
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == actor_rejected_packet) {
 		std::cerr << "Friend Mode: selected companion is no longer available" << std::endl;
+	} else if (session_mode == Mode::host && valid_header && version == protocol_version && type == move_request_packet) {
+		requested_position = game;
+		requested_frame = read_u32(receive_buffer.data() + 12);
+		move_request_pending = true;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == actor_state_packet) {
+		authoritative_position = game;
+		authoritative_frame = read_u32(receive_buffer.data() + 12);
+		actor_state_pending = true;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == avatar_state_packet) {
+		authoritative_avatar_position = game;
+		authoritative_avatar_frame = read_u32(receive_buffer.data() + 12);
+		avatar_state_pending = true;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == npc_state_packet) {
+		npc_states.push_back({game, read_u32(receive_buffer.data() + 12), read_u32(receive_buffer.data() + 16)});
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == creature_state_packet) {
+		creature_states.push_back({game, read_u32(receive_buffer.data() + 12), read_u32(receive_buffer.data() + 16)});
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == speech_begin_packet) {
+		pending_speech_source = game;
+		pending_speech_length = std::min<uint32>(read_u32(receive_buffer.data() + 12), 1024);
+		pending_speech_text.clear();
+		pending_speech_text.reserve(pending_speech_length);
+		speech_pending = true;
+		if (pending_speech_length == 0) {
+			speech_events.push_back({pending_speech_source, std::string()});
+			speech_pending = false;
+		}
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == speech_chunk_packet
+			   && speech_pending) {
+		const std::size_t remaining = pending_speech_length - pending_speech_text.size();
+		pending_speech_text.append(
+				reinterpret_cast<const char*>(receive_buffer.data() + 8), std::min<std::size_t>(12, remaining));
+		if (pending_speech_text.size() == pending_speech_length) {
+			speech_events.push_back({pending_speech_source, std::move(pending_speech_text)});
+			pending_speech_text.clear();
+			speech_pending = false;
+		}
 	} else {
 		std::cerr << "Friend Mode: handshake rejected" << std::endl;
 		close_peer();
@@ -276,6 +447,7 @@ void Friend_mode_session::poll() {
 		}
 	} else if (count == 0 || (count < 0 && !would_block())) {
 		std::cout << "Friend Mode: peer disconnected" << std::endl;
+		connection_lost = handshake_complete;
 		close_peer();
 	}
 }
@@ -291,6 +463,14 @@ void Friend_mode_session::close_peer() {
 	received_roster = false;
 	actor_request_pending = false;
 	actor_assignment_pending = false;
+	move_request_pending = false;
+	actor_state_pending = false;
+	avatar_state_pending = false;
+	npc_states.clear();
+	creature_states.clear();
+	speech_events.clear();
+	speech_pending = false;
+	pending_speech_text.clear();
 }
 
 void Friend_mode_session::stop() {

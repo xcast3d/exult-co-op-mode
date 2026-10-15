@@ -38,6 +38,19 @@ public:
 		return roster;
 	}
 	bool take_actor_assignment(uint32& actor);
+	void send_move_request(int tx, int ty, int tz, int frame);
+	bool take_move_request(int& tx, int& ty, int& tz, int& frame);
+	void send_actor_state(int tx, int ty, int tz, int frame);
+	bool take_actor_state(int& tx, int& ty, int& tz, int& frame);
+	void send_avatar_state(int tx, int ty, int tz, int frame);
+	bool take_avatar_state(int& tx, int& ty, int& tz, int& frame);
+	void send_npc_state(uint32 npc, int tx, int ty, int tz, int frame);
+	bool take_npc_state(uint32& npc, int& tx, int& ty, int& tz, int& frame);
+	void send_creature_state(uint32 creature, int tx, int ty, int tz, int frame);
+	bool take_creature_state(uint32& creature, int& tx, int& ty, int& tz, int& frame);
+	void send_speech(uint32 source, bool creature, const std::string& text);
+	bool take_speech(uint32& source, bool& creature, std::string& text);
+	bool take_connection_lost();
 
 	Mode mode() const {
 		return session_mode;
@@ -47,7 +60,7 @@ public:
 	}
 
 private:
-	static constexpr std::size_t packet_size = 12;
+	static constexpr std::size_t packet_size = 20;
 
 	Mode                              session_mode = Mode::off;
 	int                               listen_socket = -1;
@@ -64,6 +77,32 @@ private:
 	uint32                            requested_actor = 0;
 	bool                              actor_assignment_pending = false;
 	uint32                            assigned_actor = 0;
+	bool                              move_request_pending = false;
+	uint32                            requested_position = 0;
+	uint32                            requested_frame = 0;
+	bool                              actor_state_pending = false;
+	uint32                            authoritative_position = 0;
+	uint32                            authoritative_frame = 0;
+	bool                              avatar_state_pending = false;
+	uint32                            authoritative_avatar_position = 0;
+	uint32                            authoritative_avatar_frame = 0;
+	struct Npc_state {
+		uint32 npc;
+		uint32 position;
+		uint32 frame;
+	};
+	std::deque<Npc_state>             npc_states;
+	std::deque<Npc_state>             creature_states;
+	struct Speech_event {
+		uint32 source;
+		std::string text;
+	};
+	std::deque<Speech_event>             speech_events;
+	bool                                 speech_pending = false;
+	uint32                               pending_speech_source = 0;
+	uint32                               pending_speech_length = 0;
+	std::string                          pending_speech_text;
+	bool                              connection_lost = false;
 
 	void close_peer();
 	void queue_packet(unsigned char type);

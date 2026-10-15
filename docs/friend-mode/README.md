@@ -36,7 +36,6 @@ TCP port and a guest can use a dedicated **Connect to Host** title-menu entry.
 The peers exchange a versioned handshake and reject incompatible game variants.
 This has been verified with two isolated Exult instances on one Mac.
 
-This checkpoint does not yet synchronize world state or replicate movement.
 The temporary local guest profile and copied runtime data live under
 `.friend-mode-local/`, which is ignored by Git.
 
@@ -45,8 +44,19 @@ shows the guest a selector using the companions' existing portraits and names,
 and has the host validate the requested assignment. The guest then takes local
 input and camera control of the accepted companion. This has been verified with
 Iolo over two local instances. Moving this selector from the loaded world into
-the pre-game connection flow is a later UI refinement; movement and world state
-are still not synchronized at this checkpoint.
+the pre-game connection flow is a later UI refinement.
+
+The current synchronization prototype has also been verified for Avatar and
+companion position/facing, nearby NPC and creature position/facing, companion
+movement across building thresholds, client-specific roofs, and disconnect
+notification. The guest camera and movement cursor remain anchored to the
+assigned companion. Guest-side NPC simulation is suspended so it does not fight
+host snapshots.
+
+Inspection labels from single clicks remain local to the client that generated
+them. Network guests can use their own inventory and ordinary containers, but
+NPC/sign activations that could start Avatar-owned story Usecode are currently
+blocked without revoking companion control.
 
 ## Local possession prototype
 
@@ -73,3 +83,27 @@ normal inventory cycling.
 The `--nocrc` flag is required because the development key binding changes the
 generated Exult resource archive. It does not disable validation of the
 original Ultima VII game data.
+
+## Dialogue authority
+
+Network dialogue is host-authoritative. When the Avatar begins a conversation,
+connected guests temporarily enter a spectator state: movement and world
+interaction pause, the host's conversation text and portraits are mirrored,
+and only the host may choose responses. Guest control resumes on the same
+companion when dialogue ends.
+
+Inspection labels, including single-click object names, remain local to each
+client and are not replicated. Host NPC remarks and animal barks have a draft
+transport but are a known open issue: they are not yet reliably displayed on
+the guest and must be fixed before dialogue spectator mode is implemented.
+
+## Known prototype gaps
+
+- Host NPC remarks and animal barks do not reliably appear on guests.
+- Host-started dialogue does not yet pause guests or mirror conversation UI.
+- Creature identity currently relies on deterministic loaded-world ordering;
+  spawned/despawned creature replication needs a durable network identity.
+- The companion selector still appears after loading rather than in the
+  pre-game connection flow.
+- Returning a disconnected guest to the title menu remains unfinished; the
+  current prototype displays a disconnect prompt and can close the session.

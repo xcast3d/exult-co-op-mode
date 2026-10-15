@@ -313,7 +313,9 @@ Game_window::Game_window(
 		  focus(true), ice_dungeon(false), painted(false), ambient_light(false), infravision_active(false), skip_above_actor(31),
 		  in_dungeon(0), num_npcs1(0), std_delay(c_std_delay), time_stopped(0), special_light(0), theft_warnings(0), theft_cx(255),
 		  theft_cy(255), moving_barge(nullptr), main_actor(nullptr), controlled_actor(nullptr),
-		  controlled_actor_previous_schedule(-1), camera_actor(nullptr), npcs(0), bodies(0), scrolltx(0),
+		  controlled_actor_previous_schedule(-1), network_friend_control(false), remote_friend_actor(nullptr),
+		  remote_friend_actor_previous_schedule(-1),
+		  camera_actor(nullptr), npcs(0), bodies(0), scrolltx(0),
 		  scrollty(0), dirty(0, 0, 0, 0), save_names{}, mouse3rd(false), fastmouse(false), double_click_closes_gumps(false),
 		  text_bg(false), step_tile_delta(8), allow_right_pathfind(2), scroll_with_mouse(false), alternate_drop(false),
 		  allow_autonotes(false), allow_enhancements(false), in_exult_menu(false), extended_intro(false), load_palette_timer(0),
@@ -971,6 +973,8 @@ void Game_window::clear_world(bool restoremapedit) {
 	main_actor   = nullptr;
 	controlled_actor = nullptr;
 	controlled_actor_previous_schedule = -1;
+	remote_friend_actor = nullptr;
+	remote_friend_actor_previous_schedule = -1;
 	camera_actor = nullptr;
 	num_npcs1    = 0;
 	theft_cx = theft_cy = -1;
@@ -1187,7 +1191,7 @@ bool Game_window::toggle_friend_mode_control() {
  * network host selects by stable NPC number; the guest resolves that actor in
  * its copy of the loaded world.
  */
-bool Game_window::take_friend_mode_control(int npc_num) {
+bool Game_window::take_friend_mode_control(int npc_num, bool network_guest) {
 	Actor* companion = get_npc(npc_num);
 	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()
 		|| companion->get_flag(Obj_flags::asleep) || companion->get_flag(Obj_flags::paralyzed)) {
@@ -1200,9 +1204,36 @@ bool Game_window::take_friend_mode_control(int npc_num) {
 	controlled_actor_previous_schedule = companion->get_schedule_type();
 	companion->set_schedule_type(Schedule::wait);
 	controlled_actor = companion;
+	network_friend_control = network_guest;
 	set_camera_actor(companion);
 	cout << "Friend Mode: controlling " << companion->get_name() << endl;
 	return true;
+}
+
+bool Game_window::reserve_friend_mode_actor(int npc_num) {
+	Actor* companion = get_npc(npc_num);
+	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()) {
+		return false;
+	}
+	release_remote_friend_mode_actor();
+	companion->stop();
+	remote_friend_actor_previous_schedule = companion->get_schedule_type();
+	companion->set_schedule_type(Schedule::wait);
+	remote_friend_actor = companion;
+	cout << "Friend Mode: reserved " << companion->get_name() << " for remote control" << endl;
+	return true;
+}
+
+void Game_window::release_remote_friend_mode_actor() {
+	if (!remote_friend_actor) {
+		return;
+	}
+	remote_friend_actor->stop();
+	if (remote_friend_actor_previous_schedule >= 0 && remote_friend_actor->is_in_party()) {
+		remote_friend_actor->set_schedule_type(remote_friend_actor_previous_schedule);
+	}
+	remote_friend_actor = nullptr;
+	remote_friend_actor_previous_schedule = -1;
 }
 
 /*
@@ -1221,6 +1252,7 @@ bool Game_window::release_friend_mode_control() {
 	}
 	controlled_actor = main_actor;
 	controlled_actor_previous_schedule = -1;
+	network_friend_control = false;
 	set_camera_actor(main_actor);
 	cout << "Friend Mode: controlling the Avatar" << endl;
 	return true;
@@ -1236,7 +1268,8 @@ void Game_window::enforce_friend_mode_control_safety() {
 	if (!current || current == main_actor) {
 		return;
 	}
-	if (main_actor_dont_move() || main_actor->in_usecode_control() || current->in_usecode_control()
+	if ((!network_friend_control
+			 && (main_actor_dont_move() || main_actor->in_usecode_control() || current->in_usecode_control()))
 		|| !current->is_in_party() || current->is_dead() || current->get_flag(Obj_flags::asleep)
 		|| current->get_flag(Obj_flags::paralyzed)) {
 		release_friend_mode_control();
@@ -2647,6 +2680,13 @@ void Game_window::double_clicked(
 		} else {
 			Mouse::mouse()->flash_shape(Mouse::redx);
 		}
+		return;
+	}
+	if (controlled && controlled != main_actor && network_friend_control) {
+		// Network guests cannot start Avatar-owned usecode or storyline
+		// dialogue. Guest-safe containers and their own inventory returned
+		// through the dedicated paths above.
+		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
 	effects->remove_text_effects();    // Remove text msgs. from screen.

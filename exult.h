@@ -31,6 +31,10 @@ class Paintable;
 class GameManager;
 class ShortcutBar_gump;
 class TouchUI;
+class Game_object;
+
+// Allows world-object speech to enter the host's Friend Mode event stream.
+void Friend_mode_note_speech(Game_object* source, const char* text);
 
 /*
  *  Get a click, or, optionally, a keyboard char.
