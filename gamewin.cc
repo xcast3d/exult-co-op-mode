@@ -1173,22 +1173,36 @@ bool Game_window::toggle_friend_mode_control() {
 
 	const int count = party_man->get_count();
 	for (int i = 0; i < count; ++i) {
-		Actor* companion = get_npc(party_man->get_member(i));
-		if (!companion || companion->is_dead() || companion->get_flag(Obj_flags::asleep)
-			|| companion->get_flag(Obj_flags::paralyzed)) {
-			continue;
+		if (take_friend_mode_control(party_man->get_member(i))) {
+			return true;
 		}
-		companion->stop();
-		controlled_actor_previous_schedule = companion->get_schedule_type();
-		companion->set_schedule_type(Schedule::wait);
-		controlled_actor = companion;
-		set_camera_actor(companion);
-		cout << "Friend Mode: controlling " << companion->get_name() << endl;
-		return true;
 	}
 
 	cout << "Friend Mode: no eligible party companion" << endl;
 	return false;
+}
+
+/*
+ * Give the local player control of one specific active party companion.  The
+ * network host selects by stable NPC number; the guest resolves that actor in
+ * its copy of the loaded world.
+ */
+bool Game_window::take_friend_mode_control(int npc_num) {
+	Actor* companion = get_npc(npc_num);
+	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()
+		|| companion->get_flag(Obj_flags::asleep) || companion->get_flag(Obj_flags::paralyzed)) {
+		return false;
+	}
+	if (controlled_actor && controlled_actor != main_actor) {
+		release_friend_mode_control();
+	}
+	companion->stop();
+	controlled_actor_previous_schedule = companion->get_schedule_type();
+	companion->set_schedule_type(Schedule::wait);
+	controlled_actor = companion;
+	set_camera_actor(companion);
+	cout << "Friend Mode: controlling " << companion->get_name() << endl;
+	return true;
 }
 
 /*

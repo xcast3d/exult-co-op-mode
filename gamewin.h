@@ -619,6 +619,7 @@ public:
 	bool release_friend_mode_control();
 	void enforce_friend_mode_control_safety();
 	bool toggle_friend_mode_control();
+	bool take_friend_mode_control(int npc_num);
 
 	bool is_main_actor_inside() const {
 		return skip_above_actor < 31;

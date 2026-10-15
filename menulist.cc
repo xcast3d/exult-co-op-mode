@@ -118,6 +118,7 @@ MenuGameEntry::MenuGameEntry(
 		std::shared_ptr<Font> fnton, std::shared_ptr<Font> fnt, const char* txt, Shape_frame* sfx, int xpos, int ypos)
 		: MenuTextEntry(fnton, fnt, txt, xpos, ypos) {
 	sfxicon       = sfx;
+	text_x1       = x1;
 	int max_width = 0;
 	int width;
 	int max_height = font->get_text_height();
@@ -149,6 +150,11 @@ MenuGameEntry::MenuGameEntry(
 	x1       = xpos - max_width / 2 + 1;
 	x2       = x1 + max_width + 1;
 	y2       = y1 + max_height + lines;
+	text_x1  = x1;
+	if (sfxicon) {
+		x1 = text_x1 - sfxicon->get_width() - 3;
+		y2 = std::max(y2, y1 + sfxicon->get_height());
+	}
 	selected = false;
 	dirty    = true;
 }
@@ -160,8 +166,8 @@ void MenuGameEntry::paint(Game_window* gwin) {
 	dirty = false;
 
 	if (sfxicon) {
-		Shape_manager::get_instance()->paint_shape(x1 - sfxicon->get_width() - 3, y, sfxicon);
-		gwin->get_win()->show(x1 - sfxicon->get_width() - 3, y, sfxicon->get_width(), sfxicon->get_height());
+		Shape_manager::get_instance()->paint_shape(text_x1 - sfxicon->get_width() - 3, y, sfxicon);
+		gwin->get_win()->show(text_x1 - sfxicon->get_width() - 3, y, sfxicon->get_width(), sfxicon->get_height());
 	}
 
 	std::shared_ptr<Font> fnt;
@@ -170,8 +176,8 @@ void MenuGameEntry::paint(Game_window* gwin) {
 	} else {
 		fnt = font;
 	}
-	fnt->paint_text_box(gwin->get_win()->get_ib8(), text.c_str(), x1, y1, x2 - x1, y2 - y1, 0, false, true, nullptr);
-	gwin->get_win()->show(x1, y1, x2 - x1, y2 - y1);
+	fnt->paint_text_box(gwin->get_win()->get_ib8(), text.c_str(), text_x1, y1, x2 - text_x1, y2 - y1, 0, false, true, nullptr);
+	gwin->get_win()->show(text_x1, y1, x2 - text_x1, y2 - y1);
 }
 
 bool MenuGameEntry::handle_event(SDL_Event& event) {

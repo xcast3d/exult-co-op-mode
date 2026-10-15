@@ -65,9 +65,11 @@
 #include "items.h"
 #include "keyactions.h"
 #include "keys.h"
+#include "menulist.h"
 #include "mouse.h"
 #include "palette.h"
 #include "party.h"
+#include "shapeid.h"
 #include "sdlrwopsistream.h"
 #include "sdlrwopsostream.h"
 #include "touchui.h"
@@ -93,7 +95,7 @@
 #endif    // __GNUC__
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
-static const SDL_MouseID EXSDL_TOUCH_MOUSEID = SDL_TOUCH_MOUSEID;
+static const SDL_MouseID EXULT_TOUCH_MOUSEID = SDL_TOUCH_MOUSEID;
 static const SDL_TouchID EXSDL_MOUSE_TOUCHID = SDL_MOUSE_TOUCHID;
 #ifdef __GNUC__
 #	pragma GCC diagnostic pop
@@ -192,6 +194,8 @@ static int  drag_cnknum = -1;
 static void BuildGameMap(BaseGameInfo* game, int mapnum);
 static void Handle_events();
 static void Handle_event(SDL_Event& event);
+static bool Friend_actor_is_eligible(uint32 npc_num);
+static int  Select_friend_actor(const std::vector<uint32>& roster);
 
 /*
  *  Statics:
@@ -215,6 +219,46 @@ static bool   arg_friend_host  = false;
 static string arg_friend_join;
 static int    arg_friend_port = 1987;
 static Friend_mode_session friend_session;
+
+static bool Friend_actor_is_eligible(uint32 npc_num) {
+	Actor* actor = gwin->get_npc(npc_num);
+	if (!actor || actor == gwin->get_main_actor() || actor->is_dead() || actor->get_flag(Obj_flags::asleep)
+		|| actor->get_flag(Obj_flags::paralyzed)) {
+		return false;
+	}
+	Party_manager* party = gwin->get_party_man();
+	for (int i = 0; i < party->get_count(); ++i) {
+		if (party->get_member(i) == static_cast<int>(npc_num)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static int Select_friend_actor(const std::vector<uint32>& roster) {
+	MenuList menu;
+	auto     font = fontManager.get_font("MENU_FONT");
+	const int centerx = gwin->get_width() / 2 + 30;
+	int       y = std::max(16, (gwin->get_height() - static_cast<int>(roster.size()) * 55) / 2);
+	int       choices = 0;
+	for (uint32 npc_num : roster) {
+		Actor* actor = gwin->get_npc(npc_num);
+		if (!actor) {
+			continue;
+		}
+		Shape_frame* portrait = ShapeID(actor->get_face_shapenum(), 0, SF_FACES_VGA).get_shape();
+		auto* entry = new MenuGameEntry(font, font, actor->get_name().c_str(), portrait, centerx, y);
+		entry->set_id(static_cast<int>(npc_num));
+		menu.add_entry(entry);
+		y += std::max(55, entry->get_height() + 8);
+		++choices;
+	}
+	if (!choices) {
+		return -1;
+	}
+	menu.set_selection(0);
+	return menu.handle_events(gwin);
+}
 
 static string arg_installmod  = {};
 static string arg_installdata = {};
@@ -1371,8 +1415,51 @@ static void Handle_events() {
 	// actor stopped (see the stop-skate handling below). Reset on each new
 	// step so it only ever fires once per stop.
 	bool lerp_stop_anchored = false;
+	bool friend_roster_sent = false;
+	bool friend_selection_shown = false;
 	while (!quitting_time) {
 		friend_session.poll();
+		if (arg_friend_host) {
+			if (!friend_session.connected()) {
+				friend_roster_sent = false;
+			} else if (!friend_roster_sent) {
+				std::vector<uint32> roster;
+				Party_manager* party = gwin->get_party_man();
+				for (int i = 0; i < party->get_count(); ++i) {
+					const uint32 npc_num = party->get_member(i);
+					if (Friend_actor_is_eligible(npc_num)) {
+						roster.push_back(npc_num);
+					}
+				}
+				friend_session.send_party_roster(roster);
+				cout << "Friend Mode: advertised " << roster.size() << " available companion(s)" << endl;
+				friend_roster_sent = true;
+			}
+			uint32 requested_actor = 0;
+			if (friend_session.take_actor_request(requested_actor)) {
+				if (Friend_actor_is_eligible(requested_actor)) {
+					friend_session.accept_actor(requested_actor);
+				} else {
+					friend_session.reject_actor(requested_actor);
+				}
+			}
+		} else if (!arg_friend_join.empty()) {
+			if (friend_session.roster_ready() && !friend_selection_shown) {
+				friend_selection_shown = true;
+				const int selected = Select_friend_actor(friend_session.party_roster());
+				if (selected >= 0) {
+					friend_session.request_actor(static_cast<uint32>(selected));
+				} else {
+					cout << "Friend Mode: no companion selected; spectating" << endl;
+				}
+			}
+			uint32 assigned_actor = 0;
+			if (friend_session.take_actor_assignment(assigned_actor)) {
+				if (!gwin->take_friend_mode_control(static_cast<int>(assigned_actor))) {
+					cerr << "Friend Mode: assigned companion is unavailable in the local world" << endl;
+				}
+			}
+		}
 #ifdef USE_EXULTSTUDIO
 		Server_delay();    // Handle requests.
 #else
@@ -2053,7 +2140,7 @@ static void Handle_event(SDL_Event& event) {
 		SDL_ConvertEventToRenderCoordinates(renderer, &event);
 		int mx;
 		int my;
-		if (Mouse::use_touch_input && event.motion.which != EXSDL_TOUCH_MOUSEID) {
+		if (Mouse::use_touch_input && event.motion.which != EXULT_TOUCH_MOUSEID) {
 			Mouse::use_touch_input = false;
 		}
 		gwin->get_win()->screen_to_game(event.motion.x, event.motion.y, gwin->get_fastmouse(), mx, my);

@@ -138,6 +138,7 @@ public:
 class MenuGameEntry : public MenuTextEntry {
 private:
 	Shape_frame* sfxicon;
+	int          text_x1;
 
 public:
 	MenuGameEntry(std::shared_ptr<Font> fnton, std::shared_ptr<Font> fnt, const char* txt, Shape_frame* sfx, int xpos, int ypos);

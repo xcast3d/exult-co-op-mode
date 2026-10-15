@@ -11,7 +11,9 @@
 
 #include <array>
 #include <cstddef>
+#include <deque>
 #include <string>
+#include <vector>
 
 class Friend_mode_session {
 public:
@@ -24,6 +26,18 @@ public:
 	bool start_guest(const std::string& address, int port, uint32 game_code);
 	void poll();
 	void stop();
+	void send_party_roster(const std::vector<uint32>& actors);
+	void request_actor(uint32 actor);
+	bool take_actor_request(uint32& actor);
+	void accept_actor(uint32 actor);
+	void reject_actor(uint32 actor);
+	bool roster_ready() const {
+		return received_roster;
+	}
+	const std::vector<uint32>& party_roster() const {
+		return roster;
+	}
+	bool take_actor_assignment(uint32& actor);
 
 	Mode mode() const {
 		return session_mode;
@@ -40,10 +54,16 @@ private:
 	int                               peer_socket   = -1;
 	uint32                            local_game_code = 0;
 	std::array<unsigned char, packet_size> receive_buffer{};
-	std::array<unsigned char, packet_size> send_buffer{};
 	std::size_t                       received = 0;
-	std::size_t                       sent     = packet_size;
+	std::size_t                       sent     = 0;
 	bool                              handshake_complete = false;
+	std::deque<std::array<unsigned char, packet_size>> outgoing;
+	std::vector<uint32>               roster;
+	bool                              received_roster = false;
+	bool                              actor_request_pending = false;
+	uint32                            requested_actor = 0;
+	bool                              actor_assignment_pending = false;
+	uint32                            assigned_actor = 0;
 
 	void close_peer();
 	void queue_packet(unsigned char type);

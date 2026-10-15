@@ -36,9 +36,17 @@ TCP port and a guest can use a dedicated **Connect to Host** title-menu entry.
 The peers exchange a versioned handshake and reject incompatible game variants.
 This has been verified with two isolated Exult instances on one Mac.
 
-This checkpoint does not yet synchronize world state, assign the guest to a
-companion, or replicate movement. The temporary local guest profile and copied
-runtime data live under `.friend-mode-local/`, which is ignored by Git.
+This checkpoint does not yet synchronize world state or replicate movement.
+The temporary local guest profile and copied runtime data live under
+`.friend-mode-local/`, which is ignored by Git.
+
+The next assignment slice now transfers the host's eligible companion roster,
+shows the guest a selector using the companions' existing portraits and names,
+and has the host validate the requested assignment. The guest then takes local
+input and camera control of the accepted companion. This has been verified with
+Iolo over two local instances. Moving this selector from the loaded world into
+the pre-game connection flow is a later UI refinement; movement and world state
+are still not synchronized at this checkpoint.
 
 ## Local possession prototype
 

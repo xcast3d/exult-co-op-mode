@@ -23,6 +23,12 @@ constexpr unsigned short protocol_version = 1;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
+constexpr unsigned char  roster_begin_packet = 4;
+constexpr unsigned char  roster_actor_packet = 5;
+constexpr unsigned char  roster_end_packet = 6;
+constexpr unsigned char  actor_request_packet = 7;
+constexpr unsigned char  actor_accepted_packet = 8;
+constexpr unsigned char  actor_rejected_packet = 9;
 
 void close_socket(int socket) {
 	if (socket < 0) {
@@ -143,10 +149,52 @@ bool Friend_mode_session::start_guest(const std::string& address, int port, uint
 }
 
 void Friend_mode_session::queue_packet(unsigned char type) {
-	send_buffer = {'U', '7', 'F', 'M', static_cast<unsigned char>(protocol_version >> 8),
+	std::array<unsigned char, packet_size> packet = {'U', '7', 'F', 'M', static_cast<unsigned char>(protocol_version >> 8),
 			static_cast<unsigned char>(protocol_version), type, 0, 0, 0, 0, 0};
-	write_u32(send_buffer.data() + 8, local_game_code);
-	sent = 0;
+	write_u32(packet.data() + 8, local_game_code);
+	outgoing.push_back(packet);
+}
+
+void Friend_mode_session::send_party_roster(const std::vector<uint32>& actors) {
+	queue_packet(roster_begin_packet);
+	for (uint32 actor : actors) {
+		queue_packet(roster_actor_packet);
+		write_u32(outgoing.back().data() + 8, actor);
+	}
+	queue_packet(roster_end_packet);
+}
+
+void Friend_mode_session::request_actor(uint32 actor) {
+	queue_packet(actor_request_packet);
+	write_u32(outgoing.back().data() + 8, actor);
+}
+
+bool Friend_mode_session::take_actor_request(uint32& actor) {
+	if (!actor_request_pending) {
+		return false;
+	}
+	actor_request_pending = false;
+	actor = requested_actor;
+	return true;
+}
+
+void Friend_mode_session::accept_actor(uint32 actor) {
+	queue_packet(actor_accepted_packet);
+	write_u32(outgoing.back().data() + 8, actor);
+}
+
+void Friend_mode_session::reject_actor(uint32 actor) {
+	queue_packet(actor_rejected_packet);
+	write_u32(outgoing.back().data() + 8, actor);
+}
+
+bool Friend_mode_session::take_actor_assignment(uint32& actor) {
+	if (!actor_assignment_pending) {
+		return false;
+	}
+	actor_assignment_pending = false;
+	actor = assigned_actor;
+	return true;
 }
 
 void Friend_mode_session::handle_packet() {
@@ -170,6 +218,22 @@ void Friend_mode_session::handle_packet() {
 			   && game == local_game_code) {
 		handshake_complete = true;
 		std::cout << "Friend Mode: session accepted by host" << std::endl;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == roster_begin_packet) {
+		roster.clear();
+		received_roster = false;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == roster_actor_packet) {
+		roster.push_back(game);
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == roster_end_packet) {
+		received_roster = true;
+	} else if (session_mode == Mode::host && valid_header && version == protocol_version && type == actor_request_packet) {
+		requested_actor = game;
+		actor_request_pending = true;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == actor_accepted_packet) {
+		assigned_actor = game;
+		actor_assignment_pending = true;
+		std::cout << "Friend Mode: companion assignment accepted" << std::endl;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == actor_rejected_packet) {
+		std::cerr << "Friend Mode: selected companion is no longer available" << std::endl;
 	} else {
 		std::cerr << "Friend Mode: handshake rejected" << std::endl;
 		close_peer();
@@ -189,11 +253,15 @@ void Friend_mode_session::poll() {
 	if (peer_socket < 0) {
 		return;
 	}
-	if (sent < packet_size) {
-		const int count = static_cast<int>(send(peer_socket, reinterpret_cast<const char*>(send_buffer.data() + sent),
+	if (!outgoing.empty()) {
+		const int count = static_cast<int>(send(peer_socket, reinterpret_cast<const char*>(outgoing.front().data() + sent),
 				packet_size - sent, 0));
 		if (count > 0) {
 			sent += static_cast<std::size_t>(count);
+			if (sent == packet_size) {
+				outgoing.pop_front();
+				sent = 0;
+			}
 		} else if (count < 0 && !would_block()) {
 			close_peer();
 			return;
@@ -216,8 +284,13 @@ void Friend_mode_session::close_peer() {
 	close_socket(peer_socket);
 	peer_socket        = -1;
 	received           = 0;
-	sent               = packet_size;
+	sent               = 0;
 	handshake_complete = false;
+	outgoing.clear();
+	roster.clear();
+	received_roster = false;
+	actor_request_pending = false;
+	actor_assignment_pending = false;
 }
 
 void Friend_mode_session::stop() {
