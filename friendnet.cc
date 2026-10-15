@@ -450,6 +450,12 @@ bool Friend_mode_session::take_dialogue_event(Dialogue_event& event) {
 	return true;
 }
 
+bool Friend_mode_session::take_peer_joined() {
+	const bool joined = peer_joined;
+	peer_joined       = false;
+	return joined;
+}
+
 bool Friend_mode_session::take_connection_lost() {
 	const bool lost = connection_lost;
 	connection_lost = false;
@@ -616,6 +622,7 @@ void Friend_mode_session::handle_packet() {
 			pending_identity.clear();
 			identity_pending = false;
 			std::cout << "Friend Mode: connected player " << remote_player_name << std::endl;
+			peer_joined = true;
 		}
 	} else if (valid_header && version == protocol_version && type == chat_begin_packet) {
 		pending_chat_length   = std::min<uint32>(game, 80);
@@ -639,8 +646,13 @@ void Friend_mode_session::handle_packet() {
 			pending_chat_text.clear();
 			chat_pending = false;
 		}
+	} else if (!valid_header) {
+		// Something other than Exult (e.g. a local port probe) connected.
+		std::cerr << "Friend Mode: closed non-Friend Mode connection" << std::endl;
+		close_peer();
 	} else {
-		std::cerr << "Friend Mode: handshake rejected" << std::endl;
+		std::cerr << "Friend Mode: unexpected packet type " << static_cast<int>(type) << " (protocol " << version
+				  << "); closing connection" << std::endl;
 		close_peer();
 	}
 }
@@ -722,6 +734,7 @@ void Friend_mode_session::close_peer() {
 	pending_dialogue_text.clear();
 	pending_dialogue_choices.clear();
 	remote_player_name.clear();
+	peer_joined = false;
 	pending_identity.clear();
 	pending_identity_length = 0;
 	identity_pending = false;

@@ -86,6 +86,13 @@ and uses its own assignment; guests trust the host. Chat never runs Usecode.
 The protocol version is now 5. Relaying chat between multiple guests waits on
 multi-peer sessions.
 
+### Session notices
+
+The host shows notices near the top of the view when a guest joins, enters the
+world as a companion, and leaves (the companion returns to party AI). The guest
+sees a notice when it joins the host's world. Connections that are not Friend
+Mode clients, such as local port probes, are logged and closed.
+
 ## Local possession prototype
 
 Launch the modified build with `./exult --bg --nocrc`, load a save with an
@@ -131,9 +138,7 @@ replicated to guests.
   spawned/despawned creature replication needs a durable network identity.
 - The companion selector still appears after loading rather than in the
   pre-game connection flow.
-- The host does not yet display an in-world notice when a companion player is
-  entering the world.
-- Returning a disconnected guest to the title menu remains unfinished; the
-  current prototype displays a disconnect prompt and can close the session.
+- Exult has no in-game return to the title menu, so a guest whose host
+  disconnects sees a notice and Exult closes after a few seconds.
 - Sessions have a single peer, so chat is not yet relayed among several
   guests.

@@ -249,6 +249,7 @@ static int    arg_friend_port = 1987;
 static string friend_player_name = "Player";
 static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
+static std::string friend_host_peer_name;    // Connected guest, for leave notice.
 static bool friend_chat_active = false;
 static std::string friend_chat_text;
 
@@ -279,6 +280,17 @@ static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, con
 		const std::string line = (sender.empty() ? std::string("Spectator") : sender) + ": " + text;
 		gwin->get_effects()->add_chat_text(line.c_str(), nullptr);
 	}
+}
+
+// Session status shown near the top of the view, like spectator chat.
+static void Friend_mode_notice(const std::string& text) {
+	cout << "Friend Mode: " << text << endl;
+	gwin->get_effects()->add_chat_text(text.c_str(), nullptr);
+}
+
+static std::string Friend_mode_actor_name(int npc_num) {
+	Actor* actor = gwin->get_npc(npc_num);
+	return actor ? actor->get_name() : std::string("a companion");
 }
 
 static void Friend_mode_paint_chat_input() {
@@ -1849,6 +1861,7 @@ static void Handle_events() {
 	Tile_coord last_guest_request(-1, -1, -1);
 	std::unordered_set<int> guest_frozen_npcs;
 	std::unordered_set<uint32> guest_frozen_creatures;
+	uint32                     guest_close_at = 0;    // Ticks when a disconnected guest exits.
 	while (!quitting_time) {
 		friend_session.poll();
 		std::string incoming_chat;
@@ -1859,7 +1872,19 @@ static void Handle_events() {
 					incoming_chat);
 		}
 		if (arg_friend_host) {
+			if (friend_session.take_peer_joined()) {
+				friend_host_peer_name = friend_session.remote_player_name_value();
+				Friend_mode_notice(friend_host_peer_name + " has joined");
+			}
 			if (!friend_session.connected()) {
+				if (!friend_host_peer_name.empty()) {
+					Friend_mode_notice(
+							host_assigned_actor >= 0
+									? friend_host_peer_name + " has left; " + Friend_mode_actor_name(host_assigned_actor)
+											  + " rejoins the party"
+									: friend_host_peer_name + " has left");
+					friend_host_peer_name.clear();
+				}
 				friend_host_dialogue_active = false;
 				friend_roster_sent = false;
 				last_avatar_state = Tile_coord(-1, -1, -1);
@@ -1890,6 +1915,9 @@ static void Handle_events() {
 					&& gwin->reserve_friend_mode_actor(static_cast<int>(requested_actor))) {
 					host_assigned_actor = static_cast<int>(requested_actor);
 					friend_session.accept_actor(requested_actor);
+					Friend_mode_notice(
+							friend_session.remote_player_name_value() + " enters the world as "
+							+ Friend_mode_actor_name(host_assigned_actor));
 					Actor* actor = gwin->get_npc(host_assigned_actor);
 					last_host_state = actor->get_tile();
 					last_host_frame = actor->get_framenum();
@@ -1961,13 +1989,19 @@ static void Handle_events() {
 				}
 			}
 		} else if (!arg_friend_join.empty()) {
+			if (friend_session.take_peer_joined()) {
+				Friend_mode_notice("Joined " + friend_session.remote_player_name_value() + "'s world");
+			}
 			if (friend_session.take_connection_lost()) {
 				gwin->set_network_dialogue_paused(false);
 				gwin->release_friend_mode_control();
 				guest_assigned_actor = -1;
-				if (Yesno_gump::ask("Host disconnected. Close this guest session?")) {
-					quitting_time = QUIT_TIME_YES;
-				}
+				// Exult cannot return to the title menu mid-game, so close.
+				Friend_mode_notice("Host disconnected. Exult will close.");
+				guest_close_at = SDL_GetTicks() + 4000;
+			}
+			if (guest_close_at != 0 && SDL_GetTicks() >= guest_close_at) {
+				quitting_time = QUIT_TIME_YES;
 			}
 			if (friend_session.roster_ready() && !friend_selection_shown) {
 				friend_selection_shown = true;

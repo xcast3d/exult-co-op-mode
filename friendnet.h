@@ -78,6 +78,8 @@ public:
 	void send_dialogue_choices(const std::vector<std::string>& choices);
 	void send_dialogue_clear_choices();
 	bool take_dialogue_event(Dialogue_event& event);
+	// True once per connection, after the peer's player name arrives.
+	bool take_peer_joined();
 	bool take_connection_lost();
 
 	Mode mode() const {
@@ -154,6 +156,7 @@ private:
 	uint32                            pending_identity_length = 0;
 	uint32                            pending_identity_received = 0;
 	bool                              identity_pending = false;
+	bool                              peer_joined      = false;
 
 	void close_peer();
 	void queue_packet(unsigned char type);
