@@ -617,6 +617,7 @@ public:
 		return controlled_actor;
 	}
 	bool release_friend_mode_control();
+	void enforce_friend_mode_control_safety();
 	bool toggle_friend_mode_control();
 
 	bool is_main_actor_inside() const {

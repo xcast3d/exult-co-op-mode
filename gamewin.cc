@@ -1212,6 +1212,23 @@ bool Game_window::release_friend_mode_control() {
 }
 
 /*
+ * Scripted movement, incapacitation, and party removal take precedence over
+ * local companion possession. Return control to the Avatar before either actor
+ * enters a state that could fight the local controller.
+ */
+void Game_window::enforce_friend_mode_control_safety() {
+	Actor* current = get_controlled_actor();
+	if (!current || current == main_actor) {
+		return;
+	}
+	if (main_actor_dont_move() || main_actor->in_usecode_control() || current->in_usecode_control()
+		|| !current->is_in_party() || current->is_dead() || current->get_flag(Obj_flags::asleep)
+		|| current->get_flag(Obj_flags::paralyzed)) {
+		release_friend_mode_control();
+	}
+}
+
+/*
  *  Scroll if necessary.
  *
  *  Output: 1 if scrolled (screen updated).
@@ -2558,6 +2575,9 @@ void Game_window::double_clicked(
 #ifdef DEBUG
 	cout << "Object name is " << obj->get_name() << endl;
 #endif
+	// Deliberate interactions remain Avatar-owned. If a companion was being
+	// controlled, hand back before Usecode or dialogue can begin.
+	release_friend_mode_control();
 	usecode->init_conversation();
 	// Check if CTRL is pressed to open basic properties instead
 	const bool ctrl_pressed = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;

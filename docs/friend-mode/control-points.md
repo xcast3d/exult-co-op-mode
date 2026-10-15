@@ -46,3 +46,9 @@ selected companion's follow schedule is suspended and restored on release.
 Dialogue, quest identity, Usecode provenance, saves, and party membership
 remain tied to `main_actor`; those boundaries still require explicit runtime
 tests before the prototype is considered safe.
+
+The first runtime story-safety test passed: activating dialogue while Iolo was
+controlled returned input and camera focus to the Avatar, completed dialogue as
+the Avatar, and restored Iolo's follow behavior afterward. Paperdoll activation
+currently crosses the same conservative boundary; it must be separated as a
+safe UI-only action before multiplayer inventory work.

@@ -1390,6 +1390,7 @@ static void Handle_events() {
 		if (gwin->have_focus() && !dragging) {
 			gwin->get_tqueue()->activate(ticks);
 		}
+		gwin->enforce_friend_mode_control_safety();
 
 		// Moved this out of the animation loop, since we want movement to be
 		// more responsive. Also, if the step delta is only 1 tile,
