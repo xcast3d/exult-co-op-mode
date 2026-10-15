@@ -174,6 +174,9 @@ string get_game_identity(const char* savename, const string& title);
 
 void Game_window::restore_gamedat(const char* fname    // Name of savegame file.
 ) {
+	// Restore the current companion's AI before replacing world state.
+	release_friend_mode_control();
+
 	// Check IDENTITY.
 	string       id                             = get_game_identity(fname, Game::get_gametitle());
 	const string static_identity                = get_game_identity(INITGAME, Game::get_gametitle());

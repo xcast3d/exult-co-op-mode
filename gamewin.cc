@@ -1167,15 +1167,7 @@ void Game_window::set_camera_actor(Actor* a) {
 bool Game_window::toggle_friend_mode_control() {
 	Actor* current = get_controlled_actor();
 	if (current != main_actor) {
-		current->stop();
-		if (controlled_actor_previous_schedule >= 0) {
-			current->set_schedule_type(controlled_actor_previous_schedule);
-		}
-		controlled_actor = main_actor;
-		controlled_actor_previous_schedule = -1;
-		set_camera_actor(main_actor);
-		cout << "Friend Mode: controlling the Avatar" << endl;
-		return true;
+		return release_friend_mode_control();
 	}
 
 	const int count = party_man->get_count();
@@ -1196,6 +1188,27 @@ bool Game_window::toggle_friend_mode_control() {
 
 	cout << "Friend Mode: no eligible party companion" << endl;
 	return false;
+}
+
+/*
+ * Return local control to the Avatar and restore a possessed companion's AI.
+ * This is deliberately safe to call when the Avatar is already controlled.
+ */
+bool Game_window::release_friend_mode_control() {
+	Actor* current = get_controlled_actor();
+	if (!current || current == main_actor) {
+		return false;
+	}
+
+	current->stop();
+	if (controlled_actor_previous_schedule >= 0) {
+		current->set_schedule_type(controlled_actor_previous_schedule);
+	}
+	controlled_actor = main_actor;
+	controlled_actor_previous_schedule = -1;
+	set_camera_actor(main_actor);
+	cout << "Friend Mode: controlling the Avatar" << endl;
+	return true;
 }
 
 /*
@@ -1460,6 +1473,10 @@ bool Game_window::init_gamedat(bool create) {
  */
 
 void Game_window::write(bool nopaint) {
+	// Never serialize the temporary AI schedule used while a companion is
+	// locally possessed. Saving is also an explicit safe handoff point.
+	release_friend_mode_control();
+
 	// Lets just show a nice message on screen first
 
 	const int width       = get_width();

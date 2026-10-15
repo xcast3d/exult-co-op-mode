@@ -616,6 +616,7 @@ public:
 	Actor* get_controlled_actor() const {
 		return controlled_actor;
 	}
+	bool release_friend_mode_control();
 	bool toggle_friend_mode_control();
 
 	bool is_main_actor_inside() const {

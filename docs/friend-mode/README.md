@@ -17,7 +17,8 @@ Phase 1: harden the working local party-member possession prototype.
 - [x] Launch with legally obtained Ultima VII data and record a baseline save.
 - [x] Trace the initial input, camera, and party-AI control points.
 - [x] Implement and manually verify local Avatar/Iolo possession.
-- [ ] Restore Avatar control automatically across save/load and unsafe scripted transitions.
+- [x] Restore Avatar control automatically across save/load.
+- [ ] Restore Avatar control automatically across unsafe scripted transitions.
 - [ ] Verify dialogue and quest interactions continue to use the canonical Avatar.
 
 See [macOS setup](macos-setup.md) and [control-point notes](control-points.md).
@@ -28,6 +29,10 @@ Launch the modified build with `./exult --bg --nocrc`, load a save with an
 active companion, and press `Control-F`. Local movement and camera focus switch
 to the first eligible party companion. Press `Control-F` again to restore
 Avatar control and the companion's prior AI schedule.
+
+Saving or loading while controlling a companion automatically hands control
+back to the Avatar first, preventing the temporary suspended-AI schedule from
+being written into a save.
 
 The `--nocrc` flag is required because the development key binding changes the
 generated Exult resource archive. It does not disable validation of the
