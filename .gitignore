@@ -85,6 +85,8 @@ data/exult_iphone.flx
 data/exult_iphone_flx.h
 data/exult_si.flx
 data/exult_si_flx.h
+/data/shortcutbar.vga
+/data/shortcutbar_vga.h
 /exult
 files/rwregress
 mapedit/exult_studio
