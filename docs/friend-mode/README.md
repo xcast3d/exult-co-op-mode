@@ -86,6 +86,16 @@ and uses its own assignment; guests trust the host. Chat never runs Usecode.
 The protocol version is now 5. Relaying chat between multiple guests waits on
 multi-peer sessions.
 
+### Party mirroring and spectating
+
+The host sends its party list when a guest joins and whenever the party
+changes, and the guest updates its local party to match before taking control.
+This lets a guest control a companion recruited after the guest's copy of the
+world was made (for example Spark). A guest without a companion is a
+spectator: movement and double-clicks are blocked so it cannot move its local
+copy of the Avatar, and the camera follows the host's Avatar. Protocol version
+is now 6.
+
 ### Session notices
 
 The host shows notices near the top of the view when a guest joins, enters the
@@ -134,6 +144,9 @@ replicated to guests.
 
 ## Known prototype gaps
 
+- The guest loads its own copy of the world. Only party membership is copied
+  from the host (on join and whenever it changes); quest flags, items and
+  other world state can still differ until Phase 4.
 - Creature identity currently relies on deterministic loaded-world ordering;
   spawned/despawned creature replication needs a durable network identity.
 - The companion selector still appears after loading rather than in the

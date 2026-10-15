@@ -20,7 +20,7 @@
 #endif
 
 namespace {
-constexpr unsigned short protocol_version = 5;
+constexpr unsigned short protocol_version = 6;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -52,6 +52,9 @@ constexpr unsigned char  identity_begin_packet = 28;
 constexpr unsigned char  identity_chunk_packet = 29;
 constexpr unsigned char  chat_begin_packet = 30;
 constexpr unsigned char  chat_chunk_packet = 31;
+constexpr unsigned char  party_begin_packet = 32;
+constexpr unsigned char  party_member_packet = 33;
+constexpr unsigned char  party_end_packet = 34;
 
 // Keep only printable ASCII from peer-supplied text.
 void append_printable(std::string& out, const unsigned char* data, std::size_t count) {
@@ -209,6 +212,24 @@ void Friend_mode_session::send_identity() {
 		const std::size_t count = std::min<std::size_t>(12, length - offset);
 		std::memcpy(outgoing.back().data() + 8, local_player_name.data() + offset, count);
 	}
+}
+
+void Friend_mode_session::send_party_members(const std::vector<uint32>& members) {
+	queue_packet(party_begin_packet);
+	for (uint32 member : members) {
+		queue_packet(party_member_packet);
+		write_u32(outgoing.back().data() + 8, member);
+	}
+	queue_packet(party_end_packet);
+}
+
+bool Friend_mode_session::take_party_members(std::vector<uint32>& members) {
+	if (!party_members_ready) {
+		return false;
+	}
+	members             = party_members;
+	party_members_ready = false;
+	return true;
 }
 
 void Friend_mode_session::send_party_roster(const std::vector<uint32>& actors) {
@@ -485,6 +506,17 @@ void Friend_mode_session::handle_packet() {
 		handshake_complete = true;
 		send_identity();
 		std::cout << "Friend Mode: session accepted by host" << std::endl;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == party_begin_packet) {
+		pending_party_members.clear();
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == party_member_packet) {
+		if (pending_party_members.size() < 16) {
+			pending_party_members.push_back(game);
+		}
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == party_end_packet) {
+		party_members       = std::move(pending_party_members);
+		party_members_ready = true;
+		pending_party_members.clear();
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == roster_begin_packet) {
 		roster.clear();
 		received_roster = false;
@@ -735,6 +767,9 @@ void Friend_mode_session::close_peer() {
 	pending_dialogue_choices.clear();
 	remote_player_name.clear();
 	peer_joined = false;
+	party_members.clear();
+	pending_party_members.clear();
+	party_members_ready = false;
 	pending_identity.clear();
 	pending_identity_length = 0;
 	identity_pending = false;

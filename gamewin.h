@@ -134,6 +134,7 @@ class Game_window {
 	int                       controlled_actor_previous_schedule;
 	bool                      network_friend_control;
 	bool                      network_dialogue_paused;
+	bool                      network_spectating = false;
 	Actor*                    remote_friend_actor;
 	int                       remote_friend_actor_previous_schedule;
 	Actor*                    camera_actor;    // What to center view around.
@@ -630,6 +631,14 @@ public:
 	void enforce_friend_mode_control_safety();
 	bool toggle_friend_mode_control();
 	bool take_friend_mode_control(int npc_num, bool network_guest = false);
+	// A network guest without a companion: world input is blocked.
+	bool is_network_spectating() const {
+		return network_spectating;
+	}
+	void set_network_spectating(bool spectating);
+	bool network_input_blocked() const {
+		return network_dialogue_paused || network_spectating;
+	}
 	bool is_network_dialogue_paused() const {
 		return network_dialogue_paused;
 	}

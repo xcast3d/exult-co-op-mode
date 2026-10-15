@@ -1211,6 +1211,14 @@ bool Game_window::take_friend_mode_control(int npc_num, bool network_guest) {
 	return true;
 }
 
+void Game_window::set_network_spectating(bool spectating) {
+	network_spectating = spectating;
+	if (spectating) {
+		main_actor->stop();
+		set_camera_actor(main_actor);
+	}
+}
+
 void Game_window::set_network_dialogue_paused(bool paused) {
 	network_dialogue_paused = paused;
 	if (paused && network_friend_control && controlled_actor) {
@@ -1906,7 +1914,7 @@ void Game_window::start_actor_alt(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
-	if (network_dialogue_paused) {
+	if (network_input_blocked()) {
 		return;
 	}
 	Actor* actor = get_controlled_actor();
@@ -2030,7 +2038,7 @@ void Game_window::start_actor(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
-	if (network_dialogue_paused) {
+	if (network_input_blocked()) {
 		return;
 	}
 	Actor* actor = get_controlled_actor();
@@ -2096,7 +2104,7 @@ void Game_window::start_actor_along_path(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
-	if (network_dialogue_paused) {
+	if (network_input_blocked()) {
 		return;
 	}
 	Actor* actor = get_controlled_actor();
@@ -2614,7 +2622,7 @@ ShapeID Game_window::get_flat(
 void Game_window::double_clicked(
 		int x, int y    // Coords in window.
 ) {
-	if (network_dialogue_paused) {
+	if (network_input_blocked()) {
 		return;
 	}
 	// Animation in progress?

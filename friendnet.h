@@ -41,6 +41,9 @@ public:
 	}
 	void poll();
 	void stop();
+	// Host's full party (NPC numbers, in order) so guests can mirror it.
+	void send_party_members(const std::vector<uint32>& members);
+	bool take_party_members(std::vector<uint32>& members);
 	void send_party_roster(const std::vector<uint32>& actors);
 	void request_actor(uint32 actor);
 	bool take_actor_request(uint32& actor);
@@ -157,6 +160,9 @@ private:
 	uint32                            pending_identity_received = 0;
 	bool                              identity_pending = false;
 	bool                              peer_joined      = false;
+	std::vector<uint32>               party_members;
+	std::vector<uint32>               pending_party_members;
+	bool                              party_members_ready = false;
 
 	void close_peer();
 	void queue_packet(unsigned char type);

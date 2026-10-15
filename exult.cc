@@ -86,6 +86,7 @@
 #	include "files/zip/unzip.h"
 #endif
 
+#include <algorithm>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -250,6 +251,7 @@ static string friend_player_name = "Player";
 static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
 static std::string friend_host_peer_name;    // Connected guest, for leave notice.
+static std::vector<uint32> friend_sent_party;    // Party last sent to the guest.
 static bool friend_chat_active = false;
 static std::string friend_chat_text;
 
@@ -494,6 +496,32 @@ void Friend_mode_note_dialogue_clear_choices() {
 	if (friend_host_dialogue_active) {
 		friend_session.send_dialogue_clear_choices();
 		friend_session.poll();
+	}
+}
+
+static std::vector<uint32> Friend_party_members() {
+	std::vector<uint32> members;
+	Party_manager*      party = gwin->get_party_man();
+	for (int i = 0; i < party->get_count(); ++i) {
+		members.push_back(static_cast<uint32>(party->get_member(i)));
+	}
+	return members;
+}
+
+// Make the guest's local party match the host's, without running Usecode.
+static void Friend_apply_party_members(const std::vector<uint32>& members) {
+	Party_manager* party = gwin->get_party_man();
+	for (int i = party->get_count() - 1; i >= 0; --i) {
+		const uint32 npc_num = static_cast<uint32>(party->get_member(i));
+		if (std::find(members.begin(), members.end(), npc_num) == members.end()) {
+			party->remove_from_party(gwin->get_npc(static_cast<int>(npc_num)));
+		}
+	}
+	for (uint32 npc_num : members) {
+		Actor* actor = gwin->get_npc(static_cast<int>(npc_num));
+		if (actor && actor != gwin->get_main_actor() && !actor->is_in_party()) {
+			party->add_to_party(actor);
+		}
 	}
 }
 
@@ -1877,6 +1905,7 @@ static void Handle_events() {
 				Friend_mode_notice(friend_host_peer_name + " has joined");
 			}
 			if (!friend_session.connected()) {
+				friend_sent_party.clear();
 				if (!friend_host_peer_name.empty()) {
 					Friend_mode_notice(
 							host_assigned_actor >= 0
@@ -1897,6 +1926,8 @@ static void Handle_events() {
 					last_host_frame = -1;
 				}
 			} else if (!friend_roster_sent) {
+				friend_sent_party = Friend_party_members();
+				friend_session.send_party_members(friend_sent_party);
 				std::vector<uint32> roster;
 				Party_manager* party = gwin->get_party_man();
 				for (int i = 0; i < party->get_count(); ++i) {
@@ -1908,6 +1939,12 @@ static void Handle_events() {
 				friend_session.send_party_roster(roster);
 				cout << "Friend Mode: advertised " << roster.size() << " available companion(s)" << endl;
 				friend_roster_sent = true;
+			} else {
+				std::vector<uint32> members = Friend_party_members();
+				if (members != friend_sent_party) {
+					friend_sent_party = std::move(members);
+					friend_session.send_party_members(friend_sent_party);
+				}
 			}
 			uint32 requested_actor = 0;
 			if (friend_session.take_actor_request(requested_actor)) {
@@ -1992,6 +2029,16 @@ static void Handle_events() {
 			if (friend_session.take_peer_joined()) {
 				Friend_mode_notice("Joined " + friend_session.remote_player_name_value() + "'s world");
 			}
+			std::vector<uint32> host_party;
+			if (friend_session.take_party_members(host_party)) {
+				Friend_apply_party_members(host_party);
+			}
+			// Without a companion, a guest only watches; it must not move
+			// its local Avatar, which belongs to the host.
+			const bool spectating = guest_assigned_actor < 0 || !gwin->has_network_friend_control();
+			if (spectating != gwin->is_network_spectating()) {
+				gwin->set_network_spectating(spectating);
+			}
 			if (friend_session.take_connection_lost()) {
 				gwin->set_network_dialogue_paused(false);
 				gwin->release_friend_mode_control();
@@ -2016,6 +2063,7 @@ static void Handle_events() {
 			if (friend_session.take_actor_assignment(assigned_actor)) {
 				if (!gwin->take_friend_mode_control(static_cast<int>(assigned_actor), true)) {
 					cerr << "Friend Mode: assigned companion is unavailable in the local world" << endl;
+					Friend_mode_notice("Could not take control; spectating");
 				} else {
 					guest_assigned_actor = static_cast<int>(assigned_actor);
 					last_guest_request = gwin->get_controlled_actor()->get_tile();
