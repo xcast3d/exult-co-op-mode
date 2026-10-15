@@ -69,6 +69,7 @@ void ActionWalkNorthWest(const int* params);
 void ActionWalkSouthWest(const int* params);
 void ActionStopWalking(const int* params);
 void ActionCenter(const int* params);
+void ActionToggleFriendControl(const int* params);
 void ActionShapeBrowser(const int* params);
 void ActionShapeBrowserHelp(const int* params);
 void ActionCreateShape(const int* params);

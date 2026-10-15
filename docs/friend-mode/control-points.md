@@ -40,8 +40,9 @@ seams, not a final design.
 
 ## First implementation boundary
 
-Introduce a controller-facing actor reference that defaults to `main_actor`.
-Route movement and physical input through it, point `camera_actor` at it, and
-temporarily suppress follow AI only for that actor. Keep dialogue, quest
-identity, Usecode provenance, saves, and party membership tied to
-`main_actor` until each boundary is tested explicitly.
+The prototype now has a controller-facing actor reference that defaults to
+`main_actor`. Movement routes through it, `camera_actor` follows it, and the
+selected companion's follow schedule is suspended and restored on release.
+Dialogue, quest identity, Usecode provenance, saves, and party membership
+remain tied to `main_actor`; those boundaries still require explicit runtime
+tests before the prototype is considered safe.

@@ -118,6 +118,7 @@ Z		stats
 Ctrl-Alt-G	grab_actor
 Ctrl-Alt-P	pick_pocket
 Ctrl-N		npc_numbers
+Ctrl-F		toggle_friend_control	# Friend Mode: Avatar/companion control
 
 1	inventory	0	# Show inventory for Avatar
 2	inventory	1	# Show inventory for character 2

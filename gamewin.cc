@@ -311,7 +311,8 @@ Game_window::Game_window(
 		  pal(nullptr), tqueue(new Time_queue()), background_noise(new Background_noise(this)), usecode(nullptr), combat(false),
 		  focus(true), ice_dungeon(false), painted(false), ambient_light(false), infravision_active(false), skip_above_actor(31),
 		  in_dungeon(0), num_npcs1(0), std_delay(c_std_delay), time_stopped(0), special_light(0), theft_warnings(0), theft_cx(255),
-		  theft_cy(255), moving_barge(nullptr), main_actor(nullptr), camera_actor(nullptr), npcs(0), bodies(0), scrolltx(0),
+		  theft_cy(255), moving_barge(nullptr), main_actor(nullptr), controlled_actor(nullptr),
+		  controlled_actor_previous_schedule(-1), camera_actor(nullptr), npcs(0), bodies(0), scrolltx(0),
 		  scrollty(0), dirty(0, 0, 0, 0), save_names{}, mouse3rd(false), fastmouse(false), double_click_closes_gumps(false),
 		  text_bg(false), step_tile_delta(8), allow_right_pathfind(2), scroll_with_mouse(false), alternate_drop(false),
 		  allow_autonotes(false), allow_enhancements(false), in_exult_menu(false), extended_intro(false), load_palette_timer(0),
@@ -967,6 +968,8 @@ void Game_window::clear_world(bool restoremapedit) {
 	Monster_actor::delete_all();    // To be safe, del. any still around.
 	Notebook_gump::clear();
 	main_actor   = nullptr;
+	controlled_actor = nullptr;
+	controlled_actor_previous_schedule = -1;
 	camera_actor = nullptr;
 	num_npcs1    = 0;
 	theft_cx = theft_cy = -1;
@@ -1154,6 +1157,45 @@ void Game_window::set_camera_actor(Actor* a) {
 	set_scrolls(t);    // Set scrolling around position,
 	// and read in map there.
 	set_all_dirty();
+}
+
+/*
+ * Toggle the Phase 1 Friend Mode prototype between the story Avatar and the
+ * first active party companion. Actor identity and party membership are not
+ * changed; only local input and camera ownership move.
+ */
+bool Game_window::toggle_friend_mode_control() {
+	Actor* current = get_controlled_actor();
+	if (current != main_actor) {
+		current->stop();
+		if (controlled_actor_previous_schedule >= 0) {
+			current->set_schedule_type(controlled_actor_previous_schedule);
+		}
+		controlled_actor = main_actor;
+		controlled_actor_previous_schedule = -1;
+		set_camera_actor(main_actor);
+		cout << "Friend Mode: controlling the Avatar" << endl;
+		return true;
+	}
+
+	const int count = party_man->get_count();
+	for (int i = 0; i < count; ++i) {
+		Actor* companion = get_npc(party_man->get_member(i));
+		if (!companion || companion->is_dead() || companion->get_flag(Obj_flags::asleep)
+			|| companion->get_flag(Obj_flags::paralyzed)) {
+			continue;
+		}
+		companion->stop();
+		controlled_actor_previous_schedule = companion->get_schedule_type();
+		companion->set_schedule_type(Schedule::wait);
+		controlled_actor = companion;
+		set_camera_actor(companion);
+		cout << "Friend Mode: controlling " << companion->get_name() << endl;
+		return true;
+	}
+
+	cout << "Friend Mode: no eligible party companion" << endl;
+	return false;
 }
 
 /*
@@ -1746,20 +1788,23 @@ void Game_window::start_actor_alt(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
+	Actor* actor = get_controlled_actor();
 	// Avatar can move, don't sync the barge anymore.
-	landing_barge = nullptr;
+	if (actor == main_actor) {
+		landing_barge = nullptr;
+	}
 	int  ax;
 	int  ay;
 	bool blocked[8];
-	get_shape_location(main_actor, ax, ay);
+	get_shape_location(actor, ax, ay);
 
-	Tile_coord start = main_actor->get_tile();
+	Tile_coord start = actor->get_tile();
 	int        dir;
-	const bool checkdrop = (main_actor->get_type_flags() & MOVE_LEVITATE) == 0;
+	const bool checkdrop = (actor->get_type_flags() & MOVE_LEVITATE) == 0;
 
 	for (dir = 0; dir < 8; dir++) {
 		Tile_coord dest = start.get_neighbor(dir);
-		blocked[dir]    = main_actor->is_blocked(dest, &start, main_actor->get_type_flags());
+		blocked[dir]    = actor->is_blocked(dest, &start, actor->get_type_flags());
 		if (checkdrop && abs(start.tz - dest.tz) > 1) {
 			blocked[dir] = true;
 		}
@@ -1772,16 +1817,16 @@ void Game_window::start_actor_alt(
 	} else if (blocked[dir] && !blocked[(dir + 7) % 8]) {
 		dir = (dir + 7) % 8;
 	} else if (blocked[dir]) {
-		Game_object* block = main_actor->is_moving() ? nullptr : main_actor->find_blocking(start.get_neighbor(dir), dir);
+		Game_object* block = actor->is_moving() ? nullptr : actor->find_blocking(start.get_neighbor(dir), dir);
 		// We already know the blocking object isn't the avatar, so don't
 		// double check it here.
-		if (!block || !block->move_aside(main_actor, dir)) {
+		if (!block || !block->move_aside(actor, dir)) {
 			stop_actor();
-			if (main_actor->get_lift() % 5) {    // Up on something?
+			if (actor->get_lift() % 5) {    // Up on something?
 				// See if we're stuck in the air.
 				const int savetz = start.tz;
 				if (!Map_chunk::is_blocked(start, 1, MOVE_WALK, 100) && start.tz < savetz) {
-					main_actor->move(start.tx, start.ty, start.tz);
+					actor->move(start.tx, start.ty, start.tz);
 				}
 			}
 			return;
@@ -1836,14 +1881,17 @@ void Game_window::start_actor_alt(
 		break;
 	}
 
-	const int lift       = main_actor->get_lift();
+	const int lift       = actor->get_lift();
 	const int liftpixels = 4 * lift;    // Figure abs. tile.
 	int       tx         = get_scrolltx() + (ax + liftpixels) / c_tilesize;
 	int       ty         = get_scrollty() + (ay + liftpixels) / c_tilesize;
 	// Wrap:
 	tx = (tx + c_num_tiles) % c_num_tiles;
 	ty = (ty + c_num_tiles) % c_num_tiles;
-	main_actor->walk_to_tile(tx, ty, lift, speed, 0);
+	actor->walk_to_tile(tx, ty, lift, speed, 0);
+	if (actor != main_actor) {
+		return;
+	}
 	if (walk_in_formation && main_actor->get_action()) {
 		//++++++In this case, may need to set schedules back to
 		// follow_avatar after, say, sitting.++++++++++
@@ -1861,17 +1909,18 @@ void Game_window::start_actor(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
-	if (main_actor->Actor::get_flag(Obj_flags::asleep)) {
+	Actor* actor = get_controlled_actor();
+	if (actor->get_flag(Obj_flags::asleep)) {
 		return;    // Zzzzz....
 	}
-	if (!cheat.in_map_editor() && (main_actor->in_usecode_control() || main_actor->get_flag(Obj_flags::paralyzed))) {
+	if (!cheat.in_map_editor() && (actor->in_usecode_control() || actor->get_flag(Obj_flags::paralyzed))) {
 		return;
 	}
 	if (gump_man->gump_mode() && !gump_man->gumps_dont_pause_game()) {
 		return;
 	}
 	//	teleported = 0;
-	if (moving_barge) {
+	if (moving_barge && actor == main_actor) {
 		// Want to move center there.
 		const int lift       = main_actor->get_lift();
 		const int liftpixels = 4 * lift;    // Figure abs. tile.
@@ -1890,7 +1939,11 @@ void Game_window::start_actor(
 		main_actor->get_followers();
 		*/
 		// Set schedule.
-		const int sched = main_actor->get_schedule_type();
+		const int sched = actor->get_schedule_type();
+		if (actor != main_actor) {
+			start_actor_alt(winx, winy, speed);
+			return;
+		}
 		if (sched != Schedule::follow_avatar && sched != Schedule::combat && !main_actor->get_flag(Obj_flags::asleep)) {
 			main_actor->set_schedule_type(Schedule::follow_avatar);
 			// If the avatar was *not* in combat or follow avatar schedules,
@@ -1919,21 +1972,22 @@ void Game_window::start_actor_along_path(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
 ) {
-	if (main_actor->Actor::get_flag(Obj_flags::asleep) || main_actor->Actor::get_flag(Obj_flags::paralyzed)
-		|| main_actor->get_schedule_type() == Schedule::sleep || moving_barge) {    // For now, don't do barges.
+	Actor* actor = get_controlled_actor();
+	if (actor->get_flag(Obj_flags::asleep) || actor->get_flag(Obj_flags::paralyzed)
+		|| actor->get_schedule_type() == Schedule::sleep || (moving_barge && actor == main_actor)) {    // For now, don't do barges.
 		return;                                                                     // Zzzzz....
 	}
 	// Animation in progress?
-	if (!cheat.in_map_editor() && main_actor->in_usecode_control()) {
+	if (!cheat.in_map_editor() && actor->in_usecode_control()) {
 		return;
 	}
 	//	teleported = 0;
-	const int        lift       = main_actor->get_lift();
+	const int        lift       = actor->get_lift();
 	const int        liftpixels = 4 * lift;    // Figure abs. tile.
 	const Tile_coord dest(
 			get_scrolltx() + (winx + liftpixels) / c_tilesize, get_scrollty() + (winy + liftpixels) / c_tilesize, lift);
-	if (!main_actor->walk_path_to_tile(dest, speed)) {
-		cout << "Couldn't find path for Avatar." << endl;
+	if (!actor->walk_path_to_tile(dest, speed)) {
+		cout << "Couldn't find path for controlled actor." << endl;
 		if (touch_pathfind) {
 			Mouse::mouse()->flash_shape(Mouse::blocked);
 		}
@@ -1941,7 +1995,9 @@ void Game_window::start_actor_along_path(
 		if (touch_pathfind) {
 			get_effects()->add_effect(std::make_unique<Sprites_effect>(18, dest, 0, 0, 0, 0));
 		}
-		main_actor->get_followers();
+		if (actor == main_actor) {
+			main_actor->get_followers();
+		}
 	}
 }
 
@@ -1950,14 +2006,17 @@ void Game_window::start_actor_along_path(
  */
 
 void Game_window::stop_actor() {
-	if (moving_barge) {
+	Actor* actor = get_controlled_actor();
+	if (moving_barge && actor == main_actor) {
 		moving_barge->stop();
 	} else {
-		main_actor->stop();    // Stop and set resting state.
+		actor->stop();    // Stop and set resting state.
 		if (!gump_man->gump_mode() || gump_man->gumps_dont_pause_game()) {
 			//+++++++The following line is for testing:
 			//			if (!walk_in_formation)
-			main_actor->get_followers();
+			if (actor == main_actor) {
+				main_actor->get_followers();
+			}
 		}
 	}
 }

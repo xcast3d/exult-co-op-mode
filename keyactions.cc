@@ -653,6 +653,13 @@ void ActionCenter(const int* params) {
 	gwin->paint();
 }
 
+// Phase 1 Friend Mode development action: switch local input between the
+// canonical Avatar and the first eligible party companion.
+void ActionToggleFriendControl(const int* params) {
+	ignore_unused_variable_warning(params);
+	Game_window::get_instance()->toggle_friend_mode_control();
+}
+
 //  { ActionShapeBrowser, 0, "Shape browser", cheat_keys, NONE },
 void ActionShapeBrowser(const int* params) {
 	ignore_unused_variable_warning(params);

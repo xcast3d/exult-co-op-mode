@@ -130,6 +130,8 @@ class Game_window {
 	// Don't recenter barge during lift off and landing.
 	bool                      suppress_barge_recenter = false;
 	Main_actor*               main_actor;      // Main sprite to move around.
+	Actor*                    controlled_actor; // Actor receiving local player input.
+	int                       controlled_actor_previous_schedule;
 	Actor*                    camera_actor;    // What to center view around.
 	std::vector<Actor_shared> npcs;            // Array of NPC's + the Avatar.
 	std::vector<Dead_body*>   bodies;          // Corresponding Dead_body's.
@@ -611,6 +613,10 @@ public:
 	inline Main_actor* get_main_actor() const {
 		return main_actor;
 	}
+	Actor* get_controlled_actor() const {
+		return controlled_actor;
+	}
+	bool toggle_friend_mode_control();
 
 	bool is_main_actor_inside() const {
 		return skip_above_actor < 31;

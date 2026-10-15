@@ -53,7 +53,8 @@ void Game_window::read_npcs() {
 	npcs.resize(1);    // Create main actor.
 	const Main_actor_shared ava = std::make_shared<Main_actor>("", 0);
 	npcs[0]                     = ava;
-	camera_actor = main_actor = ava.get();
+	camera_actor = controlled_actor = main_actor = ava.get();
+	controlled_actor_previous_schedule = -1;
 	bool fix_unused           = false;    // Get set for old savegames.
 	{
 		int             num_npcs;

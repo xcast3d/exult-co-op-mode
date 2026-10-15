@@ -35,11 +35,18 @@ Confirm that the binary starts:
 The initial baseline used Exult `1.13.1git`, Apple Clang 21, SDL 3.4.18,
 libpng 1.6.59, Vorbis 1.3.7, FluidSynth 2.6.1, and MT32emu 2.8.3.
 
-To launch The Black Gate after configuring a valid game-data path in
-`~/Library/Preferences/exult.cfg`:
+To launch the unmodified Black Gate baseline after configuring a valid
+game-data path in `~/Library/Preferences/exult.cfg`:
 
 ```sh
 ./exult --bg
+```
+
+After changing generated resources such as the default key bindings, use the
+development-only checksum override:
+
+```sh
+./exult --bg --nocrc
 ```
 
 Exult's full platform notes remain in [`README.macOS`](../../README.macOS).

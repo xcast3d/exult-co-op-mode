@@ -141,6 +141,7 @@ const struct Action {
 		{     "WALK_NORTH_WEST",      ActionWalkNorthWest, ActionStopWalking, 0x829,  Action::normal_keys,         NONE, false, false, false,  true},
 		{     "WALK_SOUTH_WEST",      ActionWalkSouthWest, ActionStopWalking, 0x82A,  Action::normal_keys,         NONE, false, false, false,  true},
 		{       "CENTER_SCREEN",             ActionCenter,           nullptr, 0x82B,   Action::cheat_keys,         NONE, false,  true,  true, false},
+		{ "TOGGLE_FRIEND_CONTROL", ActionToggleFriendControl,       nullptr, 0x800,    Action::dont_show,         NONE, false,  true,  true, false},
 		{       "SHAPE_BROWSER",       ActionShapeBrowser,           nullptr, 0x82c,   Action::cheat_keys,         NONE, false,  true,  true, false},
 		{  "SHAPE_BROWSER_HELP",   ActionShapeBrowserHelp,           nullptr, 0x82d,   Action::cheat_keys,         NONE, false,  true,  true, false},
 		{         "CREATE_ITEM",        ActionCreateShape,           nullptr, 0x82E,   Action::cheat_keys,         NONE, false,  true,  true, false},
