@@ -563,8 +563,7 @@ static void Friend_mode_spawn_test_kit() {
 	Friend_test_kit_place(481, 0, 7, 0);      // Sconce.
 	Friend_test_kit_place(336, 0, 7, 3);      // Light source.
 	Friend_test_kit_place(787, 0, -7, 0);     // Lever.
-	// Door styles and secret-wall candidates, in a row to the south.  Ultima
-	// VII builds hidden doors from door shapes in other frame styles.
+	// Other door styles and portcullises, in a row to the south.
 	Friend_test_kit_place(270, 8, -10, 10);     // Vertical door, style 2.
 	Friend_test_kit_place(270, 16, -7, 10);     // Vertical door, style 3.
 	Friend_test_kit_place(376, 8, -4, 10);      // Horizontal door, style 2.
