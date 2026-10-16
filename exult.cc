@@ -46,6 +46,7 @@
 #include "cheat.h"
 #include "chunks.h"
 #include "combat_opts.h"
+#include "contain.h"
 #include "crc.h"
 #include "dir.h"
 #include "drag.h"
@@ -495,6 +496,73 @@ static void Friend_mode_use_object_for_guest(const Friend_mode_session::Object_f
 		obj->activate();
 	}
 	cout << "Friend Mode: used shape " << obj->get_shapenum() << " for guest at " << tile.tx << ',' << tile.ty << endl;
+}
+
+// Host debug aid (F9): build a Friend Mode test kit around the Avatar with
+// one of each object guests can use, plus containers with items.  Black
+// Gate shapes.  Spawn before a guest joins: new objects are not synced yet,
+// but they are part of the world a joining guest downloads.
+static Game_object_shared Friend_test_kit_create(int shape, int frame) {
+	const Shape_info&        info = ShapeID::get_info(shape);
+	const Game_object_shared obj  = gwin->get_map()->create_ireg_object(info, shape, frame, 0, 0, 0);
+	obj->set_flag(Obj_flags::okay_to_take);
+	return obj;
+}
+
+static bool Friend_test_kit_place(int shape, int frame, int dx, int dy, Game_object_shared* placed = nullptr) {
+	const Tile_coord avatar = gwin->get_main_actor()->get_tile();
+	const Tile_coord want(avatar.tx + dx, avatar.ty + dy, avatar.tz);
+	const Tile_coord pos = Map_chunk::find_spot(want, 3, shape, frame, 1);
+	if (pos.tx < 0) {
+		cerr << "Friend Mode: no room for test shape " << shape << endl;
+		return false;
+	}
+	const Game_object_shared obj = Friend_test_kit_create(shape, frame);
+	obj->move(pos);
+	if (placed) {
+		*placed = obj;
+	}
+	return true;
+}
+
+static void Friend_test_kit_fill(const Game_object_shared& container_obj, int shape, int frame, int quantity) {
+	Container_game_object* container = container_obj ? container_obj->as_container() : nullptr;
+	if (!container) {
+		return;
+	}
+	const Game_object_shared item = Friend_test_kit_create(shape, frame);
+	if (quantity > 1) {
+		item->modify_quantity(quantity - 1);
+	}
+	container->add(item.get(), true);
+}
+
+static void Friend_mode_spawn_test_kit() {
+	if (!GAME_BG) {
+		Friend_mode_notice("The test kit uses Black Gate shapes");
+		return;
+	}
+	Friend_test_kit_place(270, 0, -6, -4);    // Vertical door.
+	Friend_test_kit_place(376, 0, -2, -6);    // Horizontal door.
+	Friend_test_kit_place(290, 0, 3, -6);     // Closed shutters.
+	Friend_test_kit_place(889, 0, 7, -4);     // Lamp post.
+	Friend_test_kit_place(481, 0, 7, 0);      // Sconce.
+	Friend_test_kit_place(336, 0, 7, 3);      // Light source.
+	Friend_test_kit_place(787, 0, -7, 0);     // Lever.
+	Game_object_shared chest;
+	if (Friend_test_kit_place(800, 0, -4, 5, &chest)) {
+		Friend_test_kit_fill(chest, 377, 0, 1);      // Food.
+		Friend_test_kit_fill(chest, 644, 0, 25);     // Gold coins.
+		Friend_test_kit_fill(chest, 616, 0, 1);      // Bottle.
+		Friend_test_kit_fill(chest, 595, 0, 1);      // Torch.
+		Friend_test_kit_fill(chest, 641, 0, 1);      // Key.
+	}
+	Game_object_shared bag;
+	if (Friend_test_kit_place(802, 0, 2, 5, &bag)) {
+		Friend_test_kit_fill(bag, 377, 0, 2);    // Food.
+	}
+	gwin->set_all_dirty();
+	Friend_mode_notice("Friend Mode test kit placed");
 }
 
 // Temporary save used to hand the host's live world to a joining guest.
@@ -2901,6 +2969,10 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
  */
 
 static void Handle_event(SDL_Event& event) {
+	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
+		Friend_mode_spawn_test_kit();
+		return;
+	}
 	if (friend_session.connected()) {
 		if (friend_chat_active) {
 			if (event.type == SDL_EVENT_TEXT_INPUT) {

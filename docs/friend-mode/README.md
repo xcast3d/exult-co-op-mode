@@ -26,6 +26,8 @@ Phase 1: harden the working local party-member possession prototype.
   Avatar access to all party inventories.
 
 See [macOS setup](macos-setup.md) and [control-point notes](control-points.md).
+For a repeatable two-player pass, use the [test checklist](test-checklist.md);
+**F9** on the host places a test kit of usable objects around the Avatar.
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md).
 
