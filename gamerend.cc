@@ -396,8 +396,11 @@ void Game_window::paint(
 		Actor*    party[9];    // Get party, including Avatar.
 		const int cnt           = get_party(party, 1);
 		int       carried_light = 0;
+		// Light is measured from whoever the view follows (the Avatar, or a
+		// Friend Mode guest's companion).
+		const Actor* viewer = get_camera_actor() ? get_camera_actor() : main_actor;
 		for (int i = 0; i < cnt; i++) {
-			carried_light += Get_light_strength(party[i], main_actor, party[i]->get_light_source());
+			carried_light += Get_light_strength(party[i], viewer, party[i]->get_light_source());
 		}
 		// Also check light spell.
 		if (special_light && clock->get_total_minutes() > special_light) {
@@ -562,13 +565,15 @@ int Game_render::paint_chunk_objects(
 	Map_chunk*        olist         = gwin->map->get_chunk(cx, cy);
 	int               light_sources = 0;    // Also check for light sources.
 	Main_actor* const main_actor    = gwin->get_main_actor();
-	if (main_actor != nullptr) {
+	// Measure light from whoever the view follows (see paint()).
+	const Actor* viewer = gwin->get_camera_actor() ? gwin->get_camera_actor() : main_actor;
+	if (viewer != nullptr) {
 		const auto& lights = gwin->is_in_dungeon() ? olist->get_dungeon_lights() : olist->get_non_dungeon_lights();
 		for (const auto& light_obj : lights) {
 			const Shape_info& info = light_obj->get_info();
 			if (info.get_object_light(light_obj->get_framenum()) > 0) {
 				// Count light sources.
-				light_sources += get_light_strength(light_obj, main_actor);
+				light_sources += get_light_strength(light_obj, viewer);
 			}
 		}
 	}

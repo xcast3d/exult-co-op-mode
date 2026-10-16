@@ -113,7 +113,11 @@ now): shutters 290/291/322/372, light sources 336/338, sconces 435/481,
 curtains 657/678, levers 787, switches 788 and lamp posts (889 unlit, which swaps to 526 lit lamp when turned on). The guest's double-click asks the host,
 which checks the shape and reach (the normal double-click reach rule) and then
 uses it: doors the way NPCs do (quality zeroed so only the door's own toggle
-runs), the others with a normal activation. Locked doors show "Locked". Levers
+runs), the others with a normal activation. Locked doors show "Locked". If the object's
+script walks someone there first (levers do), the guest's companion walks, not
+the Avatar (`Friend_mode_usecode_walker`). Night lighting is measured from the
+actor the view follows instead of always the Avatar, so a guest sees light
+around their own companion. Levers
 and switches are allowed so guests can help with puzzles; their scripts can
 open gates or trigger effects elsewhere, which is accepted. Protocol version is 9.
 

@@ -463,6 +463,12 @@ static void Friend_apply_object_change(Game_object* obj, int shape, int frame) {
 	}
 }
 
+static Actor* friend_usecode_walker = nullptr;
+
+Actor* Friend_mode_usecode_walker() {
+	return friend_usecode_walker;
+}
+
 // Host: use a door or other guest-usable object for a guest.  Doors are
 // toggled the way NPCs do it (quality zeroed so only the door's own toggle
 // runs, not story Usecode); shutters, lamps and the like are activated.
@@ -487,6 +493,7 @@ static void Friend_mode_use_object_for_guest(const Friend_mode_session::Object_f
 		cout << "Friend Mode: refused object use (out of reach)" << endl;
 		return;
 	}
+	friend_usecode_walker = actor;
 	if (door) {
 		const int savequal = obj->get_quality();
 		obj->set_quality(0);
@@ -495,6 +502,7 @@ static void Friend_mode_use_object_for_guest(const Friend_mode_session::Object_f
 	} else {
 		obj->activate();
 	}
+	friend_usecode_walker = nullptr;
 	cout << "Friend Mode: used shape " << obj->get_shapenum() << " for guest at " << tile.tx << ',' << tile.ty << endl;
 }
 

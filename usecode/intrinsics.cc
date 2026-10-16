@@ -2968,13 +2968,16 @@ USECODE_INTRINSIC(path_run_usecode) {
 	// exec(loc(x,y,z)?, usecode#, itemref, eventid).
 	// Think it should have Avatar walk path to loc, return 0
 	//  if he can't get there (and return), 1 if he can.
-	Usecode_value ava(gwin->get_main_actor());
+	// Friend Mode: a guest's companion walks when the host uses an object
+	// on the guest's behalf, and the party stays put.
+	Actor*        walker = Friend_mode_usecode_walker();
+	Usecode_value ava(walker ? walker : static_cast<Actor*>(gwin->get_main_actor()));
 	const bool    simode = parms.size() > 4 ? parms[4].get_int_value() != 0 : GAME_SI;
 	return Usecode_value(path_run_usecode(
 			ava, parms[0], parms[1], parms[2], parms[3],
 			// SI:  Look for free spot. (Guess).
 			simode, false,
-			true));    // Bring companions.
+			walker == nullptr));    // Bring companions.
 }
 
 USECODE_INTRINSIC(close_gump) {

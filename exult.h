@@ -46,6 +46,9 @@ std::string Friend_mode_display_name(const Game_object* object, const std::strin
 void Friend_mode_note_object_change(Game_object* object, int old_shape, int old_frame);
 // World objects besides doors that guests may use (shutters, lamps...).
 bool Friend_mode_guest_usable_shape(int shape);
+// Host: while using an object for a guest, the guest's companion (not the
+// Avatar) walks to it for scripts that path the Avatar there first.
+Actor* Friend_mode_usecode_walker();
 // Guest: ask the host to use a door or other guest-usable object.
 void Friend_mode_request_object_use(Game_object* object);
 

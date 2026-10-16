@@ -83,6 +83,14 @@ For each of: shutters, lamp post, sconce, light source, lever.
 
 - [ ] Host toggles it; the guest sees it, including the light at night.
 - [ ] Guest toggles it on and off; both windows match.
+- [ ] At night, the guest's view brightens around a lit lamp near the guest's
+      companion (lighting is measured from whoever the view follows).
+- [ ] Lever: the guest's companion walks to it, not the Avatar.
+
+## Secret walls
+
+- [ ] When you find a secret wall or door in town or a dungeon, open it from
+      each side and note whether it opens on both windows. (Not in the kit.)
 
 ## Containers and items (not synced yet)
 
@@ -98,6 +106,8 @@ For each of: shutters, lamp post, sconce, light source, lever.
 
 ## Known gaps to ignore for now
 
+- Using items with a target, such as keys on locks: guests can't run item
+  scripts yet.
 - Items and containers changed after joining (world sync W3–W4).
 - Creatures that appear after joining, such as a cat wandering in.
 - Doors whose script swaps to a shape that isn't flagged as a door.
