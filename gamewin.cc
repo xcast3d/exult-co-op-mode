@@ -2725,14 +2725,18 @@ void Game_window::double_clicked(
 		return;
 	}
 	if (controlled && controlled != main_actor && network_friend_control) {
-		// Doors are the one Usecode-driven object guests may use: the host
-		// opens unlocked doors for them and shares the result.
-		if (!clicked_actor && obj->get_info().is_door()) {
+		// Doors, shutters, lamps and similar world toggles are the Usecode
+		// objects guests may use: the host uses them and shares the result.
+		if (!clicked_actor && !obj->get_owner() && obj->get_info().is_door()) {
 			if (obj->get_framenum() % 4 >= 2) {
 				effects->add_text("Locked", obj);
 			} else {
-				Friend_mode_request_door_use(obj);
+				Friend_mode_request_object_use(obj);
 			}
+			return;
+		}
+		if (!clicked_actor && !obj->get_owner() && Friend_mode_guest_usable_shape(obj->get_shapenum())) {
+			Friend_mode_request_object_use(obj);
 			return;
 		}
 		// Network guests cannot start Avatar-owned usecode or storyline

@@ -778,10 +778,9 @@ void Usecode_internal::set_item_shape(Usecode_value& item_arg, Usecode_value& sh
 	item->set_shape(shape);
 	chunk->add(item);
 	gwin->add_dirty(item);
-	// Friend Mode: doors open by swapping shape (e.g. 270 -> 432).
-	if (item->get_info().is_door() || ShapeID::get_info(old_shape).is_door()) {
-		Friend_mode_note_object_change(item, old_shape, old_frame);
-	}
+	// Friend Mode: share Usecode changes to world objects (doors open by
+	// swapping shape, e.g. 270 -> 432; shutters and lamps likewise).
+	Friend_mode_note_object_change(item, old_shape, old_frame);
 	//	rect = gwin->get_shape_rect(item).add(rect);
 	//	rect.enlarge(8);
 	//	rect = gwin->clip_to_win(rect);
@@ -827,7 +826,13 @@ void Usecode_internal::set_item_frame(
 		//              << ", " << frame << endl;
 		// (Don't mess up rotated frames.)
 		if ((frame & 0xf) < item->get_num_frames()) {
+			const int old_frame = item->get_framenum();
 			item->change_frame(frame);
+			// Friend Mode: share Usecode frame changes to world objects.
+			// (Decorative animation uses change_frame directly and is skipped.)
+			if (item->get_chunk() && !item->get_owner()) {
+				Friend_mode_note_object_change(item, item->get_shapenum(), old_frame);
+			}
 		}
 	}
 	gwin->set_painted();    // Make sure paint gets done.

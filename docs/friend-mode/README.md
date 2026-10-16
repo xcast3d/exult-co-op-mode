@@ -96,17 +96,24 @@ progress, unpacks the save into its gamedat, and loads it, so party, quest
 flags, items, doors and NPCs match the host at the moment of joining. Protocol
 version is now 7.
 
-### Doors
+### Doors, shutters and lamps
 
-The host shares every door change (opened or closed by the Avatar, NPCs or
-Usecode) with the guest. Ultima VII opens doors by swapping shape (closed
-270/376 to open 432/433, all door-flagged in TFA.DAT), so both shape swaps in
-`Usecode_internal::set_item_shape` and frame changes are hooked. A door is
-identified by tile plus old shape and frame, falling back to any door at that
-tile; the guest applies the new shape and frame locally. A guest double-clicking an unlocked door asks the host,
-which opens or closes it the way NPCs do (quality zeroed so only the door's
-own toggle runs) and shares the result. Locked doors show "Locked". Protocol
-version is now 9.
+The host shares every change a game script makes to a world object's shape or
+frame, hooked in `Usecode_internal::set_item_frame` and `set_item_shape`. That
+covers doors opened by the Avatar, NPCs or scripts, shutters, lamps, levers and
+so on. Decorative animation (torches, fountains) uses `change_frame` directly
+and is not sent. Ultima VII opens doors by swapping shape (closed 270/376 to
+open 432/433), so an object is identified by tile plus old shape and frame,
+falling back to any door at that tile.
+
+Guests may use doors and a short list of world toggles (Black Gate only for
+now): shutters 290/291/322/372, light sources 336/338, sconces 435/481,
+curtains 657/678 and the lamp post 889. The guest's double-click asks the host,
+which checks the shape and reach (the normal double-click reach rule) and then
+uses it: doors the way NPCs do (quality zeroed so only the door's own toggle
+runs), the others with a normal activation. Locked doors show "Locked". Levers
+and switches are not allowed yet because their scripts can open gates or
+trigger puzzles elsewhere. Protocol version is 9.
 
 ### Party mirroring and spectating
 

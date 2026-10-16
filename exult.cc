@@ -365,7 +365,8 @@ static void Friend_mode_update_leash_zone(Actor* actor) {
 }
 
 void Friend_mode_note_object_change(Game_object* object, int old_shape, int old_frame) {
-	if (!object || friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()) {
+	if (!object || friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()
+		|| !object->get_chunk() || object->get_owner() || object->as_actor()) {
 		return;
 	}
 	const Tile_coord t = object->get_tile();
@@ -373,12 +374,34 @@ void Friend_mode_note_object_change(Game_object* object, int old_shape, int old_
 			t.tx, t.ty, t.tz, old_shape, object->get_shapenum(), old_frame, object->get_framenum());
 }
 
-void Friend_mode_request_door_use(Game_object* door) {
-	if (!door || friend_session.mode() != Friend_mode_session::Mode::guest || !friend_session.connected()) {
+bool Friend_mode_guest_usable_shape(int shape) {
+	if (!GAME_BG) {
+		return false;    // Serpent Isle shapes not reviewed yet; doors only.
+	}
+	switch (shape) {
+	case 290:    // Closed shutters.
+	case 291:
+	case 322:    // Open shutters.
+	case 372:
+	case 336:    // Light source / lit light source.
+	case 338:
+	case 435:    // Lit sconce / sconce.
+	case 481:
+	case 657:    // Curtains.
+	case 678:
+	case 889:    // Lamp post.
+		return true;
+	default:
+		return false;
+	}
+}
+
+void Friend_mode_request_object_use(Game_object* object) {
+	if (!object || friend_session.mode() != Friend_mode_session::Mode::guest || !friend_session.connected()) {
 		return;
 	}
-	const Tile_coord t = door->get_tile();
-	friend_session.send_door_use(t.tx, t.ty, t.tz, door->get_shapenum(), door->get_framenum());
+	const Tile_coord t = object->get_tile();
+	friend_session.send_door_use(t.tx, t.ty, t.tz, object->get_shapenum(), object->get_framenum());
 }
 
 // Find a world object at exactly this tile with this shape (and frame, if
@@ -394,8 +417,8 @@ static Game_object* Friend_find_object(const Tile_coord& tile, int shape, int fr
 	return nullptr;
 }
 
-// Find a door at this tile: the given shape first, then any door shape,
-// since opening swaps shape (closed 270/376 <-> open 432/433).
+// Find a world object at this tile: the given shape first, then (for doors,
+// which swap shape when opened: 270/376 <-> 432/433) any door shape.
 static Game_object* Friend_find_door(const Tile_coord& tile, int shape, int frame) {
 	if (Game_object* obj = Friend_find_object(tile, shape, frame)) {
 		return obj;
@@ -431,29 +454,39 @@ static void Friend_apply_object_change(Game_object* obj, int shape, int frame) {
 	}
 }
 
-// Host: open or close a door for a guest, the way NPCs do: quality is
-// zeroed so only the door's own toggle runs, not story Usecode.
-static void Friend_mode_use_door_for_guest(const Friend_mode_session::Object_frame_event& request, Actor* actor) {
+// Host: use a door or other guest-usable object for a guest.  Doors are
+// toggled the way NPCs do it (quality zeroed so only the door's own toggle
+// runs, not story Usecode); shutters, lamps and the like are activated.
+static void Friend_mode_use_object_for_guest(const Friend_mode_session::Object_frame_event& request, Actor* actor) {
 	const Tile_coord tile(request.tx, request.ty, request.tz);
-	Game_object*     door = Friend_find_door(tile, request.shape, request.old_frame);
-	if (!door || !actor || !door->get_info().is_door()) {
-		cout << "Friend Mode: refused door use (no door at " << tile.tx << ',' << tile.ty << ')' << endl;
+	Game_object*     obj = Friend_find_door(tile, request.shape, request.old_frame);
+	if (!obj || !actor) {
+		cout << "Friend Mode: refused object use (nothing at " << tile.tx << ',' << tile.ty << ')' << endl;
 		return;
 	}
-	if (door->get_framenum() % 4 >= 2) {
+	const bool door = obj->get_info().is_door();
+	if (!door && !Friend_mode_guest_usable_shape(obj->get_shapenum())) {
+		cout << "Friend Mode: refused object use (shape " << obj->get_shapenum() << " not allowed)" << endl;
+		return;
+	}
+	if (door && obj->get_framenum() % 4 >= 2) {
 		cout << "Friend Mode: refused door use (locked)" << endl;
 		return;
 	}
 	// Same reach rule as the guest's double-click (and the Avatar's).
-	if (!Fast_pathfinder_client::is_grabable(actor, door)) {
-		cout << "Friend Mode: refused door use (out of reach)" << endl;
+	if (!Fast_pathfinder_client::is_grabable(actor, obj)) {
+		cout << "Friend Mode: refused object use (out of reach)" << endl;
 		return;
 	}
-	const int savequal = door->get_quality();
-	door->set_quality(0);
-	door->activate();
-	door->set_quality(savequal);
-	cout << "Friend Mode: used door for guest at " << tile.tx << ',' << tile.ty << endl;
+	if (door) {
+		const int savequal = obj->get_quality();
+		obj->set_quality(0);
+		obj->activate();
+		obj->set_quality(savequal);
+	} else {
+		obj->activate();
+	}
+	cout << "Friend Mode: used shape " << obj->get_shapenum() << " for guest at " << tile.tx << ',' << tile.ty << endl;
 }
 
 // Temporary save used to hand the host's live world to a joining guest.
@@ -2259,7 +2292,7 @@ static void Handle_events() {
 			}
 			Friend_mode_session::Object_frame_event door_request;
 			while (friend_session.take_door_use(door_request)) {
-				Friend_mode_use_door_for_guest(
+				Friend_mode_use_object_for_guest(
 						door_request, host_assigned_actor >= 0 ? gwin->get_npc(host_assigned_actor) : nullptr);
 			}
 			// The Avatar left the guest's companion beyond the leash: after a

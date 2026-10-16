@@ -61,7 +61,7 @@ public:
 	void send_object_change(
 			int tx, int ty, int tz, int old_shape, int new_shape, int old_frame, int new_frame);
 	bool take_object_frame(Object_frame_event& event);
-	// Guest asks the host to open or close a door (new_frame unused).
+	// Guest asks the host to use a door or other usable object.
 	void send_door_use(int tx, int ty, int tz, int shape, int frame);
 	bool take_door_use(Object_frame_event& event);
 	// Guest asks for the host's live world, sent as a world_save blob.

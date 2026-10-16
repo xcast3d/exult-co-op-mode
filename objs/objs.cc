@@ -570,7 +570,6 @@ void Game_object::move(const Tile_coord& t, int newmap) {
  */
 
 void Game_object::change_frame(int frnum) {
-	const int old_frame = get_framenum();
 	gwin->add_dirty(this);    // Set to repaint old area.
 							  // Track brightness change when changing frames
 	const int old_brightness = get_info().get_object_light(get_framenum());
@@ -614,10 +613,6 @@ void Game_object::change_frame(int frnum) {
 	}
 
 	gwin->add_dirty(this);    // Set to repaint new.
-	// Friend Mode: the host shares door changes with guests.
-	if (chunk && !as_actor() && old_frame != frnum && get_info().is_door()) {
-		Friend_mode_note_object_change(this, get_shapenum(), old_frame);
-	}
 }
 
 /*

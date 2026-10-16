@@ -42,10 +42,12 @@ bool Friend_mode_collect_connection_details();
 bool Friend_mode_download_world();
 std::string Friend_mode_display_name(const Game_object* object, const std::string& character_name);
 
-// Host: a world door changed shape or frame, to be shared with guests.
+// Host: Usecode changed a world object's shape or frame; share with guests.
 void Friend_mode_note_object_change(Game_object* object, int old_shape, int old_frame);
-// Guest: ask the host to open or close a door.
-void Friend_mode_request_door_use(Game_object* door);
+// World objects besides doors that guests may use (shutters, lamps...).
+bool Friend_mode_guest_usable_shape(int shape);
+// Guest: ask the host to use a door or other guest-usable object.
+void Friend_mode_request_object_use(Game_object* object);
 
 // Allows world-object speech to enter the host's Friend Mode event stream.
 void Friend_mode_note_speech(Game_object* source, const char* text);
