@@ -635,6 +635,12 @@ static void Friend_mode_show_status(const std::string& line1, const std::string&
 	gwin->show(true);
 }
 
+void Friend_mode_background_poll() {
+	if (friend_session.mode() != Friend_mode_session::Mode::off) {
+		friend_session.poll();
+	}
+}
+
 bool Friend_mode_download_world() {
 	friend_session.set_local_player_name(friend_player_name.empty() ? "Player" : friend_player_name);
 	if (!friend_session.start_guest(arg_friend_join, arg_friend_port, Game::Get_unique_gamecode())) {
@@ -643,7 +649,7 @@ bool Friend_mode_download_world() {
 		return false;
 	}
 	bool         requested = false;
-	const uint32 deadline  = SDL_GetTicks() + 60000;
+	const uint32 deadline  = SDL_GetTicks() + 120000;
 	for (;;) {
 		friend_session.poll();
 		if (friend_session.connected() && !requested) {
@@ -680,7 +686,7 @@ bool Friend_mode_download_world() {
 			Friend_mode_show_status("Downloading the host's world", std::to_string(remaining / 1024) + " KB to go");
 		} else {
 			Friend_mode_show_status(friend_session.connected() ? "Waiting for the host's world" : "Connecting to host",
-					arg_friend_join);
+					friend_session.connected() ? "The host may be in a menu" : arg_friend_join);
 		}
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {

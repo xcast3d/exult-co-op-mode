@@ -13,6 +13,7 @@
 #	include <winsock2.h>
 #	include <ws2tcpip.h>
 #else
+#	include <csignal>
 #	include <fcntl.h>
 #	include <netdb.h>
 #	include <sys/socket.h>
@@ -20,6 +21,15 @@
 #endif
 
 namespace {
+// Writing to a connection the peer has dropped raises SIGPIPE on Unix, which
+// kills the process.  Ignore it so send() fails with EPIPE and the session
+// closes the connection normally.
+void ignore_broken_pipe() {
+#ifndef _WIN32
+	std::signal(SIGPIPE, SIG_IGN);
+#endif
+}
+
 constexpr unsigned short protocol_version = 9;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
@@ -131,6 +141,7 @@ Friend_mode_session::~Friend_mode_session() {
 }
 
 bool Friend_mode_session::start_host(int port, uint32 game_code) {
+	ignore_broken_pipe();
 	stop();
 	connection_lost = false;
 	local_game_code = game_code;
@@ -170,6 +181,7 @@ bool Friend_mode_session::start_host(int port, uint32 game_code) {
 }
 
 bool Friend_mode_session::start_guest(const std::string& address, int port, uint32 game_code) {
+	ignore_broken_pipe();
 	stop();
 	connection_lost = false;
 	local_game_code = game_code;

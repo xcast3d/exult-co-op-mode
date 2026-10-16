@@ -1088,8 +1088,9 @@ bool Gump_manager::do_modal_gump(
 		touchui->hideGameControls();
 	}
 	do {
-		Delay();                   // Wait a fraction of a second.
-		Mouse::mouse()->hide();    // Turn off mouse.
+		Delay();                         // Wait a fraction of a second.
+		Friend_mode_background_poll();    // Keep Friend Mode peers connected.
+		Mouse::mouse()->hide();          // Turn off mouse.
 		Mouse::mouse_update = false;
 		SDL_Event event;
 		bool      got_event = false;

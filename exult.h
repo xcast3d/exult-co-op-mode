@@ -38,6 +38,10 @@ class Game_object;
 
 // Friend Mode connection identity is collected before the guest world loads.
 bool Friend_mode_collect_connection_details();
+// Keep the Friend Mode connection moving (accept, handshake, send and
+// receive) from loops other than the main one, such as modal gumps.  What
+// arrives is queued and handled when the main loop resumes.
+void Friend_mode_background_poll();
 // Connect to the host and replace the guest's gamedat with the host's live world.
 bool Friend_mode_download_world();
 std::string Friend_mode_display_name(const Game_object* object, const std::string& character_name);
