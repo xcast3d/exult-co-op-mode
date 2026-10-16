@@ -755,7 +755,8 @@ static void Friend_mode_item_pass(bool send) {
 static bool Friend_read_item(
 		const std::vector<unsigned char>& data, std::size_t& pos, bool top, int depth, Friend_item& item) {
 	const std::size_t start  = pos;
-	const std::size_t needed = top ? 9 : 6;
+	// shape(2) frame(1) [tx ty tz](3) quality(1) flags(1), then count(2).
+	const std::size_t needed = top ? 8 : 5;
 	if (depth > friend_item_max_depth || pos + needed + 2 > data.size()) {
 		return false;
 	}
@@ -942,8 +943,16 @@ static void Friend_mode_show_status(const std::string& line1, const std::string&
 }
 
 void Friend_mode_background_poll() {
-	if (friend_session.mode() != Friend_mode_session::Mode::off) {
-		friend_session.poll();
+	if (friend_session.mode() == Friend_mode_session::Mode::off) {
+		return;
+	}
+	friend_session.poll();
+	// A guest joining while the host is in a menu still gets the world:
+	// saving from a menu is what Exult's own Save does.  Not while a script
+	// is running, though; that request waits for the main loop.
+	if (friend_session.mode() == Friend_mode_session::Mode::host && !gwin->get_usecode()->in_usecode()
+		&& friend_session.take_world_request()) {
+		Friend_mode_send_world();
 	}
 }
 
