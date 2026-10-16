@@ -39,9 +39,14 @@ Mode, and tick off what you tried. Black Gate only for now.
 | Lever | 787 | west |
 | Chest with food, 25 gold, a bottle, a torch and a key | 800 | south-west |
 | Bag with 2 food | 802 | south-east |
+| Door styles (secret-wall candidates) | 270 and 376 at frames 8 and 16 | row to the south |
+| Unnamed door-flagged shape | 1179 | row to the south |
+| Portcullis, portcullis door | 271, 935 | row to the south |
 
 The spawned lever isn't linked to any gate, so it only tests that its frame
-change syncs.
+change syncs. No Black Gate shape is named "secret wall"; hidden doors are door
+shapes in other frame styles, so the southern row shows the candidates. Any
+frame a shape doesn't have is skipped and logged on the host.
 
 ## Join
 
@@ -89,8 +94,10 @@ For each of: shutters, lamp post, sconce, light source, lever.
 
 ## Secret walls
 
-- [ ] When you find a secret wall or door in town or a dungeon, open it from
-      each side and note whether it opens on both windows. (Not in the kit.)
+- [ ] In the kit's southern row, find the door styles that look like walls,
+      then open and close each from the host and from the guest.
+- [ ] Also try a real secret wall when you come across one in town or a
+      dungeon.
 
 ## Containers and items (not synced yet)
 

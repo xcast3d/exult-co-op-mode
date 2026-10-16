@@ -518,6 +518,11 @@ static Game_object_shared Friend_test_kit_create(int shape, int frame) {
 }
 
 static bool Friend_test_kit_place(int shape, int frame, int dx, int dy, Game_object_shared* placed = nullptr) {
+	// Skip frames a shape doesn't have; painting one could crash.
+	if (frame >= ShapeID(shape, 0).get_num_frames()) {
+		cerr << "Friend Mode: test shape " << shape << " has no frame " << frame << endl;
+		return false;
+	}
 	const Tile_coord avatar = gwin->get_main_actor()->get_tile();
 	const Tile_coord want(avatar.tx + dx, avatar.ty + dy, avatar.tz);
 	const Tile_coord pos = Map_chunk::find_spot(want, 3, shape, frame, 1);
@@ -557,6 +562,15 @@ static void Friend_mode_spawn_test_kit() {
 	Friend_test_kit_place(481, 0, 7, 0);      // Sconce.
 	Friend_test_kit_place(336, 0, 7, 3);      // Light source.
 	Friend_test_kit_place(787, 0, -7, 0);     // Lever.
+	// Door styles and secret-wall candidates, in a row to the south.  Ultima
+	// VII builds hidden doors from door shapes in other frame styles.
+	Friend_test_kit_place(270, 8, -10, 10);     // Vertical door, style 2.
+	Friend_test_kit_place(270, 16, -7, 10);     // Vertical door, style 3.
+	Friend_test_kit_place(376, 8, -4, 10);      // Horizontal door, style 2.
+	Friend_test_kit_place(376, 16, -1, 10);     // Horizontal door, style 3.
+	Friend_test_kit_place(1179, 0, 2, 10);      // Unnamed door-flagged shape.
+	Friend_test_kit_place(271, 0, 5, 10);       // Portcullis.
+	Friend_test_kit_place(935, 0, 9, 10);       // Portcullis door.
 	Game_object_shared chest;
 	if (Friend_test_kit_place(800, 0, -4, 5, &chest)) {
 		Friend_test_kit_fill(chest, 377, 0, 1);      // Food.
