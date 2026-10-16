@@ -30,7 +30,7 @@ void ignore_broken_pipe() {
 #endif
 }
 
-constexpr unsigned short protocol_version = 10;
+constexpr unsigned short protocol_version = 12;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;

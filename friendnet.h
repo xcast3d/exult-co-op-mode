@@ -48,7 +48,10 @@ public:
 		actor_inventory = 3,    // A party member's inventory (item sync).
 		guest_move      = 4,    // Guest drops the item it is holding.
 		guest_lift      = 5,    // Guest picks an item up (drag start).
-		guest_put_back  = 6     // Guest cancels a drag, or returns the rest.
+		guest_put_back  = 6,    // Guest cancels a drag, or returns the rest.
+		guest_use_item  = 7,    // Guest uses an item (food, potion, key...).
+		object_speech   = 8,    // Text spoken by a door, chest or other object.
+		party_status    = 9     // Party members' status flags, health, food.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);

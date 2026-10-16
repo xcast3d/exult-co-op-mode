@@ -3034,6 +3034,11 @@ int Usecode_internal::call_usecode(
 		conv->init_faces();       // Remove them.
 		gwin->set_all_dirty();    // Force repaint.
 	}
+	// Any conversation ends with the outermost script, including one-line
+	// remarks whose script removed its own face (no init_faces above).
+	if (!in_usecode()) {
+		Friend_mode_note_dialogue_reset();
+	}
 	if (modified_map) {
 		// On a barge, and we changed the map.
 		Barge_object* barge = gwin->get_moving_barge();

@@ -51,6 +51,7 @@
 #include "dir.h"
 #include "drag.h"
 #include "effects.h"
+#include "egg.h"
 #include "exult_bg_flx.h"
 #include "exult_flx.h"
 #include "exult_si_flx.h"
@@ -544,16 +545,55 @@ static bool Friend_test_kit_place(int shape, int frame, int dx, int dy, Game_obj
 	return true;
 }
 
-static void Friend_test_kit_fill(const Game_object_shared& container_obj, int shape, int frame, int quantity) {
+static void Friend_test_kit_fill(
+		const Game_object_shared& container_obj, int shape, int frame, int quantity, int quality = -1) {
 	Container_game_object* container = container_obj ? container_obj->as_container() : nullptr;
-	if (!container) {
+	Shapes_vga_file&       shapes    = Shape_manager::get_instance()->get_shapes();
+	if (!container || shape >= shapes.get_num_shapes() || frame >= shapes.get_num_frames(shape)) {
 		return;
 	}
 	const Game_object_shared item = Friend_test_kit_create(shape, frame);
+	if (quality >= 0) {
+		item->set_quality(quality);
+	}
 	if (quantity > 1) {
 		item->modify_quantity(quantity - 1);
 	}
 	container->add(item.get(), true);
+}
+
+// A pair of linked teleporter pads: a 4x4 carpet with a party-footpad
+// teleport egg (shape 275 frame 5, auto-reset) under every tile, each
+// sending you to just south of the other pad.
+static void Friend_test_kit_teleporters(int dx1, int dy1, int dx2, int dy2) {
+	constexpr int      pad_shape = 190;    // Carpet, 4x4 and flat.
+	Game_object_shared pads[2];
+	if (!Friend_test_kit_place(pad_shape, 0, dx1, dy1, &pads[0])
+		|| !Friend_test_kit_place(pad_shape, 0, dx2, dy2, &pads[1])) {
+		return;
+	}
+	const Shape_info& info   = ShapeID::get_info(pad_shape);
+	const int         xtiles = info.get_3d_xtiles(0);
+	const int         ytiles = info.get_3d_ytiles(0);
+	// Type teleport, criteria party_footpad, auto-reset.
+	const unsigned short itype = Egg_object::teleport | (Egg_object::party_footpad << 4) | (1 << 15);
+	for (int i = 0; i < 2; ++i) {
+		pads[i]->clear_flag(Obj_flags::okay_to_take);
+		const Tile_coord pad   = pads[i]->get_tile();    // Lower-right corner.
+		const Tile_coord other = pads[1 - i]->get_tile();
+		const Tile_coord dest(other.tx - xtiles / 2, other.ty + 2, other.tz);
+		const int        schunk = (dest.ty / c_tiles_per_schunk) * 12 + dest.tx / c_tiles_per_schunk;
+		const int        data1  = 255 | (schunk << 8);    // 255: jump to coordinates.
+		const int        data2  = (dest.tx % c_tiles_per_schunk) | ((dest.ty % c_tiles_per_schunk) << 8);
+		for (int x = 0; x < xtiles; ++x) {
+			for (int y = 0; y < ytiles; ++y) {
+				const Egg_object_shared egg = Egg_object::create_egg(
+						false, 275, 5, 0, 0, 0, itype, 100, static_cast<short>(data1), static_cast<short>(data2),
+						static_cast<short>(dest.tz));
+				egg->move(pad.tx - x, pad.ty - y, pad.tz);
+			}
+		}
+	}
 }
 
 static void Friend_mode_spawn_test_kit() {
@@ -591,6 +631,36 @@ static void Friend_mode_spawn_test_kit() {
 	if (Friend_test_kit_place(802, 0, 2, 5, &bag)) {
 		Friend_test_kit_fill(bag, 377, 0, 2);    // Food.
 	}
+	// Keys open the lock with the same quality; lockpicks may open either.
+	constexpr int chest_lock = 77;
+	constexpr int door_lock  = 78;
+	Game_object_shared locked_chest;
+	if (Friend_test_kit_place(522, 0, -9, 5, &locked_chest)) {    // Locked chest.
+		locked_chest->set_quality(chest_lock);
+		Friend_test_kit_fill(locked_chest, 644, 0, 50);    // Gold coins.
+	}
+	Game_object_shared picks_chest;
+	if (Friend_test_kit_place(522, 0, -9, 8, &picks_chest)) {    // For lockpicks: no key.
+		picks_chest->set_quality(79);
+		Friend_test_kit_fill(picks_chest, 377, 0, 1);    // Food.
+	}
+	Game_object_shared locked_door;
+	if (Friend_test_kit_place(270, 2, -10, -4, &locked_door)) {    // Locked vertical door.
+		locked_door->set_quality(door_lock);
+	}
+	// Supplies: keys, lockpicks, potions (one of each kind) and food.
+	Game_object_shared supplies;
+	if (Friend_test_kit_place(802, 0, 5, 5, &supplies)) {
+		Friend_test_kit_fill(supplies, 641, 0, 1, chest_lock);    // Key: locked chest.
+		Friend_test_kit_fill(supplies, 641, 0, 1, door_lock);     // Key: locked door.
+		Friend_test_kit_fill(supplies, 627, 0, 5);                // Lockpicks.
+		for (int frame = 0; frame < 8; ++frame) {
+			Friend_test_kit_fill(supplies, 340, frame, 1);    // Potions.
+		}
+		Friend_test_kit_fill(supplies, 377, 0, 3);    // Food.
+	}
+	// Teleporter pads west and east of the Avatar.
+	Friend_test_kit_teleporters(-11, 1, 14, 1);
 	gwin->set_all_dirty();
 	Friend_mode_notice("Friend Mode test kit placed");
 }
@@ -1463,6 +1533,201 @@ static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& dat
 	Friend_force_item_resync(actor);
 }
 
+// ---- Guest item use -------------------------------------------------------
+// Food, potions, keys and lockpicks.  Their Usecode asks for a target click
+// (food 0x179 -> 0x813, potion 0x154, lockpick 0x273, key 0x281), so the
+// host runs it with that click already answered: the guest's own companion
+// for food and potions, or the door or chest the guest picked.
+
+Friend_item_use Friend_mode_guest_item_use(int shape) {
+	if (!GAME_BG) {
+		return Friend_item_use::none;    // Serpent Isle shapes not reviewed yet.
+	}
+	switch (shape) {
+	case 377:    // Food.
+	case 340:    // Potion.
+		return Friend_item_use::on_self;
+	case 641:    // Key.
+	case 627:    // Lockpick.
+		return Friend_item_use::on_target;
+	default:
+		return Friend_item_use::none;
+	}
+}
+
+Game_object* Friend_mode_pick_item_target() {
+	int x = 0;
+	int y = 0;
+	if (!Get_click(x, y, Mouse::greenselect)) {
+		return nullptr;
+	}
+	// Same lookup as Usecode's click_on_item: open windows first.
+	Gump_manager* gumps = gwin->get_gump_man();
+	if (Gump* gump = gumps->find_gump(x, y)) {
+		int gx = 0;
+		int gy = 0;
+		gumps->map_game_to_gump(gump, x, y, gx, gy);
+		return gump->find_object(gx, gy);
+	}
+	return gwin->find_object(x, y);
+}
+
+void Friend_mode_request_item_use(Game_object* item, Game_object* target) {
+	if (!item || !target || friend_session.mode() != Friend_mode_session::Mode::guest || !friend_session.connected()) {
+		return;
+	}
+	std::vector<unsigned char> payload;
+	if (!Friend_put_path(payload, item) || !Friend_put_path(payload, target)) {
+		return;
+	}
+	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_use_item, payload);
+}
+
+// Host: use an item for a guest after checking it.
+static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& data, Actor* actor) {
+	auto refuse = [&](const char* why) {
+		cout << "Friend Mode: refused guest item use (" << why << ')' << endl;
+		Friend_force_item_resync(actor);
+	};
+	if (!actor) {
+		return refuse("no companion");
+	}
+	std::size_t  pos    = 0;
+	Game_object* item   = nullptr;
+	Game_object* target = nullptr;
+	Tile_coord   tile;
+	if (!Friend_read_path(data, pos, item, tile) || !item || item->as_actor()
+		|| !Friend_read_path(data, pos, target, tile) || !target) {
+		return refuse("not found");
+	}
+	const Friend_item_use use = Friend_mode_guest_item_use(item->get_shapenum());
+	if (use == Friend_item_use::none) {
+		return refuse("item not allowed");
+	}
+	if (!Friend_guest_may_touch(actor, item)) {
+		return refuse("item out of reach or not theirs");
+	}
+	if (use == Friend_item_use::on_self) {
+		if (target != actor) {
+			return refuse("food and potions are for the guest's own companion");
+		}
+	} else if (target->as_actor() || !(target->get_info().is_door() || target->as_container())) {
+		return refuse("keys and lockpicks work on doors and chests");
+	} else if (!Friend_guest_may_touch(actor, target)) {
+		return refuse("target out of reach");
+	}
+	Usecode_machine* usecode = gwin->get_usecode();
+	friend_usecode_walker    = actor;
+	usecode->init_conversation();
+	usecode->intercept_click_on_item(target);
+	item->activate();
+	usecode->intercept_click_on_item(nullptr);    // In case it went unused.
+	friend_usecode_walker = nullptr;
+	gwin->set_all_dirty();
+	cout << "Friend Mode: used shape " << item->get_shapenum() << " on " << target->get_name() << " for guest" << endl;
+}
+
+// Guest: show text an object spoke on the host.  Its shape may already have
+// changed here or not yet (a chest unlocks by swapping shape), so fall back
+// to a door, then to anything else on that tile.
+static void Friend_mode_apply_object_speech(const std::vector<unsigned char>& data) {
+	if (data.size() < 8) {
+		return;
+	}
+	auto            get16 = [&](std::size_t at) { return data[at] | (data[at + 1] << 8); };
+	const Tile_coord tile(get16(0), get16(2), data[4]);
+	const int        shape = get16(5);
+	const std::string text(data.begin() + 7, data.end());
+	Game_object* obj = Friend_find_door(tile, shape, c_any_framenum);
+	if (!obj) {
+		Game_object_vector found;
+		Game_object::find_nearby(found, tile, c_any_shapenum, 0, 0xb0);
+		for (Game_object* candidate : found) {
+			if (candidate->get_tile() == tile && !candidate->get_owner()) {
+				obj = candidate;
+				break;
+			}
+		}
+	}
+	if (obj) {
+		gwin->get_effects()->remove_text_effect(obj);
+		gwin->get_effects()->add_text(text.c_str(), obj);
+	}
+}
+
+// ---- Party status ---------------------------------------------------------
+// The host owns health, food and status effects (poison runs on its timers).
+// It sends each party member's status when it changes; the guest copies it
+// without starting timers of its own, and flashes the hit outline when
+// health drops so poison and damage show.
+
+namespace {
+constexpr int friend_status_flags[] = {Obj_flags::asleep,    Obj_flags::charmed,    Obj_flags::cursed,
+									   Obj_flags::paralyzed, Obj_flags::poisoned,   Obj_flags::protection,
+									   Obj_flags::might};
+std::vector<unsigned char> friend_last_party_status;
+}    // namespace
+
+static std::vector<unsigned char> Friend_party_status() {
+	std::vector<Actor*> party_actors{gwin->get_main_actor()};
+	Party_manager*      party = gwin->get_party_man();
+	for (int i = 0; i < party->get_count(); ++i) {
+		party_actors.push_back(gwin->get_npc(party->get_member(i)));
+	}
+	std::vector<unsigned char> out;
+	for (Actor* actor : party_actors) {
+		if (!actor) {
+			continue;
+		}
+		int bits = 0;
+		for (std::size_t i = 0; i < std::size(friend_status_flags); ++i) {
+			if (actor->get_flag(friend_status_flags[i])) {
+				bits |= 1 << i;
+			}
+		}
+		Friend_put16(out, actor->get_npc_num());
+		Friend_put8(out, bits);
+		Friend_put16(out, actor->get_property(static_cast<int>(Actor::health)) + 128);    // Can go negative.
+		Friend_put8(out, actor->get_property(static_cast<int>(Actor::food_level)));
+	}
+	return out;
+}
+
+// Host: send party status if it changed (or always, after a world send).
+static void Friend_mode_status_pass(bool force) {
+	std::vector<unsigned char> status = Friend_party_status();
+	if (force || status != friend_last_party_status) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::party_status, status);
+		friend_last_party_status = std::move(status);
+	}
+}
+
+static void Friend_mode_apply_party_status(const std::vector<unsigned char>& data) {
+	auto get16 = [&](std::size_t at) { return data[at] | (data[at + 1] << 8); };
+	for (std::size_t at = 0; at + 6 <= data.size(); at += 6) {
+		const int npc    = get16(at);
+		const int bits   = data[at + 2];
+		const int health = get16(at + 3) - 128;
+		const int food   = data[at + 5];
+		Actor*    actor  = npc == 0 ? static_cast<Actor*>(gwin->get_main_actor()) : gwin->get_npc(npc);
+		if (!actor) {
+			continue;
+		}
+		for (std::size_t i = 0; i < std::size(friend_status_flags); ++i) {
+			const bool on = (bits & (1 << i)) != 0;
+			if (actor->get_flag(friend_status_flags[i]) != on) {
+				actor->set_friend_status_flag(friend_status_flags[i], on);
+			}
+		}
+		if (health < actor->get_property(static_cast<int>(Actor::health))) {
+			actor->flash_hit();
+		}
+		actor->set_property(static_cast<int>(Actor::health), health);
+		actor->set_property(static_cast<int>(Actor::food_level), food);
+	}
+	gwin->set_all_dirty();    // Portraits show poison and health.
+}
+
 // Temporary save used to hand the host's live world to a joining guest.
 static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
 
@@ -1488,6 +1753,7 @@ static void Friend_mode_send_world() {
 		friend_inventory_hashes.clear();
 		Friend_mode_item_pass(false);
 		Friend_mode_inventory_pass(false);
+		Friend_mode_status_pass(true);
 	} else {
 		cerr << "Friend Mode: could not read " << friend_world_file << endl;
 	}
@@ -1773,6 +2039,21 @@ void Friend_mode_note_speech(Game_object* source, const char* text) {
 	}
 	Actor* actor = source->as_actor();
 	if (!actor) {
+		// Doors and chests ("Locked", "Unlocked"): send the tile and shape of
+		// the object, or of whatever it is inside on the map.
+		Game_object* outer = source->get_outermost();
+		if (outer->as_actor() || !outer->get_chunk()) {
+			return;
+		}
+		const Tile_coord           t = outer->get_tile();
+		std::vector<unsigned char> payload;
+		Friend_put16(payload, t.tx);
+		Friend_put16(payload, t.ty);
+		Friend_put8(payload, t.tz);
+		Friend_put16(payload, outer->get_shapenum());
+		payload.insert(payload.end(), text, text + std::min<std::size_t>(std::strlen(text), 200));
+		friend_session.send_blob(Friend_mode_session::Blob_kind::object_speech, payload);
+		friend_session.poll();
 		return;
 	}
 	uint32 source_id = 0;
@@ -3272,6 +3553,7 @@ static void Handle_events() {
 					friend_next_item_sync = now + friend_item_sync_ms;
 					Friend_mode_item_pass(true);
 					Friend_mode_inventory_pass(true);
+					Friend_mode_status_pass(false);
 				}
 			}
 			if (!friend_session.connected()) {
@@ -3350,8 +3632,14 @@ static void Handle_events() {
 					cout << "Friend Mode: host accepted move to " << tx << ',' << ty << ',' << tz << endl;
 					// The guest already collision-tested this adjacent step. Applying it
 					// directly avoids a second pathfinder disagreeing about door state.
+					const Tile_coord from = actor->get_tile();
 					actor->move(requested.tx, requested.ty, requested.tz);
 					actor->change_frame(requested_frame);
+					// Eggs fire as for any party member's step (teleporters and
+					// the like); the guest's own copy leaves them to us.
+					if (Map_chunk* chunk = actor->get_chunk()) {
+						chunk->activate_eggs(actor, requested.tx, requested.ty, requested.tz, from.tx, from.ty);
+					}
 				} else {
 					cout << "Friend Mode: host rejected out-of-range move to " << tx << ',' << ty << ',' << tz << endl;
 					// Resend the true position so the guest snaps back.
@@ -3369,6 +3657,8 @@ static void Handle_events() {
 						Friend_mode_perform_guest_move(request, guest_actor);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_put_back) {
 						Friend_return_held_item();
+					} else if (kind == Friend_mode_session::Blob_kind::guest_use_item) {
+						Friend_mode_use_item_for_guest(request, guest_actor);
 					}
 				}
 			}
@@ -3466,6 +3756,10 @@ static void Handle_events() {
 					Friend_mode_apply_chunk(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::actor_inventory) {
 					Friend_mode_apply_inventory(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::object_speech) {
+					Friend_mode_apply_object_speech(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::party_status) {
+					Friend_mode_apply_party_status(blob);
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;
@@ -3523,7 +3817,10 @@ static void Handle_events() {
 				Actor* actor = gwin->get_npc(guest_assigned_actor);
 				const Tile_coord state(tx, ty, tz);
 				if (actor && actor->get_tile() != state) {
-					const bool beckoned = actor->get_tile().distance_2d(state) > Game_window::friend_leash_warn_tiles;
+					// A long jump to beside the Avatar is the leash; anywhere else
+					// it was a teleporter.
+					const bool beckoned = actor->get_tile().distance_2d(state) > Game_window::friend_leash_warn_tiles
+										  && gwin->get_main_actor()->get_tile().distance_2d(state) <= 4;
 					actor->move(state.tx, state.ty, state.tz);
 					gwin->set_camera_actor(actor);
 					if (beckoned) {

@@ -2203,7 +2203,9 @@ void Game_window::teleport_party(
 	for (i = 0; i < cnt; i++) {
 		const int party_member = party_man->get_member(i);
 		Actor*    person       = get_npc(party_member);
-		if (person && !person->is_dead() && person->get_schedule_type() != Schedule::wait
+		// A Friend Mode guest's companion waits on the host but still travels.
+		if (person && !person->is_dead()
+			&& (person->get_schedule_type() != Schedule::wait || person == remote_friend_actor)
 			&& (person->can_act() || no_status_check)) {
 			person->set_action(nullptr);
 			const Tile_coord t1 = Map_chunk::find_spot(t, 8, person->get_shapenum(), person->get_framenum(), 1);
@@ -2732,6 +2734,23 @@ void Game_window::double_clicked(
 		return;
 	}
 	if (controlled && controlled != main_actor && network_friend_control) {
+		// Food, potions, keys and lockpicks: the host runs them for us.
+		const Friend_item_use item_use = clicked_actor ? Friend_item_use::none
+													   : Friend_mode_guest_item_use(obj->get_shapenum());
+		if (item_use != Friend_item_use::none) {
+			Actor* holder = obj->get_outermost()->as_actor();
+			if (holder && holder != controlled) {
+				Mouse::mouse()->flash_shape(Mouse::redx);    // Someone else's pack.
+				return;
+			}
+			effects->remove_text_effects();
+			Game_object* target = controlled;
+			if (item_use == Friend_item_use::on_target) {
+				target = Friend_mode_pick_item_target();
+			}
+			Friend_mode_request_item_use(obj, target);
+			return;
+		}
 		// Doors, shutters, lamps and similar world toggles are the Usecode
 		// objects guests may use: the host uses them and shares the result.
 		if (!clicked_actor && !obj->get_owner() && obj->get_info().is_door()) {
@@ -2746,10 +2765,19 @@ void Game_window::double_clicked(
 			Friend_mode_request_object_use(obj);
 			return;
 		}
+		if (!clicked_actor && obj->get_info().is_container_locked()) {
+			effects->add_text("Locked", obj);    // A key or lockpick opens it.
+			return;
+		}
 		// Network guests cannot start Avatar-owned usecode or storyline
 		// dialogue. Guest-safe containers and their own inventory returned
-		// through the dedicated paths above.
-		Mouse::mouse()->flash_shape(Mouse::redx);
+		// through the dedicated paths above.  Anything else with a script
+		// (people, story objects) is the Avatar's to use.
+		if (clicked_actor || usecode->function_exists(obj->get_usecode())) {
+			effects->add_text("The Avatar must do this", obj);
+		} else {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		}
 		return;
 	}
 	effects->remove_text_effects();    // Remove text msgs. from screen.

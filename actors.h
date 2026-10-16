@@ -581,6 +581,12 @@ public:
 		flags &= ~(static_cast<uint32>(1) << Obj_flags::asleep);
 	}
 
+	// Friend Mode guest: copy a status flag from the host without the
+	// timers and side effects of set_flag() and clear_flag().
+	void set_friend_status_flag(int flag, bool on);
+	// Flash the red outline, as when hit.
+	void flash_hit();
+
 	void set_flag(int flag) override;
 	void set_type_flag(int flag);
 	void clear_flag(int flag) override;

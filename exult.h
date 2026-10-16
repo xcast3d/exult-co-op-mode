@@ -64,6 +64,14 @@ bool Friend_mode_guest_usable_shape(int shape);
 Actor* Friend_mode_usecode_walker();
 // Guest: ask the host to use a door or other guest-usable object.
 void Friend_mode_request_object_use(Game_object* object);
+// Items guests may use: food and potions on their own companion, keys and
+// lockpicks on a door or chest they pick.
+enum class Friend_item_use { none, on_self, on_target };
+Friend_item_use Friend_mode_guest_item_use(int shape);
+// Guest: ask the host to use 'item' on 'target'.
+void Friend_mode_request_item_use(Game_object* item, Game_object* target);
+// Guest: crosshair click for a key or lockpick target (nullptr on Escape).
+Game_object* Friend_mode_pick_item_target();
 
 // Allows world-object speech to enter the host's Friend Mode event stream.
 void Friend_mode_note_speech(Game_object* source, const char* text);

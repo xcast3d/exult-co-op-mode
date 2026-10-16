@@ -74,14 +74,17 @@ The item pick-up model, the host pause bar and chest windows staying open on
 the guest were tested on one Mac on 2026-10-16 and work. The two-tester
 contention checks have not been run with a second person yet.
 
-Noted from that test:
+Also tested on 2026-10-16 and working: guests using food, potions (including
+poison, which now shows on the guest), keys, lockpicks and teleporters;
+"Locked" and "Unlocked" on the guest; and the larger **F9** test kit. Real
+in-game teleporters still need a try, to see how the leash behaves after
+long jumps.
 
-- **Teleporters** still need handling for guests.
-- **A better test kit** with more interactive items, so more of the world can
-  be checked in one pass.
+The guest's wait bar now ends with every host script, so a one-line remark
+with a portrait (no "bye") no longer leaves it stuck; tested and working.
 
 Other open items: theft by guests, giving items to other party members,
-keys, creatures that appear after joining, game-clock sync (day and night can
+creatures that appear after joining, game-clock sync (day and night can
 differ between machines), and multi-guest sessions
 ([plan](multi-guest-plan.md)).
 
@@ -159,6 +162,37 @@ put back: the host's drags show up on guests at once, and a guest's pick-up is
 held by the host for that guest (see the world sync plan). Two people can't end
 up with the same item. Protocol
 version is now 10.
+
+### Food, potions, keys and lockpicks
+
+A guest can double-click food or a potion to use it on their own companion,
+and a key or lockpick to get a crosshair and pick a door or chest. The guest
+sends the item and the target to the host. The host checks that the item is
+the guest's or within reach (and the target too), then runs the item's
+normal script with the target click already answered, so eating, drinking,
+unlocking and breaking picks all behave as in the game. The results come back
+through the usual item and door sync. Black Gate shapes: food 377, potion 340,
+key 641, lockpick 627. Protocol version is now 11.
+
+Anything else a guest double-clicks that would run a script, including people
+outside the party, shows "The Avatar must do this" instead. Locked chests show
+"Locked".
+
+Text spoken by doors, chests and other objects ("Locked", "Unlocked") is sent
+to guests with the object's tile and shape. The host also sends each party
+member's health, food level and status effects (poison, sleep, paralysis,
+charm, curse, protection, might) when they change. The guest copies them
+without starting its own timers, since poison and the rest run on the host,
+and flashes the red outline when health drops. Protocol version is now 12.
+
+### Teleporters
+
+When the host accepts a guest's step, it fires the eggs on that tile the way
+it would for any party member. A teleporter triggered by the guest's companion
+sends only that companion, not the Avatar and the party. The guest's own copy
+of the world never fires teleporters itself; the host's move comes back as
+the companion's new position. When the Avatar takes a teleporter, the guest's
+companion goes with the party. Leash rules still apply on arrival.
 
 ### Party mirroring and spectating
 
@@ -238,8 +272,8 @@ replicated to guests.
 ## Known prototype gaps
 
 - Guests start from the host's world and items, doors and party inventories
-  stay in sync near the players, but theft by guests, giving items to other
-  party members and using keys are not handled yet; see the
+  stay in sync near the players, but theft by guests and giving items to other
+  party members are not handled yet; see the
   [world sync plan](world-sync-plan.md).
 - Creature identity currently relies on deterministic loaded-world ordering;
   spawned/despawned creature replication needs a durable network identity.

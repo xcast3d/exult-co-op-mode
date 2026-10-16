@@ -2656,6 +2656,26 @@ void Clear_hit::handle_event(unsigned long curtime, uintptr) {
 	delete this;
 }
 
+void Actor::set_friend_status_flag(int flag, bool on) {
+	if (flag < 0 || flag >= 32) {
+		return;    // Status flags are all in the first word.
+	}
+	const uint32 mask = static_cast<uint32>(1) << flag;
+	if (on) {
+		flags |= mask;
+	} else {
+		flags &= ~mask;
+	}
+	add_dirty();
+}
+
+void Actor::flash_hit() {
+	hit = true;
+	add_dirty();
+	auto* c = new Clear_hit(this);
+	gwin->get_tqueue()->add(Game::get_ticks() + 200, c, this);
+}
+
 bool Actor::can_act() {
 	return !(get_flag(Obj_flags::paralyzed) || get_flag(Obj_flags::asleep) || is_dead() || is_knocked_out());
 }

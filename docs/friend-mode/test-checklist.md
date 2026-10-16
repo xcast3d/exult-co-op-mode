@@ -42,6 +42,14 @@ Mode, and tick off what you tried. Black Gate only for now.
 | Other door styles | 270 and 376 at frames 8 and 16 | row to the south |
 | Portcullis, portcullis door | 271, 935 | row to the south |
 | Secret walls | 828, 845 | further south |
+| Locked door (key quality 78) | 270 frame 2 | far west, slightly north |
+| Locked chest with 50 gold (key quality 77) | 522 | far west, south |
+| Locked chest with food, no key (for lockpicks) | 522 | far west, further south |
+| Supplies bag: both keys, 5 lockpicks, potions (frames 0-7), 3 food | 802 | east, south |
+| Teleporter pads (4x4 carpet, linked) | 190 + eggs 275 | far west and far east |
+
+Each teleporter pad drops you just south of the other one. The eggs under
+them are invisible; the carpet marks where they are.
 
 The spawned lever isn't linked to any gate, so it only tests that its frame
 change syncs. Any shape or frame the game doesn't have is skipped and logged on the host.
@@ -111,6 +119,41 @@ which have no state to sync.
 - [ ] Guest has the chest open while the host changes it; the guest's chest
       window stays open and shows the new contents.
 
+## Food, potions, keys and lockpicks
+
+- [ ] Guest takes food from the supplies bag and double-clicks it: the
+      guest's own companion eats and remarks on it, on both screens, and one
+      food goes away on both sides. The host log names who ate ("used shape
+      377 on <name>").
+- [ ] Guest drinks a few potions; each one is used up on both sides and its
+      message shows.
+- [ ] Guest drinks a poison potion: on both screens the companion shows as
+      poisoned and flashes red as it loses health.
+- [ ] Guest double-clicks the quality-77 key, then clicks the locked chest:
+      it unlocks on both sides, and both screens show "Unlocked".
+- [ ] Guest uses the quality-78 key on the locked door: it unlocks on both.
+- [ ] Guest uses a lockpick on the second locked chest. It may take a few
+      tries, and a pick can break; both sides match after each try.
+- [ ] Guest presses Escape at the crosshair: nothing happens.
+- [ ] Guest double-clicks a locked chest: "Locked".
+- [ ] Guest tries food from the Avatar's pack: refused.
+
+## Teleporters
+
+- [ ] Guest walks onto the west pad: the companion lands south of the east
+      pad on both screens, and the Avatar stays put.
+- [ ] Guest walks onto the east pad and comes back.
+- [ ] Host walks onto a pad: the Avatar and the whole party, including the
+      guest's companion, arrive at the other pad.
+- [ ] Find a real teleporter in the game and try it from the guest.
+
+## The Avatar must do this
+
+- [ ] Guest double-clicks an NPC who isn't in the party: "The Avatar must do
+      this" over them, and no conversation starts.
+- [ ] Guest double-clicks an object with a script that guests can't use, such
+      as a bottle or a bed: "The Avatar must do this".
+
 ## Inventories and guest item moves (W4)
 
 - [ ] Host moves an item within the Avatar's or a companion's inventory; the
@@ -134,6 +177,9 @@ which have no state to sync.
       conversation. Please wait." at the bottom, not over the conversation.
 - [ ] With the guest's chat line open, the bar sits above it.
 - [ ] When the conversation ends, the bar disappears and the guest can move.
+- [ ] Host uses a lockpick on an unlocked chest: a one-line remark with a
+      portrait ("Try those on a locked chest or door."). The guest's wait bar
+      goes away when it closes, with no "bye".
 
 ## Two people grabbing the same item (needs two testers)
 
@@ -170,9 +216,9 @@ the first request and the second person's drag snaps back.
 
 ## Known gaps to ignore for now
 
-- Using items with a target, such as keys on locks: guests can't run item
-  scripts yet.
-- Theft by guests, giving items to other party members, and keys.
+- Theft by guests, and giving items to other party members.
+- Stats other than health, food level and status effects (poison, sleep,
+  paralysis, charm, curse, protection, might) aren't mirrored to the guest.
 - Creatures that appear after joining, such as a cat wandering in.
 - Doors whose script swaps to a shape that isn't flagged as a door.
 - Sounds for changes made on the other machine.
