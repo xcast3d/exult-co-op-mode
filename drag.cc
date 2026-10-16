@@ -24,6 +24,8 @@
 
 #include "drag.h"
 
+#include "exult.h"
+
 #include "Audio.h"
 #include "Dynamic_container_gump.h"
 #include "Gump.h"
@@ -191,6 +193,8 @@ bool Dragging_info::start(
 			}
 		}
 	}
+	// Friend Mode guests: remember where the item came from.
+	Friend_mode_note_drag_start(obj.get());
 	Mouse::mouse()->set_shape(Mouse::hand);
 	// Remove text, so that we don't potentially paint the object under and
 	// the mouse pointer over it.
@@ -753,6 +757,8 @@ bool Dragging_info::drop(
 	if (!(on_gump ? drop_on_gump(x, y, to_drop, on_gump) : drop_on_map(x, y, to_drop))) {
 		return false;
 	}
+	// Friend Mode guests: ask the host to make the same move.
+	Friend_mode_note_drag_drop(to_drop, quantity, on_gump ? on_gump->get_container() : nullptr);
 	// Make a 'dropped' sound.
 	Audio::get_ptr()->play_sound_effect(Audio::game_sfx(74));
 	if (!gump) {    // Do eggs where it came from.

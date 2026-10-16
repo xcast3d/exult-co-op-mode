@@ -896,6 +896,396 @@ static void Friend_mode_apply_chunk(const std::vector<unsigned char>& data) {
 	}
 }
 
+// ---- Party inventories and guest item moves (world sync W4) -------------
+
+static std::unordered_map<int, uint64> friend_inventory_hashes;
+
+// Serialized inventory entries: equipment slot (255 = none), then the item.
+static std::vector<std::vector<unsigned char>> Friend_inventory_items(Actor* actor) {
+	std::vector<std::vector<unsigned char>> items;
+	Object_iterator                         next(actor->get_objects());
+	while (Game_object* obj = next.get_next()) {
+		items.emplace_back();
+		const int spot = actor->find_readied(obj);
+		Friend_put8(items.back(), spot < 0 ? 255 : spot);
+		Friend_put_item(items.back(), obj, false, 0);
+	}
+	std::sort(items.begin(), items.end());
+	return items;
+}
+
+// Host: send party inventories that changed (first sight is the baseline).
+static void Friend_mode_inventory_pass(bool send) {
+	std::vector<Actor*> party_actors{gwin->get_main_actor()};
+	Party_manager*      party = gwin->get_party_man();
+	for (int i = 0; i < party->get_count(); ++i) {
+		party_actors.push_back(gwin->get_npc(party->get_member(i)));
+	}
+	for (Actor* actor : party_actors) {
+		if (!actor) {
+			continue;
+		}
+		const auto   items = Friend_inventory_items(actor);
+		const uint64 hash  = Friend_hash_items(items);
+		const int    npc   = actor->get_npc_num();
+		auto         found = friend_inventory_hashes.find(npc);
+		if (found == friend_inventory_hashes.end()) {
+			friend_inventory_hashes[npc] = hash;
+			continue;
+		}
+		if (found->second == hash) {
+			continue;
+		}
+		found->second = hash;
+		if (!send) {
+			continue;
+		}
+		std::vector<unsigned char> payload;
+		Friend_put16(payload, npc);
+		Friend_put16(payload, static_cast<int>(items.size()));
+		for (const auto& item : items) {
+			payload.insert(payload.end(), item.begin(), item.end());
+		}
+		friend_session.send_blob(Friend_mode_session::Blob_kind::actor_inventory, payload);
+		cout << "Friend Mode: sent inventory of " << actor->get_name() << " (" << items.size() << " items)" << endl;
+	}
+}
+
+// Guest: make a party member's inventory match the host's.
+static void Friend_mode_apply_inventory(const std::vector<unsigned char>& data) {
+	if (data.size() < 4) {
+		return;
+	}
+	const int npc   = data[0] | (data[1] << 8);
+	const int count = data[2] | (data[3] << 8);
+	Actor*    actor = gwin->get_npc(npc);
+	if (!actor) {
+		return;
+	}
+	std::size_t                                    pos = 4;
+	std::vector<std::pair<int, Friend_item>>       wanted;
+	std::vector<std::vector<unsigned char>>        wanted_bytes;
+	for (int i = 0; i < count; ++i) {
+		if (pos >= data.size()) {
+			cerr << "Friend Mode: malformed inventory for NPC " << npc << endl;
+			return;
+		}
+		const std::size_t start = pos;
+		const int         spot  = data[pos++];
+		Friend_item       item;
+		if (!Friend_read_item(data, pos, false, 0, item)) {
+			cerr << "Friend Mode: malformed inventory for NPC " << npc << endl;
+			return;
+		}
+		wanted.emplace_back(spot, std::move(item));
+		wanted_bytes.emplace_back(data.begin() + start, data.begin() + pos);
+	}
+	std::vector<std::pair<Game_object*, std::vector<unsigned char>>> current;
+	Object_iterator                                                  next(actor->get_objects());
+	while (Game_object* obj = next.get_next()) {
+		current.emplace_back(obj, std::vector<unsigned char>());
+		const int spot = actor->find_readied(obj);
+		Friend_put8(current.back().second, spot < 0 ? 255 : spot);
+		Friend_put_item(current.back().second, obj, false, 0);
+	}
+	std::vector<bool> kept(current.size(), false);
+	std::vector<std::size_t> missing;
+	for (std::size_t w = 0; w < wanted.size(); ++w) {
+		bool matched = false;
+		for (std::size_t i = 0; i < current.size(); ++i) {
+			if (!kept[i] && current[i].second == wanted_bytes[w]) {
+				kept[i] = matched = true;
+				break;
+			}
+		}
+		if (!matched) {
+			missing.push_back(w);
+		}
+	}
+	int removed = 0;
+	for (std::size_t i = 0; i < current.size(); ++i) {
+		if (!kept[i]) {
+			Friend_delete_item(current[i].first);
+			++removed;
+		}
+	}
+	for (std::size_t w : missing) {
+		Game_object_shared obj = Friend_create_item(wanted[w].second);
+		if (!obj) {
+			continue;
+		}
+		const int spot = wanted[w].first;
+		if (spot == 255 || !actor->add_readied(obj.get(), spot, true, true)) {
+			actor->add(obj.get(), true);
+		}
+	}
+	if (removed || !missing.empty()) {
+		gwin->set_all_dirty();
+		cout << "Friend Mode: inventory of " << actor->get_name() << ": removed " << removed << ", added "
+			 << missing.size() << endl;
+	}
+}
+
+// Where an object is, as a path from a root: kind 0 = an object on the map
+// (tile, then the object), 1 = an actor's inventory (NPC number), 2 = a bare
+// map tile (drop destination).  Each step is shape, frame and quality.
+enum Friend_path_kind { friend_path_world = 0, friend_path_actor = 1, friend_path_tile = 2 };
+
+static bool Friend_put_path(std::vector<unsigned char>& out, Game_object* obj) {
+	std::vector<Game_object*> chain;
+	for (Game_object* cur = obj; cur; cur = cur->get_owner()) {
+		chain.push_back(cur);
+		if (chain.size() > static_cast<std::size_t>(friend_item_max_depth)) {
+			return false;
+		}
+	}
+	std::reverse(chain.begin(), chain.end());    // Outermost first.
+	Actor* root_actor = chain.front()->as_actor();
+	if (root_actor) {
+		if (root_actor->get_npc_num() <= 0 && root_actor != gwin->get_main_actor()) {
+			return false;    // Only numbered NPCs (and the Avatar) can be named.
+		}
+		Friend_put8(out, friend_path_actor);
+		Friend_put16(out, root_actor->get_npc_num());
+		chain.erase(chain.begin());
+	} else {
+		const Tile_coord t = chain.front()->get_tile();
+		Friend_put8(out, friend_path_world);
+		Friend_put16(out, t.tx);
+		Friend_put16(out, t.ty);
+		Friend_put8(out, t.tz);
+	}
+	Friend_put8(out, static_cast<int>(chain.size()));
+	for (Game_object* step : chain) {
+		Friend_put16(out, step->get_shapenum());
+		Friend_put8(out, step->get_framenum());
+		Friend_put8(out, step->get_quality());
+	}
+	return true;
+}
+
+static void Friend_put_tile_path(std::vector<unsigned char>& out, const Tile_coord& t) {
+	Friend_put8(out, friend_path_tile);
+	Friend_put16(out, t.tx);
+	Friend_put16(out, t.ty);
+	Friend_put8(out, t.tz);
+	Friend_put8(out, 0);
+}
+
+// Resolve a path.  For a bare tile, returns nullptr and sets 'tile'.
+static bool Friend_read_path(
+		const std::vector<unsigned char>& data, std::size_t& pos, Game_object*& found, Tile_coord& tile) {
+	found = nullptr;
+	if (pos >= data.size()) {
+		return false;
+	}
+	auto get8  = [&]() { return pos < data.size() ? static_cast<int>(data[pos++]) : -1; };
+	auto get16 = [&]() {
+		const int lo = get8();
+		return lo | (get8() << 8);
+	};
+	const int kind = get8();
+	Game_object* cur = nullptr;
+	if (kind == friend_path_actor) {
+		const int npc = get16();
+		cur           = npc == 0 ? static_cast<Actor*>(gwin->get_main_actor()) : gwin->get_npc(npc);
+		if (!cur) {
+			return false;
+		}
+	} else if (kind == friend_path_world || kind == friend_path_tile) {
+		tile.tx = get16();
+		tile.ty = get16();
+		tile.tz = get8();
+	} else {
+		return false;
+	}
+	const int steps = get8();
+	if (steps < 0 || pos + static_cast<std::size_t>(steps) * 4 > data.size()) {
+		return false;
+	}
+	for (int i = 0; i < steps; ++i) {
+		const int shape   = get16();
+		const int frame   = get8();
+		const int quality = get8();
+		Game_object* next_obj = nullptr;
+		if (!cur) {    // First step of a map path: the object on that tile.
+			Game_object_vector candidates;
+			Game_object::find_nearby(candidates, tile, shape, 0, 0xb0, quality, frame);
+			for (Game_object* obj : candidates) {
+				if (obj->get_tile() == tile && !obj->get_owner()) {
+					next_obj = obj;
+					break;
+				}
+			}
+		} else if (Container_game_object* container = cur->as_container()) {
+			Object_iterator next(container->get_objects());
+			while (Game_object* child = next.get_next()) {
+				if (child->get_shapenum() == shape && child->get_framenum() == frame && child->get_quality() == quality) {
+					next_obj = child;
+					break;
+				}
+			}
+		}
+		if (!next_obj) {
+			return false;
+		}
+		cur = next_obj;
+	}
+	found = cur;
+	return kind == friend_path_tile || found != nullptr;
+}
+
+static std::vector<unsigned char> friend_drag_source;
+
+void Friend_mode_note_drag_start(Game_object* obj) {
+	friend_drag_source.clear();
+	if (obj && friend_session.mode() == Friend_mode_session::Mode::guest && gwin->has_network_friend_control()
+		&& !Friend_put_path(friend_drag_source, obj)) {
+		friend_drag_source.clear();
+	}
+}
+
+void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container) {
+	if (!dropped || friend_drag_source.empty() || friend_session.mode() != Friend_mode_session::Mode::guest
+		|| !friend_session.connected()) {
+		return;
+	}
+	std::vector<unsigned char> payload = friend_drag_source;
+	friend_drag_source.clear();
+	Container_game_object* owner = dropped->get_owner();
+	if (!owner && !dropped->get_chunk()) {
+		// Merged into a matching stack: it went into the window's container.
+		owner = gump_container ? gump_container->as_container() : nullptr;
+		if (!owner) {
+			return;    // Unknown destination; the next resync will correct it.
+		}
+	}
+	if (owner) {
+		if (!Friend_put_path(payload, owner)) {
+			return;
+		}
+		Actor* actor_owner = owner->as_actor();
+		const int spot     = actor_owner ? actor_owner->find_readied(dropped) : -1;
+		Friend_put8(payload, spot < 0 ? 255 : spot);
+	} else {
+		Friend_put_tile_path(payload, dropped->get_tile());
+		Friend_put8(payload, 255);
+	}
+	Friend_put16(payload, std::max(1, quantity));
+	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_move, payload);
+}
+
+// Host: may the guest's companion handle things inside or at 'obj'?  Its own
+// inventory, or something on the map within reach.  Not other people's packs.
+static bool Friend_guest_may_touch(Actor* actor, Game_object* obj) {
+	Game_object* outer = obj->get_outermost();
+	if (Actor* holder = outer->as_actor()) {
+		return holder == actor;
+	}
+	return Fast_pathfinder_client::is_grabable(actor, outer);
+}
+
+// Make the next passes resend everything near the guest and its inventory,
+// so a guest whose own move was refused or changed snaps back to the truth.
+static void Friend_force_item_resync(Actor* actor) {
+	for (auto& entry : friend_chunk_hashes) {
+		entry.second = 0;
+	}
+	if (actor) {
+		friend_inventory_hashes[actor->get_npc_num()] = 0;
+	}
+	friend_next_item_sync = 0;
+}
+
+// Host: carry out a guest's item move after checking it.
+static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& data, Actor* actor) {
+	auto refuse = [&](const char* why) {
+		cout << "Friend Mode: refused guest item move (" << why << ')' << endl;
+		Friend_force_item_resync(actor);
+	};
+	if (!actor) {
+		return refuse("no companion");
+	}
+	std::size_t  pos = 0;
+	Game_object* src = nullptr;
+	Game_object* dst = nullptr;
+	Tile_coord   src_tile;
+	Tile_coord   dst_tile;
+	if (!Friend_read_path(data, pos, src, src_tile) || !src) {
+		return refuse("source not found");
+	}
+	const bool dst_ok = Friend_read_path(data, pos, dst, dst_tile);
+	if (!dst_ok || pos + 3 > data.size()) {
+		return refuse("destination not found");
+	}
+	const int spot     = data[pos];
+	const int quantity = data[pos + 1] | (data[pos + 2] << 8);
+	if (src->as_actor() || !Friend_guest_may_touch(actor, src)) {
+		return refuse("source out of reach or not yours");
+	}
+	Container_game_object* container = dst ? dst->as_container() : nullptr;
+	if (dst && !container) {
+		return refuse("destination is not a container");
+	}
+	if (container) {
+		if (!Friend_guest_may_touch(actor, container)) {
+			return refuse("destination out of reach or not yours");
+		}
+		for (Game_object* up = container; up; up = up->get_owner()) {
+			if (up == src) {
+				return refuse("container into itself");
+			}
+		}
+		// Party members can carry only so much.
+		Game_object* holder = container->get_outermost();
+		if (holder->get_flag(Obj_flags::in_party)
+			&& (holder->get_weight() + src->get_weight()) / 10 > holder->get_max_weight()) {
+			return refuse("too heavy");
+		}
+	} else if (actor->get_tile().distance(dst_tile) > 8 || dst_tile.tz > actor->get_lift() + 5) {
+		return refuse("drop spot out of reach");
+	}
+	// Lift the item, splitting a stack if only part moves.
+	Container_game_object* src_owner = src->get_owner();
+	const Tile_coord       src_at    = src->get_tile();
+	Game_object_shared     moving;
+	const bool             split     = quantity < src->get_quantity();
+	if (split) {
+		moving = gwin->get_map()->create_ireg_object(src->get_shapenum(), src->get_framenum());
+		moving->modify_quantity(quantity - 1);
+		if (src->get_flag(Obj_flags::okay_to_take)) {
+			moving->set_flag(Obj_flags::okay_to_take);
+		}
+		src->modify_quantity(-quantity);
+	} else {
+		src->remove_this(&moving);
+	}
+	bool placed = false;
+	if (container) {
+		Actor* holder_actor = container->as_actor();
+		placed = (holder_actor && spot != 255) ? holder_actor->add_readied(moving.get(), spot)
+											   : container->add(moving.get(), false, true);
+	} else {
+		moving->move(dst_tile);
+		placed = true;
+	}
+	if (!placed) {    // Put it back where it was.
+		if (split) {
+			src->modify_quantity(quantity);
+		} else if (src_owner) {
+			src_owner->add(moving.get(), true);
+		} else {
+			moving->move(src_at);
+		}
+		return refuse("no room");
+	}
+	gwin->set_all_dirty();
+	cout << "Friend Mode: moved shape " << moving->get_shapenum() << " for guest" << endl;
+	// The guest already moved it locally; resend in case the result differs
+	// (stacking, placement inside the container).
+	Friend_force_item_resync(actor);
+}
+
 // Temporary save used to hand the host's live world to a joining guest.
 static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
 
@@ -918,7 +1308,9 @@ static void Friend_mode_send_world() {
 		cout << "Friend Mode: sent world (" << data.size() << " bytes)" << endl;
 		// Both sides now match: record every nearby chunk as the baseline.
 		friend_chunk_hashes.clear();
+		friend_inventory_hashes.clear();
 		Friend_mode_item_pass(false);
+		Friend_mode_inventory_pass(false);
 	} else {
 		cerr << "Friend Mode: could not read " << friend_world_file << endl;
 	}
@@ -2638,10 +3030,12 @@ static void Handle_events() {
 				if (now >= friend_next_item_sync) {
 					friend_next_item_sync = now + friend_item_sync_ms;
 					Friend_mode_item_pass(true);
+					Friend_mode_inventory_pass(true);
 				}
 			}
 			if (!friend_session.connected()) {
 				friend_chunk_hashes.clear();
+				friend_inventory_hashes.clear();
 				friend_sent_party.clear();
 				friend_leash_return_at = 0;
 				if (!friend_host_peer_name.empty()) {
@@ -2720,6 +3114,16 @@ static void Handle_events() {
 					cout << "Friend Mode: host rejected out-of-range move to " << tx << ',' << ty << ',' << tz << endl;
 					// Resend the true position so the guest snaps back.
 					last_host_state = Tile_coord(-1, -1, -1);
+				}
+			}
+			{
+				Friend_mode_session::Blob_kind kind;
+				std::vector<unsigned char>     request;
+				while (friend_session.take_blob(kind, request)) {
+					if (kind == Friend_mode_session::Blob_kind::guest_move) {
+						Friend_mode_perform_guest_move(
+								request, host_assigned_actor >= 0 ? gwin->get_npc(host_assigned_actor) : nullptr);
+					}
 				}
 			}
 			Friend_mode_session::Object_frame_event door_request;
@@ -2809,6 +3213,8 @@ static void Handle_events() {
 			while (friend_session.take_blob(blob_kind, blob)) {
 				if (blob_kind == Friend_mode_session::Blob_kind::chunk_objects) {
 					Friend_mode_apply_chunk(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::actor_inventory) {
+					Friend_mode_apply_inventory(blob);
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;

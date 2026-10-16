@@ -1,6 +1,6 @@
 # World sync: items, containers and doors (plan)
 
-**Status:** W1 (join with the host's live save), W2 (doors and other toggles) and W3 (host item changes, by chunk reconciliation) built; W4 planned. This is Phase 4 of the
+**Status:** W1 (join with the host's live save), W2 (doors and other toggles) W3 (host item changes, by chunk reconciliation) and W4 (party inventories and guest item moves) built; W5 is mostly covered by reconciliation. This is Phase 4 of the
 [project brief](../ultima-7-friend-mode.md).
 
 ## What's broken today
@@ -76,23 +76,31 @@ Door and toggle changes still go out immediately through the Usecode hooks;
 reconciliation also catches anything those miss. This makes W5's drift
 recovery largely automatic for the area around the players.
 
-### 4. Guest to host: actions
+### 4. Party inventories and guest item moves (built)
 
-| Guest action | Request | Host checks | Host does |
-| --- | --- | --- | --- |
-| Open or close a door | `use_door(ref)` | in reach, really a door, not locked, shape allowed | Exult's NPC door trick: quality to 0, activate, restore (`actions.cc:383`) |
-| Take an item | `move_item(ref, to = own inventory)` | in reach, not someone else's inventory, weight and volume | the normal engine move |
-| Drop or put an item | `move_item(ref, to = map tile or container)` | owns it, destination in reach and fits | the normal engine move |
-| Open a container | (none) | — | stays local: viewing doesn't change the world |
+**Inventories:** the host reconciles each party member's inventory the same way
+as map chunks: equipment slot plus item (with contents) per entry,
+fingerprinted every 250 ms; a changed inventory is sent whole as an
+`actor_inventory` blob and the guest rebuilds it to match, re-equipping slots.
 
-- The guest **waits for the host** instead of moving the item locally first.
-  On a LAN that's a few milliseconds. It avoids having to undo a move the host
-  turns down.
-- The host handles requests one at a time, so if two players grab the same
-  item, the first one gets it and the second sees it disappear.
-- **Theft:** taking items marked as not okay to take sets off the game's own
-  theft logic on the host, the same as when the Avatar steals. Guards come for
-  the party.
+**Guest moves:** the guest's drag and drop finishes locally so it feels
+instant, and the guest also sends a `guest_move` request: the item's source
+path (captured in `Dragging_info::start` before it is lifted), the destination
+path (a container, an equipment slot, or a map tile) and the quantity. A path
+starts at a map tile or an actor and steps down through containers by shape,
+frame and quality.
+
+The host checks that the source and destination are the guest companion's own
+inventory or within its reach on the map (never another party member's pack),
+that a container isn't moved into itself, that a party member can carry the
+weight and that it fits, then performs the move with Exult's own code
+(splitting stacks when part of one moves). Whether it accepts or refuses, it
+forces a resend of the nearby chunks and the guest's inventory, so the guest
+ends up matching the host either way.
+
+Not covered yet: theft (moving items not marked okay to take does not set off
+the game's theft logic for guests), giving items to other party members, and
+using items with a target such as keys.
 
 ### 5. Recovering from drift
 
@@ -107,7 +115,7 @@ them. This is the safety net, not the normal path.
 | W1 | Variable-length messages; the guest joins using the host's live save | A guest joining mid-game sees exactly the host's world: items, doors, party |
 | W2 | Host change hooks for frames, plus guest door use | The Avatar opens a door and the guest sees it; a guest opens an unlocked door and the host sees it |
 | W3 | Chunk reconciliation for objects on the map and in containers (built) | The Avatar picks up or drops items and the guest sees it |
-| W4 | Guest item requests: take, drop, put in a container, move within own inventory | Spark takes bread from a bag; the host sees the bag without it and Spark holding it |
+| W4 | Party inventories and guest item moves (built) | Spark takes bread from a bag; the host sees the bag without it and Spark holding it |
 | W5 | Chunk resync, theft, two players grabbing the same item, a long two-player session | No drift after 30 minutes of looting, fighting and doors |
 
 W1 comes first because every later step assumes both worlds start the same.

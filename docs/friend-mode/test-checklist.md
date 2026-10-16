@@ -110,8 +110,20 @@ which have no state to sync.
       floor match on the guest.
 - [ ] Guest has the chest open while the host changes it; the guest's chest
       window closes and reopening shows the new contents.
-- [ ] Known gap (W4): guest item actions and party inventories (taking items
-      into Spark's pack) only change the guest's window.
+
+## Inventories and guest item moves (W4)
+
+- [ ] Host moves an item within the Avatar's or a companion's inventory; the
+      guest's paperdoll or pack shows it.
+- [ ] Guest takes the food from the bag into the companion's pack; the host
+      sees the bag empty and the companion holding it.
+- [ ] Guest puts it back into the bag; the host sees it.
+- [ ] Guest drops an item on the floor and picks it up again.
+- [ ] Guest moves part of the chest's gold (the quantity prompt) into the pack;
+      both windows show the split.
+- [ ] Guest equips and unequips something on the companion's paperdoll.
+- [ ] Guest tries to put something into the Avatar's pack: refused, and the
+      guest's view snaps back.
 
 ## Leaving
 
@@ -123,7 +135,7 @@ which have no state to sync.
 
 - Using items with a target, such as keys on locks: guests can't run item
   scripts yet.
-- Guest item actions and party inventories (world sync W4).
+- Theft by guests, giving items to other party members, and keys.
 - Creatures that appear after joining, such as a cat wandering in.
 - Doors whose script swaps to a shape that isn't flagged as a door.
 - Sounds for changes made on the other machine.

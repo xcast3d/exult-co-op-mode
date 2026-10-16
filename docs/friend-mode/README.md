@@ -126,8 +126,10 @@ open gates or trigger effects elsewhere, which is accepted. Protocol version is 
 The host reconciles movable objects with the guest by chunk (see the
 [world sync plan](world-sync-plan.md), W3): every 250 ms it fingerprints the
 objects and container contents near the players and sends any chunk that
-changed; the guest makes its copy match. Party inventories and guest item
-actions are not synced yet (W4).
+changed; the guest makes its copy match. Party inventories are reconciled the
+same way. A guest's drag and drop happens locally and is also sent to the host
+as a move request; the host checks reach, ownership, weight and room, makes
+the move, and resends so both sides match (W4).
 
 ### Party mirroring and spectating
 
@@ -205,9 +207,9 @@ replicated to guests.
 
 ## Known prototype gaps
 
-- Guests start from the host's world and see the host's door and item changes
-  near the players, but party inventories and guest item actions are not
-  synced yet; see the
+- Guests start from the host's world and items, doors and party inventories
+  stay in sync near the players, but theft by guests, giving items to other
+  party members and using keys are not handled yet; see the
   [world sync plan](world-sync-plan.md).
 - Creature identity currently relies on deterministic loaded-world ordering;
   spawned/despawned creature replication needs a durable network identity.

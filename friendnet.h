@@ -44,7 +44,9 @@ public:
 	// Variable-length data sent as raw bytes after a header packet.
 	enum class Blob_kind : uint32 {
 		world_save    = 1,
-		chunk_objects = 2    // A map chunk's movable objects (item sync).
+		chunk_objects   = 2,    // A map chunk's movable objects (item sync).
+		actor_inventory = 3,    // A party member's inventory (item sync).
+		guest_move      = 4     // Guest asks the host to move an item.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);
