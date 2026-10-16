@@ -363,6 +363,59 @@ static void Friend_mode_update_leash_zone(Actor* actor) {
 	}
 }
 
+void Friend_mode_note_frame_change(Game_object* object, int old_frame) {
+	if (!object || friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()) {
+		return;
+	}
+	const Tile_coord t = object->get_tile();
+	friend_session.send_object_frame(t.tx, t.ty, t.tz, object->get_shapenum(), old_frame, object->get_framenum());
+}
+
+void Friend_mode_request_door_use(Game_object* door) {
+	if (!door || friend_session.mode() != Friend_mode_session::Mode::guest || !friend_session.connected()) {
+		return;
+	}
+	const Tile_coord t = door->get_tile();
+	friend_session.send_door_use(t.tx, t.ty, t.tz, door->get_shapenum(), door->get_framenum());
+}
+
+// Find a world object at exactly this tile with this shape (and frame, if
+// not c_any_framenum).
+static Game_object* Friend_find_object(const Tile_coord& tile, int shape, int frame) {
+	Game_object_vector found;
+	Game_object::find_nearby(found, tile, shape, 1, 0xb0, c_any_qual, frame);
+	for (Game_object* obj : found) {
+		if (obj->get_tile() == tile && !obj->get_owner()) {
+			return obj;
+		}
+	}
+	return nullptr;
+}
+
+// Host: open or close a door for a guest, the way NPCs do: quality is
+// zeroed so only the door's own toggle runs, not story Usecode.
+static void Friend_mode_use_door_for_guest(const Friend_mode_session::Object_frame_event& request, Actor* actor) {
+	const Tile_coord tile(request.tx, request.ty, request.tz);
+	Game_object*     door = Friend_find_object(tile, request.shape, c_any_framenum);
+	if (!door || !actor || !door->get_info().is_door()) {
+		cout << "Friend Mode: refused door use (no door at " << tile.tx << ',' << tile.ty << ')' << endl;
+		return;
+	}
+	if (door->get_framenum() % 4 >= 2) {
+		cout << "Friend Mode: refused door use (locked)" << endl;
+		return;
+	}
+	if (actor->get_tile().distance(door->get_tile()) > 4) {
+		cout << "Friend Mode: refused door use (out of reach)" << endl;
+		return;
+	}
+	const int savequal = door->get_quality();
+	door->set_quality(0);
+	door->activate();
+	door->set_quality(savequal);
+	cout << "Friend Mode: used door for guest at " << tile.tx << ',' << tile.ty << endl;
+}
+
 // Temporary save used to hand the host's live world to a joining guest.
 static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
 
@@ -2164,6 +2217,11 @@ static void Handle_events() {
 					last_host_state = Tile_coord(-1, -1, -1);
 				}
 			}
+			Friend_mode_session::Object_frame_event door_request;
+			while (friend_session.take_door_use(door_request)) {
+				Friend_mode_use_door_for_guest(
+						door_request, host_assigned_actor >= 0 ? gwin->get_npc(host_assigned_actor) : nullptr);
+			}
 			// The Avatar left the guest's companion beyond the leash: after a
 			// grace period, bring it back beside the Avatar like party catch-up.
 			if (host_assigned_actor >= 0) {
@@ -2240,6 +2298,19 @@ static void Handle_events() {
 			std::vector<uint32> host_party;
 			if (friend_session.take_party_members(host_party)) {
 				Friend_apply_party_members(host_party);
+			}
+			Friend_mode_session::Object_frame_event frame_event;
+			while (friend_session.take_object_frame(frame_event)) {
+				const Tile_coord tile(frame_event.tx, frame_event.ty, frame_event.tz);
+				Game_object*     obj = Friend_find_object(tile, frame_event.shape, frame_event.old_frame);
+				if (!obj) {
+					obj = Friend_find_object(tile, frame_event.shape, c_any_framenum);
+				}
+				if (obj && obj->get_framenum() != frame_event.new_frame) {
+					obj->change_frame(frame_event.new_frame);
+				} else if (!obj) {
+					cerr << "Friend Mode: no object for frame change at " << tile.tx << ',' << tile.ty << endl;
+				}
 			}
 			// Without a companion, a guest only watches; it must not move
 			// its local Avatar, which belongs to the host.

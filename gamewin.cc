@@ -2725,6 +2725,16 @@ void Game_window::double_clicked(
 		return;
 	}
 	if (controlled && controlled != main_actor && network_friend_control) {
+		// Doors are the one Usecode-driven object guests may use: the host
+		// opens unlocked doors for them and shares the result.
+		if (!clicked_actor && obj->get_info().is_door()) {
+			if (obj->get_framenum() % 4 >= 2) {
+				effects->add_text("Locked", obj);
+			} else {
+				Friend_mode_request_door_use(obj);
+			}
+			return;
+		}
 		// Network guests cannot start Avatar-owned usecode or storyline
 		// dialogue. Guest-safe containers and their own inventory returned
 		// through the dedicated paths above.

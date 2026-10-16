@@ -96,6 +96,15 @@ progress, unpacks the save into its gamedat, and loads it, so party, quest
 flags, items, doors and NPCs match the host at the moment of joining. Protocol
 version is now 7.
 
+### Doors
+
+The host shares every door frame change (opened or closed by the Avatar, NPCs
+or Usecode) with the guest, identified by tile, shape and old frame; the guest
+applies it locally. A guest double-clicking an unlocked door asks the host,
+which opens or closes it the way NPCs do (quality zeroed so only the door's
+own toggle runs) and shares the result. Locked doors show "Locked". Protocol
+version is now 8.
+
 ### Party mirroring and spectating
 
 The host sends its party list when a guest joins and whenever the party
@@ -172,8 +181,8 @@ replicated to guests.
 
 ## Known prototype gaps
 
-- Guests start from the host's world, but object changes after joining
-  (items, containers, doors) are not synced yet; see the
+- Guests start from the host's world, and door changes are shared, but item
+  and container changes after joining are not synced yet; see the
   [world sync plan](world-sync-plan.md).
 - Creature identity currently relies on deterministic loaded-world ordering;
   spawned/despawned creature replication needs a durable network identity.

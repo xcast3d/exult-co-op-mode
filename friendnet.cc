@@ -20,7 +20,7 @@
 #endif
 
 namespace {
-constexpr unsigned short protocol_version = 7;
+constexpr unsigned short protocol_version = 8;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -58,6 +58,8 @@ constexpr unsigned char  party_end_packet = 34;
 // A blob header is followed by 'length' raw bytes outside packet framing.
 constexpr unsigned char  blob_packet = 35;
 constexpr unsigned char  world_request_packet = 36;
+constexpr unsigned char  object_frame_packet = 37;
+constexpr unsigned char  door_use_packet = 38;
 constexpr uint32         max_blob_size = 16 * 1024 * 1024;
 constexpr std::size_t    blob_chunk_size = 16 * 1024;
 
@@ -230,6 +232,38 @@ bool Friend_mode_session::take_blob(Blob_kind& kind, std::vector<unsigned char>&
 	kind = blobs.front().kind;
 	data = std::move(blobs.front().data);
 	blobs.pop_front();
+	return true;
+}
+
+void Friend_mode_session::send_object_frame(int tx, int ty, int tz, int shape, int old_frame, int new_frame) {
+	queue_packet(object_frame_packet);
+	write_u32(outgoing.back().data() + 8, pack_position(tx, ty, tz));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(shape));
+	write_u32(outgoing.back().data() + 16, static_cast<uint32>((old_frame & 0xff) | ((new_frame & 0xff) << 8)));
+}
+
+bool Friend_mode_session::take_object_frame(Object_frame_event& event) {
+	if (object_frames.empty()) {
+		return false;
+	}
+	event = object_frames.front();
+	object_frames.pop_front();
+	return true;
+}
+
+void Friend_mode_session::send_door_use(int tx, int ty, int tz, int shape, int frame) {
+	queue_packet(door_use_packet);
+	write_u32(outgoing.back().data() + 8, pack_position(tx, ty, tz));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(shape));
+	write_u32(outgoing.back().data() + 16, static_cast<uint32>(frame));
+}
+
+bool Friend_mode_session::take_door_use(Object_frame_event& event) {
+	if (door_uses.empty()) {
+		return false;
+	}
+	event = door_uses.front();
+	door_uses.pop_front();
 	return true;
 }
 
@@ -563,6 +597,25 @@ void Friend_mode_session::handle_packet() {
 	} else if (session_mode == Mode::host && handshake_complete && valid_header && version == protocol_version
 			   && type == world_request_packet) {
 		world_requested = true;
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == object_frame_packet) {
+		Object_frame_event event;
+		unpack_position(game, event.tx, event.ty, event.tz);
+		event.shape           = static_cast<int>(read_u32(receive_buffer.data() + 12) & 0xffffU);
+		const uint32 frames   = read_u32(receive_buffer.data() + 16);
+		event.old_frame       = static_cast<int>(frames & 0xffU);
+		event.new_frame       = static_cast<int>((frames >> 8) & 0xffU);
+		object_frames.push_back(event);
+	} else if (session_mode == Mode::host && handshake_complete && valid_header && version == protocol_version
+			   && type == door_use_packet) {
+		Object_frame_event event;
+		unpack_position(game, event.tx, event.ty, event.tz);
+		event.shape     = static_cast<int>(read_u32(receive_buffer.data() + 12) & 0xffffU);
+		event.old_frame = static_cast<int>(read_u32(receive_buffer.data() + 16) & 0xffU);
+		event.new_frame = event.old_frame;
+		if (door_uses.size() < 8) {
+			door_uses.push_back(event);
+		}
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == party_begin_packet) {
 		pending_party_members.clear();
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
@@ -849,6 +902,8 @@ void Friend_mode_session::close_peer() {
 	party_members.clear();
 	pending_party_members.clear();
 	party_members_ready = false;
+	object_frames.clear();
+	door_uses.clear();
 	blob_remaining  = 0;
 	blob_data.clear();
 	blobs.clear();

@@ -49,6 +49,18 @@ public:
 	uint32 blob_bytes_remaining() const {
 		return blob_remaining;
 	}
+	// A world object (identified by tile, shape and frame) changed frame.
+	struct Object_frame_event {
+		int tx = 0, ty = 0, tz = 0;
+		int shape = 0;
+		int old_frame = 0;
+		int new_frame = 0;
+	};
+	void send_object_frame(int tx, int ty, int tz, int shape, int old_frame, int new_frame);
+	bool take_object_frame(Object_frame_event& event);
+	// Guest asks the host to open or close a door (new_frame unused).
+	void send_door_use(int tx, int ty, int tz, int shape, int frame);
+	bool take_door_use(Object_frame_event& event);
 	// Guest asks for the host's live world, sent as a world_save blob.
 	void request_world();
 	bool take_world_request();
@@ -187,6 +199,8 @@ private:
 	uint32                            blob_remaining = 0;
 	std::vector<unsigned char>        blob_data;
 	bool                              world_requested = false;
+	std::deque<Object_frame_event>    object_frames;
+	std::deque<Object_frame_event>    door_uses;
 
 	void close_peer();
 	void queue_packet(unsigned char type);

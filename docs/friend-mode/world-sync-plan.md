@@ -1,6 +1,6 @@
 # World sync: items, containers and doors (plan)
 
-**Status:** W1 built (guests join with the host's live save); W2–W5 planned. This is Phase 4 of the
+**Status:** W1 (join with the host's live save) and W2 (doors) built; W3–W5 planned. This is Phase 4 of the
 [project brief](../ultima-7-friend-mode.md).
 
 ## What's broken today
