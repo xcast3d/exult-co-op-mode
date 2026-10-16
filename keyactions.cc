@@ -430,6 +430,17 @@ void ActionTryKeys(const int* params) {
 		return;
 	}
 	const int qual = obj->get_quality();    // Key quality should match.
+	if (Friend_mode_is_guest()) {
+		// Only the guest's own keys, and the host turns them.
+		Actor*             own = gwin->get_controlled_actor();
+		Game_object_vector keys;
+		if (gwin->has_network_friend_control() && own && own->get_objects(keys, 641, qual, c_any_framenum)) {
+			Friend_mode_request_item_use(keys[0], obj);
+		} else {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		}
+		return;
+	}
 	Actor*    party[10];                    // Get ->party members.
 	const int party_cnt = gwin->get_party(&party[0], 1);
 	for (int i = 0; i < party_cnt; i++) {

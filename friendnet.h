@@ -53,7 +53,8 @@ public:
 		object_speech   = 8,    // Text spoken by a door, chest or other object.
 		party_status    = 9,    // Party members' status flags, health, food.
 		game_clock      = 10,   // Day, time and weather.
-		creature_list   = 11    // Creatures near the players, by network ID.
+		creature_list   = 11,   // Creatures near the players, by network ID.
+		roster_request  = 12    // Guest wants the companion picker again.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);
@@ -95,6 +96,12 @@ public:
 	}
 	const std::vector<uint32>& party_roster() const {
 		return roster;
+	}
+	// True once each time a complete roster arrives.
+	bool take_roster_update() {
+		const bool updated = roster_updated;
+		roster_updated     = false;
+		return updated;
 	}
 	bool take_actor_assignment(uint32& actor);
 	void send_move_request(int tx, int ty, int tz, int frame);
@@ -151,6 +158,7 @@ private:
 	std::deque<std::vector<unsigned char>> outgoing;
 	std::vector<uint32>               roster;
 	bool                              received_roster = false;
+	bool                              roster_updated  = false;
 	bool                              actor_request_pending = false;
 	uint32                            requested_actor = 0;
 	bool                              actor_assignment_pending = false;

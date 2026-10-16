@@ -326,8 +326,8 @@ void Cheat::finish_init() {
 }
 
 void Cheat::set_enabled(bool en) {
-	if (en && Friend_mode_is_guest()) {
-		return;    // The host's world: no cheats for guests.
+	if (Friend_mode_is_guest()) {
+		return;    // No cheats for guests, and their config keeps its setting.
 	}
 	enabled = en;
 	std::string cheating;

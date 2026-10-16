@@ -229,9 +229,12 @@ void GameEngineOptions_gump::build_buttons() {
 			this, &GameEngineOptions_gump::toggle_enhancements, yesNo, enhancements,
 			get_button_pos_for_label(Strings::Enhancements_()), yForRow(++y_index), small_size);
 
-	buttons[id_cheats] = std::make_unique<GameEngineTextToggle>(
-			this, &GameEngineOptions_gump::toggle_cheats, yesNo, cheats, get_button_pos_for_label(Strings::Cheats_()),
-			yForRow(++y_index), small_size);
+	// Friend Mode guests play in the host's world: no cheats option.
+	if (!Friend_mode_is_guest()) {
+		buttons[id_cheats] = std::make_unique<GameEngineTextToggle>(
+				this, &GameEngineOptions_gump::toggle_cheats, yesNo, cheats, get_button_pos_for_label(Strings::Cheats_()),
+				yForRow(++y_index), small_size);
+	}
 	y_index_cheats_start = y_index;
 	update_cheat_buttons();
 }
@@ -360,7 +363,9 @@ void GameEngineOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::CombatCharmedDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::Enhancements_(), x + label_margin, y + yForRow(++y_index) + 1);
-	font->paint_text(iwin->get_ib8(), Strings::Cheats_(), x + label_margin, y + yForRow(++y_index) + 1);
+	if (buttons[id_cheats]) {
+		font->paint_text(iwin->get_ib8(), Strings::Cheats_(), x + label_margin, y + yForRow(++y_index) + 1);
+	}
 	if (buttons[id_feeding]) {
 		font->paint_text(iwin->get_ib8(), Strings::Feeding_(), x + label_margin, y + yForRow(++y_index) + 1);
 	}

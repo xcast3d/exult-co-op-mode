@@ -30,7 +30,7 @@ void ignore_broken_pipe() {
 #endif
 }
 
-constexpr unsigned short protocol_version = 13;
+constexpr unsigned short protocol_version = 14;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -670,6 +670,7 @@ void Friend_mode_session::handle_packet() {
 		roster.push_back(game);
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == roster_end_packet) {
 		received_roster = true;
+		roster_updated  = true;
 	} else if (session_mode == Mode::host && valid_header && version == protocol_version && type == actor_request_packet) {
 		requested_actor = game;
 		actor_request_pending = true;
@@ -915,6 +916,7 @@ void Friend_mode_session::close_peer() {
 	outgoing.clear();
 	roster.clear();
 	received_roster = false;
+	roster_updated  = false;
 	actor_request_pending = false;
 	actor_assignment_pending = false;
 	move_request_pending = false;

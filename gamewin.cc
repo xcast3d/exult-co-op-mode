@@ -2260,6 +2260,13 @@ bool Game_window::activate_item(
 		int frnum,    // Desired frame
 		int qual      // Desired quality
 ) {
+	if (Friend_mode_is_guest()) {
+		// Keyboard shortcuts (food, watch, lockpicks...) use the guest's own
+		// companion's items, through the host like a double-click.
+		Actor* own = network_friend_control ? controlled_actor : nullptr;
+		Game_object* obj = own && own != main_actor ? own->find_item(shnum, qual, frnum) : nullptr;
+		return obj && Friend_mode_guest_activate(obj);
+	}
 	Actor*    party[9];    // Get party.
 	const int cnt = get_party(party, 1);
 	for (int i = 0; i < cnt; i++) {
@@ -2768,6 +2775,12 @@ void Game_window::double_clicked(
 		}
 		if (!clicked_actor && obj->get_info().is_container_locked()) {
 			effects->add_text("Locked", obj);    // A key or lockpick opens it.
+			return;
+		}
+		if (!clicked_actor && Friend_mode_guest_local_shape(obj->get_shapenum())) {
+			effects->remove_text_effects();    // Only shows something: run it here.
+			usecode->init_conversation();
+			obj->activate();
 			return;
 		}
 		// Network guests cannot start Avatar-owned usecode or storyline

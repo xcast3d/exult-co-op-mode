@@ -74,8 +74,14 @@ void Friend_mode_request_object_use(Game_object* object);
 // lockpicks on a door or chest they pick.
 enum class Friend_item_use { none, on_self, on_target };
 Friend_item_use Friend_mode_guest_item_use(int shape);
+// Read-only objects (signs, books, map, telescope...): a guest uses them on
+// its own copy of the world, and only the guest sees the result.
+bool Friend_mode_guest_local_shape(int shape);
 // Guest: ask the host to use 'item' on 'target'.
 void Friend_mode_request_item_use(Game_object* item, Game_object* target);
+// Guest: use an item from the companion's own pack by keyboard shortcut.
+// Returns false if nothing happened.
+bool Friend_mode_guest_activate(Game_object* item);
 // Guest: crosshair click for a key or lockpick target (nullptr on Escape).
 Game_object* Friend_mode_pick_item_target();
 

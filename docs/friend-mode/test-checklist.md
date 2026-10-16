@@ -151,9 +151,26 @@ which have no state to sync.
 
 - [ ] Guest double-clicks an NPC who isn't in the party: "The Avatar must do
       this" over them, and no conversation starts.
-- [ ] Guest opens the kit's first chest (the one with gold) and
-      double-clicks the bottle, then the torch: "The Avatar must do this"
-      each time, and nothing happens on the host. A bed in town works too.
+- [ ] Guest double-clicks a bed in town: "The Avatar must do this", and
+      nothing happens on the host.
+
+## Everyday objects and shortcut keys
+
+- [ ] Guest takes the bottle from the kit's gold chest and double-clicks it:
+      the companion drinks it on both screens.
+- [ ] Guest double-clicks the torch from that chest: it lights on both;
+      again, and it goes out.
+- [ ] Guest double-clicks a grandfather clock in town, and a pocketwatch if
+      the companion has one: the time shows over it on both.
+- [ ] Guest presses F with food in the companion's pack: the companion eats
+      on both screens (not the Avatar).
+- [ ] Guest presses K, then clicks the kit's locked chest, with its key in
+      the companion's pack: it unlocks on both.
+- [ ] Guest presses M: the map opens on the guest only.
+- [ ] Guest double-clicks a sign, a book and a scroll (any in town): the text
+      opens on the guest only; the host sees nothing.
+- [ ] Guest uses a telescope or sextant if you find one: it works on the
+      guest only.
 
 ## Inventories and guest item moves (W4)
 
@@ -256,6 +273,21 @@ the first request and the second person's drag snaps back.
 - [ ] Walk much further away and back: the body is gone on both (as in U7).
 - [ ] With the guest's companion standing by a body, walk the Avatar away a
       screen and a half: the body stays on both.
+
+## Spectating and switching companions
+
+- [ ] Guest presses Escape at the companion picker: the bar says "You are
+      watching. Press Tab to choose a companion"; the view follows the
+      Avatar as the host walks, creatures and items keep updating, and chat
+      still works.
+- [ ] Guest presses Tab and picks a companion: the bar goes and the guest
+      controls it.
+- [ ] Guest presses Tab again and picks another: "<name> switches to
+      <companion>" on the host; the first companion follows the party again.
+- [ ] Guest presses Tab during a host conversation: a red X, nothing opens.
+- [ ] Host loads a save without the guest's companion, then one with it:
+      the guest watches, then picks it again with Tab.
+- [ ] Guest opens Game Engine options: there is no Cheats line.
 
 ## Leaving
 

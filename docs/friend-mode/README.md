@@ -108,24 +108,52 @@ Found in testing:
 - An inactive window can leave a stale mouse arrow drawn until it is clicked;
   cosmetic.
 
+Tested 2026-10-16 and working (protocol version 14): everything in the list
+below except grandfather clocks and the telescope/sextant (none found yet).
+The map key (M) needs a map in the companion's pack, as in U7.
+
+Found in testing: guests taking items near NPCs set off no theft alerts, and
+the guest's companion never wakes sleeping NPCs (Exult checks only the
+Avatar for both). Guests should also be able to paint (brush and pigments on
+an easel) and flip a gold coin.
+
+Built 2026-10-16:
+
+- **Spectating and picking a companion again.** A guest without a companion
+  follows the Avatar's view (roofs too), keeps getting items, creatures and
+  the clock, and sees a bar: "You are watching. Press Tab to choose a
+  companion." **Tab** opens the companion picker at any time (not during a
+  host conversation or pause); picking another companion hands the old one
+  back to the party's AI and the host says "<name> switches to <companion>".
+  The cheats option is hidden on guests.
+- **Everyday objects for guests.** Black Gate's object scripts were checked
+  (the decompiler in tools/ucxt can't read the data, so a small script listed
+  each script's engine calls and flags). Guests may now use bottles (the same
+  script as food), torches (light and put out), the pocketwatch and
+  grandfather clocks (say the time). Eating or drinking something that isn't
+  yours calls the guards, as in single-player.
+- **Read-only objects open on the guest only.** Their scripts only show
+  something, so a guest runs them on its own copy and the host never sees
+  it: signs, tombstones, books, scrolls, the cloth map, telescope, sextant,
+  sundial, orrery viewer, crystal ball, and the pot and stuffed toy remarks.
+  Three books and one scroll set a story flag when read; for those the story
+  only counts when the Avatar reads them, so a guest can find one and point
+  the Avatar to it. The mirror (sets a flag) and beds (sleep moves time and
+  the party) stay Avatar-only.
+- **Shortcut keys on guests** (F food, W watch, P lockpick, K keys and the
+  like) used to run item scripts on the guest's own copy. They now use only
+  the companion's own items and go through the host like a double-click; the
+  cloth map (M) still opens locally.
+
 Next to build:
 
-1. **Spectating and picking a companion again**: a guest without a
-   companion follows the Avatar's view, sees everything a player sees, and
-   gets a bar (like the pause bar) saying which key opens the companion
-   picker. The same key lets any guest switch to a free companion. Also hide
-   the cheats option on guests.
-2. **Everyday objects for guests**: review the scripts of common objects
-   (torch, bottles and drinks, and so on) and add the ones that only affect
-   the user or the object itself to the guest list. Anything that touches
-   story flags, time or the whole party (beds: sleeping) stays Avatar-only.
-3. **Guest combat**: the guest's attack target goes to the host, which runs
+1. **Guest combat**: the guest's attack target goes to the host, which runs
    combat for that companion (part of Phase 5).
-4. **Shared journal** that guests can write in too. Edits go to the host
+2. **Shared journal** that guests can write in too. Edits go to the host
    one note at a time (when a note is finished, not on save), the host
    applies them in order and sends the journal back to everyone. A note
    someone is editing is locked for others.
-5. **Theft by guests**: taking items not marked okay to take sets off the
+3. **Theft by guests**: taking items not marked okay to take sets off the
    game's theft logic, as it does for the Avatar.
 
 Waiting for a second tester: the two-tester contention checks and a real
