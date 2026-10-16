@@ -389,6 +389,8 @@ bool Friend_mode_guest_usable_shape(int shape) {
 	case 481:
 	case 657:    // Curtains.
 	case 678:
+	case 787:    // Lever.
+	case 788:    // Switch.
 	case 889:    // Lamp post.
 		return true;
 	default:

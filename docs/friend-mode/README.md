@@ -108,12 +108,12 @@ falling back to any door at that tile.
 
 Guests may use doors and a short list of world toggles (Black Gate only for
 now): shutters 290/291/322/372, light sources 336/338, sconces 435/481,
-curtains 657/678 and the lamp post 889. The guest's double-click asks the host,
+curtains 657/678, levers 787, switches 788 and the lamp post 889. The guest's double-click asks the host,
 which checks the shape and reach (the normal double-click reach rule) and then
 uses it: doors the way NPCs do (quality zeroed so only the door's own toggle
 runs), the others with a normal activation. Locked doors show "Locked". Levers
-and switches are not allowed yet because their scripts can open gates or
-trigger puzzles elsewhere. Protocol version is 9.
+and switches are allowed so guests can help with puzzles; their scripts can
+open gates or trigger effects elsewhere, which is accepted. Protocol version is 9.
 
 ### Party mirroring and spectating
 
