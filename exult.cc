@@ -73,6 +73,7 @@
 #include "monsters.h"
 #include "palette.h"
 #include "party.h"
+#include "paths.h"
 #include "schedule.h"
 #include "shapeid.h"
 #include "sdlrwopsistream.h"
@@ -443,7 +444,8 @@ static void Friend_mode_use_door_for_guest(const Friend_mode_session::Object_fra
 		cout << "Friend Mode: refused door use (locked)" << endl;
 		return;
 	}
-	if (actor->get_tile().distance(door->get_tile()) > 4) {
+	// Same reach rule as the guest's double-click (and the Avatar's).
+	if (!Fast_pathfinder_client::is_grabable(actor, door)) {
 		cout << "Friend Mode: refused door use (out of reach)" << endl;
 		return;
 	}
