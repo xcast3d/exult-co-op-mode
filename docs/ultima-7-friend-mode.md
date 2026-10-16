@@ -234,6 +234,31 @@ Protocol considerations: versioning, explicit serialization (no raw C++ structs)
 
 **Exit criterion:** A short story sequence and combat encounter work end-to-end with two players.
 
+### Phase 5b — Lobby codes over WebRTC
+
+Joining today means typing the host's address and, over the internet, setting
+up port forwarding. Replace that with a short code the host reads out and the
+guest types in.
+
+- [ ] Put the socket code in `friendnet.cc` behind one small connection
+      interface, so the transport can change without touching game code. Do
+      this together with multi-guest support, which needs several peers
+      anyway ([multi-guest plan](friend-mode/multi-guest-plan.md)).
+- [ ] A small lobby service that hands out codes and passes WebRTC connection
+      details between host and guest. It never sees game traffic.
+- [ ] Native WebRTC data channels (for example libdatachannel), reliable and
+      ordered, which matches today's TCP stream. Send the world download in
+      pieces.
+- [ ] A relay (TURN) fallback for the networks where a direct connection fails.
+- [ ] Keep direct address entry for LAN play and debugging.
+
+**Exit criterion:** Two players on different home networks join with a code
+and no router setup.
+
+**When:** after the two-player gameplay sync settles (Phase 4 and 5 work), and
+before Phase 7 distribution. It gets friends who aren't technical playing, and
+it is also the transport a browser build would need.
+
 ### Phase 6 — Independent exploration
 
 - [ ] Per-client camera tracking.
@@ -247,8 +272,28 @@ Protocol considerations: versioning, explicit serialization (no raw C++ structs)
 
 - [ ] Additional companion assignments and consensual companion swaps.
 - [ ] Mac/Windows compatibility testing and automated builds.
-- [ ] Easier remote connections, optional relay or session discovery.
+- [ ] Easier remote connections: lobby codes from Phase 5b.
 - [ ] Packaging, compatibility matrix, installation instructions, and GPL-compliant distribution.
+
+### Phase 8 (possible) — Exult in the browser
+
+Play from a web page with nothing to install, joining by lobby code. Exult has
+no web build today, but it is C++ on SDL3, which can target the browser
+through Emscripten.
+
+- [ ] Spike: build unmodified single-player Exult with Emscripten.
+- [ ] Exult waits in its own loops (clicks, conversations, delays); a browser
+      page must keep handing control back. Try Emscripten's Asyncify before
+      rewriting any loops, and measure speed and download size.
+- [ ] Game data and saves in browser storage (see Licensing and game data).
+- [ ] Digital (OGG) music first; MIDI synthesizers later, if at all.
+- [ ] Friend Mode on the browser's own WebRTC, through the Phase 5b connection
+      interface.
+- [ ] Hosting: browsers slow down background tabs, so a host in a hidden tab
+      slows everyone. Warn the host, or keep hosting to native builds.
+
+**Exit criterion:** A guest in a browser joins a native or browser host by
+code and plays a short session.
 
 ## Infrastructure choices
 
@@ -257,8 +302,9 @@ Protocol considerations: versioning, explicit serialization (no raw C++ structs)
 | Source hosting | Private Bitbucket repository | Public release when ready |
 | Main development machine | Mac | Windows CI / testing |
 | Authoritative simulation | Host Exult process | Dedicated server only if needed |
-| Connection | Loopback / LAN | Tailscale, NAT traversal, or relay |
-| Lobby and invitations | None | Supabase or similar |
+| Connection | Loopback / LAN | WebRTC data channels with TURN relay fallback (Phase 5b) |
+| Lobby and invitations | None | Small lobby service for codes (Supabase or similar) |
+| Client platform | Native Mac / Windows | Browser via Emscripten (Phase 8, possible) |
 | Chat | Direct host-relayed packets | Optional history / moderation |
 | Saves | Host local storage | Optional cloud backup |
 
@@ -287,6 +333,9 @@ Keep project planning in `docs/friend-mode/` within the source tree. Track upstr
 - The original Ultima VII game data is **not** included with Exult and remains subject to its own copyright/licensing.
 - Do not commit original game assets, purchased game files, or save data containing private information to the Bitbucket repository.
 - Friend Mode is an experimental fan project, not an official Ultima release.
+- A browser build must not host the Ultima VII files, even behind a "you must
+  own the game" disclaimer; that is still redistribution. Players load their
+  own copy once, and it stays in their browser's storage.
 
 ## Open technical questions
 
