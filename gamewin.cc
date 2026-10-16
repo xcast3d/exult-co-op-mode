@@ -2658,10 +2658,11 @@ void Game_window::double_clicked(
 				}
 			}
 		}
-		// Check path, except if an NPC, sign, or if editing.
+		// Check path, except if an NPC, sign, or if editing.  Reach is
+		// measured from whoever is being controlled, not the Avatar.
 		if (obj && !obj->as_actor() && !cheat.in_hack_mover() &&
 			//! Is_sign(obj->get_shapenum()) &&
-			!Fast_pathfinder_client::is_grabable(main_actor, obj)) {
+			!Fast_pathfinder_client::is_grabable(controlled ? controlled : main_actor, obj)) {
 			Mouse::mouse()->flash_shape(Mouse::blocked);
 			return;
 		}
