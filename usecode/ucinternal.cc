@@ -771,11 +771,17 @@ void Usecode_internal::set_item_shape(Usecode_value& item_arg, Usecode_value& sh
 		item->set_shape(shape);
 		return;
 	}
-	const Game_object_shared keep = item->shared_from_this();
+	const Game_object_shared keep      = item->shared_from_this();
+	const int                old_shape = item->get_shapenum();
+	const int                old_frame = item->get_framenum();
 	chunk->remove(item);    // Remove and add to update cache.
 	item->set_shape(shape);
 	chunk->add(item);
 	gwin->add_dirty(item);
+	// Friend Mode: doors open by swapping shape (e.g. 270 -> 432).
+	if (item->get_info().is_door() || ShapeID::get_info(old_shape).is_door()) {
+		Friend_mode_note_object_change(item, old_shape, old_frame);
+	}
 	//	rect = gwin->get_shape_rect(item).add(rect);
 	//	rect.enlarge(8);
 	//	rect = gwin->clip_to_win(rect);

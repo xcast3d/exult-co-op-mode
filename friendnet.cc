@@ -20,7 +20,7 @@
 #endif
 
 namespace {
-constexpr unsigned short protocol_version = 8;
+constexpr unsigned short protocol_version = 9;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -235,10 +235,12 @@ bool Friend_mode_session::take_blob(Blob_kind& kind, std::vector<unsigned char>&
 	return true;
 }
 
-void Friend_mode_session::send_object_frame(int tx, int ty, int tz, int shape, int old_frame, int new_frame) {
+void Friend_mode_session::send_object_change(
+		int tx, int ty, int tz, int old_shape, int new_shape, int old_frame, int new_frame) {
 	queue_packet(object_frame_packet);
 	write_u32(outgoing.back().data() + 8, pack_position(tx, ty, tz));
-	write_u32(outgoing.back().data() + 12, static_cast<uint32>(shape));
+	write_u32(outgoing.back().data() + 12,
+			  static_cast<uint32>((old_shape & 0xffff) | ((new_shape & 0xffff) << 16)));
 	write_u32(outgoing.back().data() + 16, static_cast<uint32>((old_frame & 0xff) | ((new_frame & 0xff) << 8)));
 }
 
@@ -601,7 +603,9 @@ void Friend_mode_session::handle_packet() {
 			   && type == object_frame_packet) {
 		Object_frame_event event;
 		unpack_position(game, event.tx, event.ty, event.tz);
-		event.shape           = static_cast<int>(read_u32(receive_buffer.data() + 12) & 0xffffU);
+		const uint32 shapes   = read_u32(receive_buffer.data() + 12);
+		event.shape           = static_cast<int>(shapes & 0xffffU);
+		event.new_shape       = static_cast<int>(shapes >> 16);
 		const uint32 frames   = read_u32(receive_buffer.data() + 16);
 		event.old_frame       = static_cast<int>(frames & 0xffU);
 		event.new_frame       = static_cast<int>((frames >> 8) & 0xffU);
@@ -612,6 +616,7 @@ void Friend_mode_session::handle_packet() {
 		unpack_position(game, event.tx, event.ty, event.tz);
 		event.shape     = static_cast<int>(read_u32(receive_buffer.data() + 12) & 0xffffU);
 		event.old_frame = static_cast<int>(read_u32(receive_buffer.data() + 16) & 0xffU);
+		event.new_shape = event.shape;
 		event.new_frame = event.old_frame;
 		if (door_uses.size() < 8) {
 			door_uses.push_back(event);

@@ -98,12 +98,15 @@ version is now 7.
 
 ### Doors
 
-The host shares every door frame change (opened or closed by the Avatar, NPCs
-or Usecode) with the guest, identified by tile, shape and old frame; the guest
-applies it locally. A guest double-clicking an unlocked door asks the host,
+The host shares every door change (opened or closed by the Avatar, NPCs or
+Usecode) with the guest. Ultima VII opens doors by swapping shape (closed
+270/376 to open 432/433, all door-flagged in TFA.DAT), so both shape swaps in
+`Usecode_internal::set_item_shape` and frame changes are hooked. A door is
+identified by tile plus old shape and frame, falling back to any door at that
+tile; the guest applies the new shape and frame locally. A guest double-clicking an unlocked door asks the host,
 which opens or closes it the way NPCs do (quality zeroed so only the door's
 own toggle runs) and shares the result. Locked doors show "Locked". Protocol
-version is now 8.
+version is now 9.
 
 ### Party mirroring and spectating
 

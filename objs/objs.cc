@@ -616,7 +616,7 @@ void Game_object::change_frame(int frnum) {
 	gwin->add_dirty(this);    // Set to repaint new.
 	// Friend Mode: the host shares door changes with guests.
 	if (chunk && !as_actor() && old_frame != frnum && get_info().is_door()) {
-		Friend_mode_note_frame_change(this, old_frame);
+		Friend_mode_note_object_change(this, get_shapenum(), old_frame);
 	}
 }
 

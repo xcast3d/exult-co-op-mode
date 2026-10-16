@@ -363,12 +363,13 @@ static void Friend_mode_update_leash_zone(Actor* actor) {
 	}
 }
 
-void Friend_mode_note_frame_change(Game_object* object, int old_frame) {
+void Friend_mode_note_object_change(Game_object* object, int old_shape, int old_frame) {
 	if (!object || friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()) {
 		return;
 	}
 	const Tile_coord t = object->get_tile();
-	friend_session.send_object_frame(t.tx, t.ty, t.tz, object->get_shapenum(), old_frame, object->get_framenum());
+	friend_session.send_object_change(
+			t.tx, t.ty, t.tz, old_shape, object->get_shapenum(), old_frame, object->get_framenum());
 }
 
 void Friend_mode_request_door_use(Game_object* door) {
@@ -392,11 +393,48 @@ static Game_object* Friend_find_object(const Tile_coord& tile, int shape, int fr
 	return nullptr;
 }
 
+// Find a door at this tile: the given shape first, then any door shape,
+// since opening swaps shape (closed 270/376 <-> open 432/433).
+static Game_object* Friend_find_door(const Tile_coord& tile, int shape, int frame) {
+	if (Game_object* obj = Friend_find_object(tile, shape, frame)) {
+		return obj;
+	}
+	if (Game_object* obj = Friend_find_object(tile, shape, c_any_framenum)) {
+		return obj;
+	}
+	Game_object_vector found;
+	Game_object::find_nearby(found, tile, c_any_shapenum, 1, 0xb0);
+	for (Game_object* obj : found) {
+		if (obj->get_tile() == tile && !obj->get_owner() && obj->get_info().is_door()) {
+			return obj;
+		}
+	}
+	return Game_object::find_door(tile);
+}
+
+// Apply a host shape/frame change to a guest's copy of a world object.
+static void Friend_apply_object_change(Game_object* obj, int shape, int frame) {
+	if (obj->get_shapenum() != shape) {
+		Map_chunk* chunk = obj->get_chunk();
+		if (chunk) {
+			const Game_object_shared keep = obj->shared_from_this();
+			gwin->add_dirty(obj);
+			chunk->remove(obj);    // Re-add so the chunk cache updates.
+			obj->set_shape(shape, frame);
+			chunk->add(obj);
+			gwin->add_dirty(obj);
+		}
+	}
+	if (obj->get_framenum() != frame) {
+		obj->change_frame(frame);
+	}
+}
+
 // Host: open or close a door for a guest, the way NPCs do: quality is
 // zeroed so only the door's own toggle runs, not story Usecode.
 static void Friend_mode_use_door_for_guest(const Friend_mode_session::Object_frame_event& request, Actor* actor) {
 	const Tile_coord tile(request.tx, request.ty, request.tz);
-	Game_object*     door = Friend_find_object(tile, request.shape, c_any_framenum);
+	Game_object*     door = Friend_find_door(tile, request.shape, request.old_frame);
 	if (!door || !actor || !door->get_info().is_door()) {
 		cout << "Friend Mode: refused door use (no door at " << tile.tx << ',' << tile.ty << ')' << endl;
 		return;
@@ -2302,13 +2340,10 @@ static void Handle_events() {
 			Friend_mode_session::Object_frame_event frame_event;
 			while (friend_session.take_object_frame(frame_event)) {
 				const Tile_coord tile(frame_event.tx, frame_event.ty, frame_event.tz);
-				Game_object*     obj = Friend_find_object(tile, frame_event.shape, frame_event.old_frame);
-				if (!obj) {
-					obj = Friend_find_object(tile, frame_event.shape, c_any_framenum);
-				}
-				if (obj && obj->get_framenum() != frame_event.new_frame) {
-					obj->change_frame(frame_event.new_frame);
-				} else if (!obj) {
+				Game_object*     obj = Friend_find_door(tile, frame_event.shape, frame_event.old_frame);
+				if (obj) {
+					Friend_apply_object_change(obj, frame_event.new_shape, frame_event.new_frame);
+				} else {
 					cerr << "Friend Mode: no object for frame change at " << tile.tx << ',' << tile.ty << endl;
 				}
 			}

@@ -49,14 +49,17 @@ public:
 	uint32 blob_bytes_remaining() const {
 		return blob_remaining;
 	}
-	// A world object (identified by tile, shape and frame) changed frame.
+	// A world object (identified by tile, old shape and old frame) changed
+	// shape and/or frame.
 	struct Object_frame_event {
 		int tx = 0, ty = 0, tz = 0;
-		int shape = 0;
+		int shape     = 0;    // Old (or current) shape.
+		int new_shape = 0;
 		int old_frame = 0;
 		int new_frame = 0;
 	};
-	void send_object_frame(int tx, int ty, int tz, int shape, int old_frame, int new_frame);
+	void send_object_change(
+			int tx, int ty, int tz, int old_shape, int new_shape, int old_frame, int new_frame);
 	bool take_object_frame(Object_frame_event& event);
 	// Guest asks the host to open or close a door (new_frame unused).
 	void send_door_use(int tx, int ty, int tz, int shape, int frame);
