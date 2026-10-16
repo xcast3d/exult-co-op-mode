@@ -61,6 +61,8 @@
 #include "friendnet.h"
 #include "game.h"
 #include "gamemap.h"
+#include "iregobjs.h"
+#include "objiter.h"
 #include "gamemgr/modmgr.h"
 #include "gamewin.h"
 #include "gump_utils.h"
@@ -97,6 +99,7 @@
 #include <cstring>
 #include <iomanip>
 #include <sstream>
+#include <unordered_map>
 #include <unordered_set>
 
 #ifdef __GNUC__
@@ -592,6 +595,306 @@ static void Friend_mode_spawn_test_kit() {
 	Friend_mode_notice("Friend Mode test kit placed");
 }
 
+// ---- Item sync (world sync W3) ------------------------------------------
+// The host fingerprints the movable objects (and container contents) in the
+// map chunks around the players.  When a chunk changes, it sends that chunk's
+// whole object list; the guest keeps exact matches, deletes the rest and
+// creates what is missing.  This catches every change whatever caused it.
+
+namespace {
+constexpr uint32 friend_item_sync_ms      = 250;
+constexpr int    friend_item_avatar_chunks = 3;    // Radius around the Avatar.
+constexpr int    friend_item_guest_chunks  = 2;    // Radius around the guest.
+constexpr int    friend_item_max_depth     = 8;    // Container nesting limit.
+
+void Friend_put8(std::vector<unsigned char>& out, int value) {
+	out.push_back(static_cast<unsigned char>(value & 0xff));
+}
+
+void Friend_put16(std::vector<unsigned char>& out, int value) {
+	Friend_put8(out, value);
+	Friend_put8(out, value >> 8);
+}
+
+// One object as sent: top-level objects carry their tile within the chunk.
+struct Friend_item {
+	int                        shape = 0, frame = 0, tx = 0, ty = 0, tz = 0, quality = 0, flags = 0;
+	std::vector<Friend_item>   children;
+	std::vector<unsigned char> bytes;    // Serialized form, for matching.
+};
+
+enum Friend_item_flags { friend_item_okay_to_take = 1, friend_item_invisible = 2 };
+}    // namespace
+
+// A world object that item sync covers: movable (ireg), not an actor, egg or
+// barge.
+static bool Friend_item_synced(Game_object* obj) {
+	return obj && !obj->as_actor() && !obj->is_egg() && !obj->as_barge() && dynamic_cast<Ireg_game_object*>(obj);
+}
+
+static void Friend_put_item(std::vector<unsigned char>& out, Game_object* obj, bool top, int depth) {
+	Friend_put16(out, obj->get_shapenum());
+	Friend_put8(out, obj->get_framenum());
+	if (top) {
+		Friend_put8(out, obj->get_tx());
+		Friend_put8(out, obj->get_ty());
+		Friend_put8(out, obj->get_lift());
+	}
+	Friend_put8(out, obj->get_quality());    // Also the count for stackables.
+	Friend_put8(out, (obj->get_flag(Obj_flags::okay_to_take) ? friend_item_okay_to_take : 0)
+							 | (obj->get_flag(Obj_flags::invisible) ? friend_item_invisible : 0));
+	std::vector<std::vector<unsigned char>> children;
+	Container_game_object* container = obj->as_container();
+	if (container && depth < friend_item_max_depth) {
+		Object_iterator next(container->get_objects());
+		while (Game_object* child = next.get_next()) {
+			children.emplace_back();
+			Friend_put_item(children.back(), child, false, depth + 1);
+		}
+		// Order inside a container doesn't matter for matching.
+		std::sort(children.begin(), children.end());
+	}
+	Friend_put16(out, static_cast<int>(children.size()));
+	for (const auto& child : children) {
+		out.insert(out.end(), child.begin(), child.end());
+	}
+}
+
+// Serialized top-level objects of a chunk, sorted.
+static std::vector<std::vector<unsigned char>> Friend_chunk_items(Map_chunk* chunk) {
+	std::vector<std::vector<unsigned char>> items;
+	Object_iterator                         next(chunk->get_objects());
+	while (Game_object* obj = next.get_next()) {
+		if (Friend_item_synced(obj)) {
+			items.emplace_back();
+			Friend_put_item(items.back(), obj, true, 0);
+		}
+	}
+	std::sort(items.begin(), items.end());
+	return items;
+}
+
+static uint64 Friend_hash_items(const std::vector<std::vector<unsigned char>>& items) {
+	uint64 hash = 1469598103934665603ULL;    // FNV-1a.
+	for (const auto& item : items) {
+		for (unsigned char byte : item) {
+			hash = (hash ^ byte) * 1099511628211ULL;
+		}
+		hash = (hash ^ 0xffU) * 1099511628211ULL;
+	}
+	return hash;
+}
+
+static std::unordered_map<int, uint64> friend_chunk_hashes;
+static uint32                          friend_next_item_sync = 0;
+
+// Host: fingerprint chunks near the players; send the ones that changed.
+// With send false, only record the current state (right after the guest
+// downloads the world, both sides match).
+static void Friend_mode_item_pass(bool send) {
+	Game_map*   map    = gwin->get_map();
+	Main_actor* avatar = gwin->get_main_actor();
+	if (!map || !avatar) {
+		return;
+	}
+	std::unordered_set<int> chunks;
+	auto                    add_around = [&](Actor* actor, int radius) {
+        if (!actor || actor->get_map() != avatar->get_map()) {
+            return;
+        }
+        const int acx = actor->get_cx();
+        const int acy = actor->get_cy();
+        for (int dy = -radius; dy <= radius; ++dy) {
+            for (int dx = -radius; dx <= radius; ++dx) {
+                const int cx = (acx + dx + c_num_chunks) % c_num_chunks;
+                const int cy = (acy + dy + c_num_chunks) % c_num_chunks;
+                chunks.insert(cy * c_num_chunks + cx);
+            }
+        }
+	};
+	add_around(avatar, friend_item_avatar_chunks);
+	add_around(gwin->get_remote_friend_actor(), friend_item_guest_chunks);
+	for (int key : chunks) {
+		const int cx = key % c_num_chunks;
+		const int cy = key / c_num_chunks;
+		if (!map->is_chunk_read(cx, cy)) {
+			continue;
+		}
+		Map_chunk* chunk = map->get_chunk_unsafe(cx, cy);
+		if (!chunk) {
+			continue;
+		}
+		const auto   items = Friend_chunk_items(chunk);
+		const uint64 hash  = Friend_hash_items(items);
+		auto         found = friend_chunk_hashes.find(key);
+		if (found == friend_chunk_hashes.end()) {
+			// First sight: unchanged since the guest's copy was made.
+			friend_chunk_hashes[key] = hash;
+			continue;
+		}
+		if (found->second == hash) {
+			continue;
+		}
+		found->second = hash;
+		if (!send) {
+			continue;
+		}
+		std::vector<unsigned char> payload;
+		Friend_put16(payload, cx);
+		Friend_put16(payload, cy);
+		Friend_put16(payload, static_cast<int>(items.size()));
+		for (const auto& item : items) {
+			payload.insert(payload.end(), item.begin(), item.end());
+		}
+		friend_session.send_blob(Friend_mode_session::Blob_kind::chunk_objects, payload);
+		cout << "Friend Mode: sent chunk " << cx << ',' << cy << " (" << items.size() << " objects)" << endl;
+	}
+}
+
+// Parse one object; returns false on malformed data.
+static bool Friend_read_item(
+		const std::vector<unsigned char>& data, std::size_t& pos, bool top, int depth, Friend_item& item) {
+	const std::size_t start  = pos;
+	const std::size_t needed = top ? 9 : 6;
+	if (depth > friend_item_max_depth || pos + needed + 2 > data.size()) {
+		return false;
+	}
+	auto get8  = [&]() { return static_cast<int>(data[pos++]); };
+	auto get16 = [&]() {
+		const int lo = get8();
+		return lo | (get8() << 8);
+	};
+	item.shape = get16();
+	item.frame = get8();
+	if (top) {
+		item.tx = get8();
+		item.ty = get8();
+		item.tz = get8();
+	}
+	item.quality   = get8();
+	item.flags     = get8();
+	const int count = get16();
+	for (int i = 0; i < count; ++i) {
+		item.children.emplace_back();
+		if (!Friend_read_item(data, pos, false, depth + 1, item.children.back())) {
+			return false;
+		}
+	}
+	item.bytes.assign(data.begin() + start, data.begin() + pos);
+	return true;
+}
+
+static Game_object_shared Friend_create_item(const Friend_item& item) {
+	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
+	if (item.shape >= shapes.get_num_shapes()) {
+		return nullptr;
+	}
+	const Game_object_shared obj = gwin->get_map()->create_ireg_object(
+			ShapeID::get_info(item.shape), item.shape, item.frame, 0, 0, 0);
+	obj->set_quality(item.quality);
+	if (item.flags & friend_item_okay_to_take) {
+		obj->set_flag(Obj_flags::okay_to_take);
+	} else {
+		obj->clear_flag(Obj_flags::okay_to_take);
+	}
+	if (item.flags & friend_item_invisible) {
+		obj->set_flag(Obj_flags::invisible);
+	}
+	if (Container_game_object* container = obj->as_container()) {
+		for (const Friend_item& child : item.children) {
+			if (Game_object_shared made = Friend_create_item(child)) {
+				container->add(made.get(), true);
+			}
+		}
+	}
+	return obj;
+}
+
+// Delete an object and its contents without spilling them, closing any
+// window open on it first.
+static void Friend_delete_item(Game_object* obj) {
+	Gump_manager* gumps = gwin->get_gump_man();
+	while (Gump* gump = gumps->find_gump(obj, c_any_shapenum)) {
+		gumps->close_gump(gump);
+	}
+	if (Container_game_object* container = obj->as_container()) {
+		std::vector<Game_object*> contents;
+		Object_iterator           next(container->get_objects());
+		while (Game_object* child = next.get_next()) {
+			contents.push_back(child);
+		}
+		for (Game_object* child : contents) {
+			Friend_delete_item(child);
+		}
+	}
+	obj->remove_this();
+}
+
+// Guest: make a chunk's movable objects match the host's list.
+static void Friend_mode_apply_chunk(const std::vector<unsigned char>& data) {
+	if (data.size() < 6) {
+		return;
+	}
+	std::size_t pos   = 0;
+	const int   cx    = data[0] | (data[1] << 8);
+	const int   cy    = data[2] | (data[3] << 8);
+	const int   count = data[4] | (data[5] << 8);
+	pos               = 6;
+	if (cx >= c_num_chunks || cy >= c_num_chunks) {
+		return;
+	}
+	std::vector<Friend_item> wanted(static_cast<std::size_t>(count));
+	for (Friend_item& item : wanted) {
+		if (!Friend_read_item(data, pos, true, 0, item)) {
+			cerr << "Friend Mode: malformed chunk " << cx << ',' << cy << endl;
+			return;
+		}
+	}
+	Game_map* map = gwin->get_map();
+	map->ensure_chunk_read(cx, cy);
+	Map_chunk* chunk = map->get_chunk(cx, cy);
+	// Current objects with their serialized form.
+	std::vector<std::pair<Game_object*, std::vector<unsigned char>>> current;
+	Object_iterator                                                  next(chunk->get_objects());
+	while (Game_object* obj = next.get_next()) {
+		if (Friend_item_synced(obj)) {
+			current.emplace_back(obj, std::vector<unsigned char>());
+			Friend_put_item(current.back().second, obj, true, 0);
+		}
+	}
+	std::vector<bool> kept(current.size(), false);
+	std::vector<const Friend_item*> missing;
+	for (const Friend_item& item : wanted) {
+		bool matched = false;
+		for (std::size_t i = 0; i < current.size(); ++i) {
+			if (!kept[i] && current[i].second == item.bytes) {
+				kept[i] = matched = true;
+				break;
+			}
+		}
+		if (!matched) {
+			missing.push_back(&item);
+		}
+	}
+	int removed = 0;
+	for (std::size_t i = 0; i < current.size(); ++i) {
+		if (!kept[i]) {
+			Friend_delete_item(current[i].first);
+			++removed;
+		}
+	}
+	for (const Friend_item* item : missing) {
+		if (Game_object_shared obj = Friend_create_item(*item)) {
+			obj->move(cx * c_tiles_per_chunk + item->tx, cy * c_tiles_per_chunk + item->ty, item->tz);
+		}
+	}
+	if (removed || !missing.empty()) {
+		gwin->set_all_dirty();
+		cout << "Friend Mode: chunk " << cx << ',' << cy << ": removed " << removed << ", added " << missing.size()
+			 << endl;
+	}
+}
+
 // Temporary save used to hand the host's live world to a joining guest.
 static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
 
@@ -612,6 +915,9 @@ static void Friend_mode_send_world() {
 	if (Friend_mode_read_file(friend_world_file, data)) {
 		friend_session.send_blob(Friend_mode_session::Blob_kind::world_save, data);
 		cout << "Friend Mode: sent world (" << data.size() << " bytes)" << endl;
+		// Both sides now match: record every nearby chunk as the baseline.
+		friend_chunk_hashes.clear();
+		Friend_mode_item_pass(false);
 	} else {
 		cerr << "Friend Mode: could not read " << friend_world_file << endl;
 	}
@@ -2318,7 +2624,15 @@ static void Handle_events() {
 				friend_host_peer_name = friend_session.remote_player_name_value();
 				Friend_mode_notice(friend_host_peer_name + " has joined");
 			}
+			if (friend_session.connected() && host_assigned_actor >= 0) {
+				const uint32 now = SDL_GetTicks();
+				if (now >= friend_next_item_sync) {
+					friend_next_item_sync = now + friend_item_sync_ms;
+					Friend_mode_item_pass(true);
+				}
+			}
 			if (!friend_session.connected()) {
+				friend_chunk_hashes.clear();
 				friend_sent_party.clear();
 				friend_leash_return_at = 0;
 				if (!friend_host_peer_name.empty()) {
@@ -2480,6 +2794,13 @@ static void Handle_events() {
 			std::vector<uint32> host_party;
 			if (friend_session.take_party_members(host_party)) {
 				Friend_apply_party_members(host_party);
+			}
+			Friend_mode_session::Blob_kind blob_kind;
+			std::vector<unsigned char>     blob;
+			while (friend_session.take_blob(blob_kind, blob)) {
+				if (blob_kind == Friend_mode_session::Blob_kind::chunk_objects) {
+					Friend_mode_apply_chunk(blob);
+				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;
 			while (friend_session.take_object_frame(frame_event)) {

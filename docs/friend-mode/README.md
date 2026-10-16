@@ -121,6 +121,14 @@ around their own companion. Levers
 and switches are allowed so guests can help with puzzles; their scripts can
 open gates or trigger effects elsewhere, which is accepted. Protocol version is 9.
 
+### Items on the map and in containers
+
+The host reconciles movable objects with the guest by chunk (see the
+[world sync plan](world-sync-plan.md), W3): every 250 ms it fingerprints the
+objects and container contents near the players and sends any chunk that
+changed; the guest makes its copy match. Party inventories and guest item
+actions are not synced yet (W4).
+
 ### Party mirroring and spectating
 
 The host sends its party list when a guest joins and whenever the party
@@ -197,8 +205,9 @@ replicated to guests.
 
 ## Known prototype gaps
 
-- Guests start from the host's world, and door changes are shared, but item
-  and container changes after joining are not synced yet; see the
+- Guests start from the host's world and see the host's door and item changes
+  near the players, but party inventories and guest item actions are not
+  synced yet; see the
   [world sync plan](world-sync-plan.md).
 - Creature identity currently relies on deterministic loaded-world ordering;
   spawned/despawned creature replication needs a durable network identity.

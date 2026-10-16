@@ -1,6 +1,6 @@
 # World sync: items, containers and doors (plan)
 
-**Status:** W1 (join with the host's live save) and W2 (doors) built; W3–W5 planned. This is Phase 4 of the
+**Status:** W1 (join with the host's live save), W2 (doors and other toggles) and W3 (host item changes, by chunk reconciliation) built; W4 planned. This is Phase 4 of the
 [project brief](../ultima-7-friend-mode.md).
 
 ## What's broken today
@@ -54,20 +54,27 @@ world, so an object can be found by where it is and what it is:
 Quantity and quality go with the object's data, not its reference. If a
 reference can't be resolved, the guest asks for a resync of that chunk (see 5).
 
-### 3. Host to guests: object changes
+### 3. Host to guests: object changes (built as chunk reconciliation)
 
-Hook the engine where objects change:
+Hooking every engine path that adds, removes or moves an object turned out to
+be fragile: dragging, Usecode creation and deletion, combat drops, theft and
+stacking all take different paths, and the low-level chunk add/remove is also
+used for map loading and NPC movement. Item sync reconciles state instead:
 
-- **Added** to the map, a container, or an inventory.
-- **Removed** from one of those.
-- **Changed frame** (doors, levers, torches lit or unlit).
-- **Changed quantity or quality** (stacks such as gold or arrows).
+- Every 250 ms the host serializes the movable (ireg) objects in the loaded
+  chunks within 3 chunks of the Avatar and 2 of the guest's companion: shape,
+  frame, tile, quality (which is also the count for stackables), flags and
+  container contents recursively. Actors, eggs and barges are excluded.
+- Each chunk's sorted list is fingerprinted (FNV-1a). The first fingerprint of
+  a chunk is the baseline (right after a join both sides match); when it
+  changes, the host sends the chunk's whole list as a `chunk_objects` blob.
+- The guest keeps objects whose serialized form matches exactly, deletes the
+  rest (closing any open container window and deleting contents first, so
+  nothing spills) and creates what is missing.
 
-When the change is within range of a player, the host sends a small change
-message: `remove(ref)`, `add(where, shape, frame, quality, quantity)`,
-`set_frame(ref, frame)`, `set_quantity(ref, n)`. Guests apply these with the
-engine's own functions, with sound and Usecode turned off. A move is a remove
-plus an add.
+Door and toggle changes still go out immediately through the Usecode hooks;
+reconciliation also catches anything those miss. This makes W5's drift
+recovery largely automatic for the area around the players.
 
 ### 4. Guest to host: actions
 
@@ -99,7 +106,7 @@ them. This is the safety net, not the normal path.
 | --- | --- | --- |
 | W1 | Variable-length messages; the guest joins using the host's live save | A guest joining mid-game sees exactly the host's world: items, doors, party |
 | W2 | Host change hooks for frames, plus guest door use | The Avatar opens a door and the guest sees it; a guest opens an unlocked door and the host sees it |
-| W3 | Host change hooks for add, remove and quantity on the map and in containers | The Avatar picks up or drops items and the guest sees it |
+| W3 | Chunk reconciliation for objects on the map and in containers (built) | The Avatar picks up or drops items and the guest sees it |
 | W4 | Guest item requests: take, drop, put in a container, move within own inventory | Spark takes bread from a bag; the host sees the bag without it and Spark holding it |
 | W5 | Chunk resync, theft, two players grabbing the same item, a long two-player session | No drift after 30 minutes of looting, fighting and doors |
 

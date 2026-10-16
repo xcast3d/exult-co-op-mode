@@ -102,11 +102,16 @@ which have no state to sync.
 - [ ] Guest slides each one open and closed; both windows match.
 - [ ] When you find a real one in town or a dungeon, try it from the guest.
 
-## Containers and items (not synced yet)
+## Items from the host (W3)
 
-- [ ] Guest can open the chest and bag and see the same contents as the host.
-- [ ] Known gap (W3–W4): taking or moving items only changes the window that
-      did it.
+- [ ] Host takes the food out of the kit's bag; the guest's bag empties too.
+- [ ] Host drops an item on the floor; it appears on the guest.
+- [ ] Host moves gold from the chest to the floor; the chest contents and the
+      floor match on the guest.
+- [ ] Guest has the chest open while the host changes it; the guest's chest
+      window closes and reopening shows the new contents.
+- [ ] Known gap (W4): guest item actions and party inventories (taking items
+      into Spark's pack) only change the guest's window.
 
 ## Leaving
 
@@ -118,7 +123,7 @@ which have no state to sync.
 
 - Using items with a target, such as keys on locks: guests can't run item
   scripts yet.
-- Items and containers changed after joining (world sync W3–W4).
+- Guest item actions and party inventories (world sync W4).
 - Creatures that appear after joining, such as a cat wandering in.
 - Doors whose script swaps to a shape that isn't flagged as a door.
 - Sounds for changes made on the other machine.

@@ -42,7 +42,10 @@ public:
 	void poll();
 	void stop();
 	// Variable-length data sent as raw bytes after a header packet.
-	enum class Blob_kind : uint32 { world_save = 1 };
+	enum class Blob_kind : uint32 {
+		world_save    = 1,
+		chunk_objects = 2    // A map chunk's movable objects (item sync).
+	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);
 	// Bytes of the blob currently arriving (0 when none).
