@@ -518,9 +518,10 @@ static Game_object_shared Friend_test_kit_create(int shape, int frame) {
 }
 
 static bool Friend_test_kit_place(int shape, int frame, int dx, int dy, Game_object_shared* placed = nullptr) {
-	// Skip frames a shape doesn't have; painting one could crash.
-	if (frame >= ShapeID(shape, 0).get_num_frames()) {
-		cerr << "Friend Mode: test shape " << shape << " has no frame " << frame << endl;
+	// Skip shapes or frames this game's data doesn't have; using them crashes.
+	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
+	if (shape < 0 || shape >= shapes.get_num_shapes() || frame >= shapes.get_num_frames(shape)) {
+		cerr << "Friend Mode: no test shape " << shape << " frame " << frame << " in this game" << endl;
 		return false;
 	}
 	const Tile_coord avatar = gwin->get_main_actor()->get_tile();
@@ -568,7 +569,6 @@ static void Friend_mode_spawn_test_kit() {
 	Friend_test_kit_place(270, 16, -7, 10);     // Vertical door, style 3.
 	Friend_test_kit_place(376, 8, -4, 10);      // Horizontal door, style 2.
 	Friend_test_kit_place(376, 16, -1, 10);     // Horizontal door, style 3.
-	Friend_test_kit_place(1179, 0, 2, 10);      // Unnamed door-flagged shape.
 	Friend_test_kit_place(271, 0, 5, 10);       // Portcullis.
 	Friend_test_kit_place(935, 0, 9, 10);       // Portcullis door.
 	Game_object_shared chest;

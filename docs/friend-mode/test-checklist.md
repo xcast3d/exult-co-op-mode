@@ -40,7 +40,6 @@ Mode, and tick off what you tried. Black Gate only for now.
 | Chest with food, 25 gold, a bottle, a torch and a key | 800 | south-west |
 | Bag with 2 food | 802 | south-east |
 | Door styles (secret-wall candidates) | 270 and 376 at frames 8 and 16 | row to the south |
-| Unnamed door-flagged shape | 1179 | row to the south |
 | Portcullis, portcullis door | 271, 935 | row to the south |
 
 The spawned lever isn't linked to any gate, so it only tests that its frame
