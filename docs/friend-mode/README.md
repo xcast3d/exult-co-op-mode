@@ -70,17 +70,17 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
-Built at the end of the last session and not yet tested:
+The item pick-up model, the host pause bar and chest windows staying open on
+the guest were tested on one Mac on 2026-10-16 and work. The two-tester
+contention checks have not been run with a second person yet.
 
-1. **Pick-up model for items:** an item in someone's hand disappears for
-   everyone. Run the checklist's "Inventories and guest item moves" and "Two
-   people grabbing the same item" sections; the second needs a second tester.
-2. **Host pause bar:** "The host has paused the game." stays at the bottom
-   while the host is in a menu (including the quantity prompt).
-3. **Chest windows staying open** on the guest while the host changes their
-   contents.
+Noted from that test:
 
-Open items after that: theft by guests, giving items to other party members,
+- **Teleporters** still need handling for guests.
+- **A better test kit** with more interactive items, so more of the world can
+  be checked in one pass.
+
+Other open items: theft by guests, giving items to other party members,
 keys, creatures that appear after joining, game-clock sync (day and night can
 differ between machines), and multi-guest sessions
 ([plan](multi-guest-plan.md)).

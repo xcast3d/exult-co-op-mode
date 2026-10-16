@@ -109,7 +109,7 @@ which have no state to sync.
 - [ ] Host moves gold from the chest to the floor; the chest contents and the
       floor match on the guest.
 - [ ] Guest has the chest open while the host changes it; the guest's chest
-      window closes and reopening shows the new contents.
+      window stays open and shows the new contents.
 
 ## Inventories and guest item moves (W4)
 
