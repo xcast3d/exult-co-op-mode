@@ -38,6 +38,8 @@ class Game_object;
 
 // Friend Mode connection identity is collected before the guest world loads.
 bool Friend_mode_collect_connection_details();
+// Connect to the host and replace the guest's gamedat with the host's live world.
+bool Friend_mode_download_world();
 std::string Friend_mode_display_name(const Game_object* object, const std::string& character_name);
 
 // Allows world-object speech to enter the host's Friend Mode event stream.

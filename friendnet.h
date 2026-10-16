@@ -41,6 +41,17 @@ public:
 	}
 	void poll();
 	void stop();
+	// Variable-length data sent as raw bytes after a header packet.
+	enum class Blob_kind : uint32 { world_save = 1 };
+	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
+	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);
+	// Bytes of the blob currently arriving (0 when none).
+	uint32 blob_bytes_remaining() const {
+		return blob_remaining;
+	}
+	// Guest asks for the host's live world, sent as a world_save blob.
+	void request_world();
+	bool take_world_request();
 	// Host's full party (NPC numbers, in order) so guests can mirror it.
 	void send_party_members(const std::vector<uint32>& members);
 	bool take_party_members(std::vector<uint32>& members);
@@ -91,6 +102,10 @@ public:
 	bool connected() const {
 		return handshake_complete;
 	}
+	// A socket to the peer is open (possibly still handshaking).
+	bool peer_open() const {
+		return peer_socket >= 0;
+	}
 
 private:
 	static constexpr std::size_t packet_size = 20;
@@ -103,7 +118,7 @@ private:
 	std::size_t                       received = 0;
 	std::size_t                       sent     = 0;
 	bool                              handshake_complete = false;
-	std::deque<std::array<unsigned char, packet_size>> outgoing;
+	std::deque<std::vector<unsigned char>> outgoing;
 	std::vector<uint32>               roster;
 	bool                              received_roster = false;
 	bool                              actor_request_pending = false;
@@ -163,6 +178,15 @@ private:
 	std::vector<uint32>               party_members;
 	std::vector<uint32>               pending_party_members;
 	bool                              party_members_ready = false;
+	struct Blob {
+		Blob_kind                  kind;
+		std::vector<unsigned char> data;
+	};
+	std::deque<Blob>                  blobs;
+	Blob_kind                         blob_kind      = Blob_kind::world_save;
+	uint32                            blob_remaining = 0;
+	std::vector<unsigned char>        blob_data;
+	bool                              world_requested = false;
 
 	void close_peer();
 	void queue_packet(unsigned char type);

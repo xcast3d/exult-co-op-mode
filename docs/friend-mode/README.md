@@ -86,6 +86,16 @@ and uses its own assignment; guests trust the host. Chat never runs Usecode.
 The protocol version is now 5. Relaying chat between multiple guests waits on
 multi-peer sessions.
 
+### Joining with the host's world
+
+After **Connect to Host**, the guest connects from the title menu and asks for
+the host's world. The host writes its live game to a temporary save (the
+normal save code, about 190 KB) and sends it as one variable-length message:
+a header packet with the length, then raw bytes. The guest shows download
+progress, unpacks the save into its gamedat, and loads it, so party, quest
+flags, items, doors and NPCs match the host at the moment of joining. Protocol
+version is now 7.
+
 ### Party mirroring and spectating
 
 The host sends its party list when a guest joins and whenever the party
@@ -162,9 +172,9 @@ replicated to guests.
 
 ## Known prototype gaps
 
-- The guest loads its own copy of the world. Only party membership is copied
-  from the host (on join and whenever it changes); quest flags, items and
-  other world state can still differ until Phase 4.
+- Guests start from the host's world, but object changes after joining
+  (items, containers, doors) are not synced yet; see the
+  [world sync plan](world-sync-plan.md).
 - Creature identity currently relies on deterministic loaded-world ordering;
   spawned/despawned creature replication needs a durable network identity.
 - The companion selector still appears after loading rather than in the

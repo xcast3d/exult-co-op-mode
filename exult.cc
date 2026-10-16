@@ -363,6 +363,111 @@ static void Friend_mode_update_leash_zone(Actor* actor) {
 	}
 }
 
+// Temporary save used to hand the host's live world to a joining guest.
+static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
+
+static bool Friend_mode_read_file(const char* fname, std::vector<unsigned char>& data) {
+	auto in = U7open_in(fname);
+	if (!in) {
+		return false;
+	}
+	data.assign(std::istreambuf_iterator<char>(*in), std::istreambuf_iterator<char>());
+	return in->good() || in->eof();
+}
+
+// Host: write the live game to a temporary save and send it to the guest.
+static void Friend_mode_send_world() {
+	gwin->write(true);
+	gwin->save_gamedat(friend_world_file, "Friend Mode join");
+	std::vector<unsigned char> data;
+	if (Friend_mode_read_file(friend_world_file, data)) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::world_save, data);
+		cout << "Friend Mode: sent world (" << data.size() << " bytes)" << endl;
+	} else {
+		cerr << "Friend Mode: could not read " << friend_world_file << endl;
+	}
+	U7remove(friend_world_file);
+}
+
+static void Friend_mode_show_status(const std::string& line1, const std::string& line2) {
+	auto font = fontManager.get_font("MENU_FONT");
+	if (!font) {
+		return;
+	}
+	gwin->clear_screen(true);
+	Image_buffer8* buffer  = gwin->get_win()->get_ib8();
+	const int      centerx = gwin->get_width() / 2;
+	const int      top     = std::max(20, gwin->get_height() / 3);
+	font->center_text(buffer, centerx, top, line1.c_str());
+	if (!line2.empty()) {
+		font->center_text(buffer, centerx, top + 18, line2.c_str());
+	}
+	font->center_text(buffer, centerx, top + 50, "Esc cancels");
+	gwin->show(true);
+}
+
+bool Friend_mode_download_world() {
+	friend_session.set_local_player_name(friend_player_name.empty() ? "Player" : friend_player_name);
+	if (!friend_session.start_guest(arg_friend_join, arg_friend_port, Game::Get_unique_gamecode())) {
+		Friend_mode_show_status("Could not connect to host", arg_friend_join);
+		SDL_Delay(2500);
+		return false;
+	}
+	bool         requested = false;
+	const uint32 deadline  = SDL_GetTicks() + 60000;
+	for (;;) {
+		friend_session.poll();
+		if (friend_session.connected() && !requested) {
+			friend_session.request_world();
+			requested = true;
+		}
+		Friend_mode_session::Blob_kind kind;
+		std::vector<unsigned char>     data;
+		if (friend_session.take_blob(kind, data) && kind == Friend_mode_session::Blob_kind::world_save) {
+			auto out = U7open_out(friend_world_file);
+			if (!out) {
+				Friend_mode_show_status("Could not store the host's world", "");
+				SDL_Delay(2500);
+				friend_session.stop();
+				return false;
+			}
+			out->write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+			out.reset();
+			cout << "Friend Mode: received world (" << data.size() << " bytes)" << endl;
+			gwin->restore_gamedat(friend_world_file);
+			U7remove(friend_world_file);
+			return true;
+		}
+		if (!friend_session.peer_open() || SDL_GetTicks() > deadline) {
+			Friend_mode_show_status(
+					friend_session.peer_open() ? "The host did not respond" : "The host refused the connection",
+					"Check that both use the same Exult build and game");
+			SDL_Delay(3000);
+			friend_session.stop();
+			return false;
+		}
+		const uint32 remaining = friend_session.blob_bytes_remaining();
+		if (remaining > 0) {
+			Friend_mode_show_status("Downloading the host's world", std::to_string(remaining / 1024) + " KB to go");
+		} else {
+			Friend_mode_show_status(friend_session.connected() ? "Waiting for the host's world" : "Connecting to host",
+					arg_friend_join);
+		}
+		SDL_Event event;
+		while (SDL_PollEvent(&event)) {
+			if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
+				friend_session.stop();
+				return false;
+			}
+			if (event.type == SDL_EVENT_QUIT) {
+				friend_session.stop();
+				throw quit_exception();
+			}
+		}
+		Delay();
+	}
+}
+
 static void Friend_mode_paint_chat_input() {
 	if (!friend_chat_active) {
 		return;
@@ -1735,7 +1840,9 @@ static void Init() {
 		}
 		friend_session.set_local_player_name(friend_player_name);
 		friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode());
-	} else if (!arg_friend_join.empty()) {
+	} else if (!arg_friend_join.empty() && friend_session.mode() == Friend_mode_session::Mode::off) {
+		// Normally already connected from the title menu while downloading
+		// the host's world.
 		friend_session.set_local_player_name(friend_player_name.empty() ? "Player" : friend_player_name);
 		friend_session.start_guest(arg_friend_join, arg_friend_port, Game::Get_unique_gamecode());
 	}
@@ -1969,6 +2076,9 @@ static void Handle_events() {
 					incoming_chat);
 		}
 		if (arg_friend_host) {
+			if (friend_session.take_world_request()) {
+				Friend_mode_send_world();
+			}
 			if (friend_session.take_peer_joined()) {
 				friend_host_peer_name = friend_session.remote_player_name_value();
 				Friend_mode_notice(friend_host_peer_name + " has joined");

@@ -20,7 +20,7 @@
 #endif
 
 namespace {
-constexpr unsigned short protocol_version = 6;
+constexpr unsigned short protocol_version = 7;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -55,6 +55,11 @@ constexpr unsigned char  chat_chunk_packet = 31;
 constexpr unsigned char  party_begin_packet = 32;
 constexpr unsigned char  party_member_packet = 33;
 constexpr unsigned char  party_end_packet = 34;
+// A blob header is followed by 'length' raw bytes outside packet framing.
+constexpr unsigned char  blob_packet = 35;
+constexpr unsigned char  world_request_packet = 36;
+constexpr uint32         max_blob_size = 16 * 1024 * 1024;
+constexpr std::size_t    blob_chunk_size = 16 * 1024;
 
 // Keep only printable ASCII from peer-supplied text.
 void append_printable(std::string& out, const unsigned char* data, std::size_t count) {
@@ -197,10 +202,45 @@ bool Friend_mode_session::start_guest(const std::string& address, int port, uint
 }
 
 void Friend_mode_session::queue_packet(unsigned char type) {
-	std::array<unsigned char, packet_size> packet = {'U', '7', 'F', 'M', static_cast<unsigned char>(protocol_version >> 8),
-			static_cast<unsigned char>(protocol_version), type, 0, 0, 0, 0, 0};
+	std::vector<unsigned char> packet = {'U', '7', 'F', 'M', static_cast<unsigned char>(protocol_version >> 8),
+			static_cast<unsigned char>(protocol_version), type, 0};
+	packet.resize(packet_size, 0);
 	write_u32(packet.data() + 8, local_game_code);
-	outgoing.push_back(packet);
+	outgoing.push_back(std::move(packet));
+}
+
+void Friend_mode_session::send_blob(Blob_kind kind, const std::vector<unsigned char>& data) {
+	if (data.size() > max_blob_size) {
+		std::cerr << "Friend Mode: blob too large (" << data.size() << " bytes)" << std::endl;
+		return;
+	}
+	queue_packet(blob_packet);
+	write_u32(outgoing.back().data() + 8, static_cast<uint32>(data.size()));
+	write_u32(outgoing.back().data() + 12, static_cast<uint32>(kind));
+	for (std::size_t offset = 0; offset < data.size(); offset += blob_chunk_size) {
+		const std::size_t count = std::min(blob_chunk_size, data.size() - offset);
+		outgoing.emplace_back(data.begin() + offset, data.begin() + offset + count);
+	}
+}
+
+bool Friend_mode_session::take_blob(Blob_kind& kind, std::vector<unsigned char>& data) {
+	if (blobs.empty()) {
+		return false;
+	}
+	kind = blobs.front().kind;
+	data = std::move(blobs.front().data);
+	blobs.pop_front();
+	return true;
+}
+
+void Friend_mode_session::request_world() {
+	queue_packet(world_request_packet);
+}
+
+bool Friend_mode_session::take_world_request() {
+	const bool requested = world_requested;
+	world_requested      = false;
+	return requested;
 }
 
 void Friend_mode_session::send_identity() {
@@ -506,6 +546,23 @@ void Friend_mode_session::handle_packet() {
 		handshake_complete = true;
 		send_identity();
 		std::cout << "Friend Mode: session accepted by host" << std::endl;
+	} else if (handshake_complete && valid_header && version == protocol_version && type == blob_packet) {
+		const uint32 length = game;
+		if (length > max_blob_size) {
+			std::cerr << "Friend Mode: refused " << length << "-byte blob" << std::endl;
+			close_peer();
+			return;
+		}
+		blob_kind      = static_cast<Blob_kind>(read_u32(receive_buffer.data() + 12));
+		blob_remaining = length;
+		blob_data.clear();
+		blob_data.reserve(length);
+		if (length == 0) {
+			blobs.push_back({blob_kind, {}});
+		}
+	} else if (session_mode == Mode::host && handshake_complete && valid_header && version == protocol_version
+			   && type == world_request_packet) {
+		world_requested = true;
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == party_begin_packet) {
 		pending_party_members.clear();
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
@@ -703,11 +760,12 @@ void Friend_mode_session::poll() {
 		return;
 	}
 	while (!outgoing.empty() && peer_socket >= 0) {
+		const std::size_t size  = outgoing.front().size();
 		const int count = static_cast<int>(send(peer_socket, reinterpret_cast<const char*>(outgoing.front().data() + sent),
-				packet_size - sent, 0));
+				size - sent, 0));
 		if (count > 0) {
 			sent += static_cast<std::size_t>(count);
-			if (sent == packet_size) {
+			if (sent == size) {
 				outgoing.pop_front();
 				sent = 0;
 			}
@@ -720,6 +778,27 @@ void Friend_mode_session::poll() {
 		}
 	}
 	while (peer_socket >= 0) {
+		if (blob_remaining > 0) {
+			// Raw blob bytes follow a blob header, outside packet framing.
+			unsigned char chunk[blob_chunk_size];
+			const int     count = static_cast<int>(recv(peer_socket, reinterpret_cast<char*>(chunk),
+                    std::min<std::size_t>(sizeof(chunk), blob_remaining), 0));
+			if (count > 0) {
+				blob_data.insert(blob_data.end(), chunk, chunk + count);
+				blob_remaining -= static_cast<uint32>(count);
+				if (blob_remaining == 0) {
+					blobs.push_back({blob_kind, std::move(blob_data)});
+					blob_data.clear();
+				}
+				continue;
+			}
+			if (count == 0 || !would_block()) {
+				std::cout << "Friend Mode: peer disconnected" << std::endl;
+				connection_lost = handshake_complete;
+				close_peer();
+			}
+			break;
+		}
 		const int count = static_cast<int>(recv(peer_socket, reinterpret_cast<char*>(receive_buffer.data() + received),
 				packet_size - received, 0));
 		if (count > 0) {
@@ -770,6 +849,10 @@ void Friend_mode_session::close_peer() {
 	party_members.clear();
 	pending_party_members.clear();
 	party_members_ready = false;
+	blob_remaining  = 0;
+	blob_data.clear();
+	blobs.clear();
+	world_requested = false;
 	pending_identity.clear();
 	pending_identity_length = 0;
 	identity_pending = false;
