@@ -1516,21 +1516,32 @@ static void Friend_mode_paint_chat_input() {
 	gwin->set_painted();
 }
 
-// Guest: while the host is in conversation, explain the pause in a bar at
-// the bottom of the screen, clear of the conversation (and above the chat
-// line when that is open).
+// Guest: while the host is in conversation or has paused the game, explain
+// it in a bar at the bottom of the screen, clear of the conversation (and
+// above the chat line when that is open).  It stays until the wait ends.
 static void Friend_mode_paint_dialogue_wait() {
-	if (friend_session.mode() != Friend_mode_session::Mode::guest || !gwin->is_network_dialogue_paused()) {
+	if (friend_session.mode() != Friend_mode_session::Mode::guest) {
+		return;
+	}
+	std::vector<std::string> lines;
+	if (gwin->is_network_dialogue_paused()) {
+		lines = {"The Avatar is having a conversation. Please wait.", "The Avatar is having a conversation.",
+				 "Please wait."};
+	} else if (gwin->is_network_host_paused()) {
+		lines = {"The host has paused the game.", "The host has paused", "the game."};
+	} else {
 		return;
 	}
 	auto font = fontManager.get_font("MENU_FONT");
 	if (!font) {
 		return;
 	}
-	std::vector<std::string> lines{"The Avatar is having a conversation. Please wait."};
-	const int                max_w = gwin->get_width() - 16;
+	// One line if it fits, else the two-line form.
+	const int max_w = gwin->get_width() - 16;
 	if (font->get_text_width(lines[0].c_str()) + 16 > max_w) {
-		lines = {"The Avatar is having a conversation.", "Please wait."};
+		lines.erase(lines.begin());
+	} else {
+		lines.resize(1);
 	}
 	int text_w = 0;
 	for (const std::string& line : lines) {
@@ -3154,7 +3165,9 @@ static void Handle_events() {
 			}
 			if (friend_session.connected() && host_assigned_actor >= 0) {
 				const uint32 now = SDL_GetTicks();
-				if (now >= friend_next_item_sync) {
+				// Mid-drag the item is lifted out of the world; wait for the
+				// drop so guests see the finished move, as with guest moves.
+				if (now >= friend_next_item_sync && !gwin->is_dragging()) {
 					friend_next_item_sync = now + friend_item_sync_ms;
 					Friend_mode_item_pass(true);
 					Friend_mode_inventory_pass(true);
@@ -3334,7 +3347,7 @@ static void Handle_events() {
 			bool host_paused = false;
 			if (friend_session.take_host_paused(host_paused)) {
 				gwin->set_network_host_paused(host_paused);
-				Friend_mode_notice(host_paused ? "The host has paused the game" : "The game resumes");
+				gwin->set_all_dirty();    // The wait bar appears or goes.
 			}
 			std::vector<uint32> host_party;
 			if (friend_session.take_party_members(host_party)) {

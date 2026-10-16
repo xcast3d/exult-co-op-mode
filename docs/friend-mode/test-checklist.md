@@ -137,9 +137,12 @@ which have no state to sync.
 
 ## Host pause
 
-- [ ] Host presses Escape for the menu. Guest: "The host has paused the game",
-      and the companion can't move or interact; chat still works.
-- [ ] Host closes the menu. Guest: "The game resumes", and nothing snaps back.
+- [ ] Host presses Escape for the menu. Guest: a bar at the bottom says "The
+      host has paused the game." and stays; the companion can't move or
+      interact; chat still works.
+- [ ] Host closes the menu. The bar goes, and nothing snaps back.
+- [ ] Host starts dragging an item out of the chest: it stays visible on the
+      guest until the host drops it.
 
 ## Leaving
 

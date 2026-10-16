@@ -661,6 +661,9 @@ public:
 	}
 	// The Friend Mode host is in a menu or dialog, so the world is paused.
 	void set_network_host_paused(bool paused);
+	bool is_network_host_paused() const {
+		return network_host_paused;
+	}
 	bool is_network_dialogue_paused() const {
 		return network_dialogue_paused;
 	}

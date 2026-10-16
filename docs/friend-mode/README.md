@@ -132,9 +132,12 @@ as a move request; the host checks reach, ownership, weight and room, makes
 the move, and resends so both sides match (W4). When only a container's contents
 change, the guest updates them in place, so a chest or pack window stays open.
 
-When the host opens a menu or a dialog, Exult pauses its world, so the host
-tells guests: their movement and interaction pause ("The host has paused the
-game") until the host returns ("The game resumes"). Chat still works. Protocol
+When the host opens a menu or a dialog (including the quantity prompt when
+splitting a stack), Exult pauses its world, so the host tells guests: their
+movement and interaction pause, with a bar at the bottom saying "The host has
+paused the game." until the host returns. Chat still works. The host holds item
+sync while it is mid-drag, so guests see its moves when they are dropped, the
+same as the host sees guest moves. Protocol
 version is now 10.
 
 ### Party mirroring and spectating
