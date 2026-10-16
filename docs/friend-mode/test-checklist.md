@@ -124,6 +124,14 @@ which have no state to sync.
 - [ ] Guest equips and unequips something on the companion's paperdoll.
 - [ ] Guest tries to put something into the Avatar's pack: refused, and the
       guest's view snaps back.
+- [ ] Guest has the chest open while the host drags an item out of it: the
+      guest's chest window stays open and updates.
+
+## Host pause
+
+- [ ] Host presses Escape for the menu. Guest: "The host has paused the game",
+      and the companion can't move or interact; chat still works.
+- [ ] Host closes the menu. Guest: "The game resumes", and nothing snaps back.
 
 ## Leaving
 

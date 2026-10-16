@@ -831,6 +831,61 @@ static void Friend_delete_item(Game_object* obj) {
 	obj->remove_this();
 }
 
+// The same object as 'item', ignoring contents (and, at top level, on the
+// same tile)?
+static bool Friend_same_object(Game_object* obj, const Friend_item& item, bool top) {
+	const int flags = (obj->get_flag(Obj_flags::okay_to_take) ? friend_item_okay_to_take : 0)
+					  | (obj->get_flag(Obj_flags::invisible) ? friend_item_invisible : 0);
+	if (obj->get_shapenum() != item.shape || obj->get_framenum() != item.frame || obj->get_quality() != item.quality
+		|| flags != item.flags) {
+		return false;
+	}
+	return !top || (obj->get_tx() == item.tx && obj->get_ty() == item.ty && obj->get_lift() == item.tz);
+}
+
+// Make a container's contents match 'wanted' in place: keep exact matches,
+// reconcile nested containers that are the same object, delete the rest and
+// create what is missing.  Open windows on kept containers stay open.
+static void Friend_reconcile_contents(Container_game_object* container, const std::vector<Friend_item>& wanted, int depth) {
+	std::vector<std::pair<Game_object*, std::vector<unsigned char>>> current;
+	Object_iterator                                                  next(container->get_objects());
+	while (Game_object* child = next.get_next()) {
+		current.emplace_back(child, std::vector<unsigned char>());
+		Friend_put_item(current.back().second, child, false, depth);
+	}
+	std::vector<bool> kept(current.size(), false);
+	std::vector<bool> done(wanted.size(), false);
+	for (std::size_t w = 0; w < wanted.size(); ++w) {    // Exact matches.
+		for (std::size_t i = 0; i < current.size(); ++i) {
+			if (!kept[i] && current[i].second == wanted[w].bytes) {
+				kept[i] = done[w] = true;
+				break;
+			}
+		}
+	}
+	for (std::size_t w = 0; w < wanted.size(); ++w) {    // Same container, new contents.
+		for (std::size_t i = 0; !done[w] && i < current.size(); ++i) {
+			Container_game_object* inner = current[i].first->as_container();
+			if (!kept[i] && inner && Friend_same_object(current[i].first, wanted[w], false)) {
+				Friend_reconcile_contents(inner, wanted[w].children, depth + 1);
+				kept[i] = done[w] = true;
+			}
+		}
+	}
+	for (std::size_t i = 0; i < current.size(); ++i) {
+		if (!kept[i]) {
+			Friend_delete_item(current[i].first);
+		}
+	}
+	for (std::size_t w = 0; w < wanted.size(); ++w) {
+		if (!done[w]) {
+			if (Game_object_shared made = Friend_create_item(wanted[w])) {
+				container->add(made.get(), true);
+			}
+		}
+	}
+}
+
 // Guest: make a chunk's movable objects match the host's list.
 static void Friend_mode_apply_chunk(const std::vector<unsigned char>& data) {
 	if (data.size() < 6) {
@@ -873,6 +928,15 @@ static void Friend_mode_apply_chunk(const std::vector<unsigned char>& data) {
 				break;
 			}
 		}
+		// Same container whose contents changed: update it in place so an
+		// open window on it stays open.
+		for (std::size_t i = 0; !matched && i < current.size(); ++i) {
+			Container_game_object* container = current[i].first->as_container();
+			if (!kept[i] && container && Friend_same_object(current[i].first, item, true)) {
+				Friend_reconcile_contents(container, item.children, 1);
+				kept[i] = matched = true;
+			}
+		}
 		if (!matched) {
 			missing.push_back(&item);
 		}
@@ -889,8 +953,8 @@ static void Friend_mode_apply_chunk(const std::vector<unsigned char>& data) {
 			obj->move(cx * c_tiles_per_chunk + item->tx, cy * c_tiles_per_chunk + item->ty, item->tz);
 		}
 	}
+	gwin->set_all_dirty();    // Contents may have changed in place too.
 	if (removed || !missing.empty()) {
-		gwin->set_all_dirty();
 		cout << "Friend Mode: chunk " << cx << ',' << cy << ": removed " << removed << ", added " << missing.size()
 			 << endl;
 	}
@@ -998,6 +1062,18 @@ static void Friend_mode_apply_inventory(const std::vector<unsigned char>& data) 
 				break;
 			}
 		}
+		// The same pack or bag in the same slot with new contents: update in
+		// place so an open window on it stays open.
+		for (std::size_t i = 0; !matched && i < current.size(); ++i) {
+			Game_object*           obj       = current[i].first;
+			Container_game_object* container = obj->as_container();
+			const int              spot      = actor->find_readied(obj);
+			if (!kept[i] && container && (spot < 0 ? 255 : spot) == wanted[w].first
+				&& Friend_same_object(obj, wanted[w].second, false)) {
+				Friend_reconcile_contents(container, wanted[w].second.children, 1);
+				kept[i] = matched = true;
+			}
+		}
 		if (!matched) {
 			missing.push_back(w);
 		}
@@ -1019,8 +1095,8 @@ static void Friend_mode_apply_inventory(const std::vector<unsigned char>& data) 
 			actor->add(obj.get(), true);
 		}
 	}
+	gwin->set_all_dirty();    // Contents may have changed in place too.
 	if (removed || !missing.empty()) {
-		gwin->set_all_dirty();
 		cout << "Friend Mode: inventory of " << actor->get_name() << ": removed " << removed << ", added "
 			 << missing.size() << endl;
 	}
@@ -1334,11 +1410,19 @@ static void Friend_mode_show_status(const std::string& line1, const std::string&
 	gwin->show(true);
 }
 
+static bool friend_host_paused_sent = false;    // Host: guests told we paused.
+
 void Friend_mode_background_poll() {
 	if (friend_session.mode() == Friend_mode_session::Mode::off) {
 		return;
 	}
 	friend_session.poll();
+	// The host's world is paused while a menu or dialog is up: tell guests.
+	if (friend_session.mode() == Friend_mode_session::Mode::host && friend_session.connected()
+		&& !friend_host_paused_sent) {
+		friend_session.send_host_paused(true);
+		friend_host_paused_sent = true;
+	}
 	// A guest joining while the host is in a menu still gets the world:
 	// saving from a menu is what Exult's own Save does.  Not while a script
 	// is running, though; that request waits for the main loop.
@@ -3018,6 +3102,12 @@ static void Handle_events() {
 					incoming_chat);
 		}
 		if (arg_friend_host) {
+			if (friend_host_paused_sent) {    // Back from a menu or dialog.
+				if (friend_session.connected()) {
+					friend_session.send_host_paused(false);
+				}
+				friend_host_paused_sent = false;
+			}
 			if (friend_session.take_world_request()) {
 				Friend_mode_send_world();
 			}
@@ -3204,6 +3294,11 @@ static void Handle_events() {
 			if (friend_session.take_peer_joined()) {
 				Friend_mode_notice("Joined " + friend_session.remote_player_name_value() + "'s world");
 			}
+			bool host_paused = false;
+			if (friend_session.take_host_paused(host_paused)) {
+				gwin->set_network_host_paused(host_paused);
+				Friend_mode_notice(host_paused ? "The host has paused the game" : "The game resumes");
+			}
 			std::vector<uint32> host_party;
 			if (friend_session.take_party_members(host_party)) {
 				Friend_apply_party_members(host_party);
@@ -3235,6 +3330,7 @@ static void Handle_events() {
 			}
 			if (friend_session.take_connection_lost()) {
 				gwin->set_network_dialogue_paused(false);
+				gwin->set_network_host_paused(false);
 				gwin->release_friend_mode_control();
 				guest_assigned_actor = -1;
 				// Exult cannot return to the title menu mid-game, so close.

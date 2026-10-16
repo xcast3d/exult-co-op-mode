@@ -69,6 +69,9 @@ public:
 	// Guest asks the host to use a door or other usable object.
 	void send_door_use(int tx, int ty, int tz, int shape, int frame);
 	bool take_door_use(Object_frame_event& event);
+	// Host tells guests when it pauses (menus, dialogs) and resumes.
+	void send_host_paused(bool paused);
+	bool take_host_paused(bool& paused);
 	// Guest asks for the host's live world, sent as a world_save blob.
 	void request_world();
 	bool take_world_request();
@@ -209,6 +212,8 @@ private:
 	bool                              world_requested = false;
 	std::deque<Object_frame_event>    object_frames;
 	std::deque<Object_frame_event>    door_uses;
+	bool                              host_paused         = false;
+	bool                              host_paused_changed = false;
 
 	void close_peer();
 	void queue_packet(unsigned char type);

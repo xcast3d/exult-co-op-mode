@@ -30,7 +30,7 @@ void ignore_broken_pipe() {
 #endif
 }
 
-constexpr unsigned short protocol_version = 9;
+constexpr unsigned short protocol_version = 10;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -70,6 +70,7 @@ constexpr unsigned char  blob_packet = 35;
 constexpr unsigned char  world_request_packet = 36;
 constexpr unsigned char  object_frame_packet = 37;
 constexpr unsigned char  door_use_packet = 38;
+constexpr unsigned char  host_paused_packet = 39;
 constexpr uint32         max_blob_size = 16 * 1024 * 1024;
 constexpr std::size_t    blob_chunk_size = 16 * 1024;
 
@@ -278,6 +279,20 @@ bool Friend_mode_session::take_door_use(Object_frame_event& event) {
 	}
 	event = door_uses.front();
 	door_uses.pop_front();
+	return true;
+}
+
+void Friend_mode_session::send_host_paused(bool paused) {
+	queue_packet(host_paused_packet);
+	write_u32(outgoing.back().data() + 8, paused ? 1U : 0U);
+}
+
+bool Friend_mode_session::take_host_paused(bool& paused) {
+	if (!host_paused_changed) {
+		return false;
+	}
+	paused              = host_paused;
+	host_paused_changed = false;
 	return true;
 }
 
@@ -633,6 +648,10 @@ void Friend_mode_session::handle_packet() {
 		if (door_uses.size() < 8) {
 			door_uses.push_back(event);
 		}
+	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
+			   && type == host_paused_packet) {
+		host_paused         = game != 0;
+		host_paused_changed = true;
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version && type == party_begin_packet) {
 		pending_party_members.clear();
 	} else if (session_mode == Mode::guest && valid_header && version == protocol_version
@@ -921,6 +940,8 @@ void Friend_mode_session::close_peer() {
 	party_members_ready = false;
 	object_frames.clear();
 	door_uses.clear();
+	host_paused         = false;
+	host_paused_changed = false;
 	blob_remaining  = 0;
 	blob_data.clear();
 	blobs.clear();

@@ -136,6 +136,7 @@ class Game_window {
 	bool                      network_dialogue_paused;
 	bool                      network_spectating = false;
 	bool                      friend_leash_blocked = false;
+	bool                      network_host_paused  = false;
 	Actor*                    remote_friend_actor;
 	int                       remote_friend_actor_previous_schedule;
 	Actor*                    camera_actor;    // What to center view around.
@@ -656,8 +657,10 @@ public:
 	}
 	void set_network_spectating(bool spectating);
 	bool network_input_blocked() const {
-		return network_dialogue_paused || network_spectating;
+		return network_dialogue_paused || network_spectating || network_host_paused;
 	}
+	// The Friend Mode host is in a menu or dialog, so the world is paused.
+	void set_network_host_paused(bool paused);
 	bool is_network_dialogue_paused() const {
 		return network_dialogue_paused;
 	}

@@ -129,7 +129,13 @@ objects and container contents near the players and sends any chunk that
 changed; the guest makes its copy match. Party inventories are reconciled the
 same way. A guest's drag and drop happens locally and is also sent to the host
 as a move request; the host checks reach, ownership, weight and room, makes
-the move, and resends so both sides match (W4).
+the move, and resends so both sides match (W4). When only a container's contents
+change, the guest updates them in place, so a chest or pack window stays open.
+
+When the host opens a menu or a dialog, Exult pauses its world, so the host
+tells guests: their movement and interaction pause ("The host has paused the
+game") until the host returns ("The game resumes"). Chat still works. Protocol
+version is now 10.
 
 ### Party mirroring and spectating
 

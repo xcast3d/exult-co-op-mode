@@ -1220,6 +1220,13 @@ bool Game_window::friend_leash_allows(const Tile_coord& from, const Tile_coord& 
 	return dist <= friend_leash_max_tiles || dist < friend_leash_distance(from);
 }
 
+void Game_window::set_network_host_paused(bool paused) {
+	network_host_paused = paused;
+	if (paused && controlled_actor) {
+		controlled_actor->stop();
+	}
+}
+
 void Game_window::set_network_spectating(bool spectating) {
 	network_spectating = spectating;
 	if (spectating) {
