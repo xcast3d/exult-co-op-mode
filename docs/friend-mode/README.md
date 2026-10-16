@@ -68,6 +68,23 @@ choices are mirrored, and only the host can choose a response. The guest
 resumes control of the same companion when the conversation ends. All four
 behaviors have been verified together over two local instances.
 
+## Next session
+
+Built at the end of the last session and not yet tested:
+
+1. **Pick-up model for items:** an item in someone's hand disappears for
+   everyone. Run the checklist's "Inventories and guest item moves" and "Two
+   people grabbing the same item" sections; the second needs a second tester.
+2. **Host pause bar:** "The host has paused the game." stays at the bottom
+   while the host is in a menu (including the quantity prompt).
+3. **Chest windows staying open** on the guest while the host changes their
+   contents.
+
+Open items after that: theft by guests, giving items to other party members,
+keys, creatures that appear after joining, game-clock sync (day and night can
+differ between machines), and multi-guest sessions
+([plan](multi-guest-plan.md)).
+
 ## Phase 3 checkpoint: player identity and overhead chat
 
 **Connect to Host** now asks for a player name (up to 20 characters) and a host
@@ -135,9 +152,12 @@ change, the guest updates them in place, so a chest or pack window stays open.
 When the host opens a menu or a dialog (including the quantity prompt when
 splitting a stack), Exult pauses its world, so the host tells guests: their
 movement and interaction pause, with a bar at the bottom saying "The host has
-paused the game." until the host returns. Chat still works. The host holds item
-sync while it is mid-drag, so guests see its moves when they are dropped, the
-same as the host sees guest moves. Protocol
+paused the game." until the host returns. Chat still works.
+
+Picking an item up takes it out of everyone's world until it is dropped or
+put back: the host's drags show up on guests at once, and a guest's pick-up is
+held by the host for that guest (see the world sync plan). Two people can't end
+up with the same item. Protocol
 version is now 10.
 
 ### Party mirroring and spectating

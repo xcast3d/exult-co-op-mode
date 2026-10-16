@@ -137,14 +137,14 @@ which have no state to sync.
 
 ## Two people grabbing the same item (needs two testers)
 
-The host's copy is the only real one, so no item can be duplicated; expect at
-most a brief ghost on the guest that snaps back.
+A picked-up item disappears for everyone, so normally the other person can't
+grab it at all. If both start a drag at nearly the same instant, the host takes
+the first request and the second person's drag snaps back.
 
-- [ ] Host starts dragging an item out of the chest; while the host is still
-      holding it, the guest drags the same item into its pack. After the host
-      drops, the item is wherever the host put it and gone from the guest's
-      pack.
-- [ ] The reverse: the guest starts the drag, the host takes the same item.
+- [ ] Host picks up an item: the guest can't see it to grab it.
+- [ ] Guest picks up an item: the host can't see it to grab it.
+- [ ] Both try to grab the same item at the same moment: one gets it, the
+      other's drag snaps back, and there is only one copy afterwards.
 - [ ] Both take from the same gold stack at once; the totals add up on both
       sides afterwards.
 
@@ -154,8 +154,13 @@ most a brief ghost on the guest that snaps back.
       host has paused the game." and stays; the companion can't move or
       interact; chat still works.
 - [ ] Host closes the menu. The bar goes, and nothing snaps back.
-- [ ] Host starts dragging an item out of the chest: it stays visible on the
-      guest until the host drops it.
+- [ ] Host starts dragging an item out of the chest: it disappears on the
+      guest at once and reappears where the host drops it.
+- [ ] Guest starts dragging an item out of the chest: it disappears on the host
+      at once. Dropping it places it on both; cancelling the drag puts it back
+      on both.
+- [ ] Guest drops part of a gold stack: the dropped part lands, and the rest
+      goes back to where it was on both sides.
 
 ## Leaving
 

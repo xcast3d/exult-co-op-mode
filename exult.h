@@ -38,12 +38,14 @@ class Game_object;
 
 // Friend Mode connection identity is collected before the guest world loads.
 bool Friend_mode_collect_connection_details();
-// Guest item moves: note where a dragged object came from before it is
-// lifted, then ask the host to make the same move once it is dropped.
+// Guest item moves, mirroring a drag on the host: picking up lifts the item
+// out of the host's world too, dropping places it, and a cancelled drag (or
+// the rest of a split stack) is put back.
 void Friend_mode_note_drag_start(Game_object* obj);
+void Friend_mode_note_drag_put_back();
 // 'gump_container' is the container whose window received the drop, if any
 // (a dropped stack that merged into another is left detached).
-void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container);
+void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container, bool whole);
 
 // Keep the Friend Mode connection moving (accept, handshake, send and
 // receive) from loops other than the main one, such as modal gumps.  What

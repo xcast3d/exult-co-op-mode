@@ -83,14 +83,29 @@ as map chunks: equipment slot plus item (with contents) per entry,
 fingerprinted every 250 ms; a changed inventory is sent whole as an
 `actor_inventory` blob and the guest rebuilds it to match, re-equipping slots.
 
-**Guest moves:** the guest's drag and drop finishes locally so it feels
-instant, and the guest also sends a `guest_move` request: the item's source
-path (captured in `Dragging_info::start` before it is lifted), the destination
-path (a container, an equipment slot, or a map tile) and the quantity. A path
-starts at a map tile or an actor and steps down through containers by shape,
-frame and quality.
+**Picking up, dropping and putting back** mirror a drag on the host, so an
+item in someone's hand is gone for everyone:
 
-The host checks that the source and destination are the guest companion's own
+- **Pick up** (`Dragging_info::start`): the guest sends `guest_lift` with the
+  item's path. The host checks it is the companion's own or within reach,
+  lifts it out of its world and holds it for that guest, remembering where it
+  came from. A path starts at a map tile or an actor and steps down through
+  containers by shape, frame and quality.
+- **Drop:** the guest sends `guest_move` with the held item as the source, the
+  destination path (a container, an equipment slot or a map tile) and the
+  quantity. If only part of a stack is dropped, the rest stays held until the
+  guest puts it back.
+- **Put back** (`Dragging_info::put_back`: a cancelled drag, or the rest of a
+  split stack): the guest sends `guest_put_back` and the host returns the held
+  item to where it came from. The host also returns it if the guest
+  disconnects mid-drag, or if a drop is refused.
+- The host's own drags work the same way from the guests' side: the item
+  disappears for guests when the host picks it up.
+
+If two people go for the same item, the host handles requests in order, so the
+second pick-up is refused and snaps back at once.
+
+On a drop, the host checks that the destination is the guest companion's own
 inventory or within its reach on the map (never another party member's pack),
 that a container isn't moved into itself, that a party member can carry the
 weight and that it fits, then performs the move with Exult's own code
@@ -99,8 +114,9 @@ forces a resend of the nearby chunks and the guest's inventory, so the guest
 ends up matching the host either way.
 
 Not covered yet: theft (moving items not marked okay to take does not set off
-the game's theft logic for guests), giving items to other party members, and
-using items with a target such as keys.
+the game's theft logic for guests), giving items to other party members,
+using items with a target such as keys, and an item a guest is holding at the
+moment the host sends the world to a new guest (it is missing from that save).
 
 ### 5. Recovering from drift
 

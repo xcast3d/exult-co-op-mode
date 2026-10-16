@@ -1105,7 +1105,7 @@ static void Friend_mode_apply_inventory(const std::vector<unsigned char>& data) 
 // Where an object is, as a path from a root: kind 0 = an object on the map
 // (tile, then the object), 1 = an actor's inventory (NPC number), 2 = a bare
 // map tile (drop destination).  Each step is shape, frame and quality.
-enum Friend_path_kind { friend_path_world = 0, friend_path_actor = 1, friend_path_tile = 2 };
+enum Friend_path_kind { friend_path_world = 0, friend_path_actor = 1, friend_path_tile = 2, friend_path_held = 3 };
 
 static bool Friend_put_path(std::vector<unsigned char>& out, Game_object* obj) {
 	std::vector<Game_object*> chain;
@@ -1211,37 +1211,50 @@ static bool Friend_read_path(
 	return kind == friend_path_tile || found != nullptr;
 }
 
-static std::vector<unsigned char> friend_drag_source;
+static bool friend_guest_lifted = false;    // Guest: the host holds our dragged item.
 
 void Friend_mode_note_drag_start(Game_object* obj) {
-	friend_drag_source.clear();
-	if (obj && friend_session.mode() == Friend_mode_session::Mode::guest && gwin->has_network_friend_control()
-		&& !Friend_put_path(friend_drag_source, obj)) {
-		friend_drag_source.clear();
-	}
-}
-
-void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container) {
-	if (!dropped || friend_drag_source.empty() || friend_session.mode() != Friend_mode_session::Mode::guest
+	friend_guest_lifted = false;
+	if (!obj || friend_session.mode() != Friend_mode_session::Mode::guest || !gwin->has_network_friend_control()
 		|| !friend_session.connected()) {
 		return;
 	}
-	std::vector<unsigned char> payload = friend_drag_source;
-	friend_drag_source.clear();
-	Container_game_object* owner = dropped->get_owner();
+	std::vector<unsigned char> source;
+	if (Friend_put_path(source, obj)) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::guest_lift, source);
+		friend_guest_lifted = true;
+	}
+}
+
+void Friend_mode_note_drag_put_back() {
+	if (friend_guest_lifted && friend_session.connected()) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::guest_put_back, {});
+	}
+	friend_guest_lifted = false;
+}
+
+void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container, bool whole) {
+	if (!dropped || !friend_guest_lifted || !friend_session.connected()) {
+		return;
+	}
+	// The source is the item the host is holding for us.
+	std::vector<unsigned char> payload{friend_path_held, 0};
+	Container_game_object*     owner = dropped->get_owner();
 	if (!owner && !dropped->get_chunk()) {
 		// Merged into a matching stack: it went into the window's container.
 		owner = gump_container ? gump_container->as_container() : nullptr;
 		if (!owner) {
-			return;    // Unknown destination; the next resync will correct it.
+			Friend_mode_note_drag_put_back();    // Unknown destination.
+			return;
 		}
 	}
 	if (owner) {
 		if (!Friend_put_path(payload, owner)) {
+			Friend_mode_note_drag_put_back();
 			return;
 		}
-		Actor* actor_owner = owner->as_actor();
-		const int spot     = actor_owner ? actor_owner->find_readied(dropped) : -1;
+		Actor*    actor_owner = owner->as_actor();
+		const int spot        = actor_owner ? actor_owner->find_readied(dropped) : -1;
 		Friend_put8(payload, spot < 0 ? 255 : spot);
 	} else {
 		Friend_put_tile_path(payload, dropped->get_tile());
@@ -1249,6 +1262,9 @@ void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object*
 	}
 	Friend_put16(payload, std::max(1, quantity));
 	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_move, payload);
+	if (whole) {
+		friend_guest_lifted = false;    // Otherwise the rest is put back.
+	}
 }
 
 // Host: may the guest's companion handle things inside or at 'obj'?  Its own
@@ -1273,6 +1289,65 @@ static void Friend_force_item_resync(Actor* actor) {
 	friend_next_item_sync = 0;
 }
 
+// Host: the item a guest has picked up.  It is out of the world (for the
+// host and everyone else) until the guest drops it or puts it back.
+struct Friend_held_item {
+	Game_object_shared obj;
+	Game_object_weak   owner;    // Container it came from, if any.
+	Tile_coord         tile;     // Or where it lay on the map.
+	int                spot = -1;    // Equipment slot it came from.
+};
+
+static Friend_held_item friend_guest_held;
+
+// Return the held item (or what is left of it) to where it came from.
+static void Friend_return_held_item() {
+	if (!friend_guest_held.obj) {
+		return;
+	}
+	const Game_object_shared obj      = std::move(friend_guest_held.obj);
+	const Game_object_shared owner    = friend_guest_held.owner.lock();
+	Container_game_object*   container = owner ? owner->as_container() : nullptr;
+	bool                     placed    = false;
+	if (container) {
+		Actor* holder = container->as_actor();
+		placed        = holder && friend_guest_held.spot >= 0
+						 && holder->add_readied(obj.get(), friend_guest_held.spot, true, true);
+		if (!placed) {
+			placed = container->add(obj.get(), true);
+		}
+	}
+	if (!placed) {
+		obj->move(friend_guest_held.tile);
+	}
+	friend_guest_held = Friend_held_item();
+	gwin->set_all_dirty();
+}
+
+// Host: a guest picked an item up.
+static void Friend_mode_guest_lift(const std::vector<unsigned char>& data, Actor* actor) {
+	Friend_return_held_item();    // Only one item in hand at a time.
+	std::size_t  pos = 0;
+	Game_object* src = nullptr;
+	Tile_coord   tile;
+	if (!actor || !Friend_read_path(data, pos, src, tile) || !src || src->as_actor()
+		|| !Friend_guest_may_touch(actor, src)) {
+		cout << "Friend Mode: refused guest pick-up (not found, out of reach or not theirs)" << endl;
+		Friend_force_item_resync(actor);
+		return;
+	}
+	Container_game_object* owner = src->get_owner();
+	if (owner) {
+		friend_guest_held.owner = weak_from_obj(owner);
+		Actor* holder           = owner->as_actor();
+		friend_guest_held.spot  = holder ? holder->find_readied(src) : -1;
+	}
+	friend_guest_held.tile = src->get_tile();
+	src->remove_this(&friend_guest_held.obj);
+	gwin->set_all_dirty();
+	cout << "Friend Mode: guest picked up shape " << friend_guest_held.obj->get_shapenum() << endl;
+}
+
 // Host: carry out a guest's item move after checking it.
 static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& data, Actor* actor) {
 	auto refuse = [&](const char* why) {
@@ -1287,44 +1362,60 @@ static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& dat
 	Game_object* dst = nullptr;
 	Tile_coord   src_tile;
 	Tile_coord   dst_tile;
-	if (!Friend_read_path(data, pos, src, src_tile) || !src) {
+	const bool   held = data.size() >= 2 && data[0] == friend_path_held;
+	if (held) {
+		src = friend_guest_held.obj.get();
+		pos = 2;
+		if (!src) {
+			return refuse("not holding that item (someone else took it)");
+		}
+	} else if (!Friend_read_path(data, pos, src, src_tile) || !src) {
 		return refuse("source not found");
 	}
 	const bool dst_ok = Friend_read_path(data, pos, dst, dst_tile);
 	if (!dst_ok || pos + 3 > data.size()) {
+		Friend_return_held_item();
 		return refuse("destination not found");
 	}
 	const int spot     = data[pos];
 	const int quantity = data[pos + 1] | (data[pos + 2] << 8);
-	if (src->as_actor() || !Friend_guest_may_touch(actor, src)) {
+	// A refused drop of a held item goes back where it came from.
+	auto refuse_drop = [&](const char* why) {
+		if (held) {
+			Friend_return_held_item();
+		}
+		refuse(why);
+	};
+	if (!held && (src->as_actor() || !Friend_guest_may_touch(actor, src))) {
 		return refuse("source out of reach or not yours");
 	}
 	Container_game_object* container = dst ? dst->as_container() : nullptr;
 	if (dst && !container) {
-		return refuse("destination is not a container");
+		return refuse_drop("destination is not a container");
 	}
 	if (container) {
 		if (!Friend_guest_may_touch(actor, container)) {
-			return refuse("destination out of reach or not yours");
+			return refuse_drop("destination out of reach or not yours");
 		}
 		for (Game_object* up = container; up; up = up->get_owner()) {
 			if (up == src) {
-				return refuse("container into itself");
+				return refuse_drop("container into itself");
 			}
 		}
 		// Party members can carry only so much.
 		Game_object* holder = container->get_outermost();
 		if (holder->get_flag(Obj_flags::in_party)
 			&& (holder->get_weight() + src->get_weight()) / 10 > holder->get_max_weight()) {
-			return refuse("too heavy");
+			return refuse_drop("too heavy");
 		}
 	} else if (actor->get_tile().distance(dst_tile) > 8 || dst_tile.tz > actor->get_lift() + 5) {
-		return refuse("drop spot out of reach");
+		return refuse_drop("drop spot out of reach");
 	}
 	// Lift the item, splitting a stack if only part moves.
 	Container_game_object* src_owner = src->get_owner();
 	const Tile_coord       src_at    = src->get_tile();
 	Game_object_shared     moving;
+	Friend_held_item       held_origin;
 	const bool             split     = quantity < src->get_quantity();
 	if (split) {
 		moving = gwin->get_map()->create_ireg_object(src->get_shapenum(), src->get_framenum());
@@ -1333,6 +1424,10 @@ static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& dat
 			moving->set_flag(Obj_flags::okay_to_take);
 		}
 		src->modify_quantity(-quantity);
+	} else if (held) {    // The whole item; keep its origin until it lands.
+		held_origin       = std::move(friend_guest_held);
+		friend_guest_held = Friend_held_item();
+		moving            = held_origin.obj;
 	} else {
 		src->remove_this(&moving);
 	}
@@ -1348,6 +1443,12 @@ static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& dat
 	if (!placed) {    // Put it back where it was.
 		if (split) {
 			src->modify_quantity(quantity);
+			if (held) {
+				Friend_return_held_item();
+			}
+		} else if (held) {
+			friend_guest_held = std::move(held_origin);
+			Friend_return_held_item();
 		} else if (src_owner) {
 			src_owner->add(moving.get(), true);
 		} else {
@@ -3165,15 +3266,16 @@ static void Handle_events() {
 			}
 			if (friend_session.connected() && host_assigned_actor >= 0) {
 				const uint32 now = SDL_GetTicks();
-				// Mid-drag the item is lifted out of the world; wait for the
-				// drop so guests see the finished move, as with guest moves.
-				if (now >= friend_next_item_sync && !gwin->is_dragging()) {
+				// A host drag lifts the item out of the world, and guests see
+				// it gone at once, the same as when a guest picks one up.
+				if (now >= friend_next_item_sync) {
 					friend_next_item_sync = now + friend_item_sync_ms;
 					Friend_mode_item_pass(true);
 					Friend_mode_inventory_pass(true);
 				}
 			}
 			if (!friend_session.connected()) {
+				Friend_return_held_item();    // A guest left mid-drag.
 				friend_chunk_hashes.clear();
 				friend_inventory_hashes.clear();
 				friend_sent_party.clear();
@@ -3260,9 +3362,13 @@ static void Handle_events() {
 				Friend_mode_session::Blob_kind kind;
 				std::vector<unsigned char>     request;
 				while (friend_session.take_blob(kind, request)) {
-					if (kind == Friend_mode_session::Blob_kind::guest_move) {
-						Friend_mode_perform_guest_move(
-								request, host_assigned_actor >= 0 ? gwin->get_npc(host_assigned_actor) : nullptr);
+					Actor* guest_actor = host_assigned_actor >= 0 ? gwin->get_npc(host_assigned_actor) : nullptr;
+					if (kind == Friend_mode_session::Blob_kind::guest_lift) {
+						Friend_mode_guest_lift(request, guest_actor);
+					} else if (kind == Friend_mode_session::Blob_kind::guest_move) {
+						Friend_mode_perform_guest_move(request, guest_actor);
+					} else if (kind == Friend_mode_session::Blob_kind::guest_put_back) {
+						Friend_return_held_item();
 					}
 				}
 			}

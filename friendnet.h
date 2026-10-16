@@ -46,7 +46,9 @@ public:
 		world_save    = 1,
 		chunk_objects   = 2,    // A map chunk's movable objects (item sync).
 		actor_inventory = 3,    // A party member's inventory (item sync).
-		guest_move      = 4     // Guest asks the host to move an item.
+		guest_move      = 4,    // Guest drops the item it is holding.
+		guest_lift      = 5,    // Guest picks an item up (drag start).
+		guest_put_back  = 6     // Guest cancels a drag, or returns the rest.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);

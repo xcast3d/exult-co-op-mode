@@ -548,6 +548,7 @@ static bool Check_weight(
  */
 
 void Dragging_info::put_back() {
+	Friend_mode_note_drag_put_back();    // Friend Mode guests: tell the host.
 	if (gump) {    // Put back remaining/orig. piece.
 		// And don't check for volume!
 		// Restore saved vals.
@@ -758,7 +759,8 @@ bool Dragging_info::drop(
 		return false;
 	}
 	// Friend Mode guests: ask the host to make the same move.
-	Friend_mode_note_drag_drop(to_drop, quantity, on_gump ? on_gump->get_container() : nullptr);
+	Friend_mode_note_drag_drop(
+			to_drop, quantity, on_gump ? on_gump->get_container() : nullptr, to_drop == obj.get());
 	// Make a 'dropped' sound.
 	Audio::get_ptr()->play_sound_effect(Audio::game_sfx(74));
 	if (!gump) {    // Do eggs where it came from.
