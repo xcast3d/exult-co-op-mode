@@ -41,6 +41,7 @@ Mode, and tick off what you tried. Black Gate only for now.
 | Bag with 2 food | 802 | south-east |
 | Other door styles | 270 and 376 at frames 8 and 16 | row to the south |
 | Portcullis, portcullis door | 271, 935 | row to the south |
+| Secret walls | 828, 845 | further south |
 
 The spawned lever isn't linked to any gate, so it only tests that its frame
 change syncs. Any shape or frame the game doesn't have is skipped and logged on the host.
@@ -89,16 +90,17 @@ For each of: shutters, lamp post, sconce, light source, lever.
       companion (lighting is measured from whoever the view follows).
 - [ ] Lever: the guest's companion walks to it, not the Avatar.
 
-## Secret passages
+## Secret walls
 
-The kit has none. Black Gate's hidden passages are either illusory walls you
-walk through (no state to sync) or wall pieces a lever, switch or button
-changes or removes elsewhere.
+Black Gate's sliding secret walls are wall shapes 828 and 845. Double-clicking
+one with quality 0 runs Usecode 0x33C/0x34D, which calls 0x81F/0x820 to slide
+it, swapping between the two shapes with sounds 30/31. The kit places one of
+each (quality 0). Other hidden passages are illusory walls you walk through,
+which have no state to sync.
 
-- [ ] Try the door styles in the kit's southern row from both sides.
-- [ ] When you find a real lever-operated passage, open it from the guest.
-      Wall pieces that change shape or frame sync now; pieces that are
-      removed need item sync (W3).
+- [ ] Host slides each secret wall open and closed; the guest sees it.
+- [ ] Guest slides each one open and closed; both windows match.
+- [ ] When you find a real one in town or a dungeon, try it from the guest.
 
 ## Containers and items (not synced yet)
 

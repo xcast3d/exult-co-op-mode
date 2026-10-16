@@ -110,7 +110,7 @@ falling back to any door at that tile.
 
 Guests may use doors and a short list of world toggles (Black Gate only for
 now): shutters 290/291/322/372, light sources 336/338, sconces 435/481,
-curtains 657/678, levers 787, switches 788 and lamp posts (889 unlit, which swaps to 526 lit lamp when turned on). The guest's double-click asks the host,
+curtains 657/678, levers 787, switches 788, secret walls 828/845 and lamp posts (889 unlit, which swaps to 526 lit lamp when turned on). The guest's double-click asks the host,
 which checks the shape and reach (the normal double-click reach rule) and then
 uses it: doors the way NPCs do (quality zeroed so only the door's own toggle
 runs), the others with a normal activation. Locked doors show "Locked". If the object's

@@ -390,6 +390,8 @@ bool Friend_mode_guest_usable_shape(int shape) {
 	case 481:
 	case 657:    // Curtains.
 	case 678:
+	case 828:    // Secret walls: double-click slides them open (quality 0).
+	case 845:
 	case 787:    // Lever.
 	case 788:    // Switch.
 	case 889:    // Lamp post (unlit).
@@ -570,6 +572,10 @@ static void Friend_mode_spawn_test_kit() {
 	Friend_test_kit_place(376, 16, -1, 10);     // Horizontal door, style 3.
 	Friend_test_kit_place(271, 0, 5, 10);       // Portcullis.
 	Friend_test_kit_place(935, 0, 9, 10);       // Portcullis door.
+	// Secret walls: these two wall shapes swap into each other when
+	// double-clicked (Usecode 0x33C/0x34D -> 0x81F/0x820), quality 0.
+	Friend_test_kit_place(828, 0, -6, 13);
+	Friend_test_kit_place(845, 0, 0, 13);
 	Game_object_shared chest;
 	if (Friend_test_kit_place(800, 0, -4, 5, &chest)) {
 		Friend_test_kit_fill(chest, 377, 0, 1);      // Food.
