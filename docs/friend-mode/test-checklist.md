@@ -135,6 +135,19 @@ which have no state to sync.
 - [ ] With the guest's chat line open, the bar sits above it.
 - [ ] When the conversation ends, the bar disappears and the guest can move.
 
+## Two people grabbing the same item (needs two testers)
+
+The host's copy is the only real one, so no item can be duplicated; expect at
+most a brief ghost on the guest that snaps back.
+
+- [ ] Host starts dragging an item out of the chest; while the host is still
+      holding it, the guest drags the same item into its pack. After the host
+      drops, the item is wherever the host put it and gone from the guest's
+      pack.
+- [ ] The reverse: the guest starts the drag, the host takes the same item.
+- [ ] Both take from the same gold stack at once; the totals add up on both
+      sides afterwards.
+
 ## Host pause
 
 - [ ] Host presses Escape for the menu. Guest: a bar at the bottom says "The
