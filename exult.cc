@@ -1516,6 +1516,43 @@ static void Friend_mode_paint_chat_input() {
 	gwin->set_painted();
 }
 
+// Guest: while the host is in conversation, explain the pause in a bar at
+// the bottom of the screen, clear of the conversation (and above the chat
+// line when that is open).
+static void Friend_mode_paint_dialogue_wait() {
+	if (friend_session.mode() != Friend_mode_session::Mode::guest || !gwin->is_network_dialogue_paused()) {
+		return;
+	}
+	auto font = fontManager.get_font("MENU_FONT");
+	if (!font) {
+		return;
+	}
+	std::vector<std::string> lines{"The Avatar is having a conversation. Please wait."};
+	const int                max_w = gwin->get_width() - 16;
+	if (font->get_text_width(lines[0].c_str()) + 16 > max_w) {
+		lines = {"The Avatar is having a conversation.", "Please wait."};
+	}
+	int text_w = 0;
+	for (const std::string& line : lines) {
+		text_w = std::max(text_w, font->get_text_width(line.c_str()));
+	}
+	const int line_h = font->get_text_height() + 2;
+	const int w      = std::min(max_w, text_w + 16);
+	const int h      = static_cast<int>(lines.size()) * line_h + 6;
+	const int x      = (gwin->get_width() - w) / 2;
+	int       y      = gwin->get_height() - h - 8;
+	if (friend_chat_active) {    // Sit above the chat line.
+		y -= font->get_text_height() + 8 + 4;
+	}
+	Image_buffer8* buffer = gwin->get_win()->get_ib8();
+	buffer->draw_box(x, y, w, h, 1, 0, 15);
+	for (std::size_t i = 0; i < lines.size(); ++i) {
+		const int line_x = x + (w - font->get_text_width(lines[i].c_str())) / 2;
+		font->draw_text(buffer, line_x, y + 4 + static_cast<int>(i) * line_h, lines[i].c_str());
+	}
+	gwin->set_painted();
+}
+
 std::string Friend_mode_display_name(const Game_object* object, const std::string& character_name) {
 	const Actor* actor = object ? object->as_actor() : nullptr;
 	if (!actor || friend_session.mode() == Friend_mode_session::Mode::off) {
@@ -3657,6 +3694,7 @@ static void Handle_events() {
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
 		Friend_mode_paint_leash_arrow();
+		Friend_mode_paint_dialogue_wait();
 		Friend_mode_paint_chat_input();
 
 		if (!gwin->show() &&          // Blit to screen if necessary.

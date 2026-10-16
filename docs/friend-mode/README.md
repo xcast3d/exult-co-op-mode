@@ -203,8 +203,9 @@ original Ultima VII game data.
 Network dialogue is host-authoritative. When the Avatar begins a conversation,
 connected guests temporarily enter a spectator state: movement and world
 interaction pause, the host's conversation text and portraits are mirrored,
-and only the host may choose responses. Guest control resumes on the same
-companion when dialogue ends.
+and only the host may choose responses. A bar at the bottom of the guest's
+screen, clear of the conversation, says "The Avatar is having a conversation.
+Please wait." Guest control resumes on the same companion when dialogue ends.
 
 Inspection labels, including single-click object names, remain local to each
 client and are not replicated. Spoken world text—including scheduled NPC

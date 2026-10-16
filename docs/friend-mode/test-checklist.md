@@ -127,6 +127,14 @@ which have no state to sync.
 - [ ] Guest has the chest open while the host drags an item out of it: the
       guest's chest window stays open and updates.
 
+## Conversations
+
+- [ ] Host talks to an NPC. The guest sees the portraits, text and choices,
+      can't pick a choice or move, and sees "The Avatar is having a
+      conversation. Please wait." at the bottom, not over the conversation.
+- [ ] With the guest's chat line open, the bar sits above it.
+- [ ] When the conversation ends, the bar disappears and the guest can move.
+
 ## Host pause
 
 - [ ] Host presses Escape for the menu. Guest: "The host has paused the game",
