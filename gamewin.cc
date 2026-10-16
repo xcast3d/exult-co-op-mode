@@ -1211,6 +1211,15 @@ bool Game_window::take_friend_mode_control(int npc_num, bool network_guest) {
 	return true;
 }
 
+int Game_window::friend_leash_distance(const Tile_coord& t) const {
+	return main_actor ? t.distance_2d(main_actor->get_tile()) : 0;
+}
+
+bool Game_window::friend_leash_allows(const Tile_coord& from, const Tile_coord& to) const {
+	const int dist = friend_leash_distance(to);
+	return dist <= friend_leash_max_tiles || dist < friend_leash_distance(from);
+}
+
 void Game_window::set_network_spectating(bool spectating) {
 	network_spectating = spectating;
 	if (spectating) {

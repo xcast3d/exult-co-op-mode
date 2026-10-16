@@ -44,8 +44,10 @@
 #include "args.h"
 #include "barge.h"
 #include "cheat.h"
+#include "chunks.h"
 #include "combat_opts.h"
 #include "crc.h"
+#include "dir.h"
 #include "drag.h"
 #include "effects.h"
 #include "exult_bg_flx.h"
@@ -252,6 +254,9 @@ static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
 static std::string friend_host_peer_name;    // Connected guest, for leave notice.
 static std::vector<uint32> friend_sent_party;    // Party last sent to the guest.
+// Grace period before a companion left beyond the leash returns to the Avatar.
+static constexpr uint32 friend_leash_grace_ms  = 5000;
+static uint32           friend_leash_return_at = 0;    // Host: ticks to return, or 0.
 static bool friend_chat_active = false;
 static std::string friend_chat_text;
 
@@ -293,6 +298,69 @@ static void Friend_mode_notice(const std::string& text) {
 static std::string Friend_mode_actor_name(int npc_num) {
 	Actor* actor = gwin->get_npc(npc_num);
 	return actor ? actor->get_name() : std::string("a companion");
+}
+
+// Guest leash state, shown locally from the synced Avatar position.
+enum class Friend_leash_zone { near, straying, beyond };
+static Friend_leash_zone friend_leash_zone = Friend_leash_zone::near;
+
+// While straying, an arrow at the screen edge points back to the Avatar.
+static void Friend_mode_paint_leash_arrow() {
+	if (friend_session.mode() != Friend_mode_session::Mode::guest || friend_leash_zone == Friend_leash_zone::near) {
+		return;
+	}
+	Actor*      actor  = gwin->get_controlled_actor();
+	Main_actor* avatar = gwin->get_main_actor();
+	if (!actor || actor == avatar) {
+		return;
+	}
+	const Tile_coord from = actor->get_tile();
+	const Tile_coord to   = avatar->get_tile();
+	const int        dx   = to.tx - from.tx;
+	const int        dy   = to.ty - from.ty;
+	if (dx == 0 && dy == 0) {
+		return;
+	}
+	Mouse*       mouse = Mouse::mouse();
+	Shape_frame* arrow = mouse->get_pointer_frame(mouse->get_long_arrow(Get_direction(-dy, dx)));
+	if (!arrow) {
+		return;
+	}
+	// Walk from the screen centre toward the Avatar until near the edge.
+	const int   w      = gwin->get_width();
+	const int   h      = gwin->get_height();
+	const int   margin = 16;
+	const float len    = std::sqrt(static_cast<float>(dx * dx + dy * dy));
+	const float ux     = dx / len;
+	const float uy     = dy / len;
+	const float sx     = ux != 0 ? (w / 2 - margin) / std::abs(ux) : 1e9f;
+	const float sy     = uy != 0 ? (h / 2 - margin) / std::abs(uy) : 1e9f;
+	const float scale  = std::min(sx, sy);
+	const int   x      = w / 2 + static_cast<int>(ux * scale);
+	const int   y      = h / 2 + static_cast<int>(uy * scale);
+	arrow->paint_rle(gwin->get_win()->get_ib8(), x, y);
+	gwin->set_painted();
+}
+
+static void Friend_mode_update_leash_zone(Actor* actor) {
+	Friend_leash_zone zone = Friend_leash_zone::near;
+	if (actor && actor != gwin->get_main_actor()) {
+		const int dist = gwin->friend_leash_distance(actor->get_tile());
+		if (dist > Game_window::friend_leash_max_tiles) {
+			zone = Friend_leash_zone::beyond;
+		} else if (dist > Game_window::friend_leash_warn_tiles) {
+			zone = Friend_leash_zone::straying;
+		}
+	}
+	if (zone != friend_leash_zone) {
+		if (zone == Friend_leash_zone::straying && friend_leash_zone == Friend_leash_zone::near) {
+			gwin->get_effects()->add_chat_text("Straying from the Avatar", actor);
+		} else if (zone == Friend_leash_zone::beyond) {
+			gwin->get_effects()->add_chat_text("The Avatar needs you", actor);
+		}
+		gwin->set_all_dirty();
+		friend_leash_zone = zone;
+	}
 }
 
 static void Friend_mode_paint_chat_input() {
@@ -1890,6 +1958,7 @@ static void Handle_events() {
 	std::unordered_set<int> guest_frozen_npcs;
 	std::unordered_set<uint32> guest_frozen_creatures;
 	uint32                     guest_close_at = 0;    // Ticks when a disconnected guest exits.
+	uint32                     guest_leash_notice_at = 0;    // Last "must return" notice.
 	while (!quitting_time) {
 		friend_session.poll();
 		std::string incoming_chat;
@@ -1906,6 +1975,7 @@ static void Handle_events() {
 			}
 			if (!friend_session.connected()) {
 				friend_sent_party.clear();
+				friend_leash_return_at = 0;
 				if (!friend_host_peer_name.empty()) {
 					Friend_mode_notice(
 							host_assigned_actor >= 0
@@ -1971,7 +2041,8 @@ static void Handle_events() {
 			if (host_assigned_actor >= 0 && friend_session.take_move_request(tx, ty, tz, requested_frame)) {
 				Actor* actor = gwin->get_npc(host_assigned_actor);
 				const Tile_coord requested(tx, ty, tz);
-				if (actor && actor->get_tile().distance(requested) <= 2) {
+				if (actor && actor->get_tile().distance(requested) <= 2
+					&& gwin->friend_leash_allows(actor->get_tile(), requested)) {
 					cout << "Friend Mode: host accepted move to " << tx << ',' << ty << ',' << tz << endl;
 					// The guest already collision-tested this adjacent step. Applying it
 					// directly avoids a second pathfinder disagreeing about door state.
@@ -1979,6 +2050,33 @@ static void Handle_events() {
 					actor->change_frame(requested_frame);
 				} else {
 					cout << "Friend Mode: host rejected out-of-range move to " << tx << ',' << ty << ',' << tz << endl;
+					// Resend the true position so the guest snaps back.
+					last_host_state = Tile_coord(-1, -1, -1);
+				}
+			}
+			// The Avatar left the guest's companion beyond the leash: after a
+			// grace period, bring it back beside the Avatar like party catch-up.
+			if (host_assigned_actor >= 0) {
+				Actor*      actor  = gwin->get_npc(host_assigned_actor);
+				Main_actor* avatar = gwin->get_main_actor();
+				const bool  other_map = actor && actor->get_map() != avatar->get_map();
+				if (actor
+					&& (other_map
+						|| gwin->friend_leash_distance(actor->get_tile()) > Game_window::friend_leash_max_tiles)) {
+					const uint32 now = SDL_GetTicks();
+					if (friend_leash_return_at == 0) {
+						friend_leash_return_at = now + (other_map ? 0 : friend_leash_grace_ms);
+					}
+					if (now >= friend_leash_return_at) {
+						const Tile_coord spot = Map_chunk::find_spot(avatar->get_tile(), 3, actor);
+						if (spot.tx >= 0) {
+							actor->move(spot, avatar->get_map_num());
+							cout << "Friend Mode: " << actor->get_name() << " returned to the Avatar" << endl;
+						}
+						friend_leash_return_at = 0;
+					}
+				} else {
+					friend_leash_return_at = 0;
 				}
 			}
 			if (host_assigned_actor >= 0) {
@@ -2077,8 +2175,12 @@ static void Handle_events() {
 				Actor* actor = gwin->get_npc(guest_assigned_actor);
 				const Tile_coord state(tx, ty, tz);
 				if (actor && actor->get_tile() != state) {
+					const bool beckoned = actor->get_tile().distance_2d(state) > Game_window::friend_leash_warn_tiles;
 					actor->move(state.tx, state.ty, state.tz);
 					gwin->set_camera_actor(actor);
+					if (beckoned) {
+						gwin->get_effects()->add_chat_text("You are beckoned by the Avatar", actor);
+					}
 				}
 				if (actor && actor->get_framenum() != frame) {
 					actor->change_frame(frame);
@@ -2168,6 +2270,15 @@ static void Handle_events() {
 				case Friend_mode_session::Dialogue_event_type::clear_choices:
 					conversation->clear_avatar_choices();
 					break;
+				}
+			}
+			if (guest_assigned_actor >= 0 && gwin->has_network_friend_control()) {
+				Actor* actor = gwin->get_npc(guest_assigned_actor);
+				Friend_mode_update_leash_zone(actor);
+				const uint32 now = SDL_GetTicks();
+				if (gwin->take_friend_leash_blocked() && actor && now - guest_leash_notice_at > 3000) {
+					guest_leash_notice_at = now;
+					gwin->get_effects()->add_chat_text("You must return to the Avatar", actor);
 				}
 			}
 			if (guest_assigned_actor >= 0 && !gwin->is_network_dialogue_paused()) {
@@ -2353,6 +2464,7 @@ static void Handle_events() {
 		}
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
+		Friend_mode_paint_leash_arrow();
 		Friend_mode_paint_chat_input();
 
 		if (!gwin->show() &&          // Blit to screen if necessary.

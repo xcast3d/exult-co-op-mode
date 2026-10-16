@@ -5241,6 +5241,14 @@ bool Npc_actor::step(
 		return false;
 	}
 	const Tile_coord oldtile = get_tile();
+	// A Friend Mode guest's companion stops at the leash boundary rather
+	// than stepping somewhere the host will refuse.
+	if (gwin->has_network_friend_control() && this == gwin->get_controlled_actor()
+		&& !gwin->friend_leash_allows(oldtile, t)) {
+		gwin->note_friend_leash_blocked();
+		stop();
+		return false;
+	}
 	// Get old chunk.
 	t.fixme();
 	// Get chunk.

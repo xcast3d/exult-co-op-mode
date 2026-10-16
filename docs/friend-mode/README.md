@@ -96,6 +96,24 @@ spectator: movement and double-clicks are blocked so it cannot move its local
 copy of the Avatar, and the camera follows the host's Avatar. Protocol version
 is now 6.
 
+### Leash
+
+Guest companions stay near the Avatar, which keeps them inside the area the
+host simulates (see the [independent-views research](independent-views-research.md)).
+Distance is measured horizontally from the Avatar:
+
+- Beyond one screen (20 tiles): "Straying from the Avatar", and a green arrow
+  at the screen edge points back to the Avatar.
+- At 32 tiles the guest cannot step further ("You must return to the Avatar").
+  The guest checks before stepping, and the host refuses such moves and resends
+  the true position. Steps back toward the Avatar are always allowed.
+- If the Avatar moves away and leaves the companion beyond 32 tiles, the guest
+  sees "The Avatar needs you"; after 5 seconds the host moves the companion
+  beside the Avatar ("You are beckoned by the Avatar"). A change of map moves
+  it at once.
+
+Raising the radius later is the path toward free roaming.
+
 ### Session notices
 
 The host shows notices near the top of the view when a guest joins, enters the

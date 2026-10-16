@@ -135,6 +135,7 @@ class Game_window {
 	bool                      network_friend_control;
 	bool                      network_dialogue_paused;
 	bool                      network_spectating = false;
+	bool                      friend_leash_blocked = false;
 	Actor*                    remote_friend_actor;
 	int                       remote_friend_actor_previous_schedule;
 	Actor*                    camera_actor;    // What to center view around.
@@ -631,6 +632,24 @@ public:
 	void enforce_friend_mode_control_safety();
 	bool toggle_friend_mode_control();
 	bool take_friend_mode_control(int npc_num, bool network_guest = false);
+	// Friend Mode leash: guest companions stay near the Avatar, which keeps
+	// them inside the area the host simulates.  Warning at one screen,
+	// boundary at about a screen and a half.
+	static constexpr int friend_leash_warn_tiles = c_screen_tile_size;
+	static constexpr int friend_leash_max_tiles  = c_screen_tile_size * 8 / 5;
+	// Distance from the Avatar used by the leash (horizontal only).
+	int friend_leash_distance(const Tile_coord& t) const;
+	// May a leashed actor move from 'from' to 'to'?  Moves back toward the
+	// Avatar are always allowed.
+	bool friend_leash_allows(const Tile_coord& from, const Tile_coord& to) const;
+	void note_friend_leash_blocked() {
+		friend_leash_blocked = true;
+	}
+	bool take_friend_leash_blocked() {
+		const bool blocked   = friend_leash_blocked;
+		friend_leash_blocked = false;
+		return blocked;
+	}
 	// A network guest without a companion: world input is blocked.
 	bool is_network_spectating() const {
 		return network_spectating;

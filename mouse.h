@@ -188,6 +188,9 @@ public:
 	void flash_shape(Mouse_shapes flash);
 
 	// Set to short arrow.
+	Shape_frame* get_pointer_frame(int framenum) {
+		return pointers.get_frame(framenum);
+	}
 	int get_short_arrow(Direction dir) {
 		return short_arrows[static_cast<int>(dir)];
 	}
