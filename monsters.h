@@ -36,6 +36,7 @@ class Monster_actor : public Npc_actor {
 	Game_object_shared next_monster;
 	Monster_actor*     prev_monster;
 	Animator*          animator;      // For wounded men.
+	uint32             friend_net_id = 0;    // Friend Mode: host-assigned, 0 = none.
 	void               link_in();     // Add to in_world list.
 	void               link_out();    // Remove from list.
 	void               equip(const Monster_info* inf, bool temporary);
@@ -59,6 +60,16 @@ public:
 	}
 
 	static void delete_all();    // Delete all monsters.
+
+	// Friend Mode: the host numbers creatures near the players so guests can
+	// refer to them; guests copy the number from the host.
+	uint32 get_friend_net_id() const {
+		return friend_net_id;
+	}
+
+	void set_friend_net_id(uint32 id) {
+		friend_net_id = id;
+	}
 
 	static void give_up() {    // For file errors only!
 		in_world = nullptr;

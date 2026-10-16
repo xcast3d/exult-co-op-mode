@@ -52,6 +52,7 @@
 #include "drag.h"
 #include "effects.h"
 #include "egg.h"
+#include "gameclk.h"
 #include "exult_bg_flx.h"
 #include "exult_flx.h"
 #include "exult_si_flx.h"
@@ -94,6 +95,7 @@
 #endif
 
 #include <algorithm>
+#include <map>
 #include <cctype>
 #include <cmath>
 #include <cstdlib>
@@ -212,22 +214,20 @@ static void Handle_event(SDL_Event& event);
 static bool Friend_actor_is_eligible(uint32 npc_num);
 static int  Select_friend_actor(const std::vector<uint32>& roster);
 
-static int Friend_creature_index(const Actor* actor) {
-	int index = 0;
-	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
-			 creature = creature->get_next_in_world(), ++index) {
-		if (creature == actor) {
-			return index;
-		}
-	}
-	return -1;
+// Creatures (monsters without an NPC number) are known to guests by a
+// number the host gives them; see the creature sync section.
+static uint32 Friend_creature_id(const Actor* actor) {
+	const auto* creature = dynamic_cast<const Monster_actor*>(actor);
+	return creature ? creature->get_friend_net_id() : 0;
 }
 
-static Monster_actor* Friend_creature_by_index(uint32 wanted) {
-	uint32 index = 0;
+static Monster_actor* Friend_creature_by_id(uint32 wanted) {
+	if (wanted == 0) {
+		return nullptr;
+	}
 	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
-			 creature = creature->get_next_in_world(), ++index) {
-		if (index == wanted) {
+			 creature = creature->get_next_in_world()) {
+		if (creature->get_friend_net_id() == wanted) {
 			return creature;
 		}
 	}
@@ -665,6 +665,32 @@ static void Friend_mode_spawn_test_kit() {
 	Friend_mode_notice("Friend Mode test kit placed");
 }
 
+// Host debug aid (Shift+F9): creatures that appear after a guest joined,
+// for creature sync.  Found by name, so they work in either game.
+static void Friend_mode_spawn_test_creatures() {
+	const char* wanted[] = {"rat", "wolf", "rabbit"};
+	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
+	int              made   = 0;
+	for (std::size_t i = 0; i < std::size(wanted); ++i) {
+		for (int shape = 150; shape < shapes.get_num_shapes(); ++shape) {
+			const char* name = get_item_name(shape);
+			if (!name || std::strcmp(name, wanted[i]) != 0 || !ShapeID::get_info(shape).is_npc()) {
+				continue;
+			}
+			const Tile_coord avatar = gwin->get_main_actor()->get_tile();
+			const Tile_coord want(avatar.tx + 4 + 3 * static_cast<int>(i), avatar.ty - 4, avatar.tz);
+			const Tile_coord pos = Map_chunk::find_spot(want, 4, shape, 0, 1);
+			if (pos.tx >= 0) {
+				Monster_actor::create(shape, pos);
+				++made;
+			}
+			break;
+		}
+	}
+	gwin->set_all_dirty();
+	Friend_mode_notice(made ? "Test creatures placed" : "No test creatures in this game");
+}
+
 // ---- Item sync (world sync W3) ------------------------------------------
 // The host fingerprints the movable objects (and container contents) in the
 // map chunks around the players.  When a chunk changes, it sends that chunk's
@@ -758,15 +784,10 @@ static uint64 Friend_hash_items(const std::vector<std::vector<unsigned char>>& i
 static std::unordered_map<int, uint64> friend_chunk_hashes;
 static uint32                          friend_next_item_sync = 0;
 
-// Host: fingerprint chunks near the players; send the ones that changed.
-// With send false, only record the current state (right after the guest
-// downloads the world, both sides match).
-static void Friend_mode_item_pass(bool send) {
-	Game_map*   map    = gwin->get_map();
+// The map chunks (keys cy * c_num_chunks + cx) near the players that the
+// host keeps guests in step with: items and creatures.
+static std::unordered_set<int> Friend_sync_chunks() {
 	Main_actor* avatar = gwin->get_main_actor();
-	if (!map || !avatar) {
-		return;
-	}
 	std::unordered_set<int> chunks;
 	auto                    add_around = [&](Actor* actor, int radius) {
         if (!actor || actor->get_map() != avatar->get_map()) {
@@ -782,8 +803,24 @@ static void Friend_mode_item_pass(bool send) {
             }
         }
 	};
+	if (!avatar) {
+		return chunks;
+	}
 	add_around(avatar, friend_item_avatar_chunks);
 	add_around(gwin->get_remote_friend_actor(), friend_item_guest_chunks);
+	return chunks;
+}
+
+// Host: fingerprint chunks near the players; send the ones that changed.
+// With send false, only record the current state (right after the guest
+// downloads the world, both sides match).
+static void Friend_mode_item_pass(bool send) {
+	Game_map*   map    = gwin->get_map();
+	Main_actor* avatar = gwin->get_main_actor();
+	if (!map || !avatar) {
+		return;
+	}
+	const std::unordered_set<int> chunks = Friend_sync_chunks();
 	for (int key : chunks) {
 		const int cx = key % c_num_chunks;
 		const int cy = key / c_num_chunks;
@@ -1728,8 +1765,302 @@ static void Friend_mode_apply_party_status(const std::vector<unsigned char>& dat
 	gwin->set_all_dirty();    // Portraits show poison and health.
 }
 
+// ---- Game clock and weather ---------------------------------------------
+// The host sends its day, time and weather twice a second when they change.
+// The guest's clock stops advancing on its own (hunger, healing and schedule
+// changes stay with the host) and jumps to the host's time.
+
+namespace {
+constexpr uint32           friend_clock_sync_ms = 500;
+std::vector<unsigned char> friend_last_clock;
+int                        friend_guest_weather = 0;    // Weather the guest last applied.
+}    // namespace
+
+static void Friend_mode_clock_pass(bool force) {
+	const Game_clock*          clock = gwin->get_clock();
+	std::vector<unsigned char> out;
+	Friend_put16(out, clock->get_day() & 0xffff);
+	Friend_put16(out, clock->get_day() >> 16);
+	Friend_put8(out, clock->get_hour());
+	Friend_put8(out, clock->get_minute());
+	Friend_put8(out, clock->get_ticks());
+	Friend_put8(out, gwin->get_effects()->get_weather());
+	if (force || out != friend_last_clock) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::game_clock, out);
+		friend_last_clock = std::move(out);
+	}
+}
+
+static void Friend_mode_apply_clock(const std::vector<unsigned char>& data) {
+	if (data.size() < 8) {
+		return;
+	}
+	const int day = data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+	Game_clock* clock = gwin->get_clock();
+	clock->set_network_follower(true);
+	clock->apply_network_time(day, data[4], data[5], data[6]);
+	const int weather = data[7];
+	if (weather != friend_guest_weather) {
+		friend_guest_weather = weather;
+		Egg_object::set_weather(weather, 0, nullptr);    // Lasts until the host's changes.
+	}
+}
+
+// ---- Creature sync -------------------------------------------------------
+// Monsters have no NPC number, so the host gives each one near the players a
+// network ID.  When the set of creatures near the players changes (one
+// appears, dies or leaves), the host sends the whole list; guests create the
+// ones they lack, frozen, and delete the rest, including any their own world
+// made.  Moves go out every 100 ms as creature states keyed by ID.
+
+namespace {
+struct Friend_creature_entry {
+	uint32     id    = 0;
+	int        shape = 0, frame = 0, align = 0, flags = 0;
+	Tile_coord tile;
+};
+
+enum Friend_creature_flags { friend_creature_invisible = 1 };
+
+uint32                                      friend_next_creature_id = 1;
+std::vector<unsigned char>                  friend_last_creature_set;    // Host: IDs, shapes, alignment, flags.
+std::unordered_map<uint32, uint64>          friend_creature_sent;        // Host: ID -> last tile and frame sent.
+std::map<uint32, Friend_creature_entry>     friend_guest_creatures;      // Guest: the host's list, kept current.
+uint32                                      friend_next_guest_creature_pass = 0;
+bool                                        friend_guest_have_creatures     = false;    // A list has arrived.
+
+uint64 Friend_pack_creature_state(const Tile_coord& t, int frame) {
+	return static_cast<uint64>(t.tx & 0xffff) | (static_cast<uint64>(t.ty & 0xffff) << 16)
+		   | (static_cast<uint64>(t.tz & 0xff) << 32) | (static_cast<uint64>(frame & 0xff) << 40);
+}
+}    // namespace
+
+// A creature the host syncs: no NPC number, alive, on the map near players.
+static bool Friend_creature_in_sync_area(Monster_actor* creature, const std::unordered_set<int>& chunks) {
+	if (creature->get_npc_num() > 0 || creature->is_dead() || creature->is_pos_invalid()
+		|| creature->get_map() != gwin->get_main_actor()->get_map()) {
+		return false;
+	}
+	return chunks.count(creature->get_cy() * c_num_chunks + creature->get_cx()) != 0;
+}
+
+// Host: send the creature list if creatures appeared or went (or always).
+static void Friend_mode_creature_pass(bool force) {
+	if (!gwin->get_main_actor()) {
+		return;
+	}
+	const std::unordered_set<int> chunks = Friend_sync_chunks();
+	std::vector<Monster_actor*>   creatures;
+	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
+		 creature = creature->get_next_in_world()) {
+		if (!Friend_creature_in_sync_area(creature, chunks)) {
+			continue;
+		}
+		if (creature->get_friend_net_id() == 0) {
+			creature->set_friend_net_id(friend_next_creature_id++);
+		}
+		creatures.push_back(creature);
+	}
+	std::sort(creatures.begin(), creatures.end(), [](const Monster_actor* a, const Monster_actor* b) {
+		return a->get_friend_net_id() < b->get_friend_net_id();
+	});
+	std::vector<unsigned char> set;
+	std::vector<unsigned char> payload;
+	Friend_put16(payload, static_cast<int>(creatures.size()));
+	for (Monster_actor* creature : creatures) {
+		const uint32     id    = creature->get_friend_net_id();
+		const int        flags = creature->get_flag(Obj_flags::invisible) ? friend_creature_invisible : 0;
+		const Tile_coord t     = creature->get_tile();
+		for (std::vector<unsigned char>* out : {&set, &payload}) {
+			Friend_put16(*out, static_cast<int>(id & 0xffff));
+			Friend_put16(*out, static_cast<int>(id >> 16));
+			Friend_put16(*out, creature->get_shapenum());
+			Friend_put8(*out, creature->get_alignment());
+			Friend_put8(*out, flags);
+		}
+		Friend_put8(payload, creature->get_framenum());
+		Friend_put16(payload, t.tx);
+		Friend_put16(payload, t.ty);
+		Friend_put8(payload, t.tz);
+	}
+	if (!force && set == friend_last_creature_set) {
+		return;
+	}
+	friend_last_creature_set = std::move(set);
+	friend_creature_sent.clear();
+	for (Monster_actor* creature : creatures) {
+		friend_creature_sent[creature->get_friend_net_id()]
+				= Friend_pack_creature_state(creature->get_tile(), creature->get_framenum());
+	}
+	friend_session.send_blob(Friend_mode_session::Blob_kind::creature_list, payload);
+	cout << "Friend Mode: sent " << creatures.size() << " creature(s)" << endl;
+}
+
+// Host: send the creatures in the list that moved or changed frame.
+static void Friend_mode_creature_moves() {
+	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
+		 creature = creature->get_next_in_world()) {
+		auto found = friend_creature_sent.find(creature->get_friend_net_id());
+		if (found == friend_creature_sent.end() || creature->is_pos_invalid()) {
+			continue;
+		}
+		const Tile_coord t     = creature->get_tile();
+		const uint64     state = Friend_pack_creature_state(t, creature->get_framenum());
+		if (state != found->second) {
+			found->second = state;
+			friend_session.send_creature_state(found->first, t.tx, t.ty, t.tz, creature->get_framenum());
+		}
+	}
+}
+
+// Guest: make a creature's look and place match the host's entry.
+static void Friend_creature_match(Monster_actor* creature, const Friend_creature_entry& entry) {
+	if (creature->get_tile() != entry.tile) {
+		creature->move(entry.tile.tx, entry.tile.ty, entry.tile.tz);
+	}
+	if (creature->get_framenum() != entry.frame) {
+		creature->change_frame(entry.frame);
+	}
+	const bool invisible = (entry.flags & friend_creature_invisible) != 0;
+	if (creature->get_flag(Obj_flags::invisible) != invisible) {
+		if (invisible) {
+			creature->set_flag(Obj_flags::invisible);
+		} else {
+			creature->clear_flag(Obj_flags::invisible);
+		}
+	}
+}
+
+// Guest: keep exactly the host's creatures.  Runs when the list arrives and
+// a few times a second, since the guest's own map loading can add creatures
+// (from the map files) or drop them.
+static void Friend_mode_guest_creature_pass(bool now) {
+	const uint32 ticks = SDL_GetTicks();
+	if (!now && ticks < friend_next_guest_creature_pass) {
+		return;
+	}
+	friend_next_guest_creature_pass = ticks + friend_item_sync_ms;
+	if (!friend_guest_have_creatures || !gwin->get_main_actor()) {
+		return;
+	}
+	std::vector<Monster_actor*> extra;
+	std::unordered_set<uint32>  present;
+	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
+		 creature = creature->get_next_in_world()) {
+		if (creature->get_npc_num() > 0) {
+			continue;    // Numbered NPCs follow NPC states.
+		}
+		const uint32 id    = creature->get_friend_net_id();
+		auto         found = friend_guest_creatures.find(id);
+		if (id == 0 || found == friend_guest_creatures.end() || found->second.shape != creature->get_shapenum()
+			|| !present.insert(id).second) {
+			extra.push_back(creature);
+		}
+	}
+	bool changed = !extra.empty();
+	for (Monster_actor* creature : extra) {
+		gwin->add_dirty(creature);
+		creature->remove_this();
+	}
+	Game_map* map = gwin->get_map();
+	for (const auto& [id, entry] : friend_guest_creatures) {
+		if (present.count(id)) {
+			continue;
+		}
+		const int cx = entry.tile.tx / c_tiles_per_chunk;
+		const int cy = entry.tile.ty / c_tiles_per_chunk;
+		if (!map || !map->is_chunk_read(cx, cy)) {
+			continue;    // Created once the guest's map has that area.
+		}
+		const Game_object_shared made
+				= Monster_actor::create(entry.shape, entry.tile, Schedule::wait, entry.align, true, false);
+		auto* creature = static_cast<Monster_actor*>(made.get());
+		creature->set_friend_net_id(id);
+		creature->set_alignment(entry.align);
+		creature->stop();
+		Friend_creature_match(creature, entry);
+		changed = true;
+	}
+	if (changed) {
+		gwin->set_all_dirty();
+	}
+}
+
+static void Friend_mode_apply_creature_list(const std::vector<unsigned char>& data) {
+	auto get16 = [&](std::size_t at) { return data[at] | (data[at + 1] << 8); };
+	if (data.size() < 2) {
+		return;
+	}
+	const int   count = get16(0);
+	std::size_t at    = 2;
+	friend_guest_creatures.clear();
+	friend_guest_have_creatures = true;
+	for (int i = 0; i < count && at + 14 <= data.size(); ++i, at += 14) {
+		Friend_creature_entry entry;
+		entry.id    = static_cast<uint32>(get16(at)) | (static_cast<uint32>(get16(at + 2)) << 16);
+		entry.shape = get16(at + 4);
+		entry.align = data[at + 6];
+		entry.flags = data[at + 7];
+		entry.frame = data[at + 8];
+		entry.tile  = Tile_coord(get16(at + 9), get16(at + 11), data[at + 13]);
+		friend_guest_creatures[entry.id] = entry;
+	}
+	Friend_mode_guest_creature_pass(true);
+	// Existing creatures may have moved since the last states.
+	for (const auto& [id, entry] : friend_guest_creatures) {
+		if (Monster_actor* creature = Friend_creature_by_id(id)) {
+			Friend_creature_match(creature, entry);
+		}
+	}
+}
+
+static void Friend_mode_apply_creature_state(uint32 id, const Tile_coord& tile, int frame) {
+	auto found = friend_guest_creatures.find(id);
+	if (found == friend_guest_creatures.end()) {
+		return;    // Not (yet) in the host's list.
+	}
+	found->second.tile  = tile;
+	found->second.frame = frame;
+	if (Monster_actor* creature = Friend_creature_by_id(id)) {
+		Friend_creature_match(creature, found->second);
+	}
+}
+
+bool Friend_mode_is_guest() {
+	return friend_session.mode() == Friend_mode_session::Mode::guest;
+}
+
+static bool friend_world_reloaded = false;    // Host loaded a save.
+
+
+void Friend_mode_note_world_loaded() {
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		friend_world_reloaded = true;
+	}
+}
+
 // Temporary save used to hand the host's live world to a joining guest.
 static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
+
+// Guest: the host loaded a save mid-game; load the same world.
+static bool Friend_mode_load_world(const std::vector<unsigned char>& data) {
+	{
+		auto out = U7open_out(friend_world_file);
+		if (!out) {
+			cerr << "Friend Mode: could not store the host's world" << endl;
+			return false;
+		}
+		out->write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
+	}
+	gwin->restore_gamedat(friend_world_file);
+	U7remove(friend_world_file);
+	gwin->read();
+	friend_guest_creatures.clear();
+	friend_guest_have_creatures = false;
+	friend_guest_weather        = 0;
+	cout << "Friend Mode: loaded the host's new world (" << data.size() << " bytes)" << endl;
+	return true;
+}
 
 static bool Friend_mode_read_file(const char* fname, std::vector<unsigned char>& data) {
 	auto in = U7open_in(fname);
@@ -1754,6 +2085,8 @@ static void Friend_mode_send_world() {
 		Friend_mode_item_pass(false);
 		Friend_mode_inventory_pass(false);
 		Friend_mode_status_pass(true);
+		Friend_mode_clock_pass(true);
+		Friend_mode_creature_pass(true);
 	} else {
 		cerr << "Friend Mode: could not read " << friend_world_file << endl;
 	}
@@ -1827,6 +2160,7 @@ bool Friend_mode_download_world() {
 			out->write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
 			out.reset();
 			cout << "Friend Mode: received world (" << data.size() << " bytes)" << endl;
+			cheat.disable_for_friend_guest();    // The host's world: no cheats.
 			gwin->restore_gamedat(friend_world_file);
 			U7remove(friend_world_file);
 			return true;
@@ -2061,11 +2395,10 @@ void Friend_mode_note_speech(Game_object* source, const char* text) {
 	if (actor->get_npc_num() >= 0) {
 		source_id = static_cast<uint32>(actor->get_npc_num());
 	} else {
-		const int index = Friend_creature_index(actor);
-		if (index < 0) {
-			return;
+		source_id = Friend_creature_id(actor);
+		if (source_id == 0) {
+			return;    // Not near the players, so guests don't have it.
 		}
-		source_id = static_cast<uint32>(index);
 		creature = true;
 	}
 	friend_session.send_speech(source_id, creature, text);
@@ -3516,10 +3849,10 @@ static void Handle_events() {
 	Tile_coord last_avatar_state(-1, -1, -1);
 	int last_avatar_frame = -1;
 	uint32 last_npc_snapshot = 0;
+	uint32 friend_next_clock_sync = 0;
 	int  guest_assigned_actor = -1;
 	Tile_coord last_guest_request(-1, -1, -1);
 	std::unordered_set<int> guest_frozen_npcs;
-	std::unordered_set<uint32> guest_frozen_creatures;
 	uint32                     guest_close_at = 0;    // Ticks when a disconnected guest exits.
 	uint32                     guest_leash_notice_at = 0;    // Last "must return" notice.
 	while (!quitting_time) {
@@ -3541,6 +3874,36 @@ static void Handle_events() {
 			if (friend_session.take_world_request()) {
 				Friend_mode_send_world();
 			}
+			if (friend_world_reloaded) {
+				friend_world_reloaded = false;
+				// The load replaced the world: anything a guest held is gone
+				// with it.  Send the new world, then hand the guest its
+				// companion again if it is still in the party.
+				friend_guest_held = Friend_held_item();
+				if (friend_session.connected()) {
+					Friend_mode_send_world();
+					friend_sent_party = Friend_party_members();
+					friend_session.send_party_members(friend_sent_party);
+					last_avatar_state = Tile_coord(-1, -1, -1);
+					last_avatar_frame = -1;
+					last_npc_snapshot = 0;
+					if (host_assigned_actor >= 0) {
+						const auto actor_num = static_cast<uint32>(host_assigned_actor);
+						if (Friend_actor_is_eligible(actor_num) && gwin->reserve_friend_mode_actor(host_assigned_actor)) {
+							friend_session.accept_actor(actor_num);
+							Actor* actor    = gwin->get_npc(host_assigned_actor);
+							last_host_state = actor->get_tile();
+							last_host_frame = actor->get_framenum();
+							friend_session.send_actor_state(
+									last_host_state.tx, last_host_state.ty, last_host_state.tz, last_host_frame);
+						} else {
+							Friend_mode_notice(
+									Friend_mode_actor_name(host_assigned_actor) + " is not in the party in this save");
+							host_assigned_actor = -1;
+						}
+					}
+				}
+			}
 			if (friend_session.take_peer_joined()) {
 				friend_host_peer_name = friend_session.remote_player_name_value();
 				Friend_mode_notice(friend_host_peer_name + " has joined");
@@ -3554,6 +3917,11 @@ static void Handle_events() {
 					Friend_mode_item_pass(true);
 					Friend_mode_inventory_pass(true);
 					Friend_mode_status_pass(false);
+					Friend_mode_creature_pass(false);
+				}
+				if (now >= friend_next_clock_sync) {
+					friend_next_clock_sync = now + friend_clock_sync_ms;
+					Friend_mode_clock_pass(false);
 				}
 			}
 			if (!friend_session.connected()) {
@@ -3561,6 +3929,8 @@ static void Handle_events() {
 				friend_chunk_hashes.clear();
 				friend_inventory_hashes.clear();
 				friend_sent_party.clear();
+				friend_creature_sent.clear();
+				friend_last_creature_set.clear();
 				friend_leash_return_at = 0;
 				if (!friend_host_peer_name.empty()) {
 					Friend_mode_notice(
@@ -3725,15 +4095,9 @@ static void Handle_events() {
 							friend_session.send_npc_state(
 									static_cast<uint32>(npc->get_npc_num()), state.tx, state.ty, state.tz,
 									npc->get_framenum());
-						} else {
-							const int creature = Friend_creature_index(npc);
-							if (creature >= 0) {
-								friend_session.send_creature_state(
-										static_cast<uint32>(creature), state.tx, state.ty, state.tz,
-										npc->get_framenum());
-							}
 						}
 					}
+					Friend_mode_creature_moves();
 				}
 			}
 		} else if (!arg_friend_join.empty()) {
@@ -3752,7 +4116,18 @@ static void Handle_events() {
 			Friend_mode_session::Blob_kind blob_kind;
 			std::vector<unsigned char>     blob;
 			while (friend_session.take_blob(blob_kind, blob)) {
-				if (blob_kind == Friend_mode_session::Blob_kind::chunk_objects) {
+				if (blob_kind == Friend_mode_session::Blob_kind::world_save) {
+					// The host loaded a save: load the same world, then wait
+					// for the host to hand our companion back.
+					gwin->set_network_dialogue_paused(false);
+					gwin->release_friend_mode_control();
+					guest_assigned_actor = -1;
+					if (Friend_mode_load_world(blob)) {
+						guest_frozen_npcs.clear();
+						last_guest_request = Tile_coord(-1, -1, -1);
+						Friend_mode_notice("The host loaded a saved game");
+					}
+				} else if (blob_kind == Friend_mode_session::Blob_kind::chunk_objects) {
 					Friend_mode_apply_chunk(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::actor_inventory) {
 					Friend_mode_apply_inventory(blob);
@@ -3760,6 +4135,10 @@ static void Handle_events() {
 					Friend_mode_apply_object_speech(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::party_status) {
 					Friend_mode_apply_party_status(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::game_clock) {
+					Friend_mode_apply_clock(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::creature_list) {
+					Friend_mode_apply_creature_list(blob);
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;
@@ -3861,25 +4240,15 @@ static void Handle_events() {
 			}
 			uint32 creature_num = 0;
 			while (friend_session.take_creature_state(creature_num, tx, ty, tz, frame)) {
-				Monster_actor* creature = Friend_creature_by_index(creature_num);
-				const Tile_coord state(tx, ty, tz);
-				if (creature && guest_frozen_creatures.insert(creature_num).second) {
-					creature->set_schedule_type(Schedule::wait);
-					creature->stop();
-				}
-				if (creature && creature->get_tile() != state) {
-					creature->move(state.tx, state.ty, state.tz);
-				}
-				if (creature && creature->get_framenum() != frame) {
-					creature->change_frame(frame);
-				}
+				Friend_mode_apply_creature_state(creature_num, Tile_coord(tx, ty, tz), frame);
 			}
+			Friend_mode_guest_creature_pass(false);
 			uint32 speech_source = 0;
 			std::string speech_text;
 			bool speech_creature = false;
 			while (friend_session.take_speech(speech_source, speech_creature, speech_text)) {
 				Actor* speaker = speech_creature
-						? static_cast<Actor*>(Friend_creature_by_index(speech_source))
+						? static_cast<Actor*>(Friend_creature_by_id(speech_source))
 						: gwin->get_npc(static_cast<int>(speech_source));
 				if (speaker) {
 					speaker->say(speech_text.c_str());
@@ -4289,7 +4658,11 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
 
 static void Handle_event(SDL_Event& event) {
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
-		Friend_mode_spawn_test_kit();
+		if (event.key.mod & SDL_KMOD_SHIFT) {
+			Friend_mode_spawn_test_creatures();
+		} else {
+			Friend_mode_spawn_test_kit();
+		}
 		return;
 	}
 	if (friend_session.connected()) {

@@ -99,9 +99,21 @@ void ActionQuit(const int* params) {
 	Game_window::get_instance()->get_gump_man()->okay_to_quit();
 }
 
+// Friend Mode guests are along for the ride: only the host saves and loads.
+static bool Friend_mode_guest_cannot_save() {
+	if (!Friend_mode_is_guest()) {
+		return false;
+	}
+	Game_window::get_instance()->get_effects()->center_text("The host saves the game");
+	return true;
+}
+
 // { ActionOldFileGump, 0, "Save/restore", normal_keys, NONE },
 void ActionOldFileGump(const int* params) {
 	ignore_unused_variable_warning(params);
+	if (Friend_mode_guest_cannot_save()) {
+		return;
+	}
 	auto* fileio = new File_gump();
 	Game_window::get_instance()->get_gump_man()->do_modal_gump(fileio, Mouse::hand);
 	delete fileio;
@@ -126,6 +138,9 @@ void ActionMixerGump(const int* params) {
 // { ActionFileGump, 0, "Save/restore", normal_keys, NONE },
 void ActionFileGump(const int* params) {
 	ignore_unused_variable_warning(params);
+	if (Friend_mode_guest_cannot_save()) {
+		return;
+	}
 	auto* fileio = new Newfile_gump();
 	Game_window::get_instance()->get_gump_man()->do_modal_gump(fileio, Mouse::hand);
 	delete fileio;
@@ -134,6 +149,9 @@ void ActionFileGump(const int* params) {
 //  { ActionQuicksave, 0, "Quick-save", normal_keys, NONE },
 void ActionQuicksave(const int* params) {
 	ignore_unused_variable_warning(params);
+	if (Friend_mode_guest_cannot_save()) {
+		return;
+	}
 	Game_window* gwin = Game_window::get_instance();
 	try {
 		gwin->write();
@@ -148,6 +166,9 @@ void ActionQuicksave(const int* params) {
 //  { ActionQuickrestore, 0, "Quick-restore", normal_keys, NONE },
 void ActionQuickrestore(const int* params) {
 	ignore_unused_variable_warning(params);
+	if (Friend_mode_guest_cannot_save()) {
+		return;
+	}
 	Game_window* gwin = Game_window::get_instance();
 	try {
 		gwin->read();
@@ -668,6 +689,9 @@ void ActionCenter(const int* params) {
 // canonical Avatar and the first eligible party companion.
 void ActionToggleFriendControl(const int* params) {
 	ignore_unused_variable_warning(params);
+	if (Friend_mode_is_guest()) {
+		return;    // A network guest keeps the companion the host gave it.
+	}
 	Game_window::get_instance()->toggle_friend_mode_control();
 }
 

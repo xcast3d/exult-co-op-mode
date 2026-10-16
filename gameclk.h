@@ -50,6 +50,7 @@ class Game_clock : public Time_sensitive {
 	bool                                was_foggy;
 	std::unique_ptr<Palette_transition> transition;    // For smooth palette transitions.
 	unsigned short                      time_rate;
+	bool                                network_follower = false;    // Friend Mode guest.
 	void                                set_time_palette(bool force);
 	void                                set_light_source_level(int lev);
 	void                                check_hunger() const;
@@ -126,6 +127,18 @@ public:
 	void increment(int num_minutes);    // Increment clock.
 	void handle_event(unsigned long curtime, uintptr udata) override;
 	void fake_next_period();    // For debugging.
+
+	// Friend Mode guest: the clock stops advancing on its own (no hunger,
+	// healing or schedule changes here) and follows the host's time.
+	void set_network_follower(bool on) {
+		network_follower = on;
+	}
+
+	bool is_network_follower() const {
+		return network_follower;
+	}
+
+	void apply_network_time(int d, int h, int m, int t);
 
 	int get_time_rate() const {
 		return time_rate;

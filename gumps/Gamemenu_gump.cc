@@ -96,7 +96,8 @@ void Gamemenu_gump::createButtons() {
 
 	// Resize the gump to default
 	SetProceduralBackground(TileRect(0, 0, 100, yForRow(8)), -1);
-	if (!gwin->is_in_exult_menu()) {
+	// Friend Mode guests are along for the ride: the host saves and loads.
+	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest()) {
 		buttons[id_load_save] = std::make_unique<Gamemenu_button>(
 				this, &Gamemenu_gump::loadsave, Strings::LoadSaveGame(), margin, yForRow(y++), preferred_button_width, 11);
 	}

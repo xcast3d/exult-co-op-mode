@@ -51,7 +51,9 @@ public:
 		guest_put_back  = 6,    // Guest cancels a drag, or returns the rest.
 		guest_use_item  = 7,    // Guest uses an item (food, potion, key...).
 		object_speech   = 8,    // Text spoken by a door, chest or other object.
-		party_status    = 9     // Party members' status flags, health, food.
+		party_status    = 9,    // Party members' status flags, health, food.
+		game_clock      = 10,   // Day, time and weather.
+		creature_list   = 11    // Creatures near the players, by network ID.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);

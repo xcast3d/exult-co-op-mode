@@ -323,6 +323,9 @@ public:
 
 	void hatch_now(Game_object* obj, bool must) override {
 		ignore_unused_variable_warning(obj, must);
+		if (Friend_mode_is_guest()) {
+			return;    // The host creates monsters and items, and shares them.
+		}
 		const Shape_info& info = ShapeID::get_info(mshape);
 		if (info.is_npc()) {
 			if (gwin->armageddon) {
@@ -390,6 +393,9 @@ public:
 
 	void hatch_now(Game_object* obj, bool must) override {
 		ignore_unused_variable_warning(obj);
+		if (Friend_mode_is_guest()) {
+			return;    // Scripts run on the host, which fires its eggs for guests' steps.
+		}
 		if (!fun && !fun_name.empty()) {
 			fun = ucmachine->find_function(fun_name.c_str());
 		}
@@ -455,6 +461,9 @@ public:
 
 	void hatch_now(Game_object* obj, bool must) override {
 		ignore_unused_variable_warning(obj, must);
+		if (Friend_mode_is_guest()) {
+			return;    // Traps fire on the host.
+		}
 		const Shape_info&  info = ShapeID::get_info(weapon);
 		const Weapon_info* winf = info.get_weapon_info();
 		int                proj;
@@ -543,6 +552,9 @@ public:
 
 	void hatch_now(Game_object* obj, bool must) override {
 		ignore_unused_variable_warning(obj, must);
+		if (Friend_mode_is_guest()) {
+			return;    // The host's weather arrives with its clock.
+		}
 		set_weather(weather, len, this);
 	}
 };
@@ -558,6 +570,9 @@ public:
 
 	void hatch_now(Game_object* obj, bool must) override {
 		ignore_unused_variable_warning(must);
+		if (Friend_mode_is_guest()) {
+			return;    // The eggs it sets off belong to the host.
+		}
 		Egg_vector eggs;
 		find_nearby_eggs(eggs, 275, dist);
 		find_nearby_eggs(eggs, 200, dist);

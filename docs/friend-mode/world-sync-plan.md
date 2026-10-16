@@ -114,9 +114,15 @@ forces a resend of the nearby chunks and the guest's inventory, so the guest
 ends up matching the host either way.
 
 Not covered yet: theft (moving items not marked okay to take does not set off
-the game's theft logic for guests), giving items to other party members,
-using items with a target such as keys, and an item a guest is holding at the
-moment the host sends the world to a new guest (it is missing from that save).
+the game's theft logic for guests; to be built). Keys and lockpicks are now
+covered by guest item use.
+
+Minor, test later: an item a guest is holding at the moment the host sends the
+world to a new guest is missing from that save.
+
+Decided: guests cannot give items to other party members. The Avatar acts as
+the game master and can move items into any party member's inventory,
+including a guest's companion; guests are limited to their own character.
 
 ### 5. Recovering from drift
 
@@ -138,8 +144,9 @@ W1 comes first because every later step assumes both worlds start the same.
 
 ## Out of scope here
 
-- Combat sync (damage, death, loot drops from creatures beyond the add hook).
-  That's Phase 5, but the add hook from W3 already covers loot appearing.
+- Combat sync (damage, health). That's Phase 5. Creatures appearing, moving
+  and dying are synced (see the README's Creatures section); their bodies and
+  loot arrive through item sync.
 - Locked doors and keys: the first version only allows unlocked doors for
   guests.
 - More than one guest. The [multi-guest plan](multi-guest-plan.md) adds that;
@@ -147,9 +154,8 @@ W1 comes first because every later step assumes both worlds start the same.
 
 ## Open questions
 
-1. **Inventory between companions:** should a guest be able to give items to
-   another party member (Avatar or companion) by dragging onto their paperdoll?
-   The interaction policy currently limits guests to their own inventory.
+1. ~~Inventory between companions~~ (decided: no; the Avatar hands items
+   around, see section 4).
 2. **Saves:** only the host saves. Should the host's save also be sent to
    guests on request, so a guest can keep a copy?
 3. **Locked doors:** later, should a guest holding the right key be able to

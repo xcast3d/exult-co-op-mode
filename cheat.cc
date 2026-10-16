@@ -326,6 +326,9 @@ void Cheat::finish_init() {
 }
 
 void Cheat::set_enabled(bool en) {
+	if (en && Friend_mode_is_guest()) {
+		return;    // The host's world: no cheats for guests.
+	}
 	enabled = en;
 	std::string cheating;
 	if (enabled) {
@@ -334,6 +337,17 @@ void Cheat::set_enabled(bool en) {
 		cheating = "no";
 	}
 	config->set("config/gameplay/cheat", cheating, true);
+}
+
+void Cheat::disable_for_friend_guest() {
+	set_map_editor(false);
+	enabled     = false;
+	god_mode    = false;
+	wizard_mode = false;
+	infravision = false;
+	pickpocket  = false;
+	npc_numbers = false;
+	hack_mover  = false;
 }
 
 void Cheat::toggle_god() {

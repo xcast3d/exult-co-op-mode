@@ -151,8 +151,9 @@ which have no state to sync.
 
 - [ ] Guest double-clicks an NPC who isn't in the party: "The Avatar must do
       this" over them, and no conversation starts.
-- [ ] Guest double-clicks an object with a script that guests can't use, such
-      as a bottle or a bed: "The Avatar must do this".
+- [ ] Guest opens the kit's first chest (the one with gold) and
+      double-clicks the bottle, then the torch: "The Avatar must do this"
+      each time, and nothing happens on the host. A bed in town works too.
 
 ## Inventories and guest item moves (W4)
 
@@ -208,6 +209,54 @@ the first request and the second person's drag snaps back.
 - [ ] Guest drops part of a gold stack: the dropped part lands, and the rest
       goes back to where it was on both sides.
 
+## Creatures
+
+- [ ] Guest joins near some animals or monsters: each one on the guest is in
+      the same place as on the host, and they move the same way.
+- [ ] Host presses **Shift+F9**: a rat, a wolf and a rabbit appear near the
+      Avatar on both screens.
+- [ ] The creatures walk around: the guest sees each one move the way it does
+      on the host (no creature moving in another's place).
+- [ ] The host's party kills one: it disappears on the guest, and its body
+      appears on both.
+- [ ] Host walks the party well away from them (into the next town area) and
+      comes back: the creatures are where the host has them, with none
+      doubled or missing.
+- [ ] Guest walks over a spot where the host's monsters appear (a monster
+      egg): no creature appears only on the guest.
+
+## Clock and weather
+
+- [ ] Guest joins: the time of day looks the same on both (light, palette).
+- [ ] Host turns on cheats and presses **Ctrl-T** a few times to skip ahead
+      three hours each: the guest's light changes with the host's, including
+      into night.
+- [ ] Guest opens the clock or watch (if the party has one) and compares with
+      the host: the same time.
+- [ ] When it rains, snows or clouds over on the host, the guest gets the same
+      weather, and it stops when the host's stops.
+- [ ] After a few game hours, the guest's companion's food level matches the
+      host's and the guest shows no hunger messages of its own.
+
+## Saving, loading and cheats
+
+- [ ] Guest presses Escape: the menu has no Load/Save entry.
+- [ ] Guest presses S, Ctrl-S and Ctrl-R: "The host saves the game" each time.
+- [ ] Guest tries to turn on cheats (Game Engine options) or presses a cheat
+      key such as Ctrl-T: nothing happens.
+- [ ] Host loads a save: the guest shows "The host loaded a saved game", ends
+      up in the same world as the host, and controls the same companion.
+- [ ] Host loads a save where that companion isn't in the party: the host
+      says so and the guest is left watching.
+
+## Bodies and temporary objects
+
+- [ ] Kill a creature (Shift+F9 helps), walk the Avatar about one and a half
+      screens away: the body is still there on both when you come back.
+- [ ] Walk much further away and back: the body is gone on both (as in U7).
+- [ ] With the guest's companion standing by a body, walk the Avatar away a
+      screen and a half: the body stays on both.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".
@@ -216,9 +265,11 @@ the first request and the second person's drag snaps back.
 
 ## Known gaps to ignore for now
 
-- Theft by guests, and giving items to other party members.
+- Theft by guests. (Guests can't give items to other party members; that is
+  by design.)
 - Stats other than health, food level and status effects (poison, sleep,
   paralysis, charm, curse, protection, might) aren't mirrored to the guest.
-- Creatures that appear after joining, such as a cat wandering in.
+- Creature health and combat (Phase 5); creatures only move and appear or
+  disappear on the guest.
 - Doors whose script swaps to a shape that isn't flagged as a door.
 - Sounds for changes made on the other machine.

@@ -270,6 +270,11 @@ void Game_clock::handle_event(
 
 	const int min_old  = minute;
 	const int hour_old = hour;
+	if (network_follower) {    // The host's time arrives by network.
+		curtime += gwin->get_std_delay();
+		tqueue->add(curtime, this, udata);
+		return;
+	}
 	// Time stopped?  Don't advance.
 	if (!gwin->is_time_stopped() && !cheat.in_map_editor()) {
 		ticks += time_rate;
@@ -308,6 +313,24 @@ void Game_clock::handle_event(
 	}
 	curtime += gwin->get_std_delay();
 	tqueue->add(curtime, this, udata);
+}
+
+/*
+ *  Friend Mode guest: jump to the host's time and update the palette.
+ */
+
+void Game_clock::apply_network_time(int d, int h, int m, int t) {
+	const int hour_old = hour;
+	day                = d;
+	hour               = static_cast<short>(h % 24);
+	minute             = static_cast<short>(m % 60);
+	ticks              = static_cast<short>(t % ticks_per_minute);
+	if (transition && !transition->set_step(hour, minute, ticks)) {
+		transition.reset();
+		set_time_palette(false);
+	} else if (hour != hour_old) {
+		set_time_palette(false);
+	}
 }
 
 /*

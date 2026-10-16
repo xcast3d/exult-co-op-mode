@@ -83,10 +83,67 @@ long jumps.
 The guest's wait bar now ends with every host script, so a one-line remark
 with a portrait (no "bye") no longer leaves it stuck; tested and working.
 
-Other open items: theft by guests, giving items to other party members,
-creatures that appear after joining, game-clock sync (day and night can
-differ between machines), and multi-guest sessions
-([plan](multi-guest-plan.md)).
+Tested 2026-10-16 and working: creature sync (existing and new creatures,
+deaths and bodies) and clock sync (join, Ctrl-T skips, hunger). Clouds are
+random on each machine and keep drifting on the guest while the host is
+paused; low priority. Protocol version 13.
+
+Also tested 2026-10-16 and working: guests can't save, load or use cheats;
+the host loading a save sends the new world to the guest; bodies stay near
+either player and go when both are far away. Not separately tested: script,
+missile-trap and button eggs doing nothing on the guest.
+
+Found in testing:
+
+- A guest whose companion isn't in the party after a host load is left
+  without a body: the camera doesn't follow the Avatar, creatures don't show,
+  and there is no way to pick a companion again (even after the host loads a
+  save that has one). Chat still works and shows at the top of the host's
+  view.
+- The cheats option still shows on guests (it can't be turned on); hide it
+  like Load/Save.
+- Guests can switch to combat mode but their companion doesn't attack.
+- Bottles, torches and other everyday objects with scripts say "The Avatar
+  must do this"; guests should be able to use the safe ones.
+- An inactive window can leave a stale mouse arrow drawn until it is clicked;
+  cosmetic.
+
+Next to build:
+
+1. **Spectating and picking a companion again**: a guest without a
+   companion follows the Avatar's view, sees everything a player sees, and
+   gets a bar (like the pause bar) saying which key opens the companion
+   picker. The same key lets any guest switch to a free companion. Also hide
+   the cheats option on guests.
+2. **Everyday objects for guests**: review the scripts of common objects
+   (torch, bottles and drinks, and so on) and add the ones that only affect
+   the user or the object itself to the guest list. Anything that touches
+   story flags, time or the whole party (beds: sleeping) stays Avatar-only.
+3. **Guest combat**: the guest's attack target goes to the host, which runs
+   combat for that companion (part of Phase 5).
+4. **Shared journal** that guests can write in too. Edits go to the host
+   one note at a time (when a note is finished, not on save), the host
+   applies them in order and sends the journal back to everyone. A note
+   someone is editing is locked for others.
+5. **Theft by guests**: taking items not marked okay to take sets off the
+   game's theft logic, as it does for the Avatar.
+
+Waiting for a second tester: the two-tester contention checks and a real
+in-game teleporter with the leash.
+
+Untested: a guest double-clicking a scripted object it can't use (the bottle
+or torch in the test kit's chest should say "The Avatar must do this").
+NPCs saying it was tested and works.
+
+Minor, test later: an item a guest is mid-drag on when a new guest joins is
+missing from the save the new guest downloads.
+
+Later: multi-guest sessions ([plan](multi-guest-plan.md)) and a 30-minute
+two-player soak test.
+
+Decided: the Avatar is the game master. It can open and change every party
+member's inventory, including giving items to a guest's companion. Guests are
+limited to their own character and cannot give items to others.
 
 ## Phase 3 checkpoint: player identity and overhead chat
 
@@ -193,6 +250,32 @@ sends only that companion, not the Avatar and the party. The guest's own copy
 of the world never fires teleporters itself; the host's move comes back as
 the companion's new position. When the Avatar takes a teleporter, the guest's
 companion goes with the party. Leash rules still apply on arrival.
+
+### Creatures
+
+Monsters (creatures without an NPC number) get a network ID from the host the
+first time they are near the players, in the same chunks item sync covers.
+When the set of creatures there changes (one appears, dies or leaves), the
+host sends the whole list: ID, shape, frame, tile, alignment and invisibility.
+The guest creates the ones it lacks, standing still, and deletes the rest,
+including creatures its own map loading brings in. It checks this four times
+a second, so a creature lost to the guest's own map unloading comes back.
+Moves go out as creature states by ID, only when a creature moved or changed
+frame. Monster eggs do nothing on the guest; the host's eggs make the
+creatures (and items, which item sync shares). Health and combat are still
+the host's alone (Phase 5). **Shift+F9** on the host places a rat, a wolf and
+a rabbit near the Avatar.
+
+### Clock and weather
+
+The host sends its day, hour, minute, tick and current weather (from
+`Effects_manager::get_weather`) when they change, checked twice a second, and
+right after sending its world to a joining guest. The guest's clock stops
+advancing on its own, so hunger, healing and hourly NPC schedule changes stay
+with the host, and jumps to the host's time, updating the palette. A change
+of weather starts the same effect on the guest (snow, storm, fog, clouds,
+sparkles) until the host's weather changes again. Weather eggs do nothing on
+the guest. Protocol version is now 13.
 
 ### Party mirroring and spectating
 

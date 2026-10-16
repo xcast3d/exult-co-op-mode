@@ -1652,6 +1652,7 @@ void Game_window::read() {
 	// before calling read_npcs!!
 	setup_game(cheat.in_map_editor());    // Read NPC's, usecode.
 	Mouse::mouse()->set_speed_cursor();
+	Friend_mode_note_world_loaded();
 }
 
 /*
@@ -3325,77 +3326,57 @@ void Game_window::emulate_cache(Map_chunk* olist, Map_chunk* nlist) {
 	Game_map* nmap = nlist->get_map();
 	// Cancel scripts 4 chunks from this.
 	Usecode_script::purge(Tile_coord(newx * c_tiles_per_chunk, newy * c_tiles_per_chunk, 0), 4 * c_tiles_per_chunk);
-	int nearby[5][5];    // Chunks within 3.
-	int x;
-	int y;
-	// Figure old range.
-	const int old_minx = c_num_chunks + oldx - 2;
-	const int old_maxx = c_num_chunks + oldx + 2;
-	const int old_miny = c_num_chunks + oldy - 2;
-	const int old_maxy = c_num_chunks + oldy + 2;
-	if (nmap == omap) {    // Same map?
-		// Set to 0
-		memset(nearby, 0, sizeof(nearby));
-		// Figure new range.
-		const int new_minx = c_num_chunks + newx - 2;
-		const int new_maxx = c_num_chunks + newx + 2;
-		const int new_miny = c_num_chunks + newy - 2;
-		const int new_maxy = c_num_chunks + newy + 2;
-		// Now we write what we are now near
-		for (y = new_miny; y <= new_maxy; y++) {
-			if (y > old_maxy) {
-				break;    // Beyond the end.
-			}
-			const int dy = y - old_miny;
-			if (dy < 0) {
-				continue;
-			}
-			assert(dy < 5);
-			for (x = new_minx; x <= new_maxx; x++) {
-				if (x > old_maxx) {
-					break;
+	// Temporary objects (monster bodies, spawned items) in chunks we left
+	// behind are deleted, as in the original.  Friend Mode keeps them one
+	// chunk further out (3 instead of 2), and also around a guest's
+	// companion.  A guest's world follows the host's, so it deletes nothing.
+	constexpr int keep_chunks = 3;
+	if (!Friend_mode_is_guest()) {
+		auto chunk_dist = [](int a, int b) {
+			const int d = a > b ? a - b : b - a;
+			return d < c_num_chunks - d ? d : c_num_chunks - d;
+		};
+		auto near_chunk = [&](int cx, int cy, int ax, int ay) {
+			return chunk_dist(cx, ax) <= keep_chunks && chunk_dist(cy, ay) <= keep_chunks;
+		};
+		const Actor*       guest = remote_friend_actor;
+		Game_object_vector removes;
+		for (int dy = -keep_chunks; dy <= keep_chunks; dy++) {
+			for (int dx = -keep_chunks; dx <= keep_chunks; dx++) {
+				const int cx = (oldx + dx + c_num_chunks) % c_num_chunks;
+				const int cy = (oldy + dy + c_num_chunks) % c_num_chunks;
+				if (nmap == omap && near_chunk(cx, cy, newx, newy)) {
+					continue;    // Still near.
 				}
-				const int dx = x - old_minx;
-				if (dx >= 0) {
-					assert(dx < 5);
-					nearby[dx][dy] = 1;
+				if (guest && guest->get_map() == omap && !guest->is_pos_invalid()
+					&& near_chunk(cx, cy, guest->get_cx(), guest->get_cy())) {
+					continue;    // Near the guest's companion.
 				}
-			}
-		}
-	} else {    // New map, so cache out all of old.
-		memset(nearby, 0, sizeof(nearby));
-	}
-
-	// Swap out chunks no longer nearby (0).
-	Game_object_vector removes;
-	for (y = 0; y < 5; y++) {
-		for (x = 0; x < 5; x++) {
-			if (nearby[x][y] != 0) {
-				continue;
-			}
-			Map_chunk* list = omap->get_chunk_safely((old_minx + x) % c_num_chunks, (old_miny + y) % c_num_chunks);
-			if (!list) {
-				continue;
-			}
-			Object_iterator it(list->get_objects());
-			Game_object*    each;
-			while ((each = it.get_next()) != nullptr) {
-				Egg_object* egg = each->as_egg();
-				if (egg != nullptr && egg->reset()) {
+				Map_chunk* list = omap->get_chunk_safely(cx, cy);
+				if (!list) {
 					continue;
-				} else if (each->get_flag(Obj_flags::is_temporary)) {
-					removes.push_back(each);
+				}
+				Object_iterator it(list->get_objects());
+				Game_object*    each;
+				while ((each = it.get_next()) != nullptr) {
+					Egg_object* egg = each->as_egg();
+					if (egg != nullptr && egg->reset()) {
+						continue;
+					} else if (each->get_flag(Obj_flags::is_temporary)) {
+						removes.push_back(each);
+					}
 				}
 			}
 		}
-	}
-	for (auto* remove : removes) {
+		for (auto* remove : removes) {
 #ifdef DEBUG
-		const Tile_coord t = remove->get_tile();
-		cout << "Culling object: " << remove->get_name() << '(' << remove << ")@" << t.tx << "," << t.ty << "," << t.tz << endl;
+			const Tile_coord t = remove->get_tile();
+			cout << "Culling object: " << remove->get_name() << '(' << remove << ")@" << t.tx << "," << t.ty << "," << t.tz
+				 << endl;
 #endif
-		remove->delete_contents();    // first delete item's contents
-		remove->remove_this(nullptr);
+			remove->delete_contents();    // first delete item's contents
+			remove->remove_this(nullptr);
+		}
 	}
 
 	if (omap == nmap) {

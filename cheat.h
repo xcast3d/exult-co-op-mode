@@ -86,6 +86,9 @@ public:
 	}
 
 	void set_enabled(bool en);
+	// Friend Mode guest: cheats stay off for the session (the config file
+	// is left alone, so single-player keeps its setting).
+	void disable_for_friend_guest();
 
 	bool in_god_mode() const {
 		return god_mode;
