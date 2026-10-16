@@ -391,7 +391,8 @@ bool Friend_mode_guest_usable_shape(int shape) {
 	case 678:
 	case 787:    // Lever.
 	case 788:    // Switch.
-	case 889:    // Lamp post.
+	case 889:    // Lamp post (unlit).
+	case 526:    // Lit lamp (a lit lamp post swaps to this shape).
 		return true;
 	default:
 		return false;
@@ -440,6 +441,8 @@ static Game_object* Friend_find_door(const Tile_coord& tile, int shape, int fram
 
 // Apply a host shape/frame change to a guest's copy of a world object.
 static void Friend_apply_object_change(Game_object* obj, int shape, int frame) {
+	// Lighting is refigured only by a full paint, as Usecode does.
+	const bool was_light = obj->get_info().is_light_source();
 	if (obj->get_shapenum() != shape) {
 		Map_chunk* chunk = obj->get_chunk();
 		if (chunk) {
@@ -453,6 +456,9 @@ static void Friend_apply_object_change(Game_object* obj, int shape, int frame) {
 	}
 	if (obj->get_framenum() != frame) {
 		obj->change_frame(frame);
+	}
+	if (was_light != obj->get_info().is_light_source()) {
+		gwin->paint();
 	}
 }
 
