@@ -242,8 +242,8 @@ Only the purchase or training itself is carried out by the host.
 - [x] Find how Black Gate's merchant and trainer scripts buy, sell and
       train, and which NPCs offer them
       ([findings and plan](friend-mode/shops-and-trainers.md)).
-- [ ] Let a guest's companion talk to merchants and trainers locally; other
-      NPCs keep "The Avatar must do this".
+- [x] Let a guest's companion talk to merchants locally; other NPCs keep
+      "The Avatar must do this". (Trainers next.)
 - [ ] Catch the purchase, sale or training on the guest and send it to the
       host as one request; the host checks and applies it and the usual
       sync brings the result back.

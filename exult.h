@@ -109,6 +109,13 @@ void Friend_mode_note_projectile(const Tile_coord& from, const Tile_coord& to, i
 void Friend_mode_note_sprite(
 		int num, Game_object* item, const Tile_coord& pos, int xoff, int yoff, int dx, int dy, int delay, int frame,
 		int reps);
+// Friend Mode shops.  Guest: the host's schedule for an NPC near the
+// players (-1 if not known, or not a guest).
+int Friend_mode_host_schedule(const Actor* npc);
+// Guest, during a merchant conversation: the party got or paid something.
+void Friend_mode_note_party_trade(bool add, int quantity, int shape, int quality, int frame);
+// Guest: talk to a merchant on our own copy.  False if 'npc' isn't one.
+bool Friend_mode_guest_talk_to_merchant(Actor* npc);
 // Friend Mode shared journal (see Notebook_gump).  True while connected.
 bool Friend_mode_journal_shared();
 // Start writing in shared note 'index'.  False if someone else is.

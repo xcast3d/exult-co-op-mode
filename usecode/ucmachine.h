@@ -26,6 +26,7 @@
 #include "singles.h"
 
 #include <algorithm>
+#include <array>
 #include <iosfwd>
 #include <optional>
 #include <vector>
@@ -52,6 +53,8 @@ protected:
 	Keyring* keyring = nullptr;
 	// Handles conversations
 	Conversation* conv = nullptr;
+	// Friend Mode guest: the companion talking to a merchant on this copy.
+	Actor* friend_shopper = nullptr;
 
 	// "Page size" for global flags.
 	constexpr static const size_t gflags_page_size = 2048;
@@ -181,6 +184,26 @@ public:
 
 	void init_conversation();
 	int  get_num_faces_on_screen() const;
+
+	// Friend Mode.  While a guest's companion talks to a merchant on the
+	// guest's own copy, purchases go to the host and the companion's
+	// portrait stands in for the Avatar's.
+	void set_friend_shopper(Actor* actor) {
+		friend_shopper = actor;
+	}
+
+	Actor* get_friend_shopper() const {
+		return friend_shopper;
+	}
+
+	// Host: carry out a guest's purchase.  Each entry is quantity, shape,
+	// quality, frame.  Takes 'removes' from the party (all or nothing),
+	// then gives 'adds' to 'buyer' (the rest of the party if its pack is
+	// full).  False if the party can't pay.
+	using Party_trade_item = std::array<int, 4>;
+	virtual bool friend_party_trade(
+			const std::vector<Party_trade_item>& removes, const std::vector<Party_trade_item>& adds, Actor* buyer)
+			= 0;
 	Conversation* get_conversation() const {
 		return conv;
 	}

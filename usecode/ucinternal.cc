@@ -1221,6 +1221,65 @@ Usecode_value Usecode_internal::remove_party_items(
 }
 
 /*
+ *  Friend Mode host: a guest's purchase, checked against the party's
+ *  goods first so it happens whole or not at all.
+ */
+
+Usecode_value Usecode_internal::add_items_to_buyer(
+		Actor* buyer, Usecode_value& quantval, Usecode_value& shapeval, Usecode_value& qualval, Usecode_value& frameval,
+		Usecode_value& temporary) {
+	Usecode_value result(0, nullptr);
+	int           left = quantval.get_int_value();
+	if (buyer) {
+		left = buyer->add_quantity(
+				left, shapeval.get_int_value(), qualval.get_int_value(), frameval.get_int_value(), false,
+				GAME_BG && temporary.get_int_value() != 0);
+		if (left < quantval.get_int_value()) {
+			Usecode_value got(buyer);
+			result.concat(got);
+		}
+	}
+	if (left > 0) {    // Pack full: the rest of the party, as usual.
+		Usecode_value rest(left);
+		Usecode_value others = add_party_items(rest, shapeval, qualval, frameval, temporary);
+		for (int i = 0; i < others.get_array_size(); ++i) {
+			result.concat(others.get_elem(i));
+		}
+	}
+	return result;
+}
+
+bool Usecode_internal::friend_party_trade(
+		const std::vector<Party_trade_item>& removes, const std::vector<Party_trade_item>& adds, Actor* buyer) {
+	Usecode_value all(-357);
+	for (const auto& item : removes) {
+		Usecode_value shape(item[1]);
+		Usecode_value quality(item[2]);
+		Usecode_value frame(item[3]);
+		if (count_objects(all, shape, quality, frame).get_int_value() < item[0]) {
+			return false;
+		}
+	}
+	for (const auto& item : removes) {
+		Usecode_value quantity(item[0]);
+		Usecode_value shape(item[1]);
+		Usecode_value quality(item[2]);
+		Usecode_value frame(item[3]);
+		Usecode_value flag(0);
+		remove_party_items(quantity, shape, quality, frame, flag);
+	}
+	for (const auto& item : adds) {
+		Usecode_value quantity(item[0]);
+		Usecode_value shape(item[1]);
+		Usecode_value quality(item[2]);
+		Usecode_value frame(item[3]);
+		Usecode_value temporary(0);
+		add_items_to_buyer(buyer, quantity, shape, quality, frame, temporary);
+	}
+	return true;
+}
+
+/*
  *  Add a quantity of an item to the party.
  *
  *  Output: List of members who got objects.

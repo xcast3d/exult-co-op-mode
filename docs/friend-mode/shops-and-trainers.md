@@ -53,6 +53,35 @@ script calls a routine that takes party gold:
 
 First shops and trainers; spells, healers and the rest after.
 
+## Built: shops (2026-10-17, protocol version 21)
+
+Tested: buying works from host and guest, the party's gold is taken either
+way, and a purchase the party can't afford is refused. Fixed after that
+test: a guest's purchase went to the Avatar's pack (Exult gives to the
+first party member with room); it now goes to the guest's companion
+(`Usecode_internal::add_items_to_buyer`), and to the rest of the party only
+if the companion's pack is full. Retested and working.
+
+- A guest double-clicking one of the 42 merchants (the "shop" rows below;
+  Inforlem waits for trainers) runs that merchant's conversation on the
+  guest's copy (`Friend_mode_guest_talk_to_merchant`). The host and other
+  guests see nothing.
+- The companion's portrait replaces the Avatar's on the guest's side
+  (`Usecode_machine::set_friend_shopper`, used in
+  `Conversation::show_avatar_choices`).
+- While that runs, `add_party_items` is remembered and the next
+  `remove_party_items` (the gold) sends both to the host as one purchase.
+  The host accepts only gold as payment, checks the party has it, takes it
+  and gives the item (`Usecode_internal::friend_party_trade`), then resends
+  every party pack so a refused purchase goes back on the guest. Payments
+  without an item (rooms, training) are not sent yet.
+- Spells: `add_spell` fails for a guest with "The Avatar must do this";
+  spell shops take no gold when that happens.
+- The host's NPC schedules ride in the upper bits of each NPC state's frame,
+  and `get_schedule_type` answers with them on guests, so shop hours match.
+  The story flags go out as bits when they change (twice a second at most),
+  held back while a guest's merchant conversation is open.
+
 ## The NPCs
 
 Names come from `npc.dat` (best effort). Routine numbers are usecode

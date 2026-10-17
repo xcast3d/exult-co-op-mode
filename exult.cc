@@ -2456,6 +2456,165 @@ static void Friend_mode_apply_sound(const std::vector<unsigned char>& data) {
 	}
 }
 
+// Shops.  A guest's companion talks to a merchant on the guest's own copy
+// (nobody else sees it, and the story flags it sets stay there); each
+// purchase (the item, then the gold) goes to the host, which takes the
+// party's gold and gives the item.  See docs/friend-mode/shops-and-trainers.md.
+
+// Black Gate merchants, by NPC number (tools/friend-mode/shops_and_trainers.py,
+// "shop" rows; Inforlem also trains, so he waits for trainers).
+static const std::unordered_set<int> friend_merchants{
+		18,  19,  24,  37,  38,  47,  50,  51,  52,  53,  54,  55,  59,  67,  74,  79,  87,  92,  102, 118, 121, 123,
+		130, 153, 163, 179, 188, 189, 190, 194, 196, 198, 199, 206, 207, 215, 216, 219, 222, 229, 231, 237};
+constexpr int friend_gold_shape = 644;
+
+static std::unordered_map<int, int>                    friend_host_schedules;    // Guest: NPC -> host's schedule.
+static std::vector<Usecode_machine::Party_trade_item> friend_pending_adds;      // Guest: bought, not paid yet.
+static std::vector<unsigned char>                      friend_flags_sent;        // Host: last flags sent.
+static std::vector<unsigned char>                      friend_flags_waiting;     // Guest: arrived mid-conversation.
+
+static void Friend_mode_apply_story_flags(const std::vector<unsigned char>& data);
+
+int Friend_mode_host_schedule(const Actor* npc) {
+	if (!npc || friend_session.mode() != Friend_mode_session::Mode::guest) {
+		return -1;
+	}
+	const auto found = friend_host_schedules.find(npc->get_npc_num());
+	return found == friend_host_schedules.end() ? -1 : found->second;
+}
+
+void Friend_mode_note_party_trade(bool add, int quantity, int shape, int quality, int frame) {
+	if (friend_session.mode() != Friend_mode_session::Mode::guest) {
+		return;
+	}
+	if (add) {
+		friend_pending_adds.push_back({quantity, shape, quality, frame});
+		return;
+	}
+	// Paying: whatever the party just got is what this buys.  Payments
+	// for nothing (rooms, training) wait for their own support.
+	if (friend_pending_adds.empty() || !friend_session.connected()) {
+		friend_pending_adds.clear();
+		return;
+	}
+	std::vector<unsigned char> payload;
+	auto put_item = [&](const Usecode_machine::Party_trade_item& item) {
+		for (const int value : item) {
+			Friend_put16(payload, value & 0xffff);
+		}
+	};
+	Friend_put8(payload, 1);
+	put_item({quantity, shape, quality, frame});
+	Friend_put8(payload, static_cast<int>(friend_pending_adds.size()));
+	for (const auto& item : friend_pending_adds) {
+		put_item(item);
+	}
+	friend_pending_adds.clear();
+	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_trade, payload);
+	cout << "Friend Mode: sent a purchase (" << quantity << " gold)" << endl;
+}
+
+// Host: a guest's purchase.  Only gold may be paid; the party must have it.
+static void Friend_mode_trade_for_guest(const std::vector<unsigned char>& data, Actor* actor) {
+	if (!actor) {
+		return;
+	}
+	size_t pos       = 0;
+	auto   read_list = [&](std::vector<Usecode_machine::Party_trade_item>& out) {
+        const int count = pos < data.size() ? data[pos++] : 0;
+        for (int i = 0; i < count && i < 8; ++i) {
+            Usecode_machine::Party_trade_item item{};
+            for (int& value : item) {
+                value = static_cast<sint16>(Friend_get16(data, pos));
+            }
+            out.push_back(item);
+        }
+	};
+	std::vector<Usecode_machine::Party_trade_item> removes;
+	std::vector<Usecode_machine::Party_trade_item> adds;
+	read_list(removes);
+	read_list(adds);
+	const bool gold_only = !removes.empty()
+						   && std::all_of(removes.begin(), removes.end(), [](const auto& item) {
+								  return item[1] == friend_gold_shape && item[0] > 0;
+							  });
+	const bool sane_adds = !adds.empty() && std::all_of(adds.begin(), adds.end(), [](const auto& item) {
+		return item[0] > 0 && item[0] <= 500 && item[1] >= 0;
+	});
+	if (pos > data.size() || !gold_only || !sane_adds) {
+		cout << "Friend Mode: refused guest purchase (not a purchase)" << endl;
+		Friend_force_item_resync(actor);
+		return;
+	}
+	// The guest already showed the purchase on its copy: resend every party
+	// pack either way, so a refused one goes back.
+	for (auto& entry : friend_inventory_hashes) {
+		entry.second = 0;
+	}
+	friend_next_item_sync = 0;
+	if (!gwin->get_usecode()->friend_party_trade(removes, adds, actor)) {
+		cout << "Friend Mode: refused guest purchase (the party can't pay)" << endl;
+		return;
+	}
+	cout << "Friend Mode: " << actor->get_name() << " bought shape " << adds.front()[1] << " for "
+		 << removes.front()[0] << " gold" << endl;
+}
+
+bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
+	Actor* own = gwin->get_controlled_actor();
+	if (!GAME_BG || !npc || !own || friend_session.mode() != Friend_mode_session::Mode::guest
+		|| !friend_merchants.count(npc->get_npc_num())) {
+		return false;
+	}
+	Usecode_machine* usecode = gwin->get_usecode();
+	friend_pending_adds.clear();
+	usecode->set_friend_shopper(own);
+	gwin->get_effects()->remove_text_effects();
+	usecode->init_conversation();
+	npc->activate();
+	usecode->set_friend_shopper(nullptr);
+	friend_pending_adds.clear();    // Got without paying: stays here.
+	if (!friend_flags_waiting.empty()) {
+		std::vector<unsigned char> flags;
+		flags.swap(friend_flags_waiting);
+		Friend_mode_apply_story_flags(flags);
+	}
+	return true;
+}
+
+// Host: the story flags, as bits, when they change.
+static void Friend_mode_story_flags_pass(bool force) {
+	Usecode_machine*           usecode = gwin->get_usecode();
+	const int                  count   = static_cast<int>(usecode->get_num_global_flags());
+	std::vector<unsigned char> payload;
+	Friend_put16(payload, count & 0xffff);
+	payload.resize(2 + (count + 7) / 8, 0);
+	for (int i = 0; i < count; ++i) {
+		if (usecode->get_global_flag_unsafe(i)) {
+			payload[2 + i / 8] |= static_cast<unsigned char>(1 << (i % 8));
+		}
+	}
+	if (force || payload != friend_flags_sent) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::story_flags, payload);
+		friend_flags_sent = std::move(payload);
+	}
+}
+
+// Guest: take the host's story flags (after a merchant conversation, if
+// one is open, so its answers don't change under it).
+static void Friend_mode_apply_story_flags(const std::vector<unsigned char>& data) {
+	Usecode_machine* usecode = gwin->get_usecode();
+	if (usecode->get_friend_shopper()) {
+		friend_flags_waiting = data;
+		return;
+	}
+	size_t    pos   = 0;
+	const int count = Friend_get16(data, pos);
+	for (int i = 0; i < count && 2 + static_cast<size_t>(i / 8) < data.size(); ++i) {
+		usecode->set_global_flag(i, (data[2 + i / 8] >> (i % 8)) & 1);
+	}
+}
+
 // Both sides: say when our journal opens or closes, so the other side can
 // show "Someone is writing in the party journal."
 static bool friend_journal_open_sent = false;
@@ -2963,6 +3122,7 @@ static void Friend_mode_send_world() {
 		Friend_mode_send_journal_writers();
 		Friend_mode_journal_open_pass(true);
 		Friend_mode_send_music();    // Join mid-tune.
+		Friend_mode_story_flags_pass(true);
 		friend_health_sent.clear();
 	} else {
 		cerr << "Friend Mode: could not read " << friend_world_file << endl;
@@ -4824,6 +4984,7 @@ static void Handle_events() {
 				if (now >= friend_next_clock_sync) {
 					friend_next_clock_sync = now + friend_clock_sync_ms;
 					Friend_mode_clock_pass(false);
+					Friend_mode_story_flags_pass(false);
 				}
 				if (now >= friend_next_journal_sync) {
 					friend_next_journal_sync = now + friend_journal_sync_ms;
@@ -4841,6 +5002,7 @@ static void Handle_events() {
 				friend_leash_return_at = 0;
 				friend_journal_sent.clear();
 				friend_health_sent.clear();
+				friend_flags_sent.clear();
 				if (!friend_journal_writers.empty()) {
 					friend_journal_writers.clear();    // The guest's note is free again.
 					Notebook_gump::set_remote_writers({});
@@ -4956,6 +5118,8 @@ static void Handle_events() {
 						Friend_mode_journal_lock_from_guest(request);
 					} else if (kind == Friend_mode_session::Blob_kind::journal_open) {
 						Friend_mode_apply_journal_open(request);
+					} else if (kind == Friend_mode_session::Blob_kind::guest_trade) {
+						Friend_mode_trade_for_guest(request, guest_actor);
 					}
 				}
 			}
@@ -5020,9 +5184,13 @@ static void Handle_events() {
 						}
 						const Tile_coord state = npc->get_tile();
 						if (npc->get_npc_num() > 0) {
+							// The frame's upper bits carry the schedule, plus one
+							// (so a merchant's shop hours are right on guests).
+							const Schedule* schedule = npc->get_schedule();
+							const int       sched    = schedule ? schedule->get_actual_type(npc) : npc->get_schedule_type();
 							friend_session.send_npc_state(
 									static_cast<uint32>(npc->get_npc_num()), state.tx, state.ty, state.tz,
-									npc->get_framenum());
+									npc->get_framenum() | (((sched + 1) & 0xff) << 16));
 						}
 					}
 					Friend_mode_creature_moves();
@@ -5085,6 +5253,8 @@ static void Handle_events() {
 					Friend_mode_apply_hit(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::world_sound) {
 					Friend_mode_apply_sound(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::story_flags) {
+					Friend_mode_apply_story_flags(blob);
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;
@@ -5199,6 +5369,8 @@ static void Handle_events() {
 			while (friend_session.take_npc_state(npc_num, tx, ty, tz, frame)) {
 				Actor* npc = gwin->get_npc(static_cast<int>(npc_num));
 				const Tile_coord state(tx, ty, tz);
+				friend_host_schedules[static_cast<int>(npc_num)] = ((frame >> 16) & 0xff) - 1;
+				frame &= 0xffff;
 				if (npc && guest_frozen_npcs.insert(static_cast<int>(npc_num)).second) {
 					npc->set_schedule_type(Schedule::wait);
 					npc->stop();

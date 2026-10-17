@@ -498,6 +498,13 @@ public:
 	int         find_function(const char* nm, bool noerr = false) override;
 	const char* find_function_name(int funcid) override;
 	void        do_speech(int num) override;    // Start speech, or show text.
+	bool        friend_party_trade(
+				   const std::vector<Party_trade_item>& removes, const std::vector<Party_trade_item>& adds,
+				   Actor* buyer) override;
+	// Friend Mode: give items to 'buyer' first, then the rest of the party.
+	Usecode_value add_items_to_buyer(
+			Actor* buyer, Usecode_value& quantval, Usecode_value& shapeval, Usecode_value& qualval,
+			Usecode_value& frameval, Usecode_value& temporary);
 
 	bool in_usecode() override {    // Currently in a usecode function?
 		return !call_stack.empty();

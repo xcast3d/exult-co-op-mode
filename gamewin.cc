@@ -2802,6 +2802,11 @@ void Game_window::double_clicked(
 			obj->activate();
 			return;
 		}
+		// Merchants talk to a guest's companion on the guest's own copy;
+		// purchases go to the host (Friend_mode_guest_talk_to_merchant).
+		if (clicked_actor && Friend_mode_guest_talk_to_merchant(clicked_actor)) {
+			return;
+		}
 		// Network guests cannot start Avatar-owned usecode or storyline
 		// dialogue. Guest-safe containers and their own inventory returned
 		// through the dedicated paths above.  Anything else with a script

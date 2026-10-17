@@ -394,6 +394,27 @@ Shift+F9 on the host gives a rat, a wolf and a rabbit to fight.
       party get none. Moving creatures leave no trails of old bars.
 - [ ] The same on the guest with its own option on.
 
+## Shops
+
+Trinsic has Dell's shop (weapons, armour, provisions); go during shop hours.
+
+- [ ] Guest double-clicks Dell: the conversation opens on the guest only;
+      the host sees nothing and can keep playing.
+- [ ] The guest's side of the conversation shows the companion's portrait,
+      not the Avatar's.
+- [ ] "job", then "buy", then a category: Dell's wares and prices show.
+- [ ] Buy something: the gold leaves the party and the item appears in the
+      guest's companion's pack, on both machines (another member's pack
+      only if the companion's is full).
+- [ ] Buy something the party can't afford: Dell refuses, nothing changes.
+- [ ] Outside shop hours (Ctrl-T on the host to skip time): Dell says to
+      come back during business hours, as for the Avatar.
+- [ ] Guest double-clicks a non-merchant: "The Avatar must do this".
+- [ ] At a mage who sells spells (Nicodemus, Rudyom): trying to buy a spell
+      says "The Avatar must do this" and takes no gold.
+- [ ] Host double-clicks Dell afterwards: the conversation is the Avatar's
+      as usual, unaffected by the guest's chat.
+
 ## Journal
 
 - [ ] Host writes a note and closes the journal (N, type, Escape). Guest

@@ -375,6 +375,12 @@ USECODE_INTRINSIC(get_schedule_type) {
 	}
 	Schedule* schedule = npc->get_schedule();
 	int       sched    = schedule ? schedule->get_actual_type(npc) : npc->get_schedule_type();
+	// A Friend Mode guest holds nearby NPCs still; ask what the host's are
+	// doing (a merchant is only at work in the host's world).
+	const int host_sched = Friend_mode_host_schedule(npc);
+	if (host_sched >= 0) {
+		sched = host_sched;
+	}
 	// Path_run_usecode?  (This is to fix
 	//   a bug in the Fawn Trial.)
 	//+++++Should be a better way to check.
@@ -909,13 +915,27 @@ USECODE_INTRINSIC(get_cont_items) {
 
 USECODE_INTRINSIC(remove_party_items) {
 	// Remove items(quantity, item, ??quality?? (-359), frame(-359), T/F).
-	return remove_party_items(parms[0], parms[1], parms[2], parms[3], parms[4]);
+	Usecode_value result = remove_party_items(parms[0], parms[1], parms[2], parms[3], parms[4]);
+	if (friend_shopper && result.get_int_value()) {    // Friend Mode guest: pay on the host.
+		Friend_mode_note_party_trade(
+				false, parms[0].get_int_value(), parms[1].get_int_value(), parms[2].get_int_value(),
+				parms[3].get_int_value());
+	}
+	return result;
 }
 
 USECODE_INTRINSIC(add_party_items) {
 	// Add items(num, item, ??quality?? (-359), frame (or -359), T/F).
 	// Returns array of NPC's (->'s) who got the items.
-	Usecode_value u(add_party_items(parms[0], parms[1], parms[2], parms[3], parms[4]));
+	// A Friend Mode guest's purchase goes in its own companion's pack.
+	Usecode_value u(
+			friend_shopper ? add_items_to_buyer(friend_shopper, parms[0], parms[1], parms[2], parms[3], parms[4])
+						   : add_party_items(parms[0], parms[1], parms[2], parms[3], parms[4]));
+	if (friend_shopper && u.get_array_size() > 0) {    // Friend Mode guest: bought.
+		Friend_mode_note_party_trade(
+				true, parms[0].get_int_value(), parms[1].get_int_value(), parms[2].get_int_value(),
+				parms[3].get_int_value());
+	}
 	return u;
 }
 
@@ -1914,6 +1934,12 @@ USECODE_INTRINSIC(get_body_npc) {
 USECODE_INTRINSIC(add_spell) {
 	// add_spell(spell# (0-71), ??, spellbook).
 	// Returns 0 if book already has that spell.
+	if (friend_shopper) {
+		// Friend Mode guest: only the Avatar casts, so spells are the
+		// Avatar's to buy.  Shop scripts take no gold when this fails.
+		gwin->get_effects()->add_text("The Avatar must do this", friend_shopper);
+		return Usecode_value(0);
+	}
 	Game_object* obj  = get_item(parms[2]);
 	auto*        book = obj->as_spellbook();
 	if (!book) {

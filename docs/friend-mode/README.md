@@ -199,6 +199,12 @@ Built and tested 2026-10-17:
   drawing them (the host used to send only those in Exult's 'nearby' list,
   around its own view).
 
+Built and tested 2026-10-17 (protocol version 21): **guests can shop.**
+Double-clicking a merchant runs the conversation on the guest only, with
+the companion's portrait; each purchase is made on the host with the
+party's gold. Story flags and NPC schedules now reach guests. Details:
+[shops and trainers](shops-and-trainers.md).
+
 Built and tested 2026-10-17 (protocol version 20). Also checked while
 testing: a guest's companion dying leaves the guest watching, and Tab picks
 another; the Avatar dying reloaded the last save (early in the story, before

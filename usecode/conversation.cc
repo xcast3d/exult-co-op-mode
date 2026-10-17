@@ -28,6 +28,7 @@
 #include "Gump_manager.h"
 #include "ShortcutBar_gump.h"
 #include "actors.h"
+#include "ucmachine.h"
 #include "data/exult_bg_flx.h"
 #include "effects.h"
 #include "exult.h"
@@ -734,6 +735,12 @@ void Conversation::show_avatar_choices(int num_choices, char** choices) {
 			shape = skin->face_shape;
 			frame = skin->face_frame;
 		}
+	}
+
+	// Friend Mode guest at a merchant: the companion speaks, not the Avatar.
+	if (const Actor* shopper = ucmachine->get_friend_shopper()) {
+		shape = shopper->get_face_shapenum();
+		frame = 0;
 	}
 
 	const ShapeID face_sid(shape, frame, SF_FACES_VGA);
