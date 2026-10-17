@@ -636,6 +636,9 @@ public:
 	}
 	// Friend Mode host: is this a companion some guest controls?
 	bool is_remote_friend(const Game_object* obj) const;
+	// The schedule a guest's companion has as a plain party member: the
+	// fight in combat mode, else what it had, but never waiting.
+	int friend_party_schedule(const Remote_friend& each) const;
 	// Friend Mode host: within a screenful of a guest's companion, where
 	// creatures and NPCs stay awake as they do near the Avatar.
 	bool near_remote_friend(const Game_object* obj) const;

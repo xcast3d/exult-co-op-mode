@@ -90,9 +90,11 @@ public:
 		guest_trade     = 25,   // Guest: a purchase from a merchant.
 		story_flags     = 26,   // Host: the global (story) flags.
 		resync_request  = 27,   // Guest: resend the party's packs and nearby items.
-		player_list     = 28    // Host: every player, their name and companion.
+		player_list     = 28,   // Host: every player, their name and companion.
+		notice          = 29,   // Host: a session notice (joined, left, switched).
+		guest_follow    = 30    // Guest: follow the Avatar (1) or not; host: the result.
 	};
-	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to = everyone);
+	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to = everyone, int except = -1);
 	// 'from' (optional) is the sending player; on a guest always the host.
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data, int* from = nullptr);
 	// Guest: bytes of the blob currently arriving (0 when none).
@@ -160,6 +162,8 @@ public:
 	// Speaker is the sender's controlled NPC number, or chat_spectator;
 	// 'player' is who said it.  The host relays with 'except' the sender.
 	static constexpr uint32 chat_spectator = 0xffffffffU;
+	// Asked for instead of a companion: give it up and spectate.
+	static constexpr uint32 spectate_actor = 0xffffffffU;
 	void send_chat(uint32 speaker, int player, const std::string& text, int to = everyone, int except = -1);
 	bool take_chat(uint32& speaker, int& player, std::string& text, int* from = nullptr);
 	void send_dialogue_begin();

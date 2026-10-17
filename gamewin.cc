@@ -1271,6 +1271,17 @@ bool Game_window::is_remote_friend(const Game_object* obj) const {
 		   });
 }
 
+int Game_window::friend_party_schedule(const Remote_friend& each) const {
+	if (combat) {
+		return Schedule::combat;
+	}
+	const int previous = each.previous_schedule;
+	// A companion saved while a guest held it (before saves knew better)
+	// comes back waiting; it should follow like the rest of the party.
+	return previous < 0 || previous == Schedule::wait || previous == Schedule::loiter ? Schedule::follow_avatar
+																						 : previous;
+}
+
 bool Game_window::reserve_friend_mode_actor(int npc_num) {
 	Actor* companion = get_npc(npc_num);
 	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()
@@ -1291,8 +1302,8 @@ void Game_window::release_remote_friend_mode_actor(int npc_num) {
 			continue;
 		}
 		actor->stop();
-		if (it->previous_schedule >= 0 && actor->is_in_party()) {
-			actor->set_schedule_type(it->previous_schedule);
+		if (actor->is_in_party() && !actor->is_dead()) {
+			actor->set_schedule_type(friend_party_schedule(*it));    // Back with the party.
 		}
 		remote_friends.erase(it);
 		return;
@@ -1652,7 +1663,19 @@ void Game_window::write(bool nopaint) {
 			map->write_ireg();    // Write ireg files.
 		}
 	}
+	// A guest's companion waits for its guest on the host; it must not be
+	// saved waiting, or it stays put for good once the save is loaded.
+	std::vector<int> held_schedules;
+	for (const Remote_friend& each : remote_friends) {
+		held_schedules.push_back(each.actor->get_schedule_type());
+		each.actor->set_schedule_type(friend_party_schedule(each));
+	}
 	write_npcs();              // Write out npc.dat.
+	for (size_t i = 0; i < remote_friends.size(); ++i) {
+		if (remote_friends[i].actor->get_schedule_type() != held_schedules[i]) {
+			remote_friends[i].actor->set_schedule_type(held_schedules[i]);
+		}
+	}
 	usecode->write();          // Usecode.dat (party, global flags).
 	Notebook_gump::write();    // Write out journal.
 	write_gwin();              // Write our data.

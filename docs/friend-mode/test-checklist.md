@@ -516,6 +516,85 @@ config and gamedat. The host needs a party with at least two companions
       keeps playing.
 - [ ] The host loads a save with both connected: both get the new world
       and their companions back.
+- [ ] Join, "enters the world as", switch and leave notices show on the
+      host and on both guests.
+- [ ] Guest 1 presses Tab and moves from Iolo to a free companion (Dupre,
+      Shamino, or whoever is in the party): everyone sees "<name> switches
+      to <companion>"; Iolo follows the party again on all three screens.
+- [ ] Guest 2 presses Tab: Iolo is offered now, and guest 2 takes it.
+- [ ] In combat mode, a guest switches away mid-fight: the companion left
+      behind keeps fighting.
+- [ ] Both guests press Tab and pick the same free companion: the second
+      gets "That companion is taken" and the picker again.
+- [ ] Tab does nothing (red X) while the Avatar talks to someone.
+
+## Losing a companion, and four players (Phase 6, M5)
+
+- [ ] A guest's companion dies in a fight: everyone sees "<companion> has
+      fallen; <name> is now spectating", and that guest's picker opens
+      with the free companions.
+- [ ] The Avatar dismisses a guest's companion in conversation ("leave"):
+      after the conversation, "<companion> has left the party; ..." and
+      the guest's picker opens.
+- [ ] A guest's companion is put to sleep or paralyzed: it stays theirs.
+- [ ] The host loads a save where a guest's companion isn't in the party:
+      "... is not in the party in this save; <name> is now spectating", and
+      the picker opens; the other guest keeps its companion.
+- [ ] Save on the host while guests hold companions, load it in single
+      player: every companion follows the Avatar.
+- [ ] Four players: host plus three guests, each on its own companion
+      (needs three companions in the party). Third guest:
+
+      ```bash
+      ./exult --bg --nocrc -c .friend-mode-local/guest3.cfg
+      ```
+
+      Movement, chat and item use from all three; then close one guest and
+      the others keep playing.
+- [ ] A fifth window joins when every companion has a player: it can join
+      to spectate (up to 4 spectators), and chat from it shows as
+      "Name: text".
+
+## Scripted events
+
+Story scenes and other scripts run on the host only; guests watch. Try
+them with two guests on companions.
+
+- [ ] A script egg the Avatar steps on starts a scene: both guests get the
+      conversation bar and the mirrored text and portraits; neither can
+      move until it ends.
+- [ ] A guest's companion steps on a script, missile-trap or button egg:
+      nothing happens on the guest's machine or the host (only monster
+      eggs fire for companions).
+- [ ] A companion a guest controls speaks in the Avatar's conversation
+      (Iolo or Spark interjecting): its portrait and lines show on every
+      machine, and the guest gets it back afterwards.
+- [ ] A script moves or turns the party (a scene that walks everyone, a
+      moongate, the Orb of the Moons, sleeping in a bed): the guests'
+      companions go along and the guests get control back where they land.
+- [ ] A script that walks a guest's companion (a lever's script walks the
+      user there): the guest's moves don't fight it.
+- [ ] NPC remarks and barks during scenes show over the right heads on
+      both guests.
+- [ ] A scene that ends with a companion leaving or dying: see "Losing a
+      companion".
+
+## Follow mode and Spectate
+
+- [ ] Guest presses E: the bar shows "Following the Avatar. Move to take
+      over." Walk the Avatar a screen away: the companion follows, and the
+      leash never beckons it.
+- [ ] Turn on combat mode near a creature while following: the companion
+      fights with the party.
+- [ ] The guest walks (or presses E again): the bar goes and the companion
+      is the guest's again, where it stood.
+- [ ] While one guest follows, the other guest's Tab picker doesn't offer
+      that companion.
+- [ ] E does nothing (red X) while watching or during a host conversation;
+      typing "e" in the journal or chat still works.
+- [ ] Tab → Spectate: everyone sees "<name> is now spectating; <companion>
+      rejoins the party"; the guest gets the spectating bar, and Tab again
+      offers that companion.
 
 ## Leaving
 

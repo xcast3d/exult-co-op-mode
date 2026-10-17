@@ -220,9 +220,10 @@ Progress notes and what each piece does are in
 One player per eligible party companion, plus spectators. See the
 [multi-guest plan](friend-mode/multi-guest-plan.md).
 
-- [ ] Several peers on the host, each with its own assignment, held items
+- [x] Several peers on the host, each with its own assignment, held items
       and leash.
-- [ ] The host relays chat and world updates to every guest.
+- [x] The host relays chat and world updates to every guest.
+- [x] Switching companions with Tab, follow mode (E) and Spectate.
 - [x] Put the socket code in `friendnet.cc` behind one small connection
       interface at the same time, ready for WebRTC (Phase 8).
 - [ ] The two-person checks (two people grabbing the same item), now with

@@ -11,7 +11,7 @@
 #include <iostream>
 
 namespace {
-constexpr unsigned short protocol_version = 26;
+constexpr unsigned short protocol_version = 28;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -218,7 +218,7 @@ void Friend_mode_session::deliver(int to, int except) {
 	staged.clear();
 }
 
-void Friend_mode_session::send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to) {
+void Friend_mode_session::send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to, int except) {
 	if (data.size() > max_blob_size) {
 		std::cerr << "Friend Mode: blob too large (" << data.size() << " bytes)" << std::endl;
 		return;
@@ -230,7 +230,7 @@ void Friend_mode_session::send_blob(Blob_kind kind, const std::vector<unsigned c
 		const std::size_t count = std::min(blob_chunk_size, data.size() - offset);
 		staged.emplace_back(data.begin() + offset, data.begin() + offset + count);
 	}
-	deliver(to);
+	deliver(to, except);
 }
 
 bool Friend_mode_session::take_blob(Blob_kind& kind, std::vector<unsigned char>& data, int* from) {

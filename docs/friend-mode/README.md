@@ -72,6 +72,58 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Phase 6, M5, built 2026-10-17 (protocol version 28); not tested yet.**
+Follow mode, Spectate and Enter in the journal were tested and work, and
+so did Iolo following again after the saved-waiting fix. "Watch" is now
+called **Spectate** (the picker choice, the notices and the bar: "You are
+spectating. Press Tab to choose a companion.").
+
+- **Losing a companion.** When a guest's companion dies, leaves the party
+  (a host conversation can dismiss it) or isn't in the party in a save the
+  host loads, the host frees it and everyone sees "Iolo has fallen; Marc
+  is now spectating" (or "has left the party", "is not in the party in
+  this save"). The guest spectates and its picker opens by itself with the
+  free companions, after any host conversation ends. Asleep or paralyzed
+  companions stay their guest's.
+- **Four players.** `.friend-mode-local/guest3.cfg` is a third guest (own
+  gamedat and saves, audio off), for host plus three guests.
+
+**Follow mode and Spectate, built and tested 2026-10-17 (protocol version
+28).** For stepping away without losing your companion, or giving it up:
+
+- **E: follow the Avatar.** The party's own AI takes your companion: it
+  follows the Avatar and fights when the party fights, but stays yours
+  (nobody else can pick it). A bar says "Following the Avatar. Move to take
+  over." Walking, attacking, switching or pressing E again hands it back to
+  you. E is `toggle_eggs` in the default keys, a cheat that guests can't
+  use; the journal and the chat line still get the letter.
+- **Enter in the journal** starts a new line again; the chat line opens
+  with Enter only while the journal is closed.
+- **Companions saved waiting (fixed after testing).** A companion a guest
+  holds waits for that guest on the host, and the host's saves (and the
+  world sent to joining guests) wrote it that way. Loaded later, it stood
+  still for good: Iolo didn't follow after Spectate. Saves now write a guest's
+  companion with its party schedule, and a released companion always
+  follows (or fights, in combat mode), which also repairs older saves.
+- **Spectate.** The Tab picker has a Spectate choice under the companion card
+  (only while you have one): your companion goes back to the party, and
+  everyone sees "<name> is now spectating".
+
+**Phase 6, M3 and M4, built and tested 2026-10-17 (protocol version 27).**
+The only problem found: Enter opened the chat line while writing in the
+journal (fixed in version 28, below).
+
+- **Notices on every machine.** Joining, entering the world as a
+  companion, switching and leaving show on the host and on every guest (a
+  newcomer gets its own "Joined ...'s world" instead). A guest joining
+  while the host is in a menu now sees the pause bar.
+- **Switching between guests.** Tab offers your companion and the free
+  ones. If another guest takes the one you picked first, you see "That
+  companion is taken" and the picker opens again with what is free now.
+  The companion you leave goes back to the party's AI, or straight into
+  the fight if the Avatar is in combat mode, and on your machine it moves
+  as the host says. Switching waits while the Avatar is in a conversation.
+
 **Phase 6, M1 and M2, built and tested 2026-10-17 (protocol version 26).**
 Three windows on one Mac (host, guests on Iolo and Spark): movement, chat,
 opening and closing windows, teleporting and a host load with both guests
@@ -133,7 +185,7 @@ with a portrait (no "bye") no longer leaves it stuck; tested and working.
 Tested 2026-10-16 and working: creature sync (existing and new creatures,
 deaths and bodies) and clock sync (join, Ctrl-T skips, hunger). Clouds are
 random on each machine and keep drifting on the guest while the host is
-paused; low priority. Protocol version 13.
+paused; decided 2026-10-17 to leave them unsynced (nobody will notice). Protocol version 13.
 
 Also tested 2026-10-16 and working: guests can't save, load or use cheats;
 the host loading a save sends the new world to the guest; bodies stay near
@@ -394,8 +446,9 @@ Still to test:
 Minor, test later: an item a guest is mid-drag on when a new guest joins is
 missing from the save the new guest downloads.
 
-Later: multi-guest sessions (Phase 6, [plan](multi-guest-plan.md)) and a 30-minute
-two-player soak test.
+Later: a 30-minute soak test with two or more guests, and scripted events
+with several guests (see "Scripted events" in the
+[test checklist](test-checklist.md)).
 
 Decided: the Avatar is the game master. It can open and change every party
 member's inventory, including giving items to a guest's companion. Guests are
@@ -560,6 +613,14 @@ Distance is measured horizontally from the Avatar:
   it at once.
 
 Raising the radius later is the path toward free roaming.
+
+**To explore: a longer leash.** Today it warns past 20 tiles (one screen)
+and stops guests at 32. Could it be 3-4 screens (about 60-80 tiles)? Check
+what the host simulates that far from the Avatar: chunk caching and
+deleting around guests (`Game_window` keeps 3 chunks around each guest's
+companion), item sync radius (2 chunks around a guest), keeping creatures
+and NPCs awake near guests, schedules and egg hatching, and bandwidth. Not
+urgent; a modest increase is enough.
 
 ### Session notices
 

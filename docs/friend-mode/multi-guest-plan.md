@@ -1,7 +1,9 @@
 # Multi-guest sessions and companion switching (plan)
 
-**Status:** M1 and M2 built and tested 2026-10-17 (protocol version 26); M3–M5 to do. Decided: a connection interface in its own files,
-shared change caches broadcast to every guest, and up to 4 watchers beyond
+**Status:** M1 and M2 built and tested 2026-10-17 (protocol version 26);
+M3 and M4 built and tested (protocol version 27); follow mode and Spectate
+built and tested (protocol version 28); M5 built, not yet tested. Decided: a connection interface in its own files,
+shared change caches broadcast to every guest, and up to 4 spectators beyond
 one guest per companion (trim to 7 guests later if internet tests need it).
 **Goal:** several guests in one host session, each controlling a different
 companion, with free companion switching in the style of Marvel Ultimate
@@ -122,6 +124,15 @@ and while the guest's current companion is in a transition that
 - **The host quits:** every guest shows the notice and exits (current
   behavior).
 
+## Follow mode and Spectate (built, protocol version 28)
+
+- **E (guests):** the party's AI drives the guest's companion (follow the
+  Avatar, fight with the party) while it stays reserved for that guest.
+  Ends when the guest walks, attacks, switches or presses E again; the
+  host tells the guest when it starts and ends.
+- **Spectate:** a choice in the Tab picker that gives the companion back and
+  makes the guest a spectator.
+
 ## Spectators (proposed, not yet decided)
 
 - **Viewing:** spectators press `Tab` to open the same carousel. It lists free
@@ -171,3 +182,5 @@ starts N guests with `--friend-join 127.0.0.1`.
 
 1. ~~Should spectators be capped?~~ Decided: 4 beyond one guest per
    companion. Revisit after internet tests (possibly 7 guests at most).
+2. How far can the leash go? 3-4 screens instead of 1-2 would help groups
+   spread out; see "To explore: a longer leash" in the README.

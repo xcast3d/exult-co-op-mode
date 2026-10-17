@@ -214,7 +214,9 @@ static void BuildGameMap(BaseGameInfo* game, int mapnum);
 static void Handle_events();
 static void Handle_event(SDL_Event& event);
 static bool Friend_actor_is_eligible(uint32 npc_num);
-static int  Select_friend_actor(const std::vector<uint32>& roster);
+// The picker's answer for "Spectate" (give the companion up).
+constexpr int friend_pick_spectate = -4;
+static int  Select_friend_actor(const std::vector<uint32>& roster, bool offer_watch = false);
 static void Friend_mode_send_roster(int player);
 
 // Creatures (monsters without an NPC number) are known to guests by a
@@ -290,6 +292,7 @@ struct Friend_guest {
 	Friend_held_item held;
 	int              attacker = -1;    // Companion fighting for it.
 	Game_object_weak attack_foe;
+	bool             following = false;    // The party's AI drives its companion.
 };
 static std::map<int, Friend_guest> friend_guests;
 
@@ -371,6 +374,17 @@ static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, con
 static void Friend_mode_notice(const std::string& text) {
 	cout << "Friend Mode: " << text << endl;
 	gwin->get_effects()->add_chat_text(text.c_str(), nullptr);
+}
+
+// Host: a notice every player sees (joins, leaves, companion changes),
+// except 'except' (a newcomer has its own welcome).
+static void Friend_mode_announce(const std::string& text, int except = -1) {
+	Friend_mode_notice(text);
+	if (friend_session.connected()) {
+		const size_t length = std::min<size_t>(text.size(), 120);
+		friend_session.send_blob(Friend_mode_session::Blob_kind::notice,
+				std::vector<unsigned char>(text.begin(), text.begin() + length), Friend_mode_session::everyone, except);
+	}
 }
 
 static std::string Friend_mode_actor_name(int npc_num) {
@@ -2031,6 +2045,43 @@ static void Friend_mode_check_guest_attack(Friend_guest& guest) {
 	}
 }
 
+// Follow mode.  A guest presses E: the party's AI takes its companion (it
+// follows the Avatar, and fights when the party does) but the companion
+// stays the guest's, until the guest walks, attacks, switches or presses E
+// again.  For stepping away without losing one's companion.
+
+static bool friend_following = false;    // Guest: the host's AI drives ours.
+
+// Host: start or stop following for a guest, and tell it the result.
+// 'restore_wait' leaves the companion waiting for the guest again; an
+// attack or a switch sets its schedule itself.
+static void Friend_mode_set_follow(int player, Friend_guest& guest, bool on, bool restore_wait = true) {
+	Actor* actor = guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr;
+	on           = on && actor && !actor->is_dead();
+	if (on != guest.following) {
+		guest.following = on;
+		if (actor && on) {
+			Friend_mode_end_guest_attack(guest, "following");
+			actor->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
+		} else if (actor && restore_wait) {
+			actor->set_target(nullptr);
+			actor->stop();
+			actor->set_schedule_type(Schedule::wait);
+		}
+		cout << "Friend Mode: " << guest.name << (on ? " follows the Avatar" : " takes over again") << endl;
+	}
+	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {static_cast<unsigned char>(on)}, player);
+}
+
+// Guest: the host started or stopped following for us.
+static void Friend_mode_apply_follow(const std::vector<unsigned char>& data) {
+	const bool on = !data.empty() && data[0] != 0;
+	if (on != friend_following) {
+		friend_following = on;
+		gwin->set_all_dirty();    // The bar appears or goes.
+	}
+}
+
 // Shared journal.  The host's journal is the real one.  Someone writing in a
 // note holds it (the host says who) until the cursor leaves it or the
 // journal closes; then a guest sends the finished note, and the host sends
@@ -3281,6 +3332,7 @@ bool Friend_mode_open_to_coop() {
 
 static bool friend_world_reloaded = false;    // Host loaded a save.
 static bool friend_picker_requested = false;    // Guest pressed Tab; roster on its way.
+static bool friend_spectate_requested = false;    // Guest chose Spectate itself.
 
 
 void Friend_mode_note_world_loaded() {
@@ -3505,8 +3557,10 @@ static void Friend_mode_paint_dialogue_wait() {
 				 "Please wait."};
 	} else if (gwin->is_network_host_paused()) {
 		lines = {"The host has paused the game.", "The host has paused", "the game."};
+	} else if (friend_following && friend_session.connected()) {
+		lines = {"Following the Avatar. Move to take over.", "Following the Avatar.", "Move to take over."};
 	} else if (gwin->is_network_spectating() && friend_session.connected()) {
-		lines = {"You are watching. Press Tab to choose a companion.", "You are watching. Press Tab",
+		lines = {"You are spectating. Press Tab to choose a companion.", "You are spectating. Press Tab",
 				 "to choose a companion."};
 	} else if (friend_peer_journal_open && friend_session.connected()) {
 		lines = {"Someone is writing in the party journal.", "Someone is writing in", "the party journal."};
@@ -3808,6 +3862,21 @@ static void Friend_mode_send_roster(int player) {
 	cout << "Friend Mode: advertised " << roster.size() << " available companion(s) to player " << player << endl;
 }
 
+// Host: a guest's companion is lost (dead, out of the party, or missing
+// after a load): the guest spectates, and its picker opens with what is free.
+static void Friend_mode_drop_companion(int player, Friend_guest& guest, const std::string& notice) {
+	if (guest.actor < 0) {
+		return;
+	}
+	guest.following = false;
+	Friend_return_held_item(guest.held);
+	gwin->release_remote_friend_mode_actor(guest.actor);    // If still reserved.
+	guest.actor = -1;
+	Friend_mode_announce(notice);
+	friend_session.accept_actor(Friend_mode_session::spectate_actor, player);
+	Friend_mode_send_roster(player);
+}
+
 // Host: every player, their name and companion, sent when it changes.
 static void Friend_mode_player_list_pass() {
 	std::vector<unsigned char> payload;
@@ -3962,7 +4031,7 @@ public:
 	}
 };
 
-static int Select_friend_actor(const std::vector<uint32>& roster) {
+static int Select_friend_actor(const std::vector<uint32>& roster, bool offer_watch) {
 	std::vector<uint32> choices;
 	for (uint32 npc_num : roster) {
 		if (gwin->get_npc(npc_num)) {
@@ -4009,6 +4078,11 @@ static int Select_friend_actor(const std::vector<uint32>& roster) {
 		auto* next = new MenuEntry(right_shape, right_shape, centerx + card_width / 2 + 14, title_y + 67);
 		next->set_id(-3);
 		menu.add_entry(next);
+		if (offer_watch) {
+			auto* spectate = new MenuTextEntry(hot_font, font, "Spectate", centerx, title_y + 36 + card_height + 12);
+			spectate->set_id(friend_pick_spectate);
+			menu.add_entry(spectate);
+		}
 		menu.set_cancel(-1);
 		menu.set_selection(0);
 		const int choice = menu.handle_events(gwin);
@@ -5231,7 +5305,10 @@ static void Handle_events() {
 			while (friend_session.take_peer_joined(&joined)) {
 				Friend_guest& guest = friend_guests[joined];
 				guest.name          = friend_session.player_name(joined);
-				Friend_mode_notice(guest.name + " has joined");
+				Friend_mode_announce(guest.name + " has joined", joined);
+				if (friend_host_paused_sent) {
+					friend_session.send_host_paused(true, joined);    // We're in a menu.
+				}
 			}
 			int         left = 0;
 			std::string left_name;
@@ -5253,10 +5330,10 @@ static void Handle_events() {
 				}
 				if (guest->actor >= 0) {
 					gwin->release_remote_friend_mode_actor(guest->actor);
-					Friend_mode_notice(
+					Friend_mode_announce(
 							left_name + " has left; " + Friend_mode_actor_name(guest->actor) + " rejoins the party");
 				} else {
-					Friend_mode_notice(left_name + " has left");
+					Friend_mode_announce(left_name + " has left");
 				}
 				friend_guests.erase(left);
 			}
@@ -5267,7 +5344,8 @@ static void Handle_events() {
 				// companion again if it is still in the party.
 				friend_journal_writers.clear();    // A new journal.
 				for (auto& [player, guest] : friend_guests) {
-					guest.held = Friend_held_item();
+					guest.held      = Friend_held_item();
+					guest.following = false;    // Its companion waits again in the new world.
 				}
 				if (friend_session.connected()) {
 					friend_world_sent = false;    // Nothing to catch up on in the old world.
@@ -5290,8 +5368,9 @@ static void Handle_events() {
 							friend_session.send_actor_state(guest.last_state.tx, guest.last_state.ty,
 									guest.last_state.tz, guest.last_frame, player);
 						} else {
-							Friend_mode_notice(Friend_mode_actor_name(guest.actor) + " is not in the party in this save");
-							guest.actor = -1;
+							Friend_mode_drop_companion(player, guest,
+									Friend_mode_actor_name(guest.actor) + " is not in the party in this save; " + guest.name
+											+ " is now spectating");
 						}
 					}
 				}
@@ -5369,11 +5448,27 @@ static void Handle_events() {
 				if (!guest) {
 					continue;
 				}
+				if (requested_actor == Friend_mode_session::spectate_actor) {
+					// Give the companion back and watch.
+					if (guest->actor >= 0) {
+						guest->following = false;
+						Friend_return_held_item(guest->held);
+						gwin->release_remote_friend_mode_actor(guest->actor);
+						Friend_mode_announce(guest->name + " is now spectating; " + Friend_mode_actor_name(guest->actor)
+											 + " rejoins the party");
+						guest->actor = -1;
+					}
+					friend_session.accept_actor(requested_actor, requester);
+					continue;
+				}
 				const int  previous = guest->actor;
-				const bool can_take = static_cast<int>(requested_actor) != previous
+				// Not mid-conversation: the guests are watching it, and a
+				// script may be using the companion.
+				const bool can_take = !friend_host_dialogue_active && static_cast<int>(requested_actor) != previous
 									  && Friend_actor_is_eligible(requested_actor)
 									  && Friend_actor_is_free(requested_actor, requester);
 				if (previous >= 0 && can_take) {    // Refused requests keep the old one.
+					guest->following = false;
 					Friend_return_held_item(guest->held);
 					gwin->release_remote_friend_mode_actor(previous);
 					guest->actor = -1;
@@ -5383,7 +5478,7 @@ static void Handle_events() {
 				} else if (can_take && gwin->reserve_friend_mode_actor(static_cast<int>(requested_actor))) {
 					guest->actor = static_cast<int>(requested_actor);
 					friend_session.accept_actor(requested_actor, requester);
-					Friend_mode_notice(
+					Friend_mode_announce(
 							guest->name + (previous >= 0 ? " switches to " : " enters the world as ")
 							+ Friend_mode_actor_name(guest->actor));
 					Actor* actor      = gwin->get_npc(guest->actor);
@@ -5405,6 +5500,9 @@ static void Handle_events() {
 				Actor*        actor = guest && guest->actor >= 0 ? gwin->get_npc(guest->actor) : nullptr;
 				if (!actor) {
 					continue;
+				}
+				if (guest->following) {
+					Friend_mode_set_follow(requester, *guest, false);    // Walking takes over.
 				}
 				const Tile_coord requested(tx, ty, tz);
 				if (actor->get_tile().distance(requested) <= 2
@@ -5447,7 +5545,12 @@ static void Handle_events() {
 					} else if (kind == Friend_mode_session::Blob_kind::roster_request) {
 						Friend_mode_send_roster(requester);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_attack) {
+						if (guest->following) {
+							Friend_mode_set_follow(requester, *guest, false, false);
+						}
 						Friend_mode_attack_for_guest(request, *guest);
+					} else if (kind == Friend_mode_session::Blob_kind::guest_follow) {
+						Friend_mode_set_follow(requester, *guest, !request.empty() && request[0] != 0);
 					} else if (kind == Friend_mode_session::Blob_kind::journal_edit) {
 						Friend_mode_journal_edit_from_guest(request, requester);
 					} else if (kind == Friend_mode_session::Blob_kind::journal_lock) {
@@ -5475,6 +5578,14 @@ static void Handle_events() {
 			for (auto& [player, guest] : friend_guests) {
 				Friend_mode_check_guest_attack(guest);
 				Actor* actor = guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr;
+				if (guest.actor >= 0 && (!actor || actor->is_dead() || !actor->is_in_party())) {
+					// Asleep or paralyzed passes; dead or gone does not.
+					const std::string companion = Friend_mode_actor_name(guest.actor);
+					Friend_mode_drop_companion(player, guest,
+							companion + (actor && actor->is_dead() ? " has fallen; " : " has left the party; ")
+									+ guest.name + " is now spectating");
+					continue;
+				}
 				if (!actor) {
 					continue;
 				}
@@ -5562,6 +5673,7 @@ static void Handle_events() {
 					gwin->set_network_dialogue_paused(false);
 					gwin->release_friend_mode_control();
 					guest_assigned_actor = -1;
+					Friend_mode_apply_follow({0});
 					if (Friend_mode_load_world(blob)) {
 						guest_frozen_npcs.clear();
 						last_guest_request = Tile_coord(-1, -1, -1);
@@ -5601,6 +5713,18 @@ static void Handle_events() {
 					Friend_mode_apply_story_flags(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::player_list) {
 					Friend_mode_apply_player_list(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::guest_follow) {
+					Friend_mode_apply_follow(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::notice) {
+					std::string text;
+					for (const unsigned char chr : blob) {
+						if (chr >= 32 && chr < 127) {
+							text += static_cast<char>(chr);
+						}
+					}
+					if (!text.empty()) {
+						Friend_mode_notice(text);
+					}
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;
@@ -5631,12 +5755,18 @@ static void Handle_events() {
 			if (guest_close_at != 0 && SDL_GetTicks() >= guest_close_at) {
 				quitting_time = QUIT_TIME_YES;
 			}
-			if (friend_session.take_roster_update() && friend_picker_requested) {
+			// The picker waits out a host conversation (a companion can leave
+			// the party in one).
+			if (friend_picker_requested && !gwin->is_network_dialogue_paused()
+				&& friend_session.take_roster_update()) {
 				// Tab: pick a companion again (or a first one, if watching).
 				friend_picker_requested = false;
 				friend_selection_shown  = true;
-				const int selected      = Select_friend_actor(friend_session.party_roster());
-				if (selected >= 0 && selected != guest_assigned_actor) {
+				const int selected = Select_friend_actor(friend_session.party_roster(), guest_assigned_actor >= 0);
+				if (selected == friend_pick_spectate) {
+					friend_spectate_requested = true;
+					friend_session.request_actor(Friend_mode_session::spectate_actor);
+				} else if (selected >= 0 && selected != guest_assigned_actor) {
 					friend_session.request_actor(static_cast<uint32>(selected));
 				} else if (selected >= 0) {
 					cout << "Friend Mode: kept the same companion" << endl;
@@ -5652,15 +5782,27 @@ static void Handle_events() {
 				}
 			}
 			if (friend_session.take_actor_rejected()) {
-				Friend_mode_notice("That companion is taken. Press Tab to choose another.");
+				// Taken by another guest (or the host is busy): pick again from
+				// what is free now; the host has sent a fresh list.
+				Friend_mode_notice("That companion is taken");
+				friend_picker_requested = true;
 			}
 			uint32 assigned_actor = 0;
 			if (friend_session.take_actor_assignment(assigned_actor)) {
 				if (guest_assigned_actor >= 0 && guest_assigned_actor != static_cast<int>(assigned_actor)) {
 					gwin->release_friend_mode_control();    // Switching companions.
+					// The one we left now moves as the host says, like any NPC.
+					guest_frozen_npcs.erase(guest_assigned_actor);
 					guest_assigned_actor = -1;
+					Friend_mode_apply_follow({0});
 				}
-				if (!gwin->take_friend_mode_control(static_cast<int>(assigned_actor), true)) {
+				if (assigned_actor == Friend_mode_session::spectate_actor) {
+					cout << "Friend Mode: spectating" << endl;
+					if (!friend_spectate_requested) {
+						friend_picker_requested = true;    // Lost it: pick another (the list follows).
+					}
+					friend_spectate_requested = false;
+				} else if (!gwin->take_friend_mode_control(static_cast<int>(assigned_actor), true)) {
 					cerr << "Friend Mode: assigned companion is unavailable in the local world" << endl;
 					Friend_mode_notice("Could not take control; spectating");
 				} else {
@@ -6161,7 +6303,23 @@ static void Handle_event(SDL_Event& event) {
 			Mouse::mouse()->flash_shape(Mouse::redx);
 		} else if (!friend_picker_requested) {
 			friend_picker_requested = true;
+			friend_session.take_roster_update();    // Wait for the fresh list.
 			friend_session.send_blob(Friend_mode_session::Blob_kind::roster_request, {1});
+		}
+		return;
+	}
+	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active
+		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_E && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
+		// E: follow the Avatar (the party's AI drives our companion) until we
+		// walk, or press E again.
+		Actor* own = gwin->has_network_friend_control() ? gwin->get_controlled_actor() : nullptr;
+		if (!own || gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		} else {
+			own->stop();
+			friend_session.send_blob(
+					Friend_mode_session::Blob_kind::guest_follow, {static_cast<unsigned char>(!friend_following)});
 		}
 		return;
 	}
@@ -6216,7 +6374,8 @@ static void Handle_event(SDL_Event& event) {
 				return;
 			}
 		} else if (event.type == SDL_EVENT_KEY_DOWN
-				   && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)) {
+				   && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)
+				   && !Notebook_gump::get_instance()) {    // Enter in the journal is a new line.
 			friend_chat_active = true;
 			friend_chat_text.clear();
 			gwin->stop_actor();
