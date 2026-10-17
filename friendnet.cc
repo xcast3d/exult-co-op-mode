@@ -17,6 +17,7 @@
 #	include <csignal>
 #	include <fcntl.h>
 #	include <netdb.h>
+#	include <netinet/in.h>
 #	include <sys/socket.h>
 #	include <unistd.h>
 #endif
@@ -180,19 +181,41 @@ bool Friend_mode_session::start_host(int port, uint32 game_code) {
 		std::cerr << "Friend Mode: could not resolve listen address" << std::endl;
 		return false;
 	}
-	for (addrinfo* current = addresses; current; current = current->ai_next) {
-		listen_socket = static_cast<int>(socket(current->ai_family, current->ai_socktype, current->ai_protocol));
-		if (listen_socket < 0) {
-			continue;
+	// Prefer one IPv6 socket that also takes IPv4 ("dual stack"): Windows
+	// IPv6 sockets refuse IPv4 by default, and which family comes first
+	// differs between systems.  Fall back to IPv4 alone.
+	for (const bool want_ipv6 : {true, false}) {
+		for (addrinfo* current = addresses; current && listen_socket < 0; current = current->ai_next) {
+			if ((current->ai_family == AF_INET6) != want_ipv6) {
+				continue;
+			}
+			listen_socket = static_cast<int>(socket(current->ai_family, current->ai_socktype, current->ai_protocol));
+			if (listen_socket < 0) {
+				continue;
+			}
+			int reuse = 1;
+			setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
+			if (want_ipv6) {
+				int ipv6_only = 0;
+				if (setsockopt(listen_socket, IPPROTO_IPV6, IPV6_V6ONLY, reinterpret_cast<const char*>(&ipv6_only),
+							   sizeof(ipv6_only))
+					!= 0) {
+					close_socket(listen_socket);    // Can't take IPv4 too.
+					listen_socket = -1;
+					continue;
+				}
+			}
+			if (bind(listen_socket, current->ai_addr, current->ai_addrlen) == 0 && listen(listen_socket, 1) == 0
+				&& set_nonblocking(listen_socket)) {
+				std::cout << "Friend Mode: listening for " << (want_ipv6 ? "IPv4 and IPv6" : "IPv4") << std::endl;
+				break;
+			}
+			close_socket(listen_socket);
+			listen_socket = -1;
 		}
-		int reuse = 1;
-		setsockopt(listen_socket, SOL_SOCKET, SO_REUSEADDR, reinterpret_cast<const char*>(&reuse), sizeof(reuse));
-		if (bind(listen_socket, current->ai_addr, current->ai_addrlen) == 0 && listen(listen_socket, 1) == 0
-			&& set_nonblocking(listen_socket)) {
+		if (listen_socket >= 0) {
 			break;
 		}
-		close_socket(listen_socket);
-		listen_socket = -1;
 	}
 	freeaddrinfo(addresses);
 	if (listen_socket < 0) {

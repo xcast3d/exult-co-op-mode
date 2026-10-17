@@ -1,6 +1,6 @@
 # Playing over the internet
 
-Co-Op Mode has only been tested on one Mac so far. Nothing in it is tied to
+Co-Op Mode has been tested on one Mac, and once on a Windows PC. Nothing in it is tied to
 the local machine, though: the host listens on every network address, and
 **Join a Game** takes an IP address or a host name. So a friend outside your
 home network can join once the host's router lets them in. This page lists
@@ -24,7 +24,8 @@ what that takes and what to expect.
    Give the Mac a reserved (fixed) local address in the router first, so
    the forward keeps working.
 2. **macOS firewall:** allow incoming connections for Exult when asked.
-3. **Your public address:** give the guest your public IP (shown by sites
+3. **Your public address:** the host takes IPv4 and IPv6. Give the guest
+   your public IP (shown by sites
    such as whatismyip.com), or a dynamic DNS name.
 4. Start hosting: **Co-Op Mode → Host a Game** on the title menu, or
    **Open to Co-Op** in the Escape menu during play.

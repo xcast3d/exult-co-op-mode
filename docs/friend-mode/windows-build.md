@@ -95,6 +95,15 @@ upstream, keep that line on any job upstream adds or changes.
 
 ## Testing
 
+First Windows test (2026-10-17, build from `7279672`): the build ran and
+connected, but a Windows host only took IPv6 (`::1` worked, `127.0.0.1`
+didn't). Windows IPv6 sockets refuse IPv4 unless told otherwise, and the
+host listened on whichever address type came first. Fixed since: the host
+opens one IPv6 socket with `IPV6_V6ONLY` off, which takes both, and falls
+back to IPv4 alone where IPv6 isn't available. Checked on the Mac
+(127.0.0.1 and ::1 both connect); not yet on Windows.
+
+
 - Windows guest joins a Mac host on the same network, then the other way.
 - Run the [test checklist](test-checklist.md) sections that send the most
   over the network: join, items, combat, journal, music.
