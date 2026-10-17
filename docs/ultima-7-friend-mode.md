@@ -271,7 +271,8 @@ it is also the transport a browser build would need.
 ### Phase 7 — 3–4 players and distribution
 
 - [ ] Additional companion assignments and consensual companion swaps.
-- [ ] Mac/Windows compatibility testing and automated builds.
+- [ ] Mac/Windows compatibility testing and automated builds (brought
+      forward: see the [Windows build plan](friend-mode/windows-build.md)).
 - [ ] Easier remote connections: lobby codes from Phase 5b.
 - [ ] Packaging, compatibility matrix, installation instructions, and GPL-compliant distribution.
 

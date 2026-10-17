@@ -26,6 +26,8 @@ Phase 1: harden the working local party-member possession prototype.
   Avatar access to all party inventories.
 
 See [macOS setup](macos-setup.md) and [control-point notes](control-points.md).
+To play with someone outside your network, see [internet play](internet-play.md);
+for Windows, the [Windows build plan](windows-build.md).
 For a repeatable two-player pass, use the [test checklist](test-checklist.md);
 **F9** on the host places a test kit of usable objects around the Avatar.
 The guest-action boundary is defined in the [interaction authority
@@ -177,7 +179,10 @@ can join at once, as they already join mid-game. Either way the host sees
 still work as shortcuts. The default port is 1992, the year Ultima VII
 came out (`--friend-port` changes it). The Join player name starts empty.
 
-Next after that: monster eggs hatch for the guest's companion as for the
+Next after that: a [Windows build](windows-build.md) soon, so Mac and
+Windows players can play together; [internet play](internet-play.md) notes
+what's needed to play across the internet (set `TCP_NODELAY` before the
+first real test). Also: monster eggs hatch for the guest's companion as for the
 Avatar (only monster eggs; story, music and weather eggs stay
 Avatar-only), so creatures appear wherever the guest walks inside the
 leash, plus keeping creatures near the guest awake; then the rest of
