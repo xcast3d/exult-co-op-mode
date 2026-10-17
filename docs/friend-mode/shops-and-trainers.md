@@ -103,6 +103,14 @@ points (Iolo), trained Spark, and the stats matched on host and guest.
 - A payment followed by no stat changes (an inn room, say) still stays on
   the guest only.
 
+## Built: undoing the rest (2026-10-17, protocol version 25)
+
+When a guest's merchant or trainer conversation ends, anything else it
+changed on the guest's copy is thrown away: the guest puts back the host's
+story flags (the last ones received), and asks the host (`resync_request`)
+to resend every party pack and the items near the players, so a free gift
+or anything else the host never had goes away.
+
 ## The NPCs
 
 Names come from `npc.dat` (best effort). Routine numbers are usecode

@@ -334,6 +334,18 @@ Untested: a guest double-clicking a scripted object it can't use (the bottle
 or torch in the test kit's chest should say "The Avatar must do this").
 NPCs saying it was tested and works.
 
+Still to test:
+
+- Undoing a guest's conversation (protocol version 25): after a merchant
+  or trainer conversation, the host's story flags come back on the guest
+  and the host resends the party's packs; a free gift from an NPC should
+  vanish on the guest. Also a quick shop and training round on this build.
+- Grandfather clocks and the telescope/sextant from a guest.
+- Spell shops: a guest trying to buy a spell gets "The Avatar must do
+  this" and pays nothing.
+- Shop hours: a merchant outside business hours turns the guest away, as
+  for the Avatar.
+
 Minor, test later: an item a guest is mid-drag on when a new guest joins is
 missing from the save the new guest downloads.
 

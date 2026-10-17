@@ -2485,6 +2485,7 @@ static std::optional<Usecode_machine::Party_trade_item> friend_pending_payment;
 static std::vector<std::array<int, 2>>                  friend_pending_training;    // Property, change.
 static std::vector<unsigned char>                      friend_flags_sent;        // Host: last flags sent.
 static std::vector<unsigned char>                      friend_flags_waiting;     // Guest: arrived mid-conversation.
+static std::vector<unsigned char>                      friend_host_flags;        // Guest: the host's, last applied.
 
 static void Friend_mode_apply_story_flags(const std::vector<unsigned char>& data);
 
@@ -2647,11 +2648,20 @@ bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
 	npc->activate();
 	usecode->set_friend_shopper(nullptr);
 	Friend_mode_flush_training();
-	friend_pending_adds.clear();    // Got without paying: stays here.
-	if (!friend_flags_waiting.empty()) {
-		std::vector<unsigned char> flags;
-		flags.swap(friend_flags_waiting);
+	friend_pending_adds.clear();
+	// Throw away whatever else the conversation changed on this copy: the
+	// host's story flags go back, and the host resends the party's packs
+	// and the items nearby (a free gift, say, never reached the host).
+	std::vector<unsigned char> flags;
+	flags.swap(friend_flags_waiting);
+	if (flags.empty()) {
+		flags = friend_host_flags;
+	}
+	if (!flags.empty()) {
 		Friend_mode_apply_story_flags(flags);
+	}
+	if (friend_session.connected()) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::resync_request, {1});
 	}
 	return true;
 }
@@ -2686,6 +2696,9 @@ static void Friend_mode_apply_story_flags(const std::vector<unsigned char>& data
 	const int count = Friend_get16(data, pos);
 	for (int i = 0; i < count && 2 + static_cast<size_t>(i / 8) < data.size(); ++i) {
 		usecode->set_global_flag(i, (data[2 + i / 8] >> (i % 8)) & 1);
+	}
+	if (&data != &friend_host_flags) {
+		friend_host_flags = data;
 	}
 }
 
@@ -5216,6 +5229,13 @@ static void Handle_events() {
 						Friend_mode_apply_journal_open(request);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_trade) {
 						Friend_mode_trade_for_guest(request, guest_actor);
+					} else if (kind == Friend_mode_session::Blob_kind::resync_request) {
+						// After a guest's conversation: its copy may hold changes
+						// the host never had.
+						for (auto& entry : friend_inventory_hashes) {
+							entry.second = 0;
+						}
+						Friend_force_item_resync(guest_actor);
 					}
 				}
 			}

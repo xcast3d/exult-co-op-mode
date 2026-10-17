@@ -250,7 +250,7 @@ Only the purchase or training itself is carried out by the host.
 - [x] Stats, experience and level-ups reach guests.
 - [x] Money stays the party's: the host checks and takes the party's gold,
       as the game already does, with no separate guest purse.
-- [ ] Keep anything else the local conversation changes (flags, items,
+- [x] Keep anything else the local conversation changes (flags, items,
       remarks) on the guest only, and throw it away when it ends.
 
 **Exit criterion:** A guest buys a sword in Britain and trains with a
@@ -281,6 +281,44 @@ guest types in.
 
 **Exit criterion:** Two players on different home networks join with a code
 and no router setup.
+
+### Phase 9 — Action controls (optional)
+
+Optional, more Diablo-like controls: walk with WASD, pick targets from the
+keyboard, and keep the mouse for attacking and using things. It does not
+depend on Phase 8, so it can ship in the first update after release or be
+brought forward.
+
+Both parts are off by default, each with its own toggle in the Game Input or
+Game Engine options, and they work in single-player too. They change engine
+input code (Exult's key bindings and combat targeting), so they are part of
+our Exult build; a usecode mod pack cannot add them. Keep them in their own
+commits, separate from the network code, so they could be offered to Exult
+upstream.
+
+- [ ] **WASD movement.** Build on Exult's existing keyboard walking
+      (`ActionWalk*` in `keyactions.cc`), which already slows down in combat.
+      Holding two keys walks diagonally (W+D = north-east).
+- [ ] Move Save from S to Ctrl+S (Cmd+S on Mac) when WASD is on; the main menu
+      still saves too. S is the only default key that conflicts.
+- [ ] Guests: send held movement keys to the host as a steady walk stream, and
+      check it feels responsive over a real internet connection, not just a
+      local one.
+- [ ] **Target cycling.** Q and E step to the previous or next hostile on
+      screen, nearest first, with a highlight ring that works alongside the
+      enemy health bars. Tab stays as the guest's character swap.
+- [ ] Attack the selected target with a key or left-click, through the
+      existing attack code. Hit chance, damage, and timing stay unchanged.
+- [ ] Each player has their own target; the host relays it, and other players
+      see a small marker for who is attacking what.
+- [ ] Decide when party combat AI may switch away from a target a player
+      picked by hand.
+- [ ] Toggles in Game Input / Game Engine options, saved in the config; a
+      guest's toggles apply to that guest only.
+
+**Exit criterion:** With both toggles on, a guest walks with WASD, cycles
+targets with Q/E and attacks the selected enemy, while the host plays with
+the classic mouse controls.
 
 ## Possible future projects
 

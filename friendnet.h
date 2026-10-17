@@ -68,7 +68,8 @@ public:
 		actor_hit       = 23,   // Host: someone was hit (damage, health left).
 		world_sound     = 24,   // Host: a sound from the world (scripts, hits).
 		guest_trade     = 25,   // Guest: a purchase from a merchant.
-		story_flags     = 26    // Host: the global (story) flags.
+		story_flags     = 26,   // Host: the global (story) flags.
+		resync_request  = 27    // Guest: resend the party's packs and nearby items.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);

@@ -410,6 +410,8 @@ experience) and the party needs gold.
 - [ ] With too little gold: refused; nothing changes.
 - [ ] Host trains with Markus as the Avatar: the whole party is listed, as
       usual.
+- [ ] After the guest's conversation ends, the host log shows nothing
+      refused and the guest's packs still match the host's.
 
 ## Stats and experience
 
