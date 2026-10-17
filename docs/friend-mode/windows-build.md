@@ -103,6 +103,14 @@ opens one IPv6 socket with `IPV6_V6ONLY` off, which takes both, and falls
 back to IPv4 alone where IPv6 isn't available. Checked on the Mac
 (127.0.0.1 and ::1 both connect); not yet on Windows.
 
+First Mac and Windows session (2026-10-17): a Mac host and the Windows
+build, both from `7279672` (protocol 17), on the same network. The PC
+joined the Mac at its local address and played as Iolo. Both sides must be
+built from the same commit; a mismatch is turned away at the handshake.
+The host log may show "closed non-Friend Mode connection" now and then:
+something on the Mac sends HTTP requests to local ports (seen as
+`HEAD / HTTP/1.1` from `::1`), and the host rightly closes them.
+
 
 - Windows guest joins a Mac host on the same network, then the other way.
 - Run the [test checklist](test-checklist.md) sections that send the most
