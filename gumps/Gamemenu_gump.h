@@ -37,6 +37,7 @@ private:
 		id_game_display_options,
 		id_game_engine_options,
 		id_input,
+		id_open_coop,
 		id_quit,
 		id_count
 	};
@@ -72,6 +73,7 @@ public:
 	void game_display_options();
 	void game_engine_options();
 	void input_options();
+	void open_coop();    // Start hosting Co-Op Mode in this game.
 
 	static void  do_exult_menu();
 	Gump_button* on_button(int mx, int my) override;

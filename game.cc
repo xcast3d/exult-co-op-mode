@@ -626,6 +626,28 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 	bool play     = false;
 	bool fadeout  = true;
 	bool exitmenu = false;
+	bool coop_menu = false;    // Showing the Co-Op Mode choices.
+	// Co-Op Mode entries are text, in the Exult menu's fonts.
+	const char* exult_fonts = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
+	if (!fontManager.get_font("CREDITS_FONT")) {
+		fontManager.add_font(
+				"CREDITS_FONT", File_spec(exult_fonts, EXULT_FLX_FONTS_ORIGINAL_VGA), PATCH_ORIGINAL_FONTS, 18, 1);
+	}
+	if (!fontManager.get_font("HOT_FONT")) {
+		fontManager.add_font("HOT_FONT", File_spec(exult_fonts, EXULT_FLX_FONTS_ORIGINAL_VGA), PATCH_ORIGINAL_FONTS, 19, 1);
+	}
+	const std::shared_ptr<Font> coop_font    = fontManager.get_font("CREDITS_FONT");
+	const std::shared_ptr<Font> coop_font_on = fontManager.get_font("HOT_FONT");
+	auto clear_menu_area = [&]() {
+		ibuf->fill8(0, gwin->get_width(), gwin->get_height() - menuy, 0, menuy);
+		gwin->show(true);
+	};
+	auto add_coop_entry = [&](const char* text, int id, int& offset) {
+		auto* entry = new MenuTextEntry(coop_font_on, coop_font, text, centerx, menuy + offset);
+		entry->set_id(id);
+		menu->add_entry(entry);
+		offset += coop_font->get_text_height() + 3;
+	};
 
 	do {
 		if (!menu_scene) {
@@ -640,6 +662,10 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 				auto* entry = new MenuTextEntry(font, font, "Connect to Host", centerx, menuy + offset);
 				entry->set_id(7);
 				menu->add_entry(entry);
+			} else if (coop_menu) {
+				add_coop_entry(Friend_mode_hosting() ? "STOP HOSTING" : "HOST A GAME", 9, offset);
+				add_coop_entry("JOIN A GAME", 7, offset);
+				add_coop_entry("BACK", 10, offset);
 			} else {
 				for (size_t i = 0; i < menuchoices.size(); i++) {
 				// Skip menu options based on mod settings
@@ -669,9 +695,12 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 					menu->add_entry(entry);
 					offset += f1->get_ybelow() + 3;
 				}
+				if (i == 2) {    // After Journey Onward.
+					add_coop_entry(Friend_mode_hosting() ? "CO-OP MODE: HOSTING" : "CO-OP MODE", 8, offset);
+				}
 			}
 			}
-			menu->set_selection(friend_guest ? 0 : 2);
+			menu->set_selection(friend_guest || coop_menu ? 0 : 2);
 		}
 
 		bool created = false;
@@ -696,7 +725,10 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			}
 		}
 
-		const int choice = menu->handle_events(gwin);
+		int choice = menu->handle_events(gwin);
+		if (choice == -1 && coop_menu) {
+			choice = 10;    // Escape leaves the Co-Op choices.
+		}
 		switch (choice) {
 		case -1:    // Exit
 #if defined(SDL_PLATFORM_IOS) || defined(ANDROID)
@@ -784,9 +816,26 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			exitmenu = true;
 			fadeout  = true;
 			break;
+		case 8:    // Co-Op Mode: host or join.
+			coop_menu = true;
+			clear_menu_area();    // The lists are different lengths.
+			delete menu;
+			menu = nullptr;
+			break;
+		case 9:    // Host a Game / Stop Hosting: then start or load as usual.
+			Friend_mode_set_hosting(!Friend_mode_hosting());
+			[[fallthrough]];
+		case 10:    // Back from the Co-Op choices.
+			coop_menu = false;
+			clear_menu_area();
+			delete menu;
+			menu = nullptr;
+			break;
 		case 7:    // Connect to Friend Mode host.
+			Friend_mode_set_hosting(false);
 			menu_scene.reset();
 			if (!Friend_mode_collect_connection_details() || !Friend_mode_download_world()) {
+				delete menu;
 				menu = nullptr;
 				break;
 			}

@@ -256,8 +256,8 @@ static bool   arg_reset_video  = false;    // Resets the video setings.
 static bool   arg_verify_files = false;    // Verify a game's files.
 static bool   arg_friend_host  = false;
 static string arg_friend_join;
-static int    arg_friend_port = 1987;
-static string friend_player_name = "Player";
+static int    arg_friend_port = 1992;    // The year Ultima VII came out.
+static string friend_player_name;    // Typed on Join (starts empty), or the Avatar's.
 static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
 static std::string friend_host_peer_name;    // Connected guest, for leave notice.
@@ -2604,6 +2604,42 @@ bool Friend_mode_is_guest() {
 	return friend_session.mode() == Friend_mode_session::Mode::guest;
 }
 
+// Co-Op Mode hosting: chosen on the title menu (or --friend-host) before a
+// game starts, or switched on during play from the game menu.
+bool Friend_mode_hosting() {
+	return arg_friend_host;
+}
+
+void Friend_mode_set_hosting(bool on) {
+	arg_friend_host = on;
+	if (on) {
+		arg_friend_join.clear();
+	}
+}
+
+static bool Friend_mode_start_hosting() {
+	friend_player_name = gwin->get_main_actor()->get_name();
+	if (friend_player_name.empty()) {
+		friend_player_name = "Host";
+	}
+	friend_session.set_local_player_name(friend_player_name);
+	if (!friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode())) {
+		arg_friend_host = false;
+		Friend_mode_notice("Could not open Co-Op Mode on port " + std::to_string(arg_friend_port));
+		return false;
+	}
+	Friend_mode_notice("Co-Op Mode is open on port " + std::to_string(arg_friend_port));
+	return true;
+}
+
+bool Friend_mode_open_to_coop() {
+	if (friend_session.mode() != Friend_mode_session::Mode::off) {
+		return false;    // Already hosting, or a guest.
+	}
+	arg_friend_host = true;
+	return Friend_mode_start_hosting();
+}
+
 static bool friend_world_reloaded = false;    // Host loaded a save.
 static bool friend_picker_requested = false;    // Guest pressed Tab; roster on its way.
 static bool friend_world_sent     = false;    // Host: the guest has our world, so keep it in step.
@@ -3383,7 +3419,7 @@ int main(int argc, char* argv[]) {
 	parameters.declare("--verify-files", &arg_verify_files, true);
 	parameters.declare("--friend-host", &arg_friend_host, true);
 	parameters.declare("--friend-join", &arg_friend_join, "");
-	parameters.declare("--friend-port", &arg_friend_port, 1987);
+	parameters.declare("--friend-port", &arg_friend_port, 1992);
 	parameters.declare("--installdata", &arg_installdata);
 	parameters.declare("--installmod", &arg_installmod);
 #if defined _WIN32
@@ -3467,7 +3503,7 @@ int main(int argc, char* argv[]) {
 			 << "--reset-video\tResets to the default video settings" << endl
 			 << "--friend-host\tStart an experimental Friend Mode listen server" << endl
 			 << "--friend-join <address>\tConnect to an experimental Friend Mode host" << endl
-			 << "--friend-port <port>\tFriend Mode TCP port (default 1987)" << endl;
+			 << "--friend-port <port>\tFriend Mode TCP port (default 1992)" << endl;
 
 		exit(1);
 	}
@@ -4229,12 +4265,7 @@ static void Init() {
 	gwin->read_gwin();
 	gwin->setup_game(arg_edit_mode);    // This will start the scene.
 	if (arg_friend_host) {
-		friend_player_name = gwin->get_main_actor()->get_name();
-		if (friend_player_name.empty()) {
-			friend_player_name = "Host";
-		}
-		friend_session.set_local_player_name(friend_player_name);
-		friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode());
+		Friend_mode_start_hosting();
 	} else if (!arg_friend_join.empty() && friend_session.mode() == Friend_mode_session::Mode::off) {
 		// Normally already connected from the title menu while downloading
 		// the host's world.

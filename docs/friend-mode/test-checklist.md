@@ -54,6 +54,25 @@ them are invisible; the carpet marks where they are.
 The spawned lever isn't linked to any gate, so it only tests that its frame
 change syncs. Any shape or frame the game doesn't have is skipped and logged on the host.
 
+## Co-Op Mode menus
+
+Start both without the Friend Mode options:
+`./exult --bg --nocrc` (host) and
+`./exult --bg --nocrc -c .friend-mode-local/guest.cfg` (guest).
+
+- [ ] Host title menu: "Co-Op Mode" shows below Journey Onward.
+- [ ] Host: Co-Op Mode, then Host a Game: back at the main menu, the line
+      reads "Co-Op Mode: Hosting".
+- [ ] Host: Co-Op Mode again: it offers Stop Hosting; Back and Escape
+      return to the main menu without quitting.
+- [ ] Host: Journey Onward: "Co-Op Mode is open on port 1992".
+- [ ] Guest: Co-Op Mode, then Join a Game: player name and address, then
+      the host's world downloads and the companion picker shows.
+- [ ] Without hosting, start a game, press Escape: "Open to Co-Op" is
+      there. Pick it: the menu closes and "Co-Op Mode is open on port
+      1992" shows; a guest can then join. Escape again: the button is gone.
+- [ ] On the guest, the Escape menu has no "Open to Co-Op".
+
 ## Join
 
 - [ ] Guest: **Connect to Host** asks for a player name and address.

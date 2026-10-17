@@ -164,6 +164,25 @@ Built 2026-10-16:
   the companion's own items and go through the host like a double-click; the
   cloth map (M) still opens locally.
 
+Tested 2026-10-17 and working: **Co-Op Mode in the menus**, so no
+special launch options are needed. On the title menu, **Co-Op Mode** (below
+Journey Onward) opens three choices: **Host a Game** switches hosting on
+and returns to the menu (the line then reads "Co-Op Mode: Hosting"; pick it
+again to stop), after which Start New Game or Journey Onward work as usual;
+**Join a Game** goes straight to the player name and host address, then
+downloads the host's world; **Back** (or Escape). In a running game, the
+Escape menu has **Open to Co-Op** to start hosting there and then; guests
+can join at once, as they already join mid-game. Either way the host sees
+"Co-Op Mode is open on port 1992". `--friend-host` and `--friend-join`
+still work as shortcuts. The default port is 1992, the year Ultima VII
+came out (`--friend-port` changes it). The Join player name starts empty.
+
+Next after that: monster eggs hatch for the guest's companion as for the
+Avatar (only monster eggs; story, music and weather eggs stay
+Avatar-only), so creatures appear wherever the guest walks inside the
+leash, plus keeping creatures near the guest awake; then the rest of
+Phase 5 and sounds from the other machine.
+
 Tested 2026-10-16/17 and working (protocol version 17): guest combat,
 the shared journal and the journal bar, and music from the host, as
 described below.
@@ -218,9 +237,6 @@ Built and tested 2026-10-16 (protocol version 15):
   story notes go out the same way, checked twice a second. A guest's new
   note lands after the shared ones.
 
-Next to build: the rest of Phase 5 combat sync in the [project
-brief](../ultima-7-friend-mode.md) (damage and creature health on the
-guest).
 
 Waiting for a second tester: the two-tester contention checks and a real
 in-game teleporter with the leash.

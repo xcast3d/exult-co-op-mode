@@ -36,6 +36,11 @@ class ShortcutBar_gump;
 class TouchUI;
 class Game_object;
 
+// Co-Op Mode (Friend Mode) hosting.  Set from the title menu before a game
+// starts; Friend_mode_open_to_coop starts it during play.
+bool Friend_mode_hosting();
+void Friend_mode_set_hosting(bool on);
+bool Friend_mode_open_to_coop();
 // Friend Mode connection identity is collected before the guest world loads.
 bool Friend_mode_collect_connection_details();
 // Guest item moves, mirroring a drag on the host: picking up lifts the item

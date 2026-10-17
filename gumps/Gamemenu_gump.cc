@@ -113,6 +113,10 @@ void Gamemenu_gump::createButtons() {
 			this, &Gamemenu_gump::game_display_options, Strings::GameDisplay(), margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_input] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::input_options, Strings::GameInput(), margin, yForRow(y++), preferred_button_width, 11);
+	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest() && !Friend_mode_hosting()) {
+		buttons[id_open_coop] = std::make_unique<Gamemenu_button>(
+				this, &Gamemenu_gump::open_coop, "Open to Co-Op", margin, yForRow(y++), preferred_button_width, 11);
+	}
 #if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
 	if (!gwin->is_in_exult_menu()) {
 		buttons[id_quit] = std::make_unique<Gamemenu_button>(
@@ -190,6 +194,11 @@ void Gamemenu_gump::game_engine_options() {
 	auto* cbt_opts = new GameEngineOptions_gump();
 	gumpman->do_modal_gump(cbt_opts, Mouse::hand);
 	delete cbt_opts;
+}
+
+void Gamemenu_gump::open_coop() {
+	done = true;    // Close the menu; the notice says how it went.
+	Friend_mode_open_to_coop();
 }
 
 void Gamemenu_gump::input_options() {
