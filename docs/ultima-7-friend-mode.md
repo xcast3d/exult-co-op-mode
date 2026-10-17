@@ -321,6 +321,53 @@ upstream.
 targets with Q/E and attacks the selected enemy, while the host plays with
 the classic mouse controls.
 
+### Co-op quality of life
+
+Modern conveniences that fit U7's "the Avatar leads" style, decided
+2026-10-17. Not tied to a phase; most are small and can land before or
+after Phase 8.
+
+- [ ] **Rejoin your companion.** When a guest drops, the host holds its
+      companion for a few minutes (the party's AI drives it, as in follow
+      mode). The same player name reconnecting gets it straight back,
+      without the picker.
+- [ ] **Player list.** A simple overlay: Player | Character | Health. Most
+      games put it on Tab, so either the companion picker moves to another
+      key or the list gets a free one. Alternative: add the player's name
+      under each portrait in Exult's party bar.
+- [ ] **Arrows to other players.** Like the arrow back to the Avatar when
+      out of range, one per player, each in its own color.
+- [ ] **Suggest a reply.** During the Avatar's conversation, a guest clicks
+      a keyword to highlight it on the host's screen with their name. The
+      Avatar still chooses. Few U7 choices really matter, but it lets
+      guests take part.
+- [ ] **Spectator camera.** Spectators press a key to cycle the view
+      between players.
+- [ ] **Autosave every 5 minutes** on the host, in their own rotating slots
+      (for example the last 3), never over a player's own saves, with the
+      oldest deleted so they don't pile up. Exult has no autosave of its own
+      to build on.
+- [ ] **Chat log.** A small log of recent lines that fades and can be
+      dismissed, for spectators (who have no body) and everyone else.
+      Players with a companion show overhead and in the log. Keep it to
+      player chat and a few session notices, so it never fills up like an
+      old MMO chat window.
+- [ ] **Whispers and emotes**, Ultima Online style: `/w name text`, and
+      emotes such as `/wave` or `/bow` that animate the companion.
+- [ ] **Shared objective (to think about).** A short line the Avatar sets
+      and keeps updated ("Find Christopher's murderer") as a reminder for
+      the companions. No quest log or guide arrows.
+
+Later: players' positions on the cloth map (M); pings to point at a spot
+or object (more useful with a longer leash).
+
+Decided against: returning to the title menu when the host leaves (Exult
+doesn't work that way), votes or ready checks (the Avatar calls the shots;
+revisit only with a much longer leash, like Minecraft's "everyone in bed"),
+item requests (players ask in chat), auto-follow when idle (Spectate,
+follow mode and the leash cover it), and stances (companions keep the
+combat behavior Exult's AI already gives them).
+
 ## Possible future projects
 
 Not part of this build-out; ideas for after the release.
