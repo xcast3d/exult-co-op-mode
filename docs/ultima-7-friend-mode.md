@@ -247,6 +247,7 @@ Only the purchase or training itself is carried out by the host.
 - [ ] Catch the purchase, sale or training on the guest and send it to the
       host as one request; the host checks and applies it and the usual
       sync brings the result back.
+- [x] Stats, experience and level-ups reach guests.
 - [ ] Money stays the party's: the host checks and takes the party's gold,
       as the game already does, with no separate guest purse.
 - [ ] Keep anything else the local conversation changes (flags, items,

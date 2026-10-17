@@ -2348,7 +2348,9 @@ static void Friend_mode_apply_sprite(const std::vector<unsigned char>& data) {
 	}
 }
 
-// Host: health of creatures and NPCs near the players, when it changes.
+// Host: health of creatures and NPCs near the players, when it changes,
+// with strength (the most health): a guest's own copy of a creature rolls
+// its own random strength, which made full health look hurt.
 static std::map<uint32, int> friend_health_sent;
 
 static void Friend_mode_health_pass() {
@@ -2366,14 +2368,17 @@ static void Friend_mode_health_pass() {
 			continue;    // Not known to guests by number.
 		}
 		const uint32 key    = actor->get_npc_num() > 0 ? static_cast<uint32>(actor->get_npc_num()) : (creature | 0x80000000U);
-		const int    health = actor->get_property(static_cast<int>(Actor::health));
-		const auto   found  = friend_health_sent.find(key);
-		if (found != friend_health_sent.end() && found->second == health) {
+		const int    health   = actor->get_property(static_cast<int>(Actor::health));
+		const int    strength = actor->get_property(static_cast<int>(Actor::strength));
+		const int    state    = (health & 0xffff) | (strength << 16);
+		const auto   found    = friend_health_sent.find(key);
+		if (found != friend_health_sent.end() && found->second == state) {
 			continue;
 		}
-		friend_health_sent[key] = health;
+		friend_health_sent[key] = state;
 		Friend_put_actor_ref(payload, actor);
 		Friend_put16(payload, health & 0xffff);
+		Friend_put16(payload, strength & 0xffff);
 		++count;
 	}
 	if (count > 0) {
@@ -2387,9 +2392,11 @@ static void Friend_mode_apply_health(const std::vector<unsigned char>& data) {
 	size_t    pos   = 0;
 	const int count = Friend_get16(data, pos);
 	for (int i = 0; i < count && pos < data.size(); ++i) {
-		Actor*    actor  = Friend_get_actor_ref(data, pos);
-		const int health = static_cast<sint16>(Friend_get16(data, pos));
+		Actor*    actor    = Friend_get_actor_ref(data, pos);
+		const int health   = static_cast<sint16>(Friend_get16(data, pos));
+		const int strength = static_cast<sint16>(Friend_get16(data, pos));
 		if (actor && !actor->is_in_party() && pos <= data.size()) {
+			actor->set_property(static_cast<int>(Actor::strength), strength);
 			actor->set_property(static_cast<int>(Actor::health), health);
 		}
 	}
@@ -2698,6 +2705,11 @@ constexpr int friend_status_flags[] = {Obj_flags::asleep,    Obj_flags::charmed,
 std::vector<unsigned char> friend_last_party_status;
 }    // namespace
 
+// Stats sent with party status (after health and food).
+constexpr std::array<int, 7> friend_status_stats{
+		Actor::strength, Actor::dexterity, Actor::intelligence, Actor::combat,
+		Actor::mana,     Actor::magic,     Actor::training};
+
 static std::vector<unsigned char> Friend_party_status() {
 	std::vector<Actor*> party_actors{gwin->get_main_actor()};
 	Party_manager*      party = gwin->get_party_man();
@@ -2719,6 +2731,14 @@ static std::vector<unsigned char> Friend_party_status() {
 		Friend_put8(out, bits);
 		Friend_put16(out, actor->get_property(static_cast<int>(Actor::health)) + 128);    // Can go negative.
 		Friend_put8(out, actor->get_property(static_cast<int>(Actor::food_level)));
+		// Stats, training points and experience (the level comes from it),
+		// so training and level-ups show on guests.
+		for (const int prop : friend_status_stats) {
+			Friend_put16(out, actor->get_property(prop) & 0xffff);
+		}
+		const int exp = actor->get_property(static_cast<int>(Actor::exp));
+		Friend_put16(out, exp & 0xffff);
+		Friend_put16(out, (exp >> 16) & 0xffff);
 	}
 	return out;
 }
@@ -2733,8 +2753,9 @@ static void Friend_mode_status_pass(bool force) {
 }
 
 static void Friend_mode_apply_party_status(const std::vector<unsigned char>& data) {
-	auto get16 = [&](std::size_t at) { return data[at] | (data[at + 1] << 8); };
-	for (std::size_t at = 0; at + 6 <= data.size(); at += 6) {
+	auto              get16 = [&](std::size_t at) { return data[at] | (data[at + 1] << 8); };
+	const std::size_t entry = 6 + 2 * std::size(friend_status_stats) + 4;
+	for (std::size_t at = 0; at + entry <= data.size(); at += entry) {
 		const int npc    = get16(at);
 		const int bits   = data[at + 2];
 		const int health = get16(at + 3) - 128;
@@ -2754,8 +2775,16 @@ static void Friend_mode_apply_party_status(const std::vector<unsigned char>& dat
 		}
 		actor->set_property(static_cast<int>(Actor::health), health);
 		actor->set_property(static_cast<int>(Actor::food_level), food);
+		// Experience first: on its own it would add training points for a
+		// new level, which the host's training value then replaces.
+		const std::size_t stats = at + 6;
+		const std::size_t exp_at = stats + 2 * std::size(friend_status_stats);
+		actor->set_property(static_cast<int>(Actor::exp), get16(exp_at) | (get16(exp_at + 2) << 16));
+		for (std::size_t i = 0; i < std::size(friend_status_stats); ++i) {
+			actor->set_property(friend_status_stats[i], static_cast<sint16>(get16(stats + 2 * i)));
+		}
 	}
-	gwin->set_all_dirty();    // Portraits show poison and health.
+	gwin->set_all_dirty();    // Portraits show poison and health; stats windows.
 }
 
 // ---- Game clock and weather ---------------------------------------------

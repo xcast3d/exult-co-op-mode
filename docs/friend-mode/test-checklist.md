@@ -394,6 +394,17 @@ Shift+F9 on the host gives a rat, a wolf and a rabbit to fight.
       party get none. Moving creatures leave no trails of old bars.
 - [ ] The same on the guest with its own option on.
 
+## Stats and experience
+
+- [ ] Guest opens its companion's stats (paperdoll, stats button) and the
+      host opens the same: every number matches, including experience,
+      level and training points.
+- [ ] The guest's companion kills a creature (Shift+F9): its experience
+      goes up on both.
+- [ ] Host raises the companion's experience past a level (cheat screen,
+      or more fights): the guest's stats window shows the new level and the
+      same training points as the host's.
+
 ## Shops
 
 Trinsic has Dell's shop (weapons, armour, provisions); go during shop hours.

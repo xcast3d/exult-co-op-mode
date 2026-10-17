@@ -199,6 +199,20 @@ Built and tested 2026-10-17:
   drawing them (the host used to send only those in Exult's 'nearby' list,
   around its own view).
 
+Built and tested 2026-10-17 (protocol version 22): **stats,
+experience and levels reach guests.** Party status used to carry only
+health, food level and status effects; it now also has strength,
+dexterity, intelligence, combat, mana, magic, training points and
+experience for every party member. The level is worked out from
+experience, so level-ups show in the guest's stats window too (Exult shows
+no level-up message of its own). Tested: everything matches, and the
+guest's companion's experience goes up from its fights.
+
+Fixed after that test (protocol version 23): new creatures showed a hurt
+health bar on the guest. The guest's copy of a creature rolls its own
+random strength (the most health), which differed from the host's; the
+host now sends strength with health. Retested and working.
+
 Built and tested 2026-10-17 (protocol version 21): **guests can shop.**
 Double-clicking a merchant runs the conversation on the guest only, with
 the companion's portrait; each purchase is made on the host with the
