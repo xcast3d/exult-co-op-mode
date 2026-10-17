@@ -41,7 +41,7 @@ for it. Options, easiest first:
 
 1. **A Windows PC or VM with MSYS2** (UTM or Parallels on Apple silicon
    runs Windows 11 for Arm, which runs x64 builds). Follow Exult's
-   `INSTALL` / `README.win32`, then `configure` and `make` as on the Mac.
+   `README.windows` (its build section), then `configure` and `make` as on the Mac.
    Best for the first build and for testing Mac-to-Windows play by hand.
 2. **Bitbucket Pipelines** with a Windows runner (or a self-hosted one) to
    build on each push. Later, once the manual build works.
