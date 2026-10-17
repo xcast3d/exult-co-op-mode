@@ -1,6 +1,8 @@
 # Multi-guest sessions and companion switching (plan)
 
-**Status:** planned, not built.
+**Status:** M1 and M2 built and tested 2026-10-17 (protocol version 26); M3–M5 to do. Decided: a connection interface in its own files,
+shared change caches broadcast to every guest, and up to 4 watchers beyond
+one guest per companion (trim to 7 guests later if internet tests need it).
 **Goal:** several guests in one host session, each controlling a different
 companion, with free companion switching in the style of Marvel Ultimate
 Alliance. Target 4 players for testing; design for the full party.
@@ -153,7 +155,7 @@ starts N guests with `--friend-join 127.0.0.1`.
 
 | # | Slice | Done when |
 | --- | --- | --- |
-| M1 | Session split into peers plus generic text messages. Still one guest; protocol 6. | The current two-player test passes unchanged. |
+| M1 | Connection interface (`friendconn.h`, `friendtcp.cc`), session split into peers plus generic text messages. Still one guest. | The current two-player test passes unchanged. |
 | M2 | Player IDs, controller table, `PlayerList`, multiple reserved actors on the host. | Two guests control Iolo and Spark at the same time and see each other move. |
 | M3 | Chat relay and broadcast notices. | All three players see each other's chat over the right heads. |
 | M4 | Companion switching on `Tab`. | A guest moves from Iolo to Dupre, and a second guest then takes Iolo. |
@@ -167,4 +169,5 @@ starts N guests with `--friend-join 127.0.0.1`.
 
 ## Open questions
 
-1. Should spectators be capped (for example 4 beyond the party)?
+1. ~~Should spectators be capped?~~ Decided: 4 beyond one guest per
+   companion. Revisit after internet tests (possibly 7 guests at most).

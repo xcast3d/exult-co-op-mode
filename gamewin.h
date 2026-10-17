@@ -137,8 +137,16 @@ class Game_window {
 	bool                      network_spectating = false;
 	bool                      friend_leash_blocked = false;
 	bool                      network_host_paused  = false;
-	Actor*                    remote_friend_actor;
-	int                       remote_friend_actor_previous_schedule;
+public:
+	// Friend Mode host: a companion a guest controls, and its schedule from
+	// before (restored when released).
+	struct Remote_friend {
+		Actor* actor;
+		int    previous_schedule;
+	};
+
+private:
+	std::vector<Remote_friend> remote_friends;
 	Actor*                    camera_actor;    // What to center view around.
 	std::vector<Actor_shared> npcs;            // Array of NPC's + the Avatar.
 	std::vector<Dead_body*>   bodies;          // Corresponding Dead_body's.
@@ -623,9 +631,11 @@ public:
 	Actor* get_controlled_actor() const {
 		return controlled_actor;
 	}
-	Actor* get_remote_friend_actor() const {
-		return remote_friend_actor;
+	const std::vector<Remote_friend>& get_remote_friends() const {
+		return remote_friends;
 	}
+	// Friend Mode host: is this a companion some guest controls?
+	bool is_remote_friend(const Game_object* obj) const;
 	// Friend Mode host: within a screenful of a guest's companion, where
 	// creatures and NPCs stay awake as they do near the Avatar.
 	bool near_remote_friend(const Game_object* obj) const;
@@ -671,8 +681,9 @@ public:
 		return network_dialogue_paused;
 	}
 	void set_network_dialogue_paused(bool paused);
+	// Friend Mode host: a guest takes a companion (others keep theirs).
 	bool reserve_friend_mode_actor(int npc_num);
-	void release_remote_friend_mode_actor();
+	void release_remote_friend_mode_actor(int npc_num);
 
 	bool is_main_actor_inside() const {
 		return skip_above_actor < 31;

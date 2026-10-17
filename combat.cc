@@ -201,7 +201,7 @@ void Combat_schedule::start_battle() {
 	Game_object* target = npc->get_target();
 	// A Friend Mode guest's companion fights for a player too: its battles
 	// get the same music (and victory tune) as the Avatar's.
-	const bool player_fighter = npc == gwin->get_main_actor() || npc == gwin->get_remote_friend_actor();
+	const bool player_fighter = npc == gwin->get_main_actor() || gwin->is_remote_friend(npc);
 	if (player_fighter && curtime - battle_time >= 30000 && (!opponents.empty() || (target && target->as_actor()))) {
 		start_music_combat((rand() % 2) ? CSAttacked1 : CSAttacked2, false);
 		battle_time     = curtime;

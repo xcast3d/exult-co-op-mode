@@ -85,6 +85,7 @@
 #include "version.h"
 #include "virstone.h"
 
+#include <algorithm>
 #include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
@@ -314,8 +315,6 @@ Game_window::Game_window(
 		  in_dungeon(0), num_npcs1(0), std_delay(c_std_delay), time_stopped(0), special_light(0), theft_warnings(0), theft_cx(255),
 		  theft_cy(255), moving_barge(nullptr), main_actor(nullptr), controlled_actor(nullptr),
 		  controlled_actor_previous_schedule(-1), network_friend_control(false), network_dialogue_paused(false),
-		  remote_friend_actor(nullptr),
-		  remote_friend_actor_previous_schedule(-1),
 		  camera_actor(nullptr), npcs(0), bodies(0), scrolltx(0),
 		  scrollty(0), dirty(0, 0, 0, 0), save_names{}, mouse3rd(false), fastmouse(false), double_click_closes_gumps(false),
 		  text_bg(false), step_tile_delta(8), allow_right_pathfind(2), scroll_with_mouse(false), alternate_drop(false),
@@ -986,8 +985,7 @@ void Game_window::clear_world(bool restoremapedit) {
 	main_actor   = nullptr;
 	controlled_actor = nullptr;
 	controlled_actor_previous_schedule = -1;
-	remote_friend_actor = nullptr;
-	remote_friend_actor_previous_schedule = -1;
+	remote_friends.clear();
 	camera_actor = nullptr;
 	num_npcs1    = 0;
 	theft_cx = theft_cy = -1;
@@ -1255,34 +1253,50 @@ void Game_window::set_network_dialogue_paused(bool paused) {
 }
 
 bool Game_window::near_remote_friend(const Game_object* obj) const {
-	return remote_friend_actor && obj && obj != remote_friend_actor && obj->get_map() == remote_friend_actor->get_map()
-		   && obj->distance(remote_friend_actor) <= 1 + c_screen_tile_size;
+	if (!obj) {
+		return false;
+	}
+	for (const Remote_friend& each : remote_friends) {
+		if (obj != each.actor && obj->get_map() == each.actor->get_map()
+			&& obj->distance(each.actor) <= 1 + c_screen_tile_size) {
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Game_window::is_remote_friend(const Game_object* obj) const {
+	return obj && std::any_of(remote_friends.begin(), remote_friends.end(), [obj](const Remote_friend& each) {
+			   return each.actor == obj;
+		   });
 }
 
 bool Game_window::reserve_friend_mode_actor(int npc_num) {
 	Actor* companion = get_npc(npc_num);
-	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()) {
+	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()
+		|| is_remote_friend(companion)) {
 		return false;
 	}
-	release_remote_friend_mode_actor();
 	companion->stop();
-	remote_friend_actor_previous_schedule = companion->get_schedule_type();
+	remote_friends.push_back({companion, companion->get_schedule_type()});
 	companion->set_schedule_type(Schedule::wait);
-	remote_friend_actor = companion;
 	cout << "Friend Mode: reserved " << companion->get_name() << " for remote control" << endl;
 	return true;
 }
 
-void Game_window::release_remote_friend_mode_actor() {
-	if (!remote_friend_actor) {
+void Game_window::release_remote_friend_mode_actor(int npc_num) {
+	for (auto it = remote_friends.begin(); it != remote_friends.end(); ++it) {
+		Actor* actor = it->actor;
+		if (actor->get_npc_num() != npc_num) {
+			continue;
+		}
+		actor->stop();
+		if (it->previous_schedule >= 0 && actor->is_in_party()) {
+			actor->set_schedule_type(it->previous_schedule);
+		}
+		remote_friends.erase(it);
 		return;
 	}
-	remote_friend_actor->stop();
-	if (remote_friend_actor_previous_schedule >= 0 && remote_friend_actor->is_in_party()) {
-		remote_friend_actor->set_schedule_type(remote_friend_actor_previous_schedule);
-	}
-	remote_friend_actor = nullptr;
-	remote_friend_actor_previous_schedule = -1;
 }
 
 /*
@@ -2223,7 +2237,7 @@ void Game_window::teleport_party(
 		Actor*    person       = get_npc(party_member);
 		// A Friend Mode guest's companion waits on the host but still travels.
 		if (person && !person->is_dead()
-			&& (person->get_schedule_type() != Schedule::wait || person == remote_friend_actor)
+			&& (person->get_schedule_type() != Schedule::wait || is_remote_friend(person))
 			&& (person->can_act() || no_status_check)) {
 			person->set_action(nullptr);
 			const Tile_coord t1 = Map_chunk::find_spot(t, 8, person->get_shapenum(), person->get_framenum(), 1);
@@ -3377,7 +3391,16 @@ void Game_window::emulate_cache(Map_chunk* olist, Map_chunk* nlist) {
 		auto near_chunk = [&](int cx, int cy, int ax, int ay) {
 			return chunk_dist(cx, ax) <= keep_chunks && chunk_dist(cy, ay) <= keep_chunks;
 		};
-		const Actor*       guest = remote_friend_actor;
+		auto near_guest = [&](int cx, int cy) {
+			for (const Remote_friend& each : remote_friends) {
+				const Actor* guest = each.actor;
+				if (guest->get_map() == omap && !guest->is_pos_invalid()
+					&& near_chunk(cx, cy, guest->get_cx(), guest->get_cy())) {
+					return true;
+				}
+			}
+			return false;
+		};
 		Game_object_vector removes;
 		for (int dy = -keep_chunks; dy <= keep_chunks; dy++) {
 			for (int dx = -keep_chunks; dx <= keep_chunks; dx++) {
@@ -3386,9 +3409,8 @@ void Game_window::emulate_cache(Map_chunk* olist, Map_chunk* nlist) {
 				if (nmap == omap && near_chunk(cx, cy, newx, newy)) {
 					continue;    // Still near.
 				}
-				if (guest && guest->get_map() == omap && !guest->is_pos_invalid()
-					&& near_chunk(cx, cy, guest->get_cx(), guest->get_cy())) {
-					continue;    // Near the guest's companion.
+				if (near_guest(cx, cy)) {
+					continue;    // Near a guest's companion.
 				}
 				Map_chunk* list = omap->get_chunk_safely(cx, cy);
 				if (!list) {

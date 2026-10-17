@@ -212,6 +212,9 @@
     <ClCompile Include="..\..\friendnet.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\friendtcp.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\game.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -827,6 +830,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\exultmenu.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\friendconn.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\friendnet.h">

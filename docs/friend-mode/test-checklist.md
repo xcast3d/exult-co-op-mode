@@ -485,6 +485,38 @@ Turn music on in the guest's audio options if it is off.
 - [ ] Host disables audio, then the guest fights the rat: the guest still
       plays the battle and victory music.
 
+## Two guests (Phase 6)
+
+Three windows on one Mac: the host and two guests, each guest with its own
+config and gamedat. The host needs a party with at least two companions
+(Iolo and Spark, or later). The second guest's config has audio off.
+
+```bash
+./exult --bg --nocrc -c .friend-mode-local/guest2.cfg --friend-join 127.0.0.1
+```
+
+- [ ] Guest 1 joins and takes Iolo; guest 2 joins. Guest 2's picker shows
+      only the companions nobody has (not Iolo).
+- [ ] Guest 2 takes Spark. Host: "<name> enters the world as Spark".
+- [ ] Each guest sees the other's companion walk (not stand still or run
+      its own AI), and the Avatar.
+- [ ] Clicking another guest's companion shows `Spark (Name)` on every
+      machine.
+- [ ] Chat from guest 1 shows over Iolo on the host and on guest 2; chat
+      from guest 2 over Spark on the host and guest 1; host chat over the
+      Avatar on both guests.
+- [ ] Both guests pick up, drop and use items; each guest's held item is
+      its own (guest 2 can't take what guest 1 holds).
+- [ ] Each guest's leash works on its own ("The Avatar needs you").
+- [ ] Guest 1 writes in the journal: the host and guest 2 see the bar and
+      guest 1's name on the note.
+- [ ] Guest 1 presses Tab and picks a companion guest 2 has just taken:
+      "That companion is taken".
+- [ ] Close guest 1: "<name> has left; Iolo rejoins the party"; guest 2
+      keeps playing.
+- [ ] The host loads a save with both connected: both get the new world
+      and their companions back.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".

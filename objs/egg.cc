@@ -526,8 +526,8 @@ public:
 		if (gwin->has_network_friend_control()) {
 			return;    // Friend Mode guest: the host teleports and tells us.
 		}
-		Actor* guest_actor = gwin->get_remote_friend_actor();
-		if (pos.tx != -1 && obj && guest_actor && obj == guest_actor) {
+		Actor* guest_actor = gwin->is_remote_friend(obj) ? obj->as_actor() : nullptr;
+		if (pos.tx != -1 && guest_actor) {
 			// Friend Mode host: a guest's companion stepped on it.  Send just
 			// that companion, not the Avatar and the rest of the party.
 			const Tile_coord spot = Map_chunk::find_spot(pos, 3, guest_actor);
@@ -875,7 +875,7 @@ bool Egg_object::is_active(
 	// would, so creatures appear wherever a player walks.  Other eggs
 	// (scripts, music, weather) stay the Avatar's.
 	const bool avatar_like = obj == gwin->get_main_actor()
-							 || (type == monster && obj && obj == gwin->get_remote_friend_actor());
+							 || (type == monster && gwin->is_remote_friend(obj));
 
 	const int deltaz = tz - get_lift();
 	switch (cri) {

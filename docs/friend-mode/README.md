@@ -72,6 +72,51 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Phase 6, M1 and M2, built and tested 2026-10-17 (protocol version 26).**
+Three windows on one Mac (host, guests on Iolo and Spark): movement, chat,
+opening and closing windows, teleporting and a host load with both guests
+connected all work. The host takes several guests:
+
+- **One connection interface.** The socket code is now in `friendtcp.cc`
+  behind `Friend_connection` and `Friend_listener` (`friendconn.h`), a
+  reliable byte stream, so a WebRTC data channel (Phase 8) can slot in
+  without touching the messages.
+- **One session, several peers.** `Friend_mode_session` keeps a `Peer` per
+  connection (framing, outgoing queue, name, half-arrived text and blobs,
+  the latest requests). Guests get a player number (host 0, guests 1 and
+  up) when accepted. Every send goes to every guest unless it names one;
+  what the host reads says which guest sent it. Speech, chat, names and
+  dialogue text share one text message.
+- **A record per guest on the host** (`Friend_guest` in `exult.cc`):
+  companion, last position sent, held item, leash timer, attack, journal
+  window. `Game_window` keeps a list of reserved companions, and combat,
+  eggs, teleporters, waking sleepers, item sync and "creatures stay awake
+  near guests" work for each of them.
+- **Player list.** The host sends every player's name and companion when it
+  changes, so guests label each other's companions and name chat senders.
+  Chat from a guest is shown on the host and passed on to the other guests.
+- The picker offers each guest only companions nobody else has. Guests
+  beyond one per companion plus 4 watching are turned away with "The
+  host's game is full".
+- The "last sent" caches stay shared: changes go to every guest, and a new
+  guest's world download resends everything to everyone.
+
+Fixed after that test: a lit lamp post (or any animated object) made item
+sync resend its chunk four times a second, because its frame keeps
+changing; animated objects now count as the first frame of their cycle.
+Guests get their player number when accepted, so port probes no longer use
+numbers up.
+
+To test with three windows, see "Two guests" in the
+[test checklist](test-checklist.md). The second guest uses
+`.friend-mode-local/guest2.cfg` (own gamedat and saves, audio off).
+
+Next: M3–M5 in the [multi-guest plan](multi-guest-plan.md) (join/leave
+notices on every machine, Tab switching between guests, party-change edge
+cases).
+
+## Earlier sessions
+
 The item pick-up model, the host pause bar and chest windows staying open on
 the guest were tested on one Mac on 2026-10-16 and work. The two-tester
 contention checks have not been run with a second person yet.

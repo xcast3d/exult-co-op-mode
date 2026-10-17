@@ -223,7 +223,7 @@ One player per eligible party companion, plus spectators. See the
 - [ ] Several peers on the host, each with its own assignment, held items
       and leash.
 - [ ] The host relays chat and world updates to every guest.
-- [ ] Put the socket code in `friendnet.cc` behind one small connection
+- [x] Put the socket code in `friendnet.cc` behind one small connection
       interface at the same time, ready for WebRTC (Phase 8).
 - [ ] The two-person checks (two people grabbing the same item), now with
       three or more.
