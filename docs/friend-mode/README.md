@@ -202,7 +202,8 @@ Built and tested 2026-10-17:
 Built and tested 2026-10-17 (protocol version 20). Also checked while
 testing: a guest's companion dying leaves the guest watching, and Tab picks
 another; the Avatar dying reloaded the last save (early in the story, before
-the healer resurrection).
+the healer resurrection), and the guest followed the host into the reloaded
+world.
 
 - **World sounds on the guest.** Each side hears the right sound whoever
   caused it, quieter the farther away. The host sends the sounds the world
