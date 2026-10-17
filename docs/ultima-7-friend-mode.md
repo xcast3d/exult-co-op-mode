@@ -242,13 +242,13 @@ Only the purchase or training itself is carried out by the host.
 - [x] Find how Black Gate's merchant and trainer scripts buy, sell and
       train, and which NPCs offer them
       ([findings and plan](friend-mode/shops-and-trainers.md)).
-- [x] Let a guest's companion talk to merchants locally; other NPCs keep
-      "The Avatar must do this". (Trainers next.)
-- [ ] Catch the purchase, sale or training on the guest and send it to the
+- [x] Let a guest's companion talk to merchants and trainers locally;
+      other NPCs keep "The Avatar must do this".
+- [x] Catch the purchase, sale or training on the guest and send it to the
       host as one request; the host checks and applies it and the usual
       sync brings the result back.
 - [x] Stats, experience and level-ups reach guests.
-- [ ] Money stays the party's: the host checks and takes the party's gold,
+- [x] Money stays the party's: the host checks and takes the party's gold,
       as the game already does, with no separate guest purse.
 - [ ] Keep anything else the local conversation changes (flags, items,
       remarks) on the guest only, and throw it away when it ends.
