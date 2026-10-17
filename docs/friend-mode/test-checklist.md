@@ -394,6 +394,23 @@ Shift+F9 on the host gives a rat, a wolf and a rabbit to fight.
       party get none. Moving creatures leave no trails of old bars.
 - [ ] The same on the guest with its own option on.
 
+## Trainers
+
+Markus trains in Trinsic. The companion needs training points (from
+experience) and the party needs gold.
+
+- [ ] Guest double-clicks Markus: the conversation opens on the guest only,
+      with the companion's portrait.
+- [ ] "train": "Which of you wishes to train?" lists only the guest's
+      companion (and "Nobody").
+- [ ] Train: the gold leaves the party and the companion's stats and
+      training points change, on both machines (stats window).
+- [ ] With no training points: Markus says the companion needs more
+      experience; nothing changes.
+- [ ] With too little gold: refused; nothing changes.
+- [ ] Host trains with Markus as the Avatar: the whole party is listed, as
+      usual.
+
 ## Stats and experience
 
 - [ ] Guest opens its companion's stats (paperdoll, stats button) and the

@@ -199,6 +199,11 @@ Built and tested 2026-10-17:
   drawing them (the host used to send only those in Exult's 'nearby' list,
   around its own view).
 
+Built and tested 2026-10-17 (protocol version 24): **guests can train**
+with trainers; the trainee list shows only the guest's companion and the
+host applies the training with the party's gold. Details:
+[shops and trainers](shops-and-trainers.md).
+
 Built and tested 2026-10-17 (protocol version 22): **stats,
 experience and levels reach guests.** Party status used to carry only
 health, food level and status effects; it now also has strength,

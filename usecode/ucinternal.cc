@@ -1225,6 +1225,12 @@ Usecode_value Usecode_internal::remove_party_items(
  *  goods first so it happens whole or not at all.
  */
 
+bool Usecode_internal::running_function(int id) const {
+	return std::any_of(call_stack.begin(), call_stack.end(), [id](const Stack_frame* frame) {
+		return frame && frame->function && frame->function->id == id;
+	});
+}
+
 Usecode_value Usecode_internal::add_items_to_buyer(
 		Actor* buyer, Usecode_value& quantval, Usecode_value& shapeval, Usecode_value& qualval, Usecode_value& frameval,
 		Usecode_value& temporary) {

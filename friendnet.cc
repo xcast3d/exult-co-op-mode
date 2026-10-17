@@ -53,7 +53,7 @@ bool start_sockets() {
 	return true;
 }
 
-constexpr unsigned short protocol_version = 23;
+constexpr unsigned short protocol_version = 24;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;

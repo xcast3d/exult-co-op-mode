@@ -82,6 +82,27 @@ if the companion's pack is full. Retested and working.
   The story flags go out as bits when they change (twice a second at most),
   held back while a guest's merchant conversation is open.
 
+## Built: trainers (2026-10-17, protocol version 24)
+
+Tested with Markus in Trinsic: refused when the companion had no training
+points (Iolo), trained Spark, and the stats matched on host and guest.
+
+- The 17 trainers (Inforlem included, who also sells) talk to a guest's
+  companion the same way as merchants.
+- "Which of you wishes to train?" lists only the guest's companion: inside
+  Black Gate's trainee pickers (090D, 0921), `get_party_list` answers with
+  the companion alone (`Usecode_internal::running_function` checks the
+  call stack). The rest of the conversation sees the whole party.
+- Training pays first, then raises stats through 0912 (`set_npc_prop`). A
+  payment with nothing bought is held; the companion's stat changes that
+  follow are collected, and both go to the host as one training session
+  when the next payment comes or the conversation ends. The host checks the
+  gold, takes it, and applies the changes to the guest's own companion only
+  (strength, dexterity, intelligence, combat, mana, magic and training
+  points, at most 10 each). The stat sync brings them back.
+- A payment followed by no stat changes (an inn room, say) still stays on
+  the guest only.
+
 ## The NPCs
 
 Names come from `npc.dat` (best effort). Routine numbers are usecode

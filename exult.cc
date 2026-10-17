@@ -2468,15 +2468,21 @@ static void Friend_mode_apply_sound(const std::vector<unsigned char>& data) {
 // purchase (the item, then the gold) goes to the host, which takes the
 // party's gold and gives the item.  See docs/friend-mode/shops-and-trainers.md.
 
-// Black Gate merchants, by NPC number (tools/friend-mode/shops_and_trainers.py,
-// "shop" rows; Inforlem also trains, so he waits for trainers).
+// Black Gate merchants and trainers, by NPC number
+// (tools/friend-mode/shops_and_trainers.py, "shop" and "train" rows).
 static const std::unordered_set<int> friend_merchants{
 		18,  19,  24,  37,  38,  47,  50,  51,  52,  53,  54,  55,  59,  67,  74,  79,  87,  92,  102, 118, 121, 123,
-		130, 153, 163, 179, 188, 189, 190, 194, 196, 198, 199, 206, 207, 215, 216, 219, 222, 229, 231, 237};
+		130, 153, 163, 179, 181, 188, 189, 190, 194, 196, 198, 199, 206, 207, 215, 216, 219, 222, 229, 231, 237,
+		// Trainers (Inforlem, 181, does both).
+		7, 20, 36, 49, 76, 94, 95, 104, 115, 119, 159, 161, 192, 205, 228, 238};
 constexpr int friend_gold_shape = 644;
 
 static std::unordered_map<int, int>                    friend_host_schedules;    // Guest: NPC -> host's schedule.
 static std::vector<Usecode_machine::Party_trade_item> friend_pending_adds;      // Guest: bought, not paid yet.
+// Guest: gold paid for nothing yet (training pays first), and the
+// companion's stat changes that follow it.
+static std::optional<Usecode_machine::Party_trade_item> friend_pending_payment;
+static std::vector<std::array<int, 2>>                  friend_pending_training;    // Property, change.
 static std::vector<unsigned char>                      friend_flags_sent;        // Host: last flags sent.
 static std::vector<unsigned char>                      friend_flags_waiting;     // Guest: arrived mid-conversation.
 
@@ -2490,18 +2496,12 @@ int Friend_mode_host_schedule(const Actor* npc) {
 	return found == friend_host_schedules.end() ? -1 : found->second;
 }
 
-void Friend_mode_note_party_trade(bool add, int quantity, int shape, int quality, int frame) {
-	if (friend_session.mode() != Friend_mode_session::Mode::guest) {
-		return;
-	}
-	if (add) {
-		friend_pending_adds.push_back({quantity, shape, quality, frame});
-		return;
-	}
-	// Paying: whatever the party just got is what this buys.  Payments
-	// for nothing (rooms, training) wait for their own support.
-	if (friend_pending_adds.empty() || !friend_session.connected()) {
-		friend_pending_adds.clear();
+// Guest: send one purchase or training session to the host: what was paid,
+// what the party got, and the companion's stat changes.
+static void Friend_mode_send_trade(
+		const Usecode_machine::Party_trade_item& payment, const std::vector<Usecode_machine::Party_trade_item>& adds,
+		const std::vector<std::array<int, 2>>& training) {
+	if (!friend_session.connected()) {
 		return;
 	}
 	std::vector<unsigned char> payload;
@@ -2511,14 +2511,54 @@ void Friend_mode_note_party_trade(bool add, int quantity, int shape, int quality
 		}
 	};
 	Friend_put8(payload, 1);
-	put_item({quantity, shape, quality, frame});
-	Friend_put8(payload, static_cast<int>(friend_pending_adds.size()));
-	for (const auto& item : friend_pending_adds) {
+	put_item(payment);
+	Friend_put8(payload, static_cast<int>(adds.size()));
+	for (const auto& item : adds) {
 		put_item(item);
 	}
-	friend_pending_adds.clear();
+	Friend_put8(payload, static_cast<int>(training.size()));
+	for (const auto& [prop, delta] : training) {
+		Friend_put8(payload, prop);
+		Friend_put16(payload, delta & 0xffff);
+	}
 	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_trade, payload);
-	cout << "Friend Mode: sent a purchase (" << quantity << " gold)" << endl;
+	cout << "Friend Mode: sent a " << (training.empty() ? "purchase" : "training session") << " (" << payment[0]
+		 << " gold)" << endl;
+}
+
+// Guest: a payment held for training goes out with the stat changes made
+// since (none: a payment for nothing, which stays here for now).
+static void Friend_mode_flush_training() {
+	if (friend_pending_payment && !friend_pending_training.empty()) {
+		Friend_mode_send_trade(*friend_pending_payment, {}, friend_pending_training);
+	}
+	friend_pending_payment.reset();
+	friend_pending_training.clear();
+}
+
+void Friend_mode_note_party_trade(bool add, int quantity, int shape, int quality, int frame) {
+	if (friend_session.mode() != Friend_mode_session::Mode::guest) {
+		return;
+	}
+	if (add) {
+		friend_pending_adds.push_back({quantity, shape, quality, frame});
+		return;
+	}
+	Friend_mode_flush_training();    // A new payment ends the last one.
+	if (friend_pending_adds.empty()) {
+		// Paid first: training (its stat changes come next).
+		friend_pending_payment = Usecode_machine::Party_trade_item{quantity, shape, quality, frame};
+		return;
+	}
+	// Paying for what the party just got.
+	Friend_mode_send_trade({quantity, shape, quality, frame}, friend_pending_adds, {});
+	friend_pending_adds.clear();
+}
+
+void Friend_mode_note_training(int prop, int delta) {
+	if (friend_session.mode() == Friend_mode_session::Mode::guest && friend_pending_payment) {
+		friend_pending_training.push_back({prop, delta});
+	}
 }
 
 // Host: a guest's purchase.  Only gold may be paid; the party must have it.
@@ -2541,14 +2581,30 @@ static void Friend_mode_trade_for_guest(const std::vector<unsigned char>& data, 
 	std::vector<Usecode_machine::Party_trade_item> adds;
 	read_list(removes);
 	read_list(adds);
+	// Training: the companion's stat changes (strength, dexterity,
+	// intelligence, combat, mana, magic, training points), small ones only.
+	std::vector<std::array<int, 2>> training;
+	const int                       stat_count = pos < data.size() ? data[pos++] : 0;
+	for (int i = 0; i < stat_count && i < 8; ++i) {
+		const int prop  = pos < data.size() ? data[pos++] : -1;
+		const int delta = static_cast<sint16>(Friend_get16(data, pos));
+		training.push_back({prop, delta});
+	}
+	const bool sane_training = std::all_of(training.begin(), training.end(), [](const auto& change) {
+		static const std::unordered_set<int> trainable{
+				Actor::strength, Actor::dexterity, Actor::intelligence, Actor::combat,
+				Actor::mana,     Actor::magic,     Actor::training};
+		return trainable.count(change[0]) && change[1] >= -10 && change[1] <= 10;
+	});
 	const bool gold_only = !removes.empty()
 						   && std::all_of(removes.begin(), removes.end(), [](const auto& item) {
 								  return item[1] == friend_gold_shape && item[0] > 0;
 							  });
-	const bool sane_adds = !adds.empty() && std::all_of(adds.begin(), adds.end(), [](const auto& item) {
+	const bool sane_adds = std::all_of(adds.begin(), adds.end(), [](const auto& item) {
 		return item[0] > 0 && item[0] <= 500 && item[1] >= 0;
 	});
-	if (pos > data.size() || !gold_only || !sane_adds) {
+	// Something must be bought: items, or training.
+	if (pos > data.size() || !gold_only || !sane_adds || !sane_training || (adds.empty() == training.empty())) {
 		cout << "Friend Mode: refused guest purchase (not a purchase)" << endl;
 		Friend_force_item_resync(actor);
 		return;
@@ -2563,8 +2619,16 @@ static void Friend_mode_trade_for_guest(const std::vector<unsigned char>& data, 
 		cout << "Friend Mode: refused guest purchase (the party can't pay)" << endl;
 		return;
 	}
-	cout << "Friend Mode: " << actor->get_name() << " bought shape " << adds.front()[1] << " for "
-		 << removes.front()[0] << " gold" << endl;
+	for (const auto& [prop, delta] : training) {    // Only ever the guest's own companion.
+		actor->set_property(prop, actor->get_property(prop) + delta);
+	}
+	if (training.empty()) {
+		cout << "Friend Mode: " << actor->get_name() << " bought shape " << adds.front()[1] << " for "
+			 << removes.front()[0] << " gold" << endl;
+	} else {
+		cout << "Friend Mode: " << actor->get_name() << " trained (" << training.size() << " changes) for "
+			 << removes.front()[0] << " gold" << endl;
+	}
 }
 
 bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
@@ -2575,11 +2639,14 @@ bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
 	}
 	Usecode_machine* usecode = gwin->get_usecode();
 	friend_pending_adds.clear();
+	friend_pending_payment.reset();
+	friend_pending_training.clear();
 	usecode->set_friend_shopper(own);
 	gwin->get_effects()->remove_text_effects();
 	usecode->init_conversation();
 	npc->activate();
 	usecode->set_friend_shopper(nullptr);
+	Friend_mode_flush_training();
 	friend_pending_adds.clear();    // Got without paying: stays here.
 	if (!friend_flags_waiting.empty()) {
 		std::vector<unsigned char> flags;

@@ -116,6 +116,8 @@ int Friend_mode_host_schedule(const Actor* npc);
 void Friend_mode_note_party_trade(bool add, int quantity, int shape, int quality, int frame);
 // Guest: talk to a merchant on our own copy.  False if 'npc' isn't one.
 bool Friend_mode_guest_talk_to_merchant(Actor* npc);
+// Guest, during a trainer conversation: the companion's 'prop' changed.
+void Friend_mode_note_training(int prop, int delta);
 // Friend Mode shared journal (see Notebook_gump).  True while connected.
 bool Friend_mode_journal_shared();
 // Start writing in shared note 'index'.  False if someone else is.

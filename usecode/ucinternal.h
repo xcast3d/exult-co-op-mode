@@ -501,6 +501,8 @@ public:
 	bool        friend_party_trade(
 				   const std::vector<Party_trade_item>& removes, const std::vector<Party_trade_item>& adds,
 				   Actor* buyer) override;
+	// Is function 'id' running (anywhere on the call stack)?
+	bool running_function(int id) const;
 	// Friend Mode: give items to 'buyer' first, then the rest of the party.
 	Usecode_value add_items_to_buyer(
 			Actor* buyer, Usecode_value& quantval, Usecode_value& shapeval, Usecode_value& qualval,

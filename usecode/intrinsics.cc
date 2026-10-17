@@ -483,6 +483,9 @@ USECODE_INTRINSIC(set_npc_prop) {
 				}
 				delta /= 2;    // Verified.
 			}
+			if (friend_shopper && npc == friend_shopper) {    // Friend Mode guest: training.
+				Friend_mode_note_training(prop, delta);
+			}
 			if (prop != static_cast<int>(Actor::sex_flag)) {
 				delta += npc->get_property(prop);    // NOT for gender.
 			}
@@ -510,6 +513,14 @@ USECODE_INTRINSIC(get_avatar_ref) {
 
 USECODE_INTRINSIC(get_party_list) {
 	ignore_unused_variable_warning(parms);
+	// Friend Mode guest at a trainer: "Which of you wishes to train?" lists
+	// only the guest's own companion (Black Gate's trainee pickers).
+	if (friend_shopper && GAME_BG && (running_function(0x090D) || running_function(0x0921))) {
+		Usecode_value only(friend_shopper);
+		Usecode_value u(0, nullptr);
+		u.concat(only);
+		return u;
+	}
 	// Return array with party members.
 	Usecode_value u(get_party());
 	return u;
