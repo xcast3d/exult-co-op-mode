@@ -54,6 +54,7 @@ on:
 
 jobs:
   ci-windows:
+    if: ${{ github.repository_owner == 'exult' }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false

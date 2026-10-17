@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 
@@ -28,6 +29,25 @@ void ignore_broken_pipe() {
 #ifndef _WIN32
 	std::signal(SIGPIPE, SIG_IGN);
 #endif
+}
+
+// Windows sockets must be started once per process before any socket call.
+bool start_sockets() {
+#ifdef _WIN32
+	static bool started = false;
+	if (!started) {
+		WSADATA data;
+		if (WSAStartup(MAKEWORD(2, 2), &data) != 0) {
+			std::cerr << "Friend Mode: could not start Windows sockets" << std::endl;
+			return false;
+		}
+		std::atexit([] {
+			WSACleanup();
+		});
+		started = true;
+	}
+#endif
+	return true;
 }
 
 constexpr unsigned short protocol_version = 17;
@@ -142,6 +162,9 @@ Friend_mode_session::~Friend_mode_session() {
 }
 
 bool Friend_mode_session::start_host(int port, uint32 game_code) {
+	if (!start_sockets()) {
+		return false;
+	}
 	ignore_broken_pipe();
 	stop();
 	connection_lost = false;
@@ -182,6 +205,9 @@ bool Friend_mode_session::start_host(int port, uint32 game_code) {
 }
 
 bool Friend_mode_session::start_guest(const std::string& address, int port, uint32 game_code) {
+	if (!start_sockets()) {
+		return false;
+	}
 	ignore_broken_pipe();
 	stop();
 	connection_lost = false;

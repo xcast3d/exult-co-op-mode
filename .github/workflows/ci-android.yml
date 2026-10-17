@@ -54,6 +54,7 @@ on:
 
 jobs:
   ci-android:
+    if: ${{ github.repository_owner == 'exult' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/setup-java@v5

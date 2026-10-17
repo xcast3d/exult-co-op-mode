@@ -61,6 +61,7 @@ on:
 
 jobs:
   analyze:
+    if: ${{ github.repository_owner == 'exult' }}
     name: Analyze
     runs-on: ubuntu-latest
     permissions:

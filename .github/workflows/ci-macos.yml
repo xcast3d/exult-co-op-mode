@@ -54,6 +54,7 @@ on:
 
 jobs:
   ci-macos:
+    if: ${{ github.repository_owner == 'exult' }}
     runs-on: macos-latest
     steps:
       - name: Install dependencies

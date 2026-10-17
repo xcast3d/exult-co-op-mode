@@ -14,6 +14,7 @@ MAIN_OBJS:=actions.o \
 	effects.o \
 	exult.o \
 	exultmenu.o \
+	friendnet.o \
 	game.o \
 	gameclk.o \
 	gamedat.o \

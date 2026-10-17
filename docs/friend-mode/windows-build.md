@@ -9,48 +9,85 @@ Phase 7 in the [project brief](../ultima-7-friend-mode.md), brought forward.
 Upstream Exult already builds on Windows two ways, and both are kept up to
 date by the Exult team:
 
-- **MinGW (MSYS2)** through the usual `configure` / `make`, the same build
-  system as on the Mac. `configure.ac` already links `ws2_32` (Windows
-  sockets). Upstream CI: `.github/workflows/ci-windows.yml`.
+- **MinGW (MSYS2)** with `Makefile.mingw`, which takes its object list from
+  `Makefile.common` and links `ws2_32` (Windows sockets). Upstream CI:
+  `.github/workflows/ci-windows.yml`.
 - **Visual Studio 2019+** with `msvcstuff/vs2019/Exult.vcxproj`, which also
   links `Ws2_32.lib`. Upstream CI: `.github/workflows/ci-msvc.yml`.
 
-Friend Mode code already has Windows branches in `friendnet.cc`
-(`winsock2.h`, `closesocket`, `ioctlsocket`). Not done yet:
+Friend Mode's Windows networking in `friendnet.cc`:
 
-1. **`WSAStartup`.** Windows sockets must be started once before use (and
-   `WSACleanup` at exit). Without it every socket call fails. Add it in
-   `Friend_mode_session::start_host` / `start_guest` (once per process).
-2. **Visual Studio project.** `friendnet.cc` / `friendnet.h` are in
-   `Makefile.am` but not in `Exult.vcxproj`; add them. (MinGW picks them up
-   already.)
-3. **Errors and blocking.** Check the Windows paths for "would block"
-   (`WSAEWOULDBLOCK` rather than `EWOULDBLOCK`) and broken pipes (no
-   `SIGPIPE` on Windows; `ignore_broken_pipe` should do nothing there).
-4. **Paths and the guest profile.** The one-machine test profile
+1. **Done: Windows sockets.** `winsock2.h`, `closesocket` and `ioctlsocket`;
+   `WSAStartup` runs once before the first host or join (`start_sockets`),
+   with `WSACleanup` at exit.
+2. **Done: build files.** `friendnet.o` is in `Makefile.common` (used by
+   `Makefile.mingw`), and `friendnet.cc` / `friendnet.h` are in
+   `msvcstuff/vs2019/Exult.vcxproj` and its `.filters`.
+3. **Done: errors.** "Would block" checks `WSAEWOULDBLOCK` on Windows;
+   `ignore_broken_pipe` does nothing there (Windows has no `SIGPIPE`).
+4. **To check: paths and the guest profile.** The one-machine test profile
    (`.friend-mode-local/guest.cfg`) is Mac-specific; a Windows tester uses
    the normal config. Check that the world-download temp file and gamedat
    paths work with Windows paths.
-5. **Firewall.** Windows Defender asks to allow Exult on first host; note
-   it in [internet play](internet-play.md).
+5. **To check: firewall.** Windows Defender asks to allow Exult on first
+   host; note it in [internet play](internet-play.md).
 
-## How to build it
+## How it is built: GitHub Actions
 
-The repository lives on Bitbucket, so upstream's GitHub workflows don't run
-for it. Options, easiest first:
+Mac builds stay local (`make -j8`). Windows builds come from GitHub Actions
+on a **private** GitHub repository that mirrors this branch. Bitbucket stays
+`origin`; GitHub is a second remote named `github`:
 
-1. **A Windows PC or VM with MSYS2** (UTM or Parallels on Apple silicon
-   runs Windows 11 for Arm, which runs x64 builds). Follow Exult's
-   `README.windows` (its build section), then `configure` and `make` as on the Mac.
-   Best for the first build and for testing Mac-to-Windows play by hand.
-2. **Bitbucket Pipelines** with a Windows runner (or a self-hosted one) to
-   build on each push. Later, once the manual build works.
-3. **A GitHub mirror** of this branch, which would run the existing
-   `ci-windows.yml` / `ci-msvc.yml` as they are. Simplest automation, but
-   the code then lives on GitHub too (private repositories work).
+```bash
+git push github feature/friend-mode
+```
 
-Cross-compiling from the Mac with MinGW is possible but needs SDL3 and the
-other libraries built for Windows; not worth it before option 1 works.
+Every push of `feature/friend-mode` to `github` runs
+`.github/workflows/friend-mode-windows.yml`, except pushes that only change
+docs, Markdown or other platforms' folders. To build by hand: on GitHub, open
+**Actions → friend-mode-windows → Run workflow**.
+
+The workflow uses MSYS2 UCRT64 (64-bit Windows 10 and 11, including Windows on
+Arm through emulation) and `Makefile.mingw`, like upstream's
+`ci-windows.yml`, but builds only `Exult.exe` (no Exult Studio, tools or
+installer) to save minutes. A run takes about 15–25 minutes, most of it
+installing MSYS2 packages. A newer push cancels a run still going for an
+older one.
+
+### Downloading the build
+
+1. On GitHub, open the repository's **Actions** tab, then the latest green
+   **friend-mode-windows** run.
+2. Under **Artifacts**, download `exult-friend-mode-windows-<commit>` (you
+   must be signed in). It is a zip, kept for 14 days.
+3. Unzip it anywhere. The `Exult` folder has `Exult.exe`, the DLLs it
+   needs, `data/` (Exult's own data, not Ultima VII), `COPYING.txt`,
+   `README.windows.txt`, these Friend Mode notes and `FRIEND-MODE-COMMIT.txt`
+   (the commit it was built from).
+4. Add the game: copy the `STATIC` folder of your own Ultima VII into
+   `Exult\blackgate\` (Serpent Isle into `Exult\serpentisle\`), as
+   `README.windows.txt` says, then run `Exult.exe`. Game files are never
+   in the zip.
+
+If a run fails, open it and read the **Build Exult** step; `stdout.txt` and
+`stderr.txt` next to `Exult.exe` help when the game itself misbehaves.
+
+### Actions minutes
+
+GitHub Free gives a private repository 2,000 minutes a month; Windows
+minutes count double, so that is roughly 40–60 Windows builds. Upstream
+Exult's own workflows (Linux, macOS, Android, iOS, snapshots, CodeQL,
+Coverity and so on) stay in `.github/workflows/` for easy upstream merges,
+but each job has `if: ${{ github.repository_owner == 'exult' }}` (some had
+it already), so they are skipped here and cost nothing. When merging from
+upstream, keep that line on any job upstream adds or changes.
+
+### Other options
+
+- **A Windows PC or VM with MSYS2.** Follow Exult's `README.windows` (its
+  build section), then `make -f Makefile.mingw`. Useful for debugging.
+- **Cross-compiling from the Mac** with MinGW needs SDL3 and the other
+  libraries built for Windows; not worth it while Actions works.
 
 ## Testing
 

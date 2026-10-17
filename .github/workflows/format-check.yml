@@ -5,6 +5,7 @@ on:
 
 jobs:
   clang-format-check:
+    if: ${{ github.repository_owner == 'exult' }}
     name: Clang-Format Check (informational)
     runs-on: ubuntu-latest
     steps:

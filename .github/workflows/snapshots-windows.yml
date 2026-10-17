@@ -4,6 +4,7 @@ on: [workflow_call]
 
 jobs:
   activity_check:
+    if: ${{ github.repository_owner == 'exult' }}
     runs-on: ubuntu-latest
     steps:
       - name: Activity check

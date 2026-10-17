@@ -10,9 +10,11 @@ permissions:
 
 jobs:
   snapshots-windows:
+    if: ${{ github.repository_owner == 'exult' }}
     uses: ./.github/workflows/snapshots-windows.yml
     secrets: inherit
   snapshots-android:
+    if: ${{ github.repository_owner == 'exult' }}
     uses: ./.github/workflows/snapshots-android.yml
     secrets: inherit
   snapshots:
