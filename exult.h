@@ -101,6 +101,9 @@ bool Friend_mode_guest_attack(Game_object* obj);
 bool Friend_mode_note_music(bool start, int num, bool continuous, int force, const std::string& flex);
 // Friend Mode host: show missiles and sprite effects (spells, explosions,
 // blood) on guests too, as pictures only.  'item' is what a sprite follows.
+// Friend Mode host: a world sound (scripts, hits, explosions) for guests
+// to hear too, at 'obj' or 'tile' (neither: not placed).
+void Friend_mode_note_sound(int sfx, const Game_object* obj, const Tile_coord* tile = nullptr);
 void Friend_mode_note_hit(Game_object* target, int damage, int health_left);
 void Friend_mode_note_projectile(const Tile_coord& from, const Tile_coord& to, int weapon, int sprite, int speed);
 void Friend_mode_note_sprite(

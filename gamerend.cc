@@ -30,6 +30,7 @@
 #include "actors.h"
 #include "cheat.h"
 #include "chunks.h"
+#include "combat_opts.h"
 #include "drag.h"
 #include "effects.h"
 #include "font.h"
@@ -365,6 +366,9 @@ void Game_window::paint(
 	}
 
 	effects->paint();    // Draw sprites.
+	if (Combat::health_bars) {
+		paint_health_bars();
+	}
 
 	win->set_clip(x, y, w, h);    // Clip to this area.
 	// Fill black into unpainted regions
@@ -419,6 +423,43 @@ void Game_window::paint(
 /*
  *  Paint whole window.
  */
+/*
+ *  Health bars over hurt foes, in the style of Ultima Online (an option;
+ *  U7 has none).  Shown over creatures and NPCs outside the party whose
+ *  health is below full, so peaceful townsfolk stay clear.
+ */
+
+void Game_window::paint_health_bars() {
+	constexpr int bar_w = 16;
+	Shape_manager* shapes = Shape_manager::get_instance();
+	const int     green  = shapes->get_special_pixel(POISON_PIXEL);
+	const int     red    = shapes->get_special_pixel(HIT_PIXEL);
+	const int     black  = shapes->get_special_pixel(BLACK_PIXEL);
+	Actor_vector  nearby;
+	get_nearby_npcs(nearby);
+	for (Actor* actor : nearby) {
+		if (!actor || actor->is_in_party() || actor->is_dead() || actor->get_flag(Obj_flags::invisible)
+			|| actor->get_map() != get_map() || actor->is_pos_invalid()) {
+			continue;
+		}
+		const int max_health = actor->get_property(static_cast<int>(Actor::strength));
+		const int health     = actor->get_property(static_cast<int>(Actor::health));
+		if (max_health <= 0 || health >= max_health) {
+			continue;    // Unhurt.
+		}
+		const TileRect shape = get_shape_rect(actor);
+		const int      bx    = shape.x + (shape.w - bar_w) / 2;
+		// Inside the 5 pixels Game_window::add_dirty repaints around it.
+		const int      by    = shape.y - 4;
+		const int      fill  = std::clamp(health * bar_w / max_health, 0, bar_w);
+		win->fill8(black, bar_w + 2, 4, bx - 1, by - 1);
+		win->fill8(red, bar_w, 2, bx, by);
+		if (fill > 0) {
+			win->fill8(green, fill, 2, bx, by);
+		}
+	}
+}
+
 void Game_window::paint() {
 	if (main_actor != nullptr) {
 		map->read_map_data();    // Gather in all objs., etc.

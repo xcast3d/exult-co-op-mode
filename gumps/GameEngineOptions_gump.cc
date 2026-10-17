@@ -119,6 +119,10 @@ namespace {
 			return get_text_msg(0x62E - msg_file_start);
 		}
 
+		static auto EnemyHealthBars_() {
+			return "Enemy health bars:";
+		}
+
 		static auto CombatpausedwithSpace_() {
 			return get_text_msg(0x62F - msg_file_start);
 		}
@@ -209,6 +213,10 @@ void GameEngineOptions_gump::build_buttons() {
 			this, &GameEngineOptions_gump::toggle_show_hits, yesNo, show_hits, get_button_pos_for_label(Strings::CombatShowHits_()),
 			yForRow(++y_index), small_size);
 
+	buttons[id_health_bars] = std::make_unique<GameEngineTextToggle>(
+			this, &GameEngineOptions_gump::toggle_health_bars, yesNo, health_bars,
+			get_button_pos_for_label(Strings::EnemyHealthBars_()), yForRow(++y_index), small_size);
+
 	// std::vector<std::string> modes = {"Original", "Space pauses"};
 	buttons[id_mode] = std::make_unique<GameEngineTextToggle>(
 			this, &GameEngineOptions_gump::toggle_mode, yesNo, mode, get_button_pos_for_label(Strings::CombatpausedwithSpace_()),
@@ -270,8 +278,9 @@ void GameEngineOptions_gump::load_settings() {
 		difficulty = 3;
 	}
 	difficulty += 3;    // Scale to choices (0-6).
-	show_hits = Combat::show_hits ? 1 : 0;
-	mode      = static_cast<int>(Combat::mode);
+	show_hits   = Combat::show_hits ? 1 : 0;
+	health_bars = Combat::health_bars ? 1 : 0;
+	mode        = static_cast<int>(Combat::mode);
 	if (mode < 0 || mode > 1) {
 		mode = 0;
 	}
@@ -302,17 +311,17 @@ void GameEngineOptions_gump::load_settings() {
 }
 
 GameEngineOptions_gump::GameEngineOptions_gump() : Modal_gump(nullptr, -1) {
-	SetProceduralBackground(TileRect(0, 0, 100, yForRow(13)), -1);
+	SetProceduralBackground(TileRect(0, 0, 100, yForRow(14)), -1);
 
 	// Ok
 	buttons[id_ok]
-			= std::make_unique<GameEngineOptions_button>(this, &GameEngineOptions_gump::close, Strings::OK(), 25, yForRow(12), 50);
+			= std::make_unique<GameEngineOptions_button>(this, &GameEngineOptions_gump::close, Strings::OK(), 25, yForRow(13), 50);
 	// Help
 	buttons[id_help]
-			= std::make_unique<GameEngineOptions_button>(this, &GameEngineOptions_gump::help, Strings::HELP(), 50, yForRow(12), 50);
+			= std::make_unique<GameEngineOptions_button>(this, &GameEngineOptions_gump::help, Strings::HELP(), 50, yForRow(13), 50);
 	// Cancel
 	buttons[id_cancel] = std::make_unique<GameEngineOptions_button>(
-			this, &GameEngineOptions_gump::cancel, Strings::CANCEL(), 75, yForRow(12), 50);
+			this, &GameEngineOptions_gump::cancel, Strings::CANCEL(), 75, yForRow(13), 50);
 
 	load_settings();
 	build_buttons();
@@ -324,6 +333,8 @@ void GameEngineOptions_gump::save_settings() {
 	config->set("config/gameplay/combat/difficulty", Combat::difficulty, false);
 	Combat::show_hits = (show_hits != 0);
 	config->set("config/gameplay/combat/show_hits", show_hits ? "yes" : "no", false);
+	Combat::health_bars = (health_bars != 0);
+	config->set("config/gameplay/combat/health_bars", health_bars ? "yes" : "no", false);
 	Combat::mode = static_cast<Combat::Mode>(mode);
 	str          = Combat::mode == Combat::keypause ? "keypause" : "original";
 	config->set("config/gameplay/combat/mode", str, false);
@@ -359,6 +370,7 @@ void GameEngineOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::Alternativedraganddrop_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::Speed_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatShowHits_(), x + label_margin, y + yForRow(++y_index) + 1);
+	font->paint_text(iwin->get_ib8(), Strings::EnemyHealthBars_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatpausedwithSpace_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatCharmedDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);

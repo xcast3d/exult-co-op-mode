@@ -549,6 +549,7 @@ void Explosion_effect::handle_event(
 	const int frnum = sprite.get_framenum();
 	if (!frnum) {    // Max. volume, with stereo position.
 		Audio::get_ptr()->play_sound_effect(exp_sfx, pos, AUDIO_MAX_VOLUME);
+		Friend_mode_note_sound(exp_sfx, nullptr, &pos);
 	}
 	if (frnum == frames / 4) {
 		// this was in ~Explosion_effect before

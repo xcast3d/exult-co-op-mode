@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "game.h"
 #include "gameclk.h"
 #include "gamewin.h"
+#include "exult.h"
 #include "sfxinf.h"
 
 #include <map>
@@ -60,6 +61,7 @@ static inline bool Get_sfx_out_of_range(Game_window* gwin, const Tile_coord& opo
  */
 
 void Object_sfx::Play(Game_object* obj, int sfx, int delay) {
+	Friend_mode_note_sound(sfx, obj);    // Scripted and hit sounds.
 	auto* osfx = new Object_sfx(obj, sfx);
 
 	if (!delay) {

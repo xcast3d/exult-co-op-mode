@@ -65,7 +65,8 @@ public:
 		projectile      = 20,   // Host: a missile in flight (picture only).
 		sprite_effect   = 21,   // Host: a spell, explosion or blood sprite.
 		actor_health    = 22,   // Host: health of creatures and NPCs near players.
-		actor_hit       = 23    // Host: someone was hit (damage, health left).
+		actor_hit       = 23,   // Host: someone was hit (damage, health left).
+		world_sound     = 24    // Host: a sound from the world (scripts, hits).
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);

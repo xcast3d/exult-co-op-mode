@@ -2422,6 +2422,40 @@ static void Friend_mode_apply_hit(const std::vector<unsigned char>& data) {
 	gwin->get_effects()->add_text(text, target);
 }
 
+// Host: world sounds (doors, levers and other scripts, hits, explosions),
+// so guests hear what happens near them.  Ambient sounds and menu clicks
+// are each machine's own and are not sent.
+void Friend_mode_note_sound(int sfx, const Game_object* obj, const Tile_coord* tile) {
+	if (sfx < 0 || !Friend_mode_sharing_effects()) {
+		return;
+	}
+	std::vector<unsigned char> payload;
+	Friend_put16(payload, sfx);
+	if (obj || tile) {
+		Friend_put8(payload, 1);
+		Friend_put_tile(payload, tile ? *tile : obj->get_outermost()->get_center_tile());
+	} else {
+		Friend_put8(payload, 0);
+	}
+	friend_session.send_blob(Friend_mode_session::Blob_kind::world_sound, payload);
+}
+
+static void Friend_mode_apply_sound(const std::vector<unsigned char>& data) {
+	size_t    pos    = 0;
+	const int sfx    = Friend_get16(data, pos);
+	if (pos >= data.size()) {
+		return;
+	}
+	if (data[pos++] != 0) {
+		const Tile_coord tile = Friend_get_tile(data, pos);
+		if (pos <= data.size()) {
+			Audio::get_ptr()->play_sound_effect(sfx, tile);
+		}
+	} else {
+		Audio::get_ptr()->play_sound_effect(sfx);
+	}
+}
+
 // Both sides: say when our journal opens or closes, so the other side can
 // show "Someone is writing in the party journal."
 static bool friend_journal_open_sent = false;
@@ -5049,6 +5083,8 @@ static void Handle_events() {
 					Friend_mode_apply_health(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::actor_hit) {
 					Friend_mode_apply_hit(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::world_sound) {
+					Friend_mode_apply_sound(blob);
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;

@@ -199,15 +199,34 @@ Built and tested 2026-10-17:
   drawing them (the host used to send only those in Exult's 'nearby' list,
   around its own view).
 
+Built and tested 2026-10-17 (protocol version 20). Also checked while
+testing: a guest's companion dying leaves the guest watching, and Tab picks
+another; the Avatar dying reloaded the last save (early in the story, before
+the healer resurrection).
+
+- **World sounds on the guest.** Each side hears the right sound whoever
+  caused it, quieter the farther away. The host sends the sounds the world
+  makes: scripted object sounds (doors, levers, secret walls, food and
+  potions), hits, animation and pickup sounds, and explosions, placed where
+  they happen. Ambient sounds (birds, crickets) and menu clicks are each
+  machine's own and aren't sent. Sounds loop only on the host.
+- **Enemy health bars** (an option, off by default: Game Engine →
+  "Enemy health bars"). A small green and red bar, like Ultima Online's,
+  over creatures and NPCs outside the party that are hurt; unhurt townsfolk
+  get none. Works on host and guest alike (the guest gets health from the
+  host).
+- **Faster messages and a connect time limit.** Both sides set
+  `TCP_NODELAY`, so a step goes out at once instead of waiting up to about
+  200 ms to be bundled. Joining gives up after 5 seconds per address
+  instead of freezing for a minute (checked: a test connect and handshake
+  took 0.05 s; an unreachable address gave up after 5.0 s).
+
 Tested 2026-10-17 and working: creatures appear and move near the guest
 (the Trinsic horse); missiles from the guest's companion and from the
 Avatar show on the guest; "combat shows hits" labels show on the guest.
 The Trinsic cat near the guest is awake (it meows) but stays put until the
 Avatar comes close: its schedule follows the Avatar, as in single-player.
 
-Idea for later: a health bar over enemies, like Ultima Online's (U7 has
-none), as an option. The guest already receives each creature's health,
-and the "combat shows hits" label is where it would replace or join.
 
 Tested 2026-10-17 and working: **Co-Op Mode in the menus**, so no
 special launch options are needed. On the title menu, **Co-Op Mode** (below

@@ -380,6 +380,20 @@ Shift+F9 on the host gives a rat, a wolf and a rabbit to fight.
 - [ ] Nothing extra happens on the guest: no second hit, no extra arrows
       left on the ground.
 
+## Sounds and health bars
+
+- [ ] Host opens a door near the guest: the guest hears it. Guest opens
+      one: both hear it once (not twice on the guest).
+- [ ] Guest slides a secret wall or pulls a lever: both hear it.
+- [ ] Guest's companion eats or drinks: the sound plays on both.
+- [ ] A fight near the guest: hit sounds play on the guest; an explosion
+      (if any) too.
+- [ ] Birds and crickets play on each machine as before, without doubling.
+- [ ] Game Engine → "Enemy health bars" on: a hurt wolf gets a small
+      green and red bar that shrinks as it is hit; peaceful NPCs and the
+      party get none. Moving creatures leave no trails of old bars.
+- [ ] The same on the guest with its own option on.
+
 ## Journal
 
 - [ ] Host writes a note and closes the journal (N, type, Escape). Guest

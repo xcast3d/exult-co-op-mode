@@ -18,6 +18,8 @@
 #	include <fcntl.h>
 #	include <netdb.h>
 #	include <netinet/in.h>
+#	include <netinet/tcp.h>
+#	include <sys/select.h>
 #	include <sys/socket.h>
 #	include <unistd.h>
 #endif
@@ -51,7 +53,7 @@ bool start_sockets() {
 	return true;
 }
 
-constexpr unsigned short protocol_version = 19;
+constexpr unsigned short protocol_version = 20;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -123,6 +125,44 @@ bool set_nonblocking(int socket) {
 	const int flags = fcntl(socket, F_GETFL, 0);
 	return flags >= 0 && fcntl(socket, F_SETFL, flags | O_NONBLOCK) == 0;
 #endif
+}
+
+// Send small messages (each step) at once instead of letting TCP hold them
+// back to bundle them (Nagle's algorithm), which can add ~200 ms per step.
+void set_no_delay(int socket) {
+	int enabled = 1;
+	setsockopt(socket, IPPROTO_TCP, TCP_NODELAY, reinterpret_cast<const char*>(&enabled), sizeof(enabled));
+}
+
+// Connect, giving up after 'timeout_ms' instead of the system's minute or
+// more, so a wrong address or closed port doesn't freeze the guest.
+// Leaves the socket non-blocking.
+bool connect_with_timeout(int socket, const sockaddr* address, socklen_t length, int timeout_ms) {
+	if (!set_nonblocking(socket)) {
+		return false;
+	}
+	if (connect(socket, address, length) == 0) {
+		return true;
+	}
+#ifdef _WIN32
+	if (WSAGetLastError() != WSAEWOULDBLOCK) {
+		return false;
+	}
+#else
+	if (errno != EINPROGRESS) {
+		return false;
+	}
+#endif
+	fd_set writable;
+	FD_ZERO(&writable);
+	FD_SET(static_cast<unsigned>(socket), &writable);
+	timeval wait{timeout_ms / 1000, (timeout_ms % 1000) * 1000};
+	if (select(socket + 1, nullptr, &writable, nullptr, &wait) <= 0) {
+		return false;    // Timed out.
+	}
+	int       error = 0;
+	socklen_t size  = sizeof(error);
+	return getsockopt(socket, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &size) == 0 && error == 0;
 }
 
 bool would_block() {
@@ -247,18 +287,20 @@ bool Friend_mode_session::start_guest(const std::string& address, int port, uint
 	}
 	for (addrinfo* current = addresses; current; current = current->ai_next) {
 		peer_socket = static_cast<int>(socket(current->ai_family, current->ai_socktype, current->ai_protocol));
-		if (peer_socket >= 0 && connect(peer_socket, current->ai_addr, current->ai_addrlen) == 0) {
+		if (peer_socket >= 0
+			&& connect_with_timeout(peer_socket, current->ai_addr, static_cast<socklen_t>(current->ai_addrlen), 5000)) {
 			break;
 		}
 		close_socket(peer_socket);
 		peer_socket = -1;
 	}
 	freeaddrinfo(addresses);
-	if (peer_socket < 0 || !set_nonblocking(peer_socket)) {
+	if (peer_socket < 0) {
 		close_peer();
 		std::cerr << "Friend Mode: could not connect to " << address << ':' << port << std::endl;
 		return false;
 	}
+	set_no_delay(peer_socket);
 	session_mode = Mode::guest;
 	queue_packet(hello_packet);
 	std::cout << "Friend Mode: connected to host; validating session" << std::endl;
@@ -890,6 +932,7 @@ void Friend_mode_session::poll() {
 		peer_socket = static_cast<int>(accept(listen_socket, nullptr, nullptr));
 		if (peer_socket >= 0) {
 			set_nonblocking(peer_socket);
+			set_no_delay(peer_socket);
 			std::cout << "Friend Mode: guest connected; validating session" << std::endl;
 		} else if (!would_block()) {
 			std::cerr << "Friend Mode: accept failed" << std::endl;

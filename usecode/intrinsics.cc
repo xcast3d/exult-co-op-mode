@@ -3351,6 +3351,7 @@ USECODE_INTRINSIC(play_sound_effect) {
 	COUT("Sound effect " << parms[0].get_int_value() << " request in usecode");
 
 	Audio::get_ptr()->play_sound_effect(parms[0].get_int_value());
+	Friend_mode_note_sound(parms[0].get_int_value(), nullptr);
 	return no_ret;
 }
 

@@ -835,6 +835,7 @@ public:
 	}
 
 	void paint();    // Paint whole image.
+	void paint_health_bars();    // Optional bars over hurt foes.
 	// Paint 'dirty' rectangle.
 	void paint_dirty();
 

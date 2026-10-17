@@ -36,6 +36,7 @@ private:
 	std::vector<std::string> frametext;
 	int                      difficulty;
 	int                      show_hits;
+	int                      health_bars;
 	int                      mode;
 	bool                     charmDiff;
 	int                      cheats;
@@ -53,6 +54,7 @@ private:
 		id_alternate_drop,
 		id_frames,
 		id_show_hits,
+		id_health_bars,
 		id_mode,
 		id_charmDiff,
 		id_difficulty,
@@ -103,6 +105,10 @@ public:
 
 	void toggle_show_hits(int state) {
 		show_hits = state;
+	}
+
+	void toggle_health_bars(int state) {
+		health_bars = state;
 	}
 
 	void toggle_mode(int state) {

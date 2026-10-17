@@ -38,6 +38,7 @@ public:
 
 	static Mode mode;
 	static bool show_hits;    // Display #'s.
+	static bool health_bars;    // Health bar over hurt foes (Ultima Online style).
 	// In game:
 	static void toggle_pause();    // Pause/resume.
 	static void resume();          // Always resume.

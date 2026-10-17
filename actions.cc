@@ -33,6 +33,7 @@
 #include "effects.h"
 #include "frameseq.h"
 #include "gamewin.h"
+#include "exult.h"
 #include "ignore_unused_variable_warning.h"
 #include "monstinf.h"
 #include "party.h"
@@ -800,6 +801,7 @@ int Frames_actor_action::handle_event(Actor* actor) {
 
 			Game_object* source = src ? src.get() : actor;
 			audio->play_sound_effect(sound_id, source, volume, repeat);
+			Friend_mode_note_sound(sound_id, source);
 			sound_played = true;
 		}
 		return 0;    // Done.
@@ -944,6 +946,7 @@ int Pickup_actor_action::handle_event(Actor* actor) {
 			if (play_sfx) {
 				Audio* audio = Audio::get_ptr();
 				audio->play_sound_effect(sound_id, obj_ptr.get(), volume, repeat);
+				Friend_mode_note_sound(sound_id, obj_ptr.get());
 			}
 			if (to_del) {
 				obj_ptr->remove_this();    // Delete it.
@@ -958,6 +961,7 @@ int Pickup_actor_action::handle_event(Actor* actor) {
 			if (play_sfx) {
 				Audio* audio = Audio::get_ptr();
 				audio->play_sound_effect(sound_id, obj_ptr.get(), volume, repeat);
+				Friend_mode_note_sound(sound_id, obj_ptr.get());
 			}
 			if (temp) {
 				obj_ptr->set_flag(Obj_flags::is_temporary);
@@ -1057,6 +1061,7 @@ int Play_sfx_actor_action::handle_event(Actor* actor) {
 	if (obj) {
 		Audio* audio = Audio::get_ptr();
 		audio->play_sound_effect(sound_id, obj.get(), volume, repeat);
+		Friend_mode_note_sound(sound_id, obj.get());
 	}
 	return 0;
 }

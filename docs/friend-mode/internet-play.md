@@ -48,13 +48,9 @@ the port forward).
 
 Not yet tried outside one Mac:
 
-- **Delayed steps.** The sockets don't set `TCP_NODELAY`, so small messages
-  (each step) can wait up to about 200 ms for the network to bundle them.
-  Walking may feel sticky. Fix: set `TCP_NODELAY` on both sockets in
-  `friendnet.cc` before the first real test.
-- **Connecting can stall.** The guest connects without a time limit, so a
-  wrong address or a closed port can freeze its window for about a minute
-  before "Could not connect to host".
+- **Connecting** gives up after 5 seconds per address, so a wrong address
+  or closed port shows "Could not connect to host" quickly. Small messages
+  go out at once (`TCP_NODELAY`).
 - **Lag in general.** The host checks every guest step; over a long
   distance the guest's companion may snap back now and then.
 - Joining downloads the host's save (about 190 KB), which takes a moment on

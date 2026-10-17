@@ -366,6 +366,9 @@ Game_window::Game_window(
 	config->value("config/gameplay/combat/show_hits", str, "no");
 	Combat::show_hits = (str == "yes");
 	config->set("config/gameplay/combat/show_hits", str, false);
+	config->value("config/gameplay/combat/health_bars", str, "no");
+	Combat::health_bars = (str == "yes");
+	config->set("config/gameplay/combat/health_bars", str, false);
 	config->value("config/audio/disablepause", str, "no");
 	config->set("config/audio/disablepause", str, false);
 

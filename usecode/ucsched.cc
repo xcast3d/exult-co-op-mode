@@ -32,6 +32,7 @@
 #include "game.h"
 #include "gameclk.h"
 #include "gamewin.h"
+#include "exult.h"
 #include "headers/ios_state.hpp"
 #include "ucinternal.h"
 #include "ucscriptop.h"
@@ -629,6 +630,7 @@ int Usecode_script::exec(
 			// Skip if this exact SFX is already playing
 			if (!Audio::get_ptr()->is_sfx_playing(sfx_id)) {
 				Audio::get_ptr()->play_sound_effect(sfx_id, optr.get());
+				Friend_mode_note_sound(sfx_id, optr.get());
 			}
 			break;
 		}
