@@ -2752,11 +2752,7 @@ void Game_window::double_clicked(
 				return;
 			}
 			effects->remove_text_effects();
-			Game_object* target = controlled;
-			if (item_use == Friend_item_use::on_target) {
-				target = Friend_mode_pick_item_target();
-			}
-			Friend_mode_request_item_use(obj, target);
+			Friend_mode_guest_use_item(obj);
 			return;
 		}
 		// Doors, shutters, lamps and similar world toggles are the Usecode
@@ -2907,10 +2903,12 @@ int Game_window::get_guard_shape() {
 
 Actor* Game_window::find_witness(
 		Actor*& closest_npc,    // Closest one returned.
-		int     align           // Desired alignment.
+		int     align,          // Desired alignment.
+		Actor*  thief           // Who is seen; the Avatar if null.
 ) {
+	Actor* who = thief ? thief : main_actor;
 	Actor_vector nearby;    // See if someone is nearby.
-	main_actor->find_nearby_actors(nearby, c_any_shapenum, 12, 0x28);
+	who->find_nearby_actors(nearby, c_any_shapenum, 12, 0x28);
 	closest_npc                    = nullptr;    // Look for closest NPC.
 	int       closest_dist         = 5000;
 	Actor*    witness              = nullptr;    // And closest facing us.
@@ -2927,13 +2925,13 @@ Actor* Game_window::find_witness(
 		if (npc->get_effective_alignment() != align || (npc->get_shapenum() == gshape && align != Actor::neutral)) {
 			continue;
 		}
-		const int dist = npc->distance(main_actor);
-		if (dist >= closest_witness_dist || !Fast_pathfinder_client::is_grabable(npc, main_actor)) {
+		const int dist = npc->distance(who);
+		if (dist >= closest_witness_dist || !Fast_pathfinder_client::is_grabable(npc, who)) {
 			continue;
 		}
 		// Looking toward Avatar?
 		auto      sched   = static_cast<Schedule::Schedule_types>(npc->get_schedule_type());
-		const int dir     = npc->get_direction(main_actor);
+		const int dir     = npc->get_direction(who);
 		const int facing  = npc->get_dir_facing();
 		const int dirdiff = (dir - facing + 8) % 8;
 		if (dirdiff < 3 || dirdiff > 5 || sched == Schedule::hound) {
@@ -2952,17 +2950,18 @@ Actor* Game_window::find_witness(
  *  Handle theft.
  */
 
-void Game_window::theft() {
+void Game_window::theft(Actor* thief) {
+	Actor* who = thief ? thief : main_actor;
 	// See if in a new location.
-	const int cx = main_actor->get_cx();
-	const int cy = main_actor->get_cy();
+	const int cx = who->get_cx();
+	const int cy = who->get_cy();
 	if (cx != theft_cx || cy != theft_cy) {
 		theft_cx       = cx;
 		theft_cy       = cy;
 		theft_warnings = 0;
 	}
 	Actor* closest_npc;
-	Actor* witness = find_witness(closest_npc, Actor::neutral);
+	Actor* witness = find_witness(closest_npc, Actor::neutral, who);
 	if (!witness) {
 		if (closest_npc && rand() % 2) {
 			if (closest_npc->is_goblin()) {
@@ -2973,7 +2972,7 @@ void Game_window::theft() {
 		}
 		return;    // Didn't get caught.
 	}
-	const bool avainvisible = main_actor->get_flag(Obj_flags::invisible);
+	const bool avainvisible = who->get_flag(Obj_flags::invisible);
 	if (avainvisible && !witness->can_see_invisible()) {
 		if (witness->is_goblin()) {
 			witness->say(goblin_invis_theft);
@@ -2982,8 +2981,8 @@ void Game_window::theft() {
 		}
 		return;    // Didn't get caught because was invisible.
 	}
-	const int dir = witness->get_direction(main_actor);
-	// Face avatar.
+	const int dir = witness->get_direction(who);
+	// Face the thief.
 	witness->change_frame(witness->get_dir_framenum(dir, Actor::standing));
 	// If not in combat, change to hound schedule.
 	auto sched = static_cast<Schedule::Schedule_types>(witness->get_schedule_type());

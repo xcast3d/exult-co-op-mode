@@ -661,7 +661,10 @@ static void Friend_mode_spawn_test_kit() {
 			Friend_test_kit_fill(supplies, 340, frame, 1);    // Potions.
 		}
 		Friend_test_kit_fill(supplies, 377, 0, 3);    // Food.
+		Friend_test_kit_fill(supplies, 823, 0, 1);    // Pigments.
+		Friend_test_kit_fill(supplies, 823, 2, 1);    // Paint brush.
 	}
+	Friend_test_kit_place(837, 0, 10, 5);    // Easel, to paint on.
 	// Teleporter pads west and east of the Avatar.
 	Friend_test_kit_teleporters(-11, 1, 14, 1);
 	gwin->set_all_dirty();
@@ -1524,6 +1527,11 @@ static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& dat
 	// Lift the item, splitting a stack if only part moves.
 	Container_game_object* src_owner = src->get_owner();
 	const Tile_coord       src_at    = src->get_tile();
+	// Where it really came from (a held item is out of the world already).
+	const Game_object_shared held_from = held ? friend_guest_held.owner.lock() : nullptr;
+	Game_object* const     origin_owner = held ? held_from.get() : src_owner;
+	const Tile_coord       origin_at    = held ? friend_guest_held.tile : src_at;
+	const bool             okay_to_move = src->get_flag(Obj_flags::okay_to_take);
 	Game_object_shared     moving;
 	Friend_held_item       held_origin;
 	const bool             split     = quantity < src->get_quantity();
@@ -1568,6 +1576,15 @@ static void Friend_mode_perform_guest_move(const std::vector<unsigned char>& dat
 	}
 	gwin->set_all_dirty();
 	cout << "Friend Mode: moved shape " << moving->get_shapenum() << " for guest" << endl;
+	// Theft, as for the Avatar's drags: an item not okay to take, from
+	// outside the party, that actually moved (into another container, or
+	// more than 2 tiles), outside dungeons.  Witnesses look at the guest.
+	Game_object* const from_holder = origin_owner ? origin_owner->get_outermost() : nullptr;
+	const bool         from_party  = from_holder && from_holder->get_flag(Obj_flags::in_party);
+	const bool         moved       = container ? container != origin_owner : dst_tile.distance(origin_at) > 2;
+	if (!okay_to_move && !from_party && moved && !gwin->is_in_dungeon()) {
+		gwin->theft(actor);
+	}
 	// The guest already moved it locally; resend in case the result differs
 	// (stacking, placement inside the container).
 	Friend_force_item_resync(actor);
@@ -1600,6 +1617,8 @@ bool Friend_mode_guest_local_shape(int shape) {
 	case 729:    // Crystal ball.
 	case 944:    // Pot: a remark.
 	case 742:    // Stuffed toy: a remark.
+	case 837:    // Easel: a remark (paint on it with brush and pigments).
+	case 644:    // Gold coin: "Call it." heads or tails (closes windows).
 		return true;
 	default:
 		return false;
@@ -1624,15 +1643,36 @@ Friend_item_use Friend_mode_guest_item_use(int shape) {
 	case 641:    // Key.
 	case 627:    // Lockpick.
 		return Friend_item_use::on_target;
+	case 823:    // Artist's equipment: the brush paints (two clicks, see
+				 // Friend_mode_guest_use_item); the pigments only get a remark.
+		return Friend_item_use::on_self;
 	default:
 		return Friend_item_use::none;
 	}
 }
 
-bool Friend_mode_guest_activate(Game_object* item) {
+// Black Gate artist's equipment (shape 823): frames 0-1 are pigments, the
+// rest the brush.  Its script: brush, then click the pigments, then an easel.
+static bool Friend_is_paint_brush(const Game_object* obj) {
+	return GAME_BG && obj->get_shapenum() == 823 && obj->get_framenum() >= 2;
+}
+
+static bool Friend_is_pigments(const Game_object* obj) {
+	return GAME_BG && obj->get_shapenum() == 823 && obj->get_framenum() < 2;
+}
+
+bool Friend_mode_guest_use_item(Game_object* item) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own) {
 		return false;
+	}
+	if (Friend_is_paint_brush(item)) {
+		Game_object* pigments = Friend_mode_pick_item_target();
+		Game_object* easel    = pigments ? Friend_mode_pick_item_target() : nullptr;
+		if (easel) {
+			Friend_mode_request_item_use(item, pigments, easel);
+		}
+		return true;
 	}
 	switch (Friend_mode_guest_item_use(item->get_shapenum())) {
 	case Friend_item_use::on_self:
@@ -1645,6 +1685,17 @@ bool Friend_mode_guest_activate(Game_object* item) {
 		return true;
 	case Friend_item_use::none:
 		break;
+	}
+	return false;
+}
+
+bool Friend_mode_guest_activate(Game_object* item) {
+	Actor* own = gwin->get_controlled_actor();
+	if (!own) {
+		return false;
+	}
+	if (Friend_mode_guest_use_item(item)) {
+		return true;
 	}
 	if (Friend_mode_guest_local_shape(item->get_shapenum())) {    // Shows something, here only.
 		gwin->get_usecode()->init_conversation();
@@ -1672,12 +1723,13 @@ Game_object* Friend_mode_pick_item_target() {
 	return gwin->find_object(x, y);
 }
 
-void Friend_mode_request_item_use(Game_object* item, Game_object* target) {
+void Friend_mode_request_item_use(Game_object* item, Game_object* target, Game_object* second) {
 	if (!item || !target || friend_session.mode() != Friend_mode_session::Mode::guest || !friend_session.connected()) {
 		return;
 	}
 	std::vector<unsigned char> payload;
-	if (!Friend_put_path(payload, item) || !Friend_put_path(payload, target)) {
+	if (!Friend_put_path(payload, item) || !Friend_put_path(payload, target)
+		|| (second && !Friend_put_path(payload, second))) {
 		return;
 	}
 	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_use_item, payload);
@@ -1700,6 +1752,10 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 		|| !Friend_read_path(data, pos, target, tile) || !target) {
 		return refuse("not found");
 	}
+	Game_object* second = nullptr;    // A second click (painting).
+	if (pos < data.size() && (!Friend_read_path(data, pos, second, tile) || !second)) {
+		return refuse("second target not found");
+	}
 	const Friend_item_use use = Friend_mode_guest_item_use(item->get_shapenum());
 	if (use == Friend_item_use::none) {
 		return refuse("item not allowed");
@@ -1707,7 +1763,17 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 	if (!Friend_guest_may_touch(actor, item)) {
 		return refuse("item out of reach or not theirs");
 	}
-	if (use == Friend_item_use::on_self) {
+	if (Friend_is_paint_brush(item)) {
+		// The brush script asks for the pigments, then the easel.
+		if (!Friend_is_pigments(target) || !second || second->get_shapenum() != 837) {
+			return refuse("the brush needs pigments, then an easel");
+		}
+		if (!Friend_guest_may_touch(actor, target) || !Friend_guest_may_touch(actor, second)) {
+			return refuse("pigments or easel out of reach");
+		}
+	} else if (second) {
+		return refuse("only painting takes two clicks");
+	} else if (use == Friend_item_use::on_self) {
 		if (target != actor) {
 			return refuse("food and potions are for the guest's own companion");
 		}
@@ -1720,6 +1786,9 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 	friend_usecode_walker    = actor;
 	usecode->init_conversation();
 	usecode->intercept_click_on_item(target);
+	if (second) {
+		usecode->queue_click_on_item(second);
+	}
 	item->activate();
 	usecode->intercept_click_on_item(nullptr);    // In case it went unused.
 	friend_usecode_walker = nullptr;

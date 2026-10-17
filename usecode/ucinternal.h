@@ -427,6 +427,7 @@ class Usecode_internal : public Usecode_machine {
 
 	Game_object* intercept_item = nullptr;
 	Tile_coord*  intercept_tile = nullptr;
+	std::vector<Game_object*> queued_click_items;    // Next intercepts, in order.
 
 	// execution functions
 	bool call_function(
@@ -510,6 +511,9 @@ public:
 	void                  read() override;     // Read in 'gamedat/usecode.dat'.
 
 	void intercept_click_on_item(Game_object* obj) override {
+		if (!obj) {
+			queued_click_items.clear();
+		}
 		intercept_item = obj;
 		delete intercept_tile;
 		intercept_tile = nullptr;
@@ -517,6 +521,10 @@ public:
 
 	Game_object* get_intercept_click_on_item() const override {
 		return intercept_item;
+	}
+
+	void queue_click_on_item(Game_object* obj) override {
+		queued_click_items.push_back(obj);
 	}
 
 	void intercept_click_on_tile(Tile_coord* t) override {

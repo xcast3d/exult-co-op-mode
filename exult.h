@@ -78,7 +78,9 @@ Friend_item_use Friend_mode_guest_item_use(int shape);
 // its own copy of the world, and only the guest sees the result.
 bool Friend_mode_guest_local_shape(int shape);
 // Guest: ask the host to use 'item' on 'target'.
-void Friend_mode_request_item_use(Game_object* item, Game_object* target);
+void Friend_mode_request_item_use(Game_object* item, Game_object* target, Game_object* second = nullptr);
+// Guest: use an allowed item (picking its targets); false if not allowed.
+bool Friend_mode_guest_use_item(Game_object* item);
 // Guest: use an item from the companion's own pack by keyboard shortcut.
 // Returns false if nothing happened.
 bool Friend_mode_guest_activate(Game_object* item);

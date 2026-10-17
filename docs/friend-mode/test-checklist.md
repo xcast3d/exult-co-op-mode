@@ -274,6 +274,25 @@ the first request and the second person's drag snaps back.
 - [ ] With the guest's companion standing by a body, walk the Avatar away a
       screen and a half: the body stays on both.
 
+## Painting, coins, theft and sleepers
+
+- [ ] Guest takes the brush and pigments from the supplies bag, double-clicks
+      the brush, clicks the pigments, then the kit's easel: the painting
+      appears on both, with a remark.
+- [ ] Guest double-clicks the pigments alone: a remark, nothing painted.
+- [ ] Guest double-clicks the easel: a remark on the guest only.
+- [ ] Guest double-clicks gold with Iolo near the Avatar: the Avatar and
+      Iolo trade "Call it." and heads or tails, on the guest only; the host's
+      windows stay open.
+- [ ] In a shop, the guest takes an item that isn't theirs while the
+      shopkeeper is watching: a warning over the shopkeeper (on both); doing
+      it again a few times calls the guards.
+- [ ] Out of sight of anyone: sometimes "heard something", no guards.
+- [ ] Guest moves an item inside its own pack: never counts as theft.
+- [ ] At night, the guest's companion walks right past a sleeping NPC (with
+      the Avatar further away): after a few tries the NPC wakes, says
+      something and goes back to sleep later.
+
 ## Spectating and switching companions
 
 - [ ] Guest presses Escape at the companion picker: the bar says "You are

@@ -782,8 +782,9 @@ public:
 	void schedule_npcs(int hour, bool repaint = true);
 	void mend_npcs();    // Restore HP's each hour.
 	// Find witness to Avatar's 'crime'.
-	Actor*     find_witness(Actor*& closest_npc, int align);
-	void       theft();    // Handle thievery.
+	// 'thief' defaults to the Avatar; Friend Mode passes a guest's companion.
+	Actor*     find_witness(Actor*& closest_npc, int align, Actor* thief = nullptr);
+	void       theft(Actor* thief = nullptr);    // Handle thievery.
 	static int get_guard_shape();
 	void       call_guards(Actor* witness = nullptr, bool theft = false);
 	void       stop_arresting();

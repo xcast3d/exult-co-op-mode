@@ -188,6 +188,9 @@ public:
 	// intercept the next click_on_item intrinsic
 	virtual void         intercept_click_on_item(Game_object* obj)          = 0;
 	virtual Game_object* get_intercept_click_on_item() const                = 0;
+	// Answer a later click_on_item too, after the intercepted one (Friend
+	// Mode: a script that asks for two clicks, like painting).
+	virtual void         queue_click_on_item(Game_object* obj)              = 0;
 	virtual void         intercept_click_on_tile(Tile_coord* t)             = 0;
 	virtual Tile_coord*  get_intercept_click_on_tile() const                = 0;
 	virtual void         save_intercept(Game_object*& obj, Tile_coord*& t)  = 0;

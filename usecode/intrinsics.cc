@@ -1057,6 +1057,10 @@ USECODE_INTRINSIC(click_on_item) {
 	if (intercept_item) {
 		obj            = intercept_item;
 		intercept_item = nullptr;
+		if (!queued_click_items.empty()) {    // The next click is answered too.
+			intercept_item = queued_click_items.front();
+			queued_click_items.erase(queued_click_items.begin());
+		}
 		if (intercept_tile) {
 			delete intercept_tile;
 			intercept_tile = nullptr;

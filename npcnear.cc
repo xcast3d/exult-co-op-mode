@@ -114,10 +114,15 @@ void Npc_proximity_handler::handle_event(unsigned long curtime, uintptr udata) {
 		return;
 	}
 	auto sched = static_cast<Schedule::Schedule_types>(npc->get_schedule_type());
+	// Someone walking close by can wake a sleeper: the Avatar, or a Friend
+	// Mode guest's companion.
+	auto disturbs = [npc](Actor* walker) {
+		return walker && walker->get_map() == npc->get_map() && npc->distance(walker) < 6
+			   && Fast_pathfinder_client::is_straight_path(npc, walker);
+	};
 	// Sleep schedule?
 	if (npc->get_schedule() && sched == Schedule::sleep && !npc->is_in_party() && !Bg_dont_wake(gwin, npc)
-		&& npc->distance(gwin->get_main_actor()) < 6 && Fast_pathfinder_client::is_straight_path(npc, gwin->get_main_actor())
-		&& (rand() % 3) == 0) {
+		&& (disturbs(gwin->get_main_actor()) || disturbs(gwin->get_remote_friend_actor())) && (rand() % 3) == 0) {
 		// Trick:  Stand, but stay in
 		//   sleep_schedule.
 		npc->get_schedule()->ending(Schedule::stand);

@@ -112,10 +112,28 @@ Tested 2026-10-16 and working (protocol version 14): everything in the list
 below except grandfather clocks and the telescope/sextant (none found yet).
 The map key (M) needs a map in the companion's pack, as in U7.
 
-Found in testing: guests taking items near NPCs set off no theft alerts, and
-the guest's companion never wakes sleeping NPCs (Exult checks only the
-Avatar for both). Guests should also be able to paint (brush and pigments on
-an easel) and flip a gold coin.
+Built and tested 2026-10-16 (fixes for what that test round found):
+
+- **Theft by guests.** When the host carries out a guest's item move, it
+  runs Exult's theft check the way it does for the Avatar's drags (an item
+  not okay to take, from outside the party, that really moved, outside
+  dungeons), but with witnesses looking at the guest's companion: "heard
+  something", warnings, then guards. `Game_window::theft` and
+  `find_witness` take an optional thief for this.
+- **Waking sleepers.** A sleeping NPC can be woken by the guest's companion
+  walking close by, as by the Avatar (same distance, clear line and chance).
+  The check only runs for NPCs near the host's view, which the leash mostly
+  covers.
+- **Painting** (rebuilt after testing; retested and working). The brush script
+  asks for two clicks: double-click the brush (frames 2 and up of shape
+  823), click the pigments (frames 0-1), then the easel. The guest picks
+  both, and the host answers both clicks in order (the usecode machine has a
+  small queue of click answers for this). Double-clicking the pigments alone
+  gets a remark. Double-clicking the easel runs on the guest only.
+- **Coin flip** (tested, left as is). Gold's script is a fixed exchange
+  between the Avatar and Iolo, who must be nearby, with the text over them;
+  it runs on the guest only because it closes open windows.
+  The F9 kit now has an easel, and a brush and pigments in the supplies bag.
 
 Built 2026-10-16:
 
@@ -153,8 +171,6 @@ Next to build:
    one note at a time (when a note is finished, not on save), the host
    applies them in order and sends the journal back to everyone. A note
    someone is editing is locked for others.
-3. **Theft by guests**: taking items not marked okay to take sets off the
-   game's theft logic, as it does for the Avatar.
 
 Waiting for a second tester: the two-tester contention checks and a real
 in-game teleporter with the leash.
