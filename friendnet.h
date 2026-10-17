@@ -61,7 +61,11 @@ public:
 		journal_lock    = 16,   // Guest: start or stop writing in a note.
 		journal_locks   = 17,   // Host: who is writing in which note.
 		journal_open    = 18,   // Either side: its journal opened or closed.
-		music           = 19    // Host: a music track started or stopped.
+		music           = 19,   // Host: a music track started or stopped.
+		projectile      = 20,   // Host: a missile in flight (picture only).
+		sprite_effect   = 21,   // Host: a spell, explosion or blood sprite.
+		actor_health    = 22,   // Host: health of creatures and NPCs near players.
+		actor_hit       = 23    // Host: someone was hit (damage, health left).
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data);
 	bool take_blob(Blob_kind& kind, std::vector<unsigned char>& data);

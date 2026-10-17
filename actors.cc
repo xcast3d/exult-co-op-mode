@@ -4278,6 +4278,9 @@ Game_object* Actor::attacked(
 	const int oldhp = properties[static_cast<int>(health)];
 	const int delta = figure_hit_points(attacker, weapon_shape, ammo_shape, explosion);
 
+	if (!is_dead() && delta >= 0) {    // Friend Mode guests may show it.
+		Friend_mode_note_hit(this, delta, oldhp - delta);
+	}
 	if (Combat::show_hits && !is_dead() && delta >= 0) {
 		eman->remove_text_effect(this);
 		char hpmsg[50];
@@ -5151,7 +5154,15 @@ void Npc_actor::update_schedule(
  */
 
 void Npc_actor::paint() {
-	Actor::paint();               // Draw on screen.
+	Actor::paint();    // Draw on screen.
+	wake();
+}
+
+/*
+ *  Resume a dormant NPC's schedule (it was seen, by the host or near a
+ *  Friend Mode guest), and make sure it is in the 'nearby' list.
+ */
+void Npc_actor::wake() {
 	if (dormant && schedule &&    // Resume schedule.
 								  // FOR NOW:  Not when in formation.
 		(party_id < 0 || !gwin->walk_in_formation || schedule_type != Schedule::follow_avatar)) {
@@ -5294,8 +5305,8 @@ bool Npc_actor::step(
 			stop();
 			// Offscreen, but not in party?
 			if (!gwin->add_dirty(this) && party_id < 0 &&
-				// And > a screenful away?
-				distance(gwin->get_camera_actor()) > 1 + c_screen_tile_size) {
+				// And > a screenful away (from the Avatar and any guest)?
+				distance(gwin->get_camera_actor()) > 1 + c_screen_tile_size && !gwin->near_remote_friend(this)) {
 				dormant = true;    // Go dormant.
 			}
 			return false;    // Done.
@@ -5317,8 +5328,8 @@ bool Npc_actor::step(
 
 	// Offscreen, but not in party?
 	if (!add_dirty(true) && party_id < 0 &&
-		// And > a screenful away?
-		distance(gwin->get_camera_actor()) > 1 + c_screen_tile_size &&
+		// And > a screenful away (from the Avatar and any guest)?
+		distance(gwin->get_camera_actor()) > 1 + c_screen_tile_size && !gwin->near_remote_friend(this) &&
 		//++++++++Try getting rid of the 'talk' line:
 		get_schedule_type() != Schedule::talk && get_schedule_type() != Schedule::street_maintenance) {
 		// No longer on screen.

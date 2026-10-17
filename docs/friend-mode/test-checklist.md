@@ -261,6 +261,20 @@ the first request and the second person's drag snaps back.
 - [ ] Guest walks over a spot where the host's monsters appear (a monster
       egg): no creature appears only on the guest.
 
+## Creatures around the guest
+
+Best in Trinsic near the start of the game (the stables).
+
+- [ ] Guest walks about a screen away from the Avatar toward the stables:
+      the horses appear on the guest without the host coming closer, and
+      on the host if it walks over.
+- [ ] Guest stands near them with the Avatar a screen away: they move
+      (they don't freeze) on both screens.
+- [ ] Guest walks past a spot where monsters appear when the Avatar walks
+      there (a dungeon entrance, a road at night): they appear for the guest.
+- [ ] Guest walks over a spot that starts music or a script for the Avatar:
+      nothing happens until the Avatar goes there.
+
 ## Clock and weather
 
 - [ ] Guest joins: the time of day looks the same on both (light, palette).
@@ -346,6 +360,25 @@ Shift+F9 on the host gives a rat, a wolf and a rabbit to fight.
 - [ ] Host toggles combat mode while the guest's companion fights: the
       companion keeps its foe, or stops and waits; it never wanders off
       following the Avatar.
+
+## Missiles, spells and health
+
+- [ ] Give the guest's companion a bow and arrows (or a crossbow), fight a
+      creature: the arrows fly on both screens.
+- [ ] Host's Avatar or another companion shoots or throws something: it
+      flies on the guest too.
+- [ ] Host casts a spell with a missile or a visible effect (fireball,
+      lightning, heal): the guest sees it.
+- [ ] With the combat mode option not "Original", in combat mode the guest
+      clicks the wolf during a fight: the number after "Wolf" goes down as
+      it is hit, matching the host.
+- [ ] Guest turns on Game Engine → "combat shows hits": "-6(2)" style
+      labels show over whoever is hit, on the guest too (even with the
+      host's setting off).
+- [ ] A cat or other animal near the guest, a screen from the Avatar:
+      it moves on the guest.
+- [ ] Nothing extra happens on the guest: no second hit, no extra arrows
+      left on the ground.
 
 ## Journal
 

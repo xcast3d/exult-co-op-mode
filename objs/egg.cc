@@ -871,6 +871,11 @@ bool Egg_object::is_active(
 		}
 	}
 	auto cri = static_cast<Egg_criteria>(get_criteria());
+	// Friend Mode: a guest's companion hatches monster eggs as the Avatar
+	// would, so creatures appear wherever a player walks.  Other eggs
+	// (scripts, music, weather) stay the Avatar's.
+	const bool avatar_like = obj == gwin->get_main_actor()
+							 || (type == monster && obj && obj == gwin->get_remote_friend_actor());
 
 	const int deltaz = tz - get_lift();
 	switch (cri) {
@@ -885,7 +890,7 @@ bool Egg_object::is_active(
 			}
 			return false;
 		}
-		if (obj != gwin->get_main_actor() || !area.has_world_point(tx, ty)) {
+		if (!avatar_like || !area.has_world_point(tx, ty)) {
 			return false;    // Not in square.
 		}
 		if (!(flags & (1 << static_cast<int>(hatched)))) {
@@ -896,7 +901,7 @@ bool Egg_object::is_active(
 		return !area.has_world_point(from_tx, from_ty);
 	}
 	case avatar_near:
-		if (obj != gwin->get_main_actor()) {
+		if (!avatar_like) {
 			return false;
 		}
 #ifdef DEBUG

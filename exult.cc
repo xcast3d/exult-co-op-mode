@@ -257,6 +257,7 @@ static bool   arg_verify_files = false;    // Verify a game's files.
 static bool   arg_friend_host  = false;
 static string arg_friend_join;
 static int    arg_friend_port = 1992;    // The year Ultima VII came out.
+static bool friend_world_sent     = false;    // Host: the guest has our world, so keep it in step.
 static string friend_player_name;    // Typed on Join (starts empty), or the Avatar's.
 static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
@@ -1797,6 +1798,43 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 	cout << "Friend Mode: used shape " << item->get_shapenum() << " on " << target->get_name() << " for guest" << endl;
 }
 
+// Host: the NPCs whose moves and health guests need: Exult's 'nearby' list
+// (around the host's view) plus everyone within a screenful of the guest's
+// companion, which the host may not be drawing.
+static void Friend_npcs_near_players(Actor_vector& out) {
+	gwin->get_nearby_npcs(out);
+	Actor* guest = gwin->get_remote_friend_actor();
+	if (!guest) {
+		return;
+	}
+	Actor_vector near_guest;
+	guest->find_nearby_actors(near_guest, c_any_shapenum, 1 + c_screen_tile_size);
+	for (Actor* actor : near_guest) {
+		if (std::find(out.begin(), out.end(), actor) == out.end()) {
+			out.push_back(actor);
+		}
+	}
+}
+
+// Host: creatures and NPCs within a screenful of the guest's companion wake
+// as if the host could see them (Exult wakes them only when painted), so
+// they move and fight near the guest too.
+static void Friend_mode_wake_near_guest() {
+	Actor* guest = gwin->get_remote_friend_actor();
+	if (!guest) {
+		return;
+	}
+	Actor_vector nearby;
+	guest->find_nearby_actors(nearby, c_any_shapenum, 1 + c_screen_tile_size);
+	for (Actor* actor : nearby) {
+		Npc_actor* npc = actor->as_npc();
+		// Also keeps them in the 'nearby' list, whose moves go to guests.
+		if (npc && !npc->is_in_party() && !npc->is_dead()) {
+			npc->wake();
+		}
+	}
+}
+
 // Combat.  A guest in combat mode double-clicks a foe; the host runs Exult's
 // combat schedule for the guest's companion against that foe alone.  When
 // the foe dies or is lost, or the guest walks, the companion waits again.
@@ -2194,6 +2232,194 @@ static void Friend_mode_apply_music(const std::vector<unsigned char>& data) {
 		Audio::get_ptr()->stop_music();
 	}
 	friend_music_from_host = false;
+}
+
+// Missiles, sprite effects and health.  Fights run on the host; guests
+// see the arrows, bolts, spells and blood as pictures, and the health shown
+// when clicking a foe in combat mode.
+
+enum Friend_actor_ref { friend_ref_none = 0, friend_ref_npc = 1, friend_ref_creature = 2 };
+
+static void Friend_put_actor_ref(std::vector<unsigned char>& out, const Game_object* obj) {
+	const Actor* actor = obj ? obj->as_actor() : nullptr;
+	uint32       id    = 0;
+	int          kind  = friend_ref_none;
+	if (actor && (actor->get_npc_num() > 0 || actor == gwin->get_main_actor())) {
+		kind = friend_ref_npc;
+		id   = static_cast<uint32>(actor->get_npc_num());
+	} else if (actor && (id = Friend_creature_id(actor)) != 0) {
+		kind = friend_ref_creature;
+	}
+	Friend_put8(out, kind);
+	Friend_put16(out, static_cast<int>(id & 0xffff));
+	Friend_put16(out, static_cast<int>(id >> 16));
+}
+
+static Actor* Friend_get_actor_ref(const std::vector<unsigned char>& data, size_t& pos) {
+	if (pos + 5 > data.size()) {
+		pos = data.size() + 1;
+		return nullptr;
+	}
+	const int    kind = data[pos];
+	const uint32 id   = data[pos + 1] | (data[pos + 2] << 8) | (data[pos + 3] << 16) | (static_cast<uint32>(data[pos + 4]) << 24);
+	pos += 5;
+	if (kind == friend_ref_npc) {
+		return id == 0 ? gwin->get_main_actor() : gwin->get_npc(static_cast<int>(id));
+	}
+	return kind == friend_ref_creature ? Friend_creature_by_id(id) : nullptr;
+}
+
+static void Friend_put_tile(std::vector<unsigned char>& out, const Tile_coord& t) {
+	Friend_put16(out, t.tx);
+	Friend_put16(out, t.ty);
+	Friend_put8(out, t.tz);
+}
+
+static Tile_coord Friend_get_tile(const std::vector<unsigned char>& data, size_t& pos) {
+	const int tx = Friend_get16(data, pos);
+	const int ty = Friend_get16(data, pos);
+	const int tz = pos < data.size() ? data[pos++] : 0;
+	return Tile_coord(tx, ty, tz);
+}
+
+static bool Friend_mode_sharing_effects() {
+	return friend_session.mode() == Friend_mode_session::Mode::host && friend_session.connected() && friend_world_sent;
+}
+
+void Friend_mode_note_projectile(const Tile_coord& from, const Tile_coord& to, int weapon, int sprite, int speed) {
+	if (!Friend_mode_sharing_effects()) {
+		return;
+	}
+	std::vector<unsigned char> payload;
+	Friend_put_tile(payload, from);
+	Friend_put_tile(payload, to);
+	Friend_put16(payload, weapon & 0xffff);
+	Friend_put16(payload, sprite);
+	Friend_put8(payload, speed);
+	friend_session.send_blob(Friend_mode_session::Blob_kind::projectile, payload);
+}
+
+void Friend_mode_note_sprite(
+		int num, Game_object* item, const Tile_coord& pos, int xoff, int yoff, int dx, int dy, int delay, int frame,
+		int reps) {
+	if (!Friend_mode_sharing_effects()) {
+		return;
+	}
+	std::vector<unsigned char> payload;
+	Friend_put16(payload, num);
+	Friend_put_actor_ref(payload, item);    // Follows an actor, if any.
+	Friend_put_tile(payload, pos);
+	for (const int value : {xoff, yoff, dx, dy, delay, frame, reps}) {
+		Friend_put16(payload, value & 0xffff);    // Signed, 16 bits.
+	}
+	friend_session.send_blob(Friend_mode_session::Blob_kind::sprite_effect, payload);
+}
+
+static void Friend_mode_apply_projectile(const std::vector<unsigned char>& data) {
+	size_t           pos    = 0;
+	const Tile_coord from   = Friend_get_tile(data, pos);
+	const Tile_coord to     = Friend_get_tile(data, pos);
+	const int        weapon = static_cast<sint16>(Friend_get16(data, pos));
+	const int        sprite = static_cast<sint16>(Friend_get16(data, pos));
+	if (pos >= data.size()) {
+		return;
+	}
+	const int speed = data[pos];
+	gwin->get_effects()->add_effect(std::make_unique<Projectile_effect>(from, to, weapon, sprite, speed));
+}
+
+static void Friend_mode_apply_sprite(const std::vector<unsigned char>& data) {
+	size_t           pos  = 0;
+	const int        num  = Friend_get16(data, pos);
+	Actor*           item = Friend_get_actor_ref(data, pos);
+	const Tile_coord at   = Friend_get_tile(data, pos);
+	int              values[7];
+	for (int& value : values) {
+		value = static_cast<sint16>(Friend_get16(data, pos));
+	}
+	if (pos > data.size()) {
+		return;
+	}
+	const auto [xoff, yoff, dx, dy, delay, frame, reps] = values;
+	if (item) {
+		gwin->get_effects()->add_effect(std::make_unique<Sprites_effect>(num, item, xoff, yoff, dx, dy, frame, reps));
+	} else {
+		gwin->get_effects()->add_effect(std::make_unique<Sprites_effect>(num, at, dx, dy, delay, frame, reps));
+	}
+}
+
+// Host: health of creatures and NPCs near the players, when it changes.
+static std::map<uint32, int> friend_health_sent;
+
+static void Friend_mode_health_pass() {
+	Actor_vector nearby;
+	Friend_npcs_near_players(nearby);
+	std::vector<unsigned char> payload;
+	int                        count = 0;
+	Friend_put16(payload, 0);    // Count, filled in below.
+	for (Actor* actor : nearby) {
+		if (!actor || actor->is_in_party() || actor->is_dead()) {
+			continue;
+		}
+		const uint32 creature = Friend_creature_id(actor);
+		if (actor->get_npc_num() <= 0 && creature == 0) {
+			continue;    // Not known to guests by number.
+		}
+		const uint32 key    = actor->get_npc_num() > 0 ? static_cast<uint32>(actor->get_npc_num()) : (creature | 0x80000000U);
+		const int    health = actor->get_property(static_cast<int>(Actor::health));
+		const auto   found  = friend_health_sent.find(key);
+		if (found != friend_health_sent.end() && found->second == health) {
+			continue;
+		}
+		friend_health_sent[key] = health;
+		Friend_put_actor_ref(payload, actor);
+		Friend_put16(payload, health & 0xffff);
+		++count;
+	}
+	if (count > 0) {
+		payload[0] = static_cast<unsigned char>(count & 0xff);
+		payload[1] = static_cast<unsigned char>(count >> 8);
+		friend_session.send_blob(Friend_mode_session::Blob_kind::actor_health, payload);
+	}
+}
+
+static void Friend_mode_apply_health(const std::vector<unsigned char>& data) {
+	size_t    pos   = 0;
+	const int count = Friend_get16(data, pos);
+	for (int i = 0; i < count && pos < data.size(); ++i) {
+		Actor*    actor  = Friend_get_actor_ref(data, pos);
+		const int health = static_cast<sint16>(Friend_get16(data, pos));
+		if (actor && !actor->is_in_party() && pos <= data.size()) {
+			actor->set_property(static_cast<int>(Actor::health), health);
+		}
+	}
+}
+
+// Host: a hit on someone ("combat shows hits"): sent whatever the host's
+// own setting, and shown on a guest if the guest's is on.
+void Friend_mode_note_hit(Game_object* target, int damage, int health_left) {
+	if (!Friend_mode_sharing_effects()) {
+		return;
+	}
+	std::vector<unsigned char> payload;
+	Friend_put_actor_ref(payload, target);
+	Friend_put16(payload, damage & 0xffff);
+	Friend_put16(payload, health_left & 0xffff);
+	friend_session.send_blob(Friend_mode_session::Blob_kind::actor_hit, payload);
+}
+
+static void Friend_mode_apply_hit(const std::vector<unsigned char>& data) {
+	size_t    pos    = 0;
+	Actor*    target = Friend_get_actor_ref(data, pos);
+	const int damage = static_cast<sint16>(Friend_get16(data, pos));
+	const int left   = static_cast<sint16>(Friend_get16(data, pos));
+	if (!target || pos > data.size() || !Combat::show_hits) {
+		return;
+	}
+	char text[50];
+	snprintf(text, sizeof(text), "-%d(%d)", damage, left);
+	gwin->get_effects()->remove_text_effect(target);
+	gwin->get_effects()->add_text(text, target);
 }
 
 // Both sides: say when our journal opens or closes, so the other side can
@@ -2642,7 +2868,6 @@ bool Friend_mode_open_to_coop() {
 
 static bool friend_world_reloaded = false;    // Host loaded a save.
 static bool friend_picker_requested = false;    // Guest pressed Tab; roster on its way.
-static bool friend_world_sent     = false;    // Host: the guest has our world, so keep it in step.
 
 
 void Friend_mode_note_world_loaded() {
@@ -2704,6 +2929,7 @@ static void Friend_mode_send_world() {
 		Friend_mode_send_journal_writers();
 		Friend_mode_journal_open_pass(true);
 		Friend_mode_send_music();    // Join mid-tune.
+		friend_health_sent.clear();
 	} else {
 		cerr << "Friend Mode: could not read " << friend_world_file << endl;
 	}
@@ -4557,7 +4783,9 @@ static void Handle_events() {
 					Friend_mode_item_pass(true);
 					Friend_mode_inventory_pass(true);
 					Friend_mode_status_pass(false);
+					Friend_mode_wake_near_guest();
 					Friend_mode_creature_pass(false);
+					Friend_mode_health_pass();
 				}
 				if (now >= friend_next_clock_sync) {
 					friend_next_clock_sync = now + friend_clock_sync_ms;
@@ -4578,6 +4806,7 @@ static void Handle_events() {
 				friend_world_sent = false;
 				friend_leash_return_at = 0;
 				friend_journal_sent.clear();
+				friend_health_sent.clear();
 				if (!friend_journal_writers.empty()) {
 					friend_journal_writers.clear();    // The guest's note is free again.
 					Notebook_gump::set_remote_writers({});
@@ -4750,7 +4979,7 @@ static void Handle_events() {
 				if (last_npc_snapshot == 0 || now - last_npc_snapshot >= 100) {
 					last_npc_snapshot = now;
 					Actor_vector nearby;
-					gwin->get_nearby_npcs(nearby);
+					Friend_npcs_near_players(nearby);
 					for (Actor* npc : nearby) {
 						if (!npc || npc == gwin->get_main_actor() || npc->get_npc_num() == host_assigned_actor) {
 							continue;
@@ -4812,6 +5041,14 @@ static void Handle_events() {
 					Friend_mode_apply_journal_open(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::music) {
 					Friend_mode_apply_music(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::projectile) {
+					Friend_mode_apply_projectile(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::sprite_effect) {
+					Friend_mode_apply_sprite(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::actor_health) {
+					Friend_mode_apply_health(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::actor_hit) {
+					Friend_mode_apply_hit(blob);
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;

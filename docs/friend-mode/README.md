@@ -166,6 +166,49 @@ Built 2026-10-16:
   the companion's own items and go through the host like a double-click; the
   cloth map (M) still opens locally.
 
+Built and tested 2026-10-17:
+
+- **Creatures appear around the guest.** Monster eggs hatch for the
+  guest's companion as for the Avatar (`Egg_object::is_active`: "cached
+  in" and "Avatar near" eggs of the monster type only). Script, music,
+  weather and other eggs stay the Avatar's. So creatures such as the
+  Trinsic stable horse appear wherever the guest walks inside the leash.
+- **Creatures near the guest stay awake.** Exult stops creatures and NPCs
+  that are off the host's screen and more than a screenful from the
+  Avatar, and wakes them only when the host draws them. Now they also stay
+  awake within a screenful of the guest's companion
+  (`Game_window::near_remote_friend`), and the host wakes those four times
+  a second (`Npc_actor::wake`), so they walk, fight and send their moves to
+  the guest.
+
+- **Missiles and spell effects on the guest** (protocol version 18).
+  Every missile the host fires (arrows, bolts, thrown weapons, missile
+  traps, spells cast as missiles) is sent with its start, end, picture and
+  speed, and flies on the guest as a picture only
+  (`Projectile_effect`'s visual-only constructor); the host does the hit
+  and anything left behind. Sprite effects (spells, explosions, blood) are
+  sent the same way, following the actor they belong to.
+- **Health on the guest** (protocol version 19). The host sends the
+  health of creatures and NPCs near the players when it changes. Exult
+  shows it in two optional places: after a creature's name when clicked in
+  combat mode (only when the combat mode option isn't "Original"), and as
+  "-6(2)" (damage, health left) over whoever is hit, when Game Engine
+  options has "combat shows hits" on. Each hit is now sent to the guest
+  whatever the host's setting, and shown if the guest's own setting is on.
+- **NPCs near the guest send their moves** even when the host isn't
+  drawing them (the host used to send only those in Exult's 'nearby' list,
+  around its own view).
+
+Tested 2026-10-17 and working: creatures appear and move near the guest
+(the Trinsic horse); missiles from the guest's companion and from the
+Avatar show on the guest; "combat shows hits" labels show on the guest.
+The Trinsic cat near the guest is awake (it meows) but stays put until the
+Avatar comes close: its schedule follows the Avatar, as in single-player.
+
+Idea for later: a health bar over enemies, like Ultima Online's (U7 has
+none), as an option. The guest already receives each creature's health,
+and the "combat shows hits" label is where it would replace or join.
+
 Tested 2026-10-17 and working: **Co-Op Mode in the menus**, so no
 special launch options are needed. On the title menu, **Co-Op Mode** (below
 Journey Onward) opens three choices: **Host a Game** switches hosting on

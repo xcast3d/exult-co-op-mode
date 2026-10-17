@@ -626,6 +626,9 @@ public:
 	Actor* get_remote_friend_actor() const {
 		return remote_friend_actor;
 	}
+	// Friend Mode host: within a screenful of a guest's companion, where
+	// creatures and NPCs stay awake as they do near the Avatar.
+	bool near_remote_friend(const Game_object* obj) const;
 	bool has_network_friend_control() const {
 		return network_friend_control;
 	}

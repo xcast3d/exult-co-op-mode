@@ -99,6 +99,13 @@ bool Friend_mode_guest_attack(Game_object* obj);
 // every music start and stop; false if this one must not play (a guest's
 // own, while the host chooses the music).
 bool Friend_mode_note_music(bool start, int num, bool continuous, int force, const std::string& flex);
+// Friend Mode host: show missiles and sprite effects (spells, explosions,
+// blood) on guests too, as pictures only.  'item' is what a sprite follows.
+void Friend_mode_note_hit(Game_object* target, int damage, int health_left);
+void Friend_mode_note_projectile(const Tile_coord& from, const Tile_coord& to, int weapon, int sprite, int speed);
+void Friend_mode_note_sprite(
+		int num, Game_object* item, const Tile_coord& pos, int xoff, int yoff, int dx, int dy, int delay, int frame,
+		int reps);
 // Friend Mode shared journal (see Notebook_gump).  True while connected.
 bool Friend_mode_journal_shared();
 // Start writing in shared note 'index'.  False if someone else is.

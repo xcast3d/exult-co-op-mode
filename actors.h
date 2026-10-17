@@ -919,6 +919,7 @@ public:
 	Schedule_change* find_schedule_at_time(int hour3) override;
 	// Render.
 	void paint() override;
+	void wake();    // Resume if dormant (as when painted on screen).
 	// Run usecode function.
 	void activate(int event = 1) override;
 	// For Time_sensitive:

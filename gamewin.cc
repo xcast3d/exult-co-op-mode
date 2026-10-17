@@ -1251,6 +1251,11 @@ void Game_window::set_network_dialogue_paused(bool paused) {
 	}
 }
 
+bool Game_window::near_remote_friend(const Game_object* obj) const {
+	return remote_friend_actor && obj && obj != remote_friend_actor && obj->get_map() == remote_friend_actor->get_map()
+		   && obj->distance(remote_friend_actor) <= 1 + c_screen_tile_size;
+}
+
 bool Game_window::reserve_friend_mode_actor(int npc_num) {
 	Actor* companion = get_npc(npc_num);
 	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()) {

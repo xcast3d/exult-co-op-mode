@@ -34,6 +34,7 @@
 #include "chunks.h"
 #include "dir.h"
 #include "egg.h"
+#include "exult.h"
 #include "game.h"
 #include "gameclk.h"
 #include "gamemap.h"
@@ -368,6 +369,7 @@ Sprites_effect::Sprites_effect(
 		)
 		: sprite(num, frm, SF_SPRITES_VGA), pos(p), xoff(0), yoff(0), deltax(dx), deltay(dy), reps(rps) {
 	frames = sprite.get_num_frames();
+	Friend_mode_note_sprite(num, nullptr, p, 0, 0, dx, dy, delay, frm, rps);
 	// Start.
 	gwin->get_tqueue()->add(Game::get_ticks() + delay, this);
 }
@@ -387,6 +389,7 @@ Sprites_effect::Sprites_effect(
 		: sprite(num, frm, SF_SPRITES_VGA), item(weak_from_obj(it)), xoff(xf), yoff(yf), deltax(dx), deltay(dy), reps(rps) {
 	pos    = it->get_tile();
 	frames = sprite.get_num_frames();
+	Friend_mode_note_sprite(num, it, pos, xf, yf, dx, dy, 0, frm, rps);
 	// Start immediately.
 	gwin->get_tqueue()->add(Game::get_ticks(), this);
 }
@@ -644,6 +647,9 @@ void Projectile_effect::init(
 	}
 	const int sprite_shape = sprite.get_shapenum();
 	set_sprite_shape(sprite_shape);
+	if (!skip_render) {    // Friend Mode: guests see it fly too.
+		Friend_mode_note_projectile(pos, path->get_dest(), weapon, sprite.get_shapenum(), speed);
+	}
 	// Start after a slight delay.
 	gwin->get_tqueue()->add(Game::get_ticks(), this, gwin->get_std_delay() / 2);
 }
@@ -728,6 +734,15 @@ Projectile_effect::Projectile_effect(
 	init(s, to->get_tile());
 }
 
+Projectile_effect::Projectile_effect(const Tile_coord& from, const Tile_coord& to, int weap, int spr, int spd)
+		: weapon(weap), projectile_shape(-1), sprite(spr, 0), pos(from), return_path(false), no_blocking(true),
+		  skip_render(spr < 0), visual_only(true), speed(spd > 0 ? spd : 4), attval(0), autohit(false) {
+	path = new Zombie();
+	path->NewPath(from, to, nullptr);
+	set_sprite_shape(spr);
+	gwin->get_tqueue()->add(Game::get_ticks(), this, gwin->get_std_delay() / 2);
+}
+
 /**
  *  Delete.
  */
@@ -799,6 +814,12 @@ void Projectile_effect::handle_event(
 			target = Game_object_weak(tgt_obj);
 			break;
 		}
+	}
+	if (path_finished && visual_only) {    // A guest's copy: just vanish.
+		add_dirty();
+		skip_render    = true;
+		auto ownHandle = eman->remove_effect(this);
+		return;
 	}
 	const Ammo_info* ainf = ShapeID::get_info(projectile_shape).get_ammo_info();
 	if (path_finished) {

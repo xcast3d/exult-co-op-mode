@@ -170,6 +170,7 @@ class Projectile_effect : public Special_effect {
 	bool             return_path;         // Returning a boomerang.
 	bool             no_blocking;         // Don't get blocked by things.
 	bool             skip_render;         // For delayed blast.
+	bool             visual_only = false;    // Friend Mode guest: no hit at the end.
 	// Add dirty rectangle.
 	int  speed;     // Missile speed.
 	int  attval;    // Attack value of projectile.
@@ -185,6 +186,9 @@ public:
 			bool retpath = false);
 	Projectile_effect(
 			const Tile_coord& s, Game_object* to, int weap, int proj, int spr, int attpts = 60, int spd = -1, bool retpath = false);
+	// Friend Mode guest: show a missile the host fired.  It only flies; the
+	// host does the hit, damage and anything it leaves behind.
+	Projectile_effect(const Tile_coord& from, const Tile_coord& to, int weap, int spr, int spd);
 	~Projectile_effect() override;
 	// For Time_sensitive:
 	void handle_event(unsigned long time, uintptr udata) override;

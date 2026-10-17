@@ -403,7 +403,7 @@ bool Monster_actor::step(
 			schedule->set_blocked(t);
 		}
 		stop();
-		if (!gwin->add_dirty(this)) {
+		if (!gwin->add_dirty(this) && !gwin->near_remote_friend(this)) {
 			dormant = true;    // Off-screen.
 		}
 		return false;    // Done.
@@ -417,8 +417,8 @@ bool Monster_actor::step(
 	const int ty = t.ty % c_tiles_per_chunk;
 	movef(olist, nlist, tx, ty, frame, t.tz);
 	if (!add_dirty(true) &&
-		// And > a screenful away?
-		distance(gwin->get_camera_actor()) > 1 + c_screen_tile_size) {
+		// And > a screenful away (from the Avatar and any guest)?
+		distance(gwin->get_camera_actor()) > 1 + c_screen_tile_size && !gwin->near_remote_friend(this)) {
 		// No longer on screen.
 		stop();
 		dormant = true;
