@@ -4,20 +4,12 @@ name: friend-mode-windows
 # a ready-to-run folder as a run artifact. Based on ci-windows.yml and
 # snapshots-windows.yml, trimmed to Exult.exe only to save Actions minutes.
 
+# Manual only, to save Actions minutes: build at milestones from the Actions
+# tab (Run workflow) or with `gh workflow run friend-mode-windows.yml`.
 on:
-  push:
-    branches:
-      - feature/friend-mode
-    paths-ignore:
-      - "docs/**"
-      - "**.md"
-      - "android/**"
-      - "ios/**"
-      - "macosx/**"
-      - "msvcstuff/**"
   workflow_dispatch:
 
-# A newer push replaces a build still running for an older one.
+# A newer run replaces one still going on the same branch.
 concurrency:
   group: friend-mode-windows-${{ github.ref }}
   cancel-in-progress: true

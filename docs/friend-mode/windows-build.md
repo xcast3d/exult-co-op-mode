@@ -42,17 +42,21 @@ on a **private** GitHub repository that mirrors this branch. Bitbucket stays
 git push github feature/friend-mode
 ```
 
-Every push of `feature/friend-mode` to `github` runs
-`.github/workflows/friend-mode-windows.yml`, except pushes that only change
-docs, Markdown or other platforms' folders. To build by hand: on GitHub, open
-**Actions → friend-mode-windows → Run workflow**.
+Pushing does **not** build: to save Actions minutes,
+`.github/workflows/friend-mode-windows.yml` runs only when started by hand,
+at milestones worth testing on Windows. Push first, then either open the
+repository on GitHub, **Actions → friend-mode-windows → Run workflow**
+(branch `feature/friend-mode`), or from the Mac:
+
+```bash
+gh workflow run friend-mode-windows.yml -R xcast3d/exult-co-op-mode --ref feature/friend-mode
+```
 
 The workflow uses MSYS2 UCRT64 (64-bit Windows 10 and 11, including Windows on
 Arm through emulation) and `Makefile.mingw`, like upstream's
 `ci-windows.yml`, but builds only `Exult.exe` (no Exult Studio, tools or
 installer) to save minutes. A run takes about 15–25 minutes, most of it
-installing MSYS2 packages. A newer push cancels a run still going for an
-older one.
+installing MSYS2 packages. Starting a new run cancels one still going.
 
 ### Downloading the build
 
@@ -75,8 +79,8 @@ If a run fails, open it and read the **Build Exult** step; `stdout.txt` and
 ### Actions minutes
 
 GitHub Free gives a private repository 2,000 minutes a month; Windows
-minutes count double, so that is roughly 40–60 Windows builds. Upstream
-Exult's own workflows (Linux, macOS, Android, iOS, snapshots, CodeQL,
+minutes count double, so that is roughly 40–60 Windows builds; builds are
+manual for that reason. Upstream Exult's own workflows (Linux, macOS, Android, iOS, snapshots, CodeQL,
 Coverity and so on) stay in `.github/workflows/` for easy upstream merges,
 but each job has `if: ${{ github.repository_owner == 'exult' }}` (some had
 it already), so they are skipped here and cost nothing. When merging from
