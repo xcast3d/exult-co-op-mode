@@ -94,6 +94,7 @@ private:
 	static const int* bg2si_sfxs;     // Converts BG sfx's to SI sfx's.
 	bool              truthful_      = false;
 	bool              speech_enabled = true, music_enabled = true, effects_enabled = true, speech_with_subs = false;
+	int               requested_track = -1;    // See current_music_track().
 	int               speech_volume = 100;
 	int               sfx_volume    = 100;
 	std::unique_ptr<SFX_cache_manager>     sfxs;    // SFX and voice cache manager
@@ -151,6 +152,10 @@ public:
 	bool start_music(
 			const std::string& fname, int num, bool continuous = false, MyMidiPlayer::ForceType force = MyMidiPlayer::Force_None);
 	void stop_music();
+	// The track the game last asked for (-1 for none), even with music
+	// off: game logic such as combat music checks it, and a Friend Mode host
+	// plays music for its guests whatever its own settings.
+	int current_music_track() const;
 	int  play_sound_effect(int num, int volume = AUDIO_MAX_VOLUME, int balance = 0, int repeat = 0, int distance = 0);
 	int  play_wave_sfx(int num, int volume = AUDIO_MAX_VOLUME, int balance = 0, int repeat = 0, int distance = 0);
 	int  play_sound_effect(int num, const Game_object* obj, int volume = AUDIO_MAX_VOLUME, int repeat = 0);

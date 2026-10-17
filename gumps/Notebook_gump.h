@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Gump.h"
 #include "font.h"
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -78,6 +79,15 @@ class Notebook_gump : public Gump {
 	void down_arrow();
 	void jump_to_first_entry();
 	void jump_to_last_entry();
+	// Friend Mode: the note being written in and who holds the others.
+	static int                        edit_note;
+	static std::map<int, std::string> remote_writers;
+	bool        begin_edit(int notenum);    // False if someone else is writing.
+	static void finish_edit(bool repaint = true);
+	void        check_edit_focus();
+	void        show_position(int notenum, int offset);
+	static void reflow(int notenum = -1, int offset = 0);
+	static int  shared_count();
 
 public:
 	Notebook_gump();
@@ -117,6 +127,28 @@ public:
 	static void read();     // Read it in.
 	static void read_auto_text();
 	static void read_auto_text_file(const char* filename);
+
+	// Friend Mode shared journal.  The host's notes are the journal; a
+	// guest's copy is replaced whenever the host sends it.  A note is shared
+	// once written; the trailing new note being written is not, yet.
+	struct Shared_note {
+		int         day = 0, hour = 0, minute = 0;
+		int         tx = 0, ty = 0;
+		int         gflag = -1;
+		std::string text;
+	};
+	// Every shared note as last finished (not mid-edit text).
+	static std::vector<Shared_note> get_shared_notes();
+	// Guest: the host's journal, keeping the note being written here.
+	static void set_shared_notes(const std::vector<Shared_note>& shared);
+	// Host: a guest finished a note (index < 0 for a new one).
+	static bool apply_shared_edit(int index, const Shared_note& note);
+	// Who else is writing which note ("" frees it).  A guest that loses
+	// its own note this way gets the finished text back.
+	static void set_remote_writers(const std::map<int, std::string>& writers);
+	static int  get_edit_note() {
+		return edit_note;
+	}
 };
 
 #endif

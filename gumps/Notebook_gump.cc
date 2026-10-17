@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "gameclk.h"
 #include "gamewin.h"
 #include "items.h"
+#include "mouse.h"
 #include "msgfile.h"
 #include "touchui.h"
 
@@ -45,6 +46,7 @@ using std::ofstream;
 using std::ostream;
 using std::string;
 using std::vector;
+#include <algorithm>
 #include <sstream>
 
 class Strings : public GumpStrings {
@@ -68,6 +70,8 @@ bool                 Notebook_gump::initialized_auto_text = false;
 Notebook_gump*       Notebook_gump::instance              = nullptr;
 vector<Notebook_top> Notebook_gump::page_info;
 vector<string>       Notebook_gump::auto_text;
+int                  Notebook_gump::edit_note = -1;
+std::map<int, string> Notebook_gump::remote_writers;
 
 /*
  *  Defines in 'gumps.vga':
@@ -88,6 +92,7 @@ class One_note {
 	int    day = 0, hour = 0, minute = 0;    // Game time when note was written.
 	int    tx = 0, ty = 0;                   // Tile coord. where written.
 	string text;                             // Text, 0-delimited.
+	string committed;                        // Text as last finished (shared).
 	int    gflag = -1;                       // >=0 if created automatically when
 	//   the global flag was set.
 	bool is_new = false;    // Newly created at cur. time/place.
@@ -230,6 +235,8 @@ void Notebook_gump::clear() {
 	}
 	page_info.clear();
 	initialized = false;
+	edit_note   = -1;
+	remote_writers.clear();
 }
 
 /*
@@ -241,6 +248,7 @@ void Notebook_gump::add_new(const string& text, int gflag) {
 	const Tile_coord t    = gwin->get_main_actor()->get_tile();
 	auto*            note = new One_note(clk->get_day(), clk->get_hour(), clk->get_minute(), t.tx, t.ty, text, gflag);
 	note->is_new          = true;
+	note->committed       = text;
 	notes.push_back(note);
 }
 
@@ -292,6 +300,7 @@ Notebook_gump* Notebook_gump::create() {
  *  Cleanup.
  */
 Notebook_gump::~Notebook_gump() {
+	finish_edit(false);    // Closing finishes the note being written.
 	if (!notes.empty()) {
 		// Check for empty 'new' note.
 		One_note* note = notes.back();
@@ -349,6 +358,13 @@ bool Notebook_gump::paint_page(
 		const int yoffset = 4;
 #endif
 		sman->paint_text(fontnum, buf, x + box.x, y + pagey);
+		// Friend Mode: someone else is writing this note.
+		const auto found = std::find(notes.begin(), notes.end(), note);
+		const auto writer = remote_writers.find(static_cast<int>(found - notes.begin()));
+		if (writer != remote_writers.end()) {
+			const string who = "(" + writer->second + ")";
+			sman->paint_text(4, who.c_str(), x + box.x + sman->get_text_width(fontnum, buf) + 4, y + pagey);
+		}
 		// when cheating show location of entry (in dec - could use sextant
 		// postions)
 		if (cheat()) {
@@ -407,6 +423,7 @@ void Notebook_gump::change_page(int delta) {
 	curnote = page_info[curpage].notenum;
 	updnx = cursor.offset = 0;
 	paint();
+	check_edit_focus();
 }
 
 /*
@@ -442,6 +459,7 @@ Gump_button* Notebook_gump::on_button(
 		curnote       = page_info[curpage].notenum;
 		cursor.offset = offset + coff;
 		paint();
+		check_edit_focus();
 		updnx = cursor.x - x - lpagex;
 		if (!SDL_TextInputActive(window)) {
 			TouchUI::startTextInput(window);
@@ -465,6 +483,7 @@ Gump_button* Notebook_gump::on_button(
 			curnote       = page_info[curpage].notenum;
 			cursor.offset = offset + coff;
 			paint();
+			check_edit_focus();
 			updnx = cursor.x - x - rpagex;
 			if (!SDL_TextInputActive(window)) {
 				TouchUI::startTextInput(window);
@@ -690,6 +709,10 @@ bool Notebook_gump::handle_kbd_event(void* vev) {
 	if (curpage >= static_cast<int>(page_info.size())) {
 		return false;    // Shouldn't happen.
 	}
+	check_edit_focus();    // (Before taking pinfo: finishing can reflow.)
+	if (curpage >= static_cast<int>(page_info.size())) {
+		return false;
+	}
 	const Notebook_top& pinfo = page_info[curpage];
 	One_note*           note  = notes[pinfo.notenum];
 	switch (chr) {
@@ -710,6 +733,9 @@ bool Notebook_gump::handle_kbd_event(void* vev) {
 		jump_to_last_entry();
 		break;
 	case SDLK_RETURN:
+		if (!begin_edit(pinfo.notenum)) {
+			return true;
+		}
 		note->insert('\n', cursor.offset);
 		++cursor.offset;
 		paint();    // (Not very efficient...)
@@ -719,6 +745,9 @@ bool Notebook_gump::handle_kbd_event(void* vev) {
 		}
 		break;
 	case SDLK_BACKSPACE:
+		if (cursor.offset > 0 && !begin_edit(pinfo.notenum)) {
+			return true;
+		}
 		if (note->del(cursor.offset - 1)) {
 			if (--cursor.offset < pinfo.offset && curpage % 2 == 0) {
 				prev_page();
@@ -727,6 +756,9 @@ bool Notebook_gump::handle_kbd_event(void* vev) {
 		}
 		break;
 	case SDLK_DELETE:
+		if (cursor.offset < static_cast<int>(note->text.length()) && !begin_edit(pinfo.notenum)) {
+			return true;
+		}
 		if (note->del(cursor.offset)) {
 			paint();
 		}
@@ -751,9 +783,11 @@ bool Notebook_gump::handle_kbd_event(void* vev) {
 		break;
 	case SDLK_UP:
 		up_arrow();
+		check_edit_focus();
 		return true;    // Don't set updnx.
 	case SDLK_DOWN:
 		down_arrow();
+		check_edit_focus();
 		return true;    // Don't set updnx.
 	case SDLK_PAGEUP:
 		change_page(-1);
@@ -770,6 +804,9 @@ bool Notebook_gump::handle_kbd_event(void* vev) {
 		}
 		// Special case: ignore "^" character
 		if (unicode == '^') {
+			return true;
+		}
+		if (!begin_edit(pinfo.notenum)) {
 			return true;
 		}
 
@@ -823,6 +860,7 @@ bool Notebook_gump::handle_kbd_event(void* vev) {
 		}
 		break;
 	}
+	check_edit_focus();
 	updnx = cursor.x - x - ((curpage % 2) ? rpagex : lpagex);
 #ifdef DEBUG
 	std::cout << "updnx = " << updnx << std::endl;
@@ -864,6 +902,7 @@ void Notebook_gump::add_new_with_line_breaks(const string& text, int gflag) {
 
 	// Use existing line breaking logic from One_note
 	note->add_text_with_line_breaks(text);
+	note->committed = note->text;
 
 	// Add the note to the collection
 	notes.push_back(note);
@@ -939,6 +978,9 @@ void Notebook_gump::read() {
 				note->set_gflag(gf);
 			}
 		}
+	}
+	for (auto* each : notes) {
+		each->committed = each->text;
 	}
 }
 
@@ -1218,5 +1260,237 @@ void Notebook_gump::jump_to_last_entry() {
 		curnote       = last_idx;
 		cursor.offset = 0;
 		paint();
+	}
+}
+
+/*
+ *  Friend Mode shared journal.
+ *
+ *  A note is written by one person at a time.  Writing starts with the
+ *  first change to a note and ends when the cursor leaves it or the
+ *  journal closes; only then does the note go to the others.
+ */
+
+// Shared notes come first; a trailing new note nobody has finished is not
+// shared yet.
+int Notebook_gump::shared_count() {
+	const int count = static_cast<int>(notes.size());
+	if (count > 0 && notes.back()->is_new && notes.back()->committed.empty()) {
+		return count - 1;
+	}
+	return count;
+}
+
+bool Notebook_gump::begin_edit(int notenum) {
+	if (notenum == edit_note) {
+		return true;
+	}
+	if (edit_note >= 0) {    // Shouldn't happen: focus checks finish it.
+		finish_edit();
+		return false;
+	}
+	if (notenum < 0 || notenum >= static_cast<int>(notes.size())) {
+		return false;
+	}
+	if (Friend_mode_journal_shared()) {
+		if (remote_writers.count(notenum)) {
+			Mouse::mouse()->flash_shape(Mouse::redx);    // Someone else's.
+			return false;
+		}
+		if (notenum < shared_count() && !Friend_mode_journal_begin_edit(notenum)) {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+			return false;
+		}
+	}
+	edit_note = notenum;
+	return true;
+}
+
+void Notebook_gump::finish_edit(bool repaint) {
+	const int notenum = edit_note;
+	edit_note         = -1;
+	if (notenum < 0 || notenum >= static_cast<int>(notes.size())) {
+		return;
+	}
+	One_note*  note     = notes[notenum];
+	const bool new_note = notenum >= shared_count();
+	const bool changed  = note->text != note->committed;
+	note->committed     = note->text;
+	if (!Friend_mode_journal_shared()) {
+		return;
+	}
+	const bool handed_over = Friend_mode_journal_end_edit(
+			new_note ? -1 : notenum, changed, note->day, note->hour, note->minute, note->tx, note->ty, note->text);
+	if (handed_over && new_note) {
+		// A guest's new note: the host adds it and sends it back.
+		notes.erase(notes.begin() + notenum);
+		delete note;
+		if (repaint) {
+			reflow();
+		} else {
+			page_info.clear();
+			page_info.emplace_back(0, 0);
+		}
+	}
+}
+
+void Notebook_gump::check_edit_focus() {
+	if (edit_note >= 0
+		&& (curpage >= static_cast<int>(page_info.size()) || page_info[curpage].notenum != edit_note)) {
+		finish_edit();
+	}
+}
+
+// Lay the pages out again and put the cursor at 'offset' in 'notenum'.
+void Notebook_gump::show_position(int notenum, int offset) {
+	page_info.clear();
+	page_info.emplace_back(0, 0);
+	curpage = curnote = 0;
+	cursor.offset     = 0;
+	if (notes.empty()) {
+		return;
+	}
+	notenum = std::clamp(notenum, 0, static_cast<int>(notes.size()) - 1);
+	offset  = std::clamp(offset, 0, static_cast<int>(notes[notenum]->text.length()));
+	int found = -1;
+	for (int safety = 0; safety < 10000 && found < 0; ++safety) {
+		const int topleft = curpage & ~1;
+		paint();    // Fills page_info for this pair and the next.
+		for (int page = topleft; page <= topleft + 1 && page < static_cast<int>(page_info.size()); ++page) {
+			const Notebook_top& here = page_info[page];
+			const bool more = page + 1 < static_cast<int>(page_info.size()) && page_info[page + 1].notenum == notenum
+							  && page_info[page + 1].offset > 0 && page_info[page + 1].offset <= offset;
+			if (here.notenum == notenum && here.offset <= offset && !more) {
+				found = page;
+				break;
+			}
+		}
+		const int nxt = topleft + 2;
+		if (found >= 0 || nxt >= static_cast<int>(page_info.size()) || page_info[nxt].notenum > notenum) {
+			break;
+		}
+		curpage       = nxt;
+		curnote       = page_info[curpage].notenum;
+		cursor.offset = page_info[curpage].offset;
+	}
+	curpage       = found >= 0 ? found : 0;
+	curnote       = page_info[curpage].notenum;
+	cursor.offset = found >= 0 ? offset : page_info[0].offset;
+	paint();
+	updnx = 0;
+}
+
+void Notebook_gump::reflow(int notenum, int offset) {
+	if (!instance) {
+		page_info.clear();    // Laid out again when it opens.
+		page_info.emplace_back(0, 0);
+		return;
+	}
+	if (notenum < 0) {
+		notenum = instance->curpage < static_cast<int>(page_info.size()) ? page_info[instance->curpage].notenum : 0;
+		offset  = instance->cursor.offset;
+	}
+	instance->show_position(notenum, offset);
+	gwin->set_all_dirty();
+}
+
+std::vector<Notebook_gump::Shared_note> Notebook_gump::get_shared_notes() {
+	if (!initialized) {
+		initialize();
+	}
+	std::vector<Shared_note> shared;
+	const int                count = shared_count();
+	for (int i = 0; i < count; ++i) {
+		const One_note* note = notes[i];
+		shared.push_back({note->day, note->hour, note->minute, note->tx, note->ty, note->gflag, note->committed});
+	}
+	return shared;
+}
+
+void Notebook_gump::set_shared_notes(const std::vector<Shared_note>& shared) {
+	initialized             = true;    // The host's journal, not our gamedat.
+	const int old_shared    = shared_count();
+	One_note* trailing      = static_cast<int>(notes.size()) > old_shared ? notes.back() : nullptr;
+	const int trailing_at   = static_cast<int>(notes.size()) - 1;
+	int       cur_note      = -1;
+	int       cur_offset    = 0;
+	if (instance && instance->curpage < static_cast<int>(page_info.size())) {
+		cur_note   = page_info[instance->curpage].notenum;
+		cur_offset = instance->cursor.offset;
+	}
+	// Keep what we are writing in a shared note: the host leaves it alone.
+	const int kept_at   = edit_note >= 0 && edit_note < old_shared ? edit_note : -1;
+	const string kept   = kept_at >= 0 ? notes[kept_at]->text : string();
+	const bool editing_new = trailing && edit_note == trailing_at;
+	for (int i = 0; i < old_shared; ++i) {
+		delete notes[i];
+	}
+	notes.clear();
+	for (const Shared_note& each : shared) {
+		auto* note      = new One_note(each.day, each.hour, each.minute, each.tx, each.ty, each.text, each.gflag);
+		note->committed = each.text;
+		notes.push_back(note);
+	}
+	if (kept_at >= 0 && kept_at < static_cast<int>(notes.size())) {
+		notes[kept_at]->text = kept;
+	} else if (kept_at >= 0) {
+		edit_note = -1;
+	}
+	if (trailing) {
+		notes.push_back(trailing);
+		if (editing_new) {
+			edit_note = static_cast<int>(notes.size()) - 1;
+		}
+		if (cur_note == trailing_at) {
+			cur_note = static_cast<int>(notes.size()) - 1;
+		}
+	}
+	reflow(cur_note, cur_offset);
+}
+
+bool Notebook_gump::apply_shared_edit(int index, const Shared_note& shared) {
+	if (!initialized) {
+		initialize();
+	}
+	const int count = shared_count();
+	int       cur_note   = -1;
+	int       cur_offset = 0;
+	if (instance && instance->curpage < static_cast<int>(page_info.size())) {
+		cur_note   = page_info[instance->curpage].notenum;
+		cur_offset = instance->cursor.offset;
+	}
+	if (index >= 0) {
+		if (index >= count || index == edit_note) {
+			return false;    // No such note, or we are writing it.
+		}
+		notes[index]->text = notes[index]->committed = shared.text;
+	} else {
+		// A new note goes after the shared ones, before a new note of ours.
+		auto* note = new One_note(shared.day, shared.hour, shared.minute, shared.tx, shared.ty, shared.text);
+		note->committed = shared.text;
+		notes.insert(notes.begin() + count, note);
+		if (edit_note >= count) {
+			++edit_note;
+		}
+		if (cur_note >= count) {
+			++cur_note;
+		}
+	}
+	if (instance) {
+		reflow(cur_note, cur_offset);
+	}
+	return true;
+}
+
+void Notebook_gump::set_remote_writers(const std::map<int, string>& writers) {
+	remote_writers = writers;
+	if (edit_note >= 0 && remote_writers.count(edit_note) && edit_note < static_cast<int>(notes.size())) {
+		// Someone else started this note first: back to its finished text.
+		notes[edit_note]->text = notes[edit_note]->committed;
+		edit_note              = -1;
+		Mouse::mouse()->flash_shape(Mouse::redx);
+	}
+	if (instance) {
+		reflow();
 	}
 }

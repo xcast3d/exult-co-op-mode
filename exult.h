@@ -86,7 +86,22 @@ bool Friend_mode_guest_use_item(Game_object* item);
 bool Friend_mode_guest_activate(Game_object* item);
 // Guest: crosshair click for a key or lockpick target (nullptr on Escape).
 Game_object* Friend_mode_pick_item_target();
+// Guest in combat mode: ask the host to have our companion attack 'obj'.
+// False if it isn't a foe (a door, say), so the usual click rules apply.
+bool Friend_mode_guest_attack(Game_object* obj);
 
+// Friend Mode music: the host's tracks play on guests too.  Called for
+// every music start and stop; false if this one must not play (a guest's
+// own, while the host chooses the music).
+bool Friend_mode_note_music(bool start, int num, bool continuous, int force, const std::string& flex);
+// Friend Mode shared journal (see Notebook_gump).  True while connected.
+bool Friend_mode_journal_shared();
+// Start writing in shared note 'index'.  False if someone else is.
+bool Friend_mode_journal_begin_edit(int index);
+// Finished writing in a note ('index' < 0 for a new one).  True if the note
+// went to the host, which sends it back in the journal.
+bool Friend_mode_journal_end_edit(
+		int index, bool changed, int day, int hour, int minute, int tx, int ty, const std::string& text);
 // Allows world-object speech to enter the host's Friend Mode event stream.
 void Friend_mode_note_speech(Game_object* source, const char* text);
 void Friend_mode_note_dialogue_reset();

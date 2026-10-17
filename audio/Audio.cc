@@ -495,6 +495,10 @@ bool Audio::start_music(int num, bool continuous, MyMidiPlayer::ForceType force,
 #ifdef DEBUG
 	cout << formatTicks() << "Audio subsystem request: Music start " << num << " in flex " << flex << endl;
 #endif
+	if (!Friend_mode_note_music(true, num, continuous, static_cast<int>(force), flex)) {
+		return false;
+	}
+	requested_track = num == 255 ? -1 : num;    // -1 and 255 stop the music.
 	if (audio_enabled && music_enabled && mixer && mixer->getMidiPlayer()) {
 		return mixer->getMidiPlayer()->start_music(num, music_looping == LoopingType::Never ? false : continuous, force, flex);
 	}
@@ -519,6 +523,10 @@ void Audio::stop_music() {
 #ifdef DEBUG
 	cout << formatTicks() << "Audio subsystem request: Music stop" << endl;
 #endif
+	if (!Friend_mode_note_music(false, -1, false, 0, std::string())) {
+		return;
+	}
+	requested_track = -1;
 	if (!audio_enabled) {
 		return;
 	}
@@ -909,6 +917,11 @@ bool Audio::is_voice_playing() const {
 
 MyMidiPlayer* Audio::get_midi() const {
 	return mixer ? mixer->getMidiPlayer() : nullptr;
+}
+
+int Audio::current_music_track() const {
+	MyMidiPlayer* player = get_midi();
+	return player && is_music_enabled() ? player->get_current_track() : requested_track;
 }
 
 void Audio::set_speech_volume(int newvol, bool saveconfig) {

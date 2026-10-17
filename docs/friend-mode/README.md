@@ -102,7 +102,8 @@ Found in testing:
   view.
 - The cheats option still shows on guests (it can't be turned on); hide it
   like Load/Save.
-- Guests can switch to combat mode but their companion doesn't attack.
+- Guests can switch to combat mode but their companion doesn't attack
+  (built since; see below).
 - Bottles, torches and other everyday objects with scripts say "The Avatar
   must do this"; guests should be able to use the safe ones.
 - An inactive window can leave a stale mouse arrow drawn until it is clicked;
@@ -163,14 +164,63 @@ Built 2026-10-16:
   the companion's own items and go through the host like a double-click; the
   cloth map (M) still opens locally.
 
-Next to build:
+Tested 2026-10-16/17 and working (protocol version 17): guest combat,
+the shared journal and the journal bar, and music from the host, as
+described below.
 
-1. **Guest combat**: the guest's attack target goes to the host, which runs
-   combat for that companion (part of Phase 5).
-2. **Shared journal** that guests can write in too. Edits go to the host
-   one note at a time (when a note is finished, not on save), the host
-   applies them in order and sends the journal back to everyone. A note
-   someone is editing is locked for others.
+- **Journal bar.** While one side has the journal open, the other sees a
+  bar like the pause bar: "Someone is writing in the party journal."
+- **Music from the host.** Every track the host starts or stops (region
+  music, combat, victory, scripts) is sent to the guest and played there,
+  including the current track when the guest joins. While connected, the
+  guest's own copy of the world starts no music of its own, since its eggs
+  and fights would pick differently. The guest needs "digital music" off
+  unless OGG music files are installed; with it on and no files, Exult
+  plays no music at all.
+- **Host audio off.** The host's combat music checks (danger, attacked,
+  guards) use the track the game last asked for
+  (`Audio::current_music_track`), not the host's music player, which
+  doesn't exist with audio off, so guests still get the music. Background
+  music for towns, weather and dungeons still follows the host's own synth:
+  Exult only plays it with digital music or an MT-32.
+- **Battle music for the guest's fights.** The guest's companion counts
+  like the Avatar: its first strike starts the battle tune and killing a
+  hostile (evil) monster plays the victory tune. Peaceful animals (a horse)
+  give none, as in U7. The host sends "no music" only when music stops,
+  not every second.
+- **Sound effects** need a Black Gate digital pack in `data/`
+  (`sqsfxbg.flx`, Roland, or `jmsfx.flx`, from Exult's download page; both
+  are git-ignored). This Mac now has the Roland pack. This build has no MIDI
+  sound effects. Sounds made by the other machine's actions (a door the
+  host opens) are not sent yet.
+
+Built and tested 2026-10-16 (protocol version 15):
+
+- **Guest combat** (start of Phase 5). In combat mode, a guest's
+  double-click on a foe sends it to the host, which puts the companion on
+  Exult's own combat schedule against that foe. The companion walks up and
+  fights with whatever it has readied; its moves and attack frames come back
+  as usual. It stops and waits for the guest again when the foe dies or is
+  lost (out of the host's view, invisible, or the combat schedule picks
+  another), or as soon as the guest walks. Foes are creatures and hostile
+  NPCs (evil or chaotic) within 24 tiles; anyone peaceful gets "The Avatar
+  must do this". Combat mode on a guest only changes what double-clicks do:
+  the guest's own copies of the Avatar and party no longer start fights of
+  their own. Creature health still isn't shown on the guest.
+- **Shared journal.** The host's journal is the real one, and guests can
+  read and write it (N). Writing in a note starts with the first change to
+  it and ends when the cursor leaves it or the journal closes. The writer
+  holds the note: the others see their name next to the note's date and
+  get a red X if they try to type in it. The host decides who got a note
+  first, and a guest that loses the race gets the finished text back. A
+  guest's finished note (changed, or new) goes to the host, which applies
+  it and sends the whole journal back; the host's own notes and automatic
+  story notes go out the same way, checked twice a second. A guest's new
+  note lands after the shared ones.
+
+Next to build: the rest of Phase 5 combat sync in the [project
+brief](../ultima-7-friend-mode.md) (damage and creature health on the
+guest).
 
 Waiting for a second tester: the two-tester contention checks and a real
 in-game teleporter with the leash.

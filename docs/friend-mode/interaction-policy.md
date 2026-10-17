@@ -17,7 +17,9 @@ request a limited set of safe actions without becoming the story Avatar.
 | General NPC conversation | Allow | Deny | Companion input must not advance story or expose quest choices. |
 | Quest decisions and story dialogue | Allow | Deny | Always attributed to the canonical Avatar. |
 | Story-critical object Usecode | Allow | Deny | Requires an explicit allowlist or classification before guests can invoke it. |
-| Combat actions | Allow | Later phase | Host-authoritative combat synchronization is required first. |
+| Attack a creature or hostile NPC | Allow | Allow | The guest picks the foe; the host runs the companion's combat schedule against it. |
+| Attack a peaceful NPC | Allow | Deny | Like conversation, this stays with the Avatar. |
+| Read and write the journal | Allow | Allow | One writer per note; the host's journal is authoritative. |
 
 ## Implementation direction
 

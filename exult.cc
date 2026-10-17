@@ -34,6 +34,7 @@
 #include "Face_stats.h"
 #include "Gump_button.h"
 #include "Gump_manager.h"
+#include "Notebook_gump.h"
 #include "Scroll_gump.h"
 #include "ShortcutBar_gump.h"
 #include "U7file.h"
@@ -1796,6 +1797,447 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 	cout << "Friend Mode: used shape " << item->get_shapenum() << " on " << target->get_name() << " for guest" << endl;
 }
 
+// Combat.  A guest in combat mode double-clicks a foe; the host runs Exult's
+// combat schedule for the guest's companion against that foe alone.  When
+// the foe dies or is lost, or the guest walks, the companion waits again.
+
+enum Friend_attack_target { friend_attack_npc = 0, friend_attack_creature = 1 };
+constexpr int friend_attack_max_tiles = 24;    // Reach for picking a foe.
+
+// Creatures, and NPCs who are hostile.  Peaceful people stay the Avatar's
+// business, as with talking to them.
+static bool Friend_guest_may_attack(const Actor* foe) {
+	if (foe->get_npc_num() > 0) {
+		const int align = foe->get_effective_alignment();
+		return align == Actor::evil || align == Actor::chaotic;
+	}
+	return Friend_creature_id(foe) != 0;
+}
+
+static bool Friend_is_attack_target(const Actor* own, const Actor* foe) {
+	return own && foe && foe != own && foe != gwin->get_main_actor() && !foe->is_in_party() && !foe->is_dead()
+		   && !foe->get_info().is_body_shape();
+}
+
+bool Friend_mode_guest_attack(Game_object* obj) {
+	Actor* own = gwin->get_controlled_actor();
+	Actor* foe = obj ? obj->as_actor() : nullptr;
+	if (!Friend_is_attack_target(own, foe) || friend_session.mode() != Friend_mode_session::Mode::guest) {
+		return false;    // Not a foe: doors and the like work as usual.
+	}
+	if (!Friend_guest_may_attack(foe)) {
+		gwin->get_effects()->add_text("The Avatar must do this", foe);
+		return true;
+	}
+	if (!friend_session.connected()) {
+		return true;
+	}
+	std::vector<unsigned char> payload;
+	if (foe->get_npc_num() > 0) {
+		Friend_put8(payload, friend_attack_npc);
+		Friend_put16(payload, foe->get_npc_num());
+		Friend_put16(payload, 0);
+	} else {
+		const uint32 id = Friend_creature_id(foe);
+		Friend_put8(payload, friend_attack_creature);
+		Friend_put16(payload, static_cast<int>(id & 0xffff));
+		Friend_put16(payload, static_cast<int>(id >> 16));
+	}
+	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_attack, payload);
+	cout << "Friend Mode: guest attacks " << foe->get_name() << endl;
+	return true;
+}
+
+static int              friend_attacker = -1;    // Host: companion fighting for a guest.
+static Game_object_weak friend_attack_foe;
+
+// Host: the guest's companion stops fighting and waits for the guest again.
+static void Friend_mode_end_guest_attack(const char* why) {
+	if (friend_attacker < 0) {
+		return;
+	}
+	Actor* actor = gwin->get_npc(friend_attacker);
+	if (actor && actor == gwin->get_remote_friend_actor()) {
+		actor->set_target(nullptr);
+		if (actor->get_schedule_type() != Schedule::wait) {
+			actor->set_schedule_type(Schedule::wait);
+		}
+	}
+	cout << "Friend Mode: guest's attack ended (" << why << ')' << endl;
+	friend_attacker = -1;
+	friend_attack_foe.reset();
+}
+
+static void Friend_mode_attack_for_guest(const std::vector<unsigned char>& data, Actor* actor) {
+	if (!actor || data.size() < 5) {
+		return;
+	}
+	const int    kind = data[0];
+	const uint32 id   = data[1] | (data[2] << 8) | (data[3] << 16) | (static_cast<uint32>(data[4]) << 24);
+	Actor*       foe  = kind == friend_attack_npc ? gwin->get_npc(static_cast<int>(id))
+						: kind == friend_attack_creature ? static_cast<Actor*>(Friend_creature_by_id(id))
+														 : nullptr;
+	if (!Friend_is_attack_target(actor, foe) || !Friend_guest_may_attack(foe)) {
+		cout << "Friend Mode: refused guest attack (not a foe)" << endl;
+		return;
+	}
+	if (actor->is_dead() || actor->get_flag(Obj_flags::asleep) || actor->get_flag(Obj_flags::paralyzed)
+		|| actor->get_map() != foe->get_map() || actor->distance(foe) > friend_attack_max_tiles) {
+		cout << "Friend Mode: refused guest attack (can't reach)" << endl;
+		return;
+	}
+	if (actor->get_attack_mode() == Actor::flee) {
+		actor->set_attack_mode(Actor::nearest);
+	}
+	friend_attacker   = actor->get_npc_num();
+	friend_attack_foe = weak_from_obj(foe);
+	if (actor->get_schedule_type() != Schedule::combat) {
+		actor->set_schedule_type(Schedule::combat);
+	}
+	actor->set_target(foe);
+	cout << "Friend Mode: " << actor->get_name() << " attacks " << foe->get_name() << " for guest" << endl;
+}
+
+// Host, every frame: end the attack once its foe is gone or the combat
+// schedule moved on (to another foe, or back to following the Avatar).
+static void Friend_mode_check_guest_attack(int assigned) {
+	if (friend_attacker < 0) {
+		return;
+	}
+	Actor* actor = gwin->get_npc(friend_attacker);
+	if (friend_attacker != assigned || !actor || actor != gwin->get_remote_friend_actor()) {
+		friend_attacker = -1;    // Released; its old schedule was restored.
+		friend_attack_foe.reset();
+		return;
+	}
+	const Game_object_shared foe   = friend_attack_foe.lock();
+	const Actor*             enemy = foe ? foe->as_actor() : nullptr;
+	if (!enemy || enemy->is_dead()) {
+		Friend_mode_end_guest_attack("foe defeated");
+	} else if (actor->get_schedule_type() != Schedule::combat || actor->get_target() != enemy) {
+		Friend_mode_end_guest_attack("foe lost");
+	}
+}
+
+// Shared journal.  The host's journal is the real one.  Someone writing in a
+// note holds it (the host says who) until the cursor leaves it or the
+// journal closes; then a guest sends the finished note, and the host sends
+// the whole journal to everyone when it changes.
+
+enum Friend_journal_writer { friend_writer_host = 1, friend_writer_guest = 2 };
+constexpr int    friend_journal_new       = 0xffff;    // Edit index of a new note.
+constexpr size_t friend_journal_max_text  = 4000;
+constexpr uint32 friend_journal_sync_ms   = 500;
+static std::map<int, int>         friend_journal_writers;    // Host: note -> writer.
+static std::vector<unsigned char> friend_journal_sent;       // Host: last journal sent.
+static uint32                     friend_next_journal_sync = 0;
+
+static void Friend_put_note(std::vector<unsigned char>& out, const Notebook_gump::Shared_note& note) {
+	Friend_put16(out, note.day);
+	Friend_put8(out, note.hour);
+	Friend_put8(out, note.minute);
+	Friend_put16(out, note.tx);
+	Friend_put16(out, note.ty);
+	Friend_put16(out, note.gflag + 1);
+	const size_t length = std::min(note.text.size(), friend_journal_max_text);
+	Friend_put16(out, static_cast<int>(length));
+	out.insert(out.end(), note.text.begin(), note.text.begin() + length);
+}
+
+static int Friend_get16(const std::vector<unsigned char>& data, size_t& pos) {
+	if (pos + 2 > data.size()) {
+		pos = data.size() + 1;    // Past the end: marks a bad message.
+		return 0;
+	}
+	const int value = data[pos] | (data[pos + 1] << 8);
+	pos += 2;
+	return value;
+}
+
+static bool Friend_read_note(const std::vector<unsigned char>& data, size_t& pos, Notebook_gump::Shared_note& note) {
+	note.day = Friend_get16(data, pos);
+	if (pos + 2 > data.size()) {
+		return false;
+	}
+	note.hour   = data[pos++] % 24;
+	note.minute = data[pos++] % 60;
+	note.tx     = Friend_get16(data, pos);
+	note.ty     = Friend_get16(data, pos);
+	note.gflag  = Friend_get16(data, pos) - 1;
+	const size_t length = Friend_get16(data, pos);
+	if (pos > data.size() || pos + length > data.size() || length > friend_journal_max_text) {
+		return false;
+	}
+	note.text.clear();
+	for (size_t i = 0; i < length; ++i) {    // Printable text and line breaks only.
+		const unsigned char chr = data[pos + i];
+		if (chr == '\n' || (chr >= ' ' && chr < 127 && chr != '^')) {
+			note.text += static_cast<char>(chr);
+		}
+	}
+	pos += length;
+	return true;
+}
+
+bool Friend_mode_journal_shared() {
+	return friend_session.mode() != Friend_mode_session::Mode::off && friend_session.connected();
+}
+
+// Host: tell the guest who writes where, and show the guest's note as taken.
+static void Friend_mode_send_journal_writers() {
+	std::map<int, std::string> others;
+	std::vector<unsigned char> payload;
+	Friend_put16(payload, static_cast<int>(friend_journal_writers.size()));
+	for (const auto& [note, writer] : friend_journal_writers) {
+		Friend_put16(payload, note);
+		Friend_put8(payload, writer);
+		if (writer == friend_writer_guest) {
+			others[note] = friend_session.remote_player_name_value();
+		}
+	}
+	Notebook_gump::set_remote_writers(others);
+	if (friend_session.connected()) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::journal_locks, payload);
+	}
+}
+
+bool Friend_mode_journal_begin_edit(int index) {
+	if (!Friend_mode_journal_shared()) {
+		return true;
+	}
+	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
+		std::vector<unsigned char> payload;    // The host may still say no.
+		Friend_put16(payload, index);
+		Friend_put8(payload, 1);
+		friend_session.send_blob(Friend_mode_session::Blob_kind::journal_lock, payload);
+		return true;
+	}
+	const auto found = friend_journal_writers.find(index);
+	if (found != friend_journal_writers.end() && found->second != friend_writer_host) {
+		return false;
+	}
+	friend_journal_writers[index] = friend_writer_host;
+	Friend_mode_send_journal_writers();
+	return true;
+}
+
+bool Friend_mode_journal_end_edit(
+		int index, bool changed, int day, int hour, int minute, int tx, int ty, const std::string& text) {
+	if (!Friend_mode_journal_shared()) {
+		return false;
+	}
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		// The journal goes out on the next sync.
+		if (index >= 0 && friend_journal_writers.erase(index)) {
+			Friend_mode_send_journal_writers();
+		}
+		return false;
+	}
+	std::vector<unsigned char> payload;
+	if (!changed) {
+		if (index >= 0) {    // Only looked: let go of it.
+			Friend_put16(payload, index);
+			Friend_put8(payload, 0);
+			friend_session.send_blob(Friend_mode_session::Blob_kind::journal_lock, payload);
+		}
+		return false;
+	}
+	Friend_put16(payload, index >= 0 ? index : friend_journal_new);
+	Friend_put_note(payload, {day, hour, minute, tx, ty, -1, text});
+	friend_session.send_blob(Friend_mode_session::Blob_kind::journal_edit, payload);
+	cout << "Friend Mode: sent journal note " << index << endl;
+	return true;
+}
+
+// Host: a guest starts or stops writing in a note.
+static void Friend_mode_journal_lock_from_guest(const std::vector<unsigned char>& data) {
+	size_t    pos   = 0;
+	const int index = Friend_get16(data, pos);
+	if (pos >= data.size()) {
+		return;
+	}
+	const bool lock  = data[pos] != 0;
+	const auto found = friend_journal_writers.find(index);
+	if (lock) {
+		if (found == friend_journal_writers.end()) {
+			// One note at a time per guest.
+			for (auto it = friend_journal_writers.begin(); it != friend_journal_writers.end();) {
+				it = it->second == friend_writer_guest ? friend_journal_writers.erase(it) : std::next(it);
+			}
+			friend_journal_writers[index] = friend_writer_guest;
+		}    // Else the host has it: the reply tells the guest so.
+	} else if (found != friend_journal_writers.end() && found->second == friend_writer_guest) {
+		friend_journal_writers.erase(found);
+	}
+	Friend_mode_send_journal_writers();
+}
+
+// Host: a guest finished a note.
+static void Friend_mode_journal_edit_from_guest(const std::vector<unsigned char>& data) {
+	size_t                     pos   = 0;
+	const int                  index = Friend_get16(data, pos);
+	Notebook_gump::Shared_note note;
+	if (!Friend_read_note(data, pos, note)) {
+		return;
+	}
+	const auto found = friend_journal_writers.find(index);
+	const bool host_has_it = found != friend_journal_writers.end() && found->second == friend_writer_host;
+	if (index == friend_journal_new) {
+		if (!note.text.empty() && Notebook_gump::apply_shared_edit(-1, note)) {
+			cout << "Friend Mode: guest added a journal note" << endl;
+		}
+	} else if (!host_has_it && Notebook_gump::apply_shared_edit(index, note)) {
+		cout << "Friend Mode: guest changed journal note " << index << endl;
+	} else {
+		cout << "Friend Mode: refused guest journal note " << index << endl;
+	}
+	if (found != friend_journal_writers.end() && found->second == friend_writer_guest) {
+		friend_journal_writers.erase(found);
+	}
+	Friend_mode_send_journal_writers();
+	// Send it back now, even unchanged: a refused note must go back to ours.
+	friend_journal_sent.clear();
+	friend_next_journal_sync = 0;
+}
+
+// Host: send the journal when it changed (notes finished here or by the
+// guest, and automatic notes from the story).
+static void Friend_mode_journal_pass(bool force) {
+	std::vector<unsigned char>                    payload;
+	const std::vector<Notebook_gump::Shared_note> notes = Notebook_gump::get_shared_notes();
+	Friend_put16(payload, static_cast<int>(notes.size()));
+	for (const auto& note : notes) {
+		Friend_put_note(payload, note);
+	}
+	if (force || payload != friend_journal_sent) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::journal, payload);
+		friend_journal_sent = std::move(payload);
+	}
+}
+
+// Guest: the host's journal and who is writing where.
+static void Friend_mode_apply_journal(const std::vector<unsigned char>& data) {
+	size_t    pos   = 0;
+	const int count = Friend_get16(data, pos);
+	std::vector<Notebook_gump::Shared_note> notes;
+	for (int i = 0; i < count; ++i) {
+		Notebook_gump::Shared_note note;
+		if (!Friend_read_note(data, pos, note)) {
+			cerr << "Friend Mode: bad journal" << endl;
+			return;
+		}
+		notes.push_back(std::move(note));
+	}
+	Notebook_gump::set_shared_notes(notes);
+}
+
+// Music.  The host's tracks (region music, combat, victory, scripts) play
+// on the guest too; the guest's own copy of the world picks none while
+// connected, since its eggs and fights would choose differently.
+struct Friend_music_state {
+	bool        playing    = false;
+	int         num        = -1;
+	bool        continuous = false;
+	int         force      = 0;
+	std::string flex;
+};
+static Friend_music_state friend_host_music;           // Host: what is playing.
+static bool               friend_music_from_host = false;    // Guest: playing the host's.
+
+static void Friend_mode_send_music() {
+	std::vector<unsigned char> payload;
+	Friend_put8(payload, friend_host_music.playing);
+	Friend_put16(payload, friend_host_music.num & 0xffff);
+	Friend_put8(payload, friend_host_music.continuous);
+	Friend_put8(payload, friend_host_music.force);
+	const size_t length = std::min<size_t>(friend_host_music.flex.size(), 255);
+	Friend_put8(payload, static_cast<int>(length));
+	payload.insert(payload.end(), friend_host_music.flex.begin(), friend_host_music.flex.begin() + length);
+	friend_session.send_blob(Friend_mode_session::Blob_kind::music, payload);
+}
+
+bool Friend_mode_note_music(bool start, int num, bool continuous, int force, const std::string& flex) {
+	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
+		return friend_music_from_host || !friend_session.connected();
+	}
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		const bool stop        = !start || num == -1 || num == 255;
+		const bool was_stopped = !friend_host_music.playing || friend_host_music.num == -1 || friend_host_music.num == 255;
+		friend_host_music      = {start, num, continuous, force, flex};
+		// Exult asks for silence about once a second while nothing plays.
+		if (friend_session.connected() && !(stop && was_stopped)) {
+			cout << "Friend Mode: sent music " << (start ? "track " + std::to_string(num) : std::string("stop")) << endl;
+			Friend_mode_send_music();
+		}
+	}
+	return true;
+}
+
+static void Friend_mode_apply_music(const std::vector<unsigned char>& data) {
+	if (data.size() < 6) {
+		return;
+	}
+	const bool   playing    = data[0] != 0;
+	const int    num        = static_cast<sint16>(data[1] | (data[2] << 8));
+	const bool   continuous = data[3] != 0;
+	const int    force      = std::min<int>(data[4], MyMidiPlayer::Force_Ogg);
+	const size_t length     = data[5];
+	if (data.size() < 6 + length) {
+		return;
+	}
+	const std::string flex(data.begin() + 6, data.begin() + 6 + length);
+	cout << "Friend Mode: host music " << (playing ? "track " + std::to_string(num) : std::string("stopped")) << endl;
+	friend_music_from_host = true;
+	if (playing) {
+		Audio::get_ptr()->start_music(num, continuous, static_cast<MyMidiPlayer::ForceType>(force), flex);
+	} else {
+		Audio::get_ptr()->stop_music();
+	}
+	friend_music_from_host = false;
+}
+
+// Both sides: say when our journal opens or closes, so the other side can
+// show "Someone is writing in the party journal."
+static bool friend_journal_open_sent = false;
+static bool friend_peer_journal_open = false;
+
+static void Friend_mode_journal_open_pass(bool force) {
+	if (!friend_session.connected()) {
+		friend_journal_open_sent = false;
+		if (friend_peer_journal_open) {
+			friend_peer_journal_open = false;
+			gwin->set_all_dirty();
+		}
+		return;
+	}
+	const bool open = Notebook_gump::get_instance() != nullptr;
+	if (force || open != friend_journal_open_sent) {
+		friend_journal_open_sent = open;
+		friend_session.send_blob(Friend_mode_session::Blob_kind::journal_open, {static_cast<unsigned char>(open)});
+	}
+}
+
+static void Friend_mode_apply_journal_open(const std::vector<unsigned char>& data) {
+	const bool open = !data.empty() && data[0] != 0;
+	if (open != friend_peer_journal_open) {
+		friend_peer_journal_open = open;
+		gwin->set_all_dirty();    // The bar appears or goes.
+	}
+}
+
+static void Friend_mode_apply_journal_writers(const std::vector<unsigned char>& data) {
+	size_t                     pos   = 0;
+	const int                  count = Friend_get16(data, pos);
+	std::map<int, std::string> others;
+	for (int i = 0; i < count && pos + 3 <= data.size(); ++i) {
+		const int note = Friend_get16(data, pos);
+		if (data[pos++] == friend_writer_host) {
+			others[note] = friend_session.remote_player_name_value();
+		}
+	}
+	Notebook_gump::set_remote_writers(others);
+}
+
 // Guest: show text an object spoke on the host.  Its shape may already have
 // changed here or not yet (a chest unlocks by swapping shape), so fall back
 // to a door, then to anything else on that tile.
@@ -2222,6 +2664,10 @@ static void Friend_mode_send_world() {
 		Friend_mode_status_pass(true);
 		Friend_mode_clock_pass(true);
 		Friend_mode_creature_pass(true);
+		Friend_mode_journal_pass(true);
+		Friend_mode_send_journal_writers();
+		Friend_mode_journal_open_pass(true);
+		Friend_mode_send_music();    // Join mid-tune.
 	} else {
 		cerr << "Friend Mode: could not read " << friend_world_file << endl;
 	}
@@ -2356,11 +2802,17 @@ static void Friend_mode_paint_chat_input() {
 // it in a bar at the bottom of the screen, clear of the conversation (and
 // above the chat line when that is open).  It stays until the wait ends.
 static void Friend_mode_paint_dialogue_wait() {
-	if (friend_session.mode() != Friend_mode_session::Mode::guest) {
+	if (friend_session.mode() == Friend_mode_session::Mode::off) {
 		return;
 	}
+	const bool guest = friend_session.mode() == Friend_mode_session::Mode::guest;
 	std::vector<std::string> lines;
-	if (gwin->is_network_dialogue_paused()) {
+	if (!guest) {
+		if (!friend_peer_journal_open || !friend_session.connected()) {
+			return;
+		}
+		lines = {"Someone is writing in the party journal.", "Someone is writing in", "the party journal."};
+	} else if (gwin->is_network_dialogue_paused()) {
 		lines = {"The Avatar is having a conversation. Please wait.", "The Avatar is having a conversation.",
 				 "Please wait."};
 	} else if (gwin->is_network_host_paused()) {
@@ -2368,6 +2820,8 @@ static void Friend_mode_paint_dialogue_wait() {
 	} else if (gwin->is_network_spectating() && friend_session.connected()) {
 		lines = {"You are watching. Press Tab to choose a companion.", "You are watching. Press Tab",
 				 "to choose a companion."};
+	} else if (friend_peer_journal_open && friend_session.connected()) {
+		lines = {"Someone is writing in the party journal.", "Someone is writing in", "the party journal."};
 	} else {
 		return;
 	}
@@ -4009,6 +4463,7 @@ static void Handle_events() {
 	uint32                     guest_leash_notice_at = 0;    // Last "must return" notice.
 	while (!quitting_time) {
 		friend_session.poll();
+		Friend_mode_journal_open_pass(false);
 		std::string incoming_chat;
 		uint32      incoming_speaker;
 		while (friend_session.take_chat(incoming_speaker, incoming_chat)) {
@@ -4032,6 +4487,7 @@ static void Handle_events() {
 				// with it.  Send the new world, then hand the guest its
 				// companion again if it is still in the party.
 				friend_guest_held = Friend_held_item();
+				friend_journal_writers.clear();    // A new journal.
 				if (friend_session.connected()) {
 					Friend_mode_send_world();
 					friend_sent_party = Friend_party_members();
@@ -4076,6 +4532,10 @@ static void Handle_events() {
 					friend_next_clock_sync = now + friend_clock_sync_ms;
 					Friend_mode_clock_pass(false);
 				}
+				if (now >= friend_next_journal_sync) {
+					friend_next_journal_sync = now + friend_journal_sync_ms;
+					Friend_mode_journal_pass(false);
+				}
 			}
 			if (!friend_session.connected()) {
 				Friend_return_held_item();    // A guest left mid-drag.
@@ -4086,6 +4546,11 @@ static void Handle_events() {
 				friend_last_creature_set.clear();
 				friend_world_sent = false;
 				friend_leash_return_at = 0;
+				friend_journal_sent.clear();
+				if (!friend_journal_writers.empty()) {
+					friend_journal_writers.clear();    // The guest's note is free again.
+					Notebook_gump::set_remote_writers({});
+				}
 				if (!friend_host_peer_name.empty()) {
 					Friend_mode_notice(
 							host_assigned_actor >= 0
@@ -4157,6 +4622,7 @@ static void Handle_events() {
 				if (actor && actor->get_tile().distance(requested) <= 2
 					&& gwin->friend_leash_allows(actor->get_tile(), requested)) {
 					cout << "Friend Mode: host accepted move to " << tx << ',' << ty << ',' << tz << endl;
+					Friend_mode_end_guest_attack("guest moved");    // Walking takes over.
 					// The guest already collision-tested this adjacent step. Applying it
 					// directly avoids a second pathfinder disagreeing about door state.
 					const Tile_coord from = actor->get_tile();
@@ -4188,9 +4654,18 @@ static void Handle_events() {
 						Friend_mode_use_item_for_guest(request, guest_actor);
 					} else if (kind == Friend_mode_session::Blob_kind::roster_request) {
 						Friend_mode_send_roster();
+					} else if (kind == Friend_mode_session::Blob_kind::guest_attack) {
+						Friend_mode_attack_for_guest(request, guest_actor);
+					} else if (kind == Friend_mode_session::Blob_kind::journal_edit) {
+						Friend_mode_journal_edit_from_guest(request);
+					} else if (kind == Friend_mode_session::Blob_kind::journal_lock) {
+						Friend_mode_journal_lock_from_guest(request);
+					} else if (kind == Friend_mode_session::Blob_kind::journal_open) {
+						Friend_mode_apply_journal_open(request);
 					}
 				}
 			}
+			Friend_mode_check_guest_attack(host_assigned_actor);
 			Friend_mode_session::Object_frame_event door_request;
 			while (friend_session.take_door_use(door_request)) {
 				Friend_mode_use_object_for_guest(
@@ -4298,6 +4773,14 @@ static void Handle_events() {
 					Friend_mode_apply_clock(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::creature_list) {
 					Friend_mode_apply_creature_list(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::journal) {
+					Friend_mode_apply_journal(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::journal_locks) {
+					Friend_mode_apply_journal_writers(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::journal_open) {
+					Friend_mode_apply_journal_open(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::music) {
+					Friend_mode_apply_music(blob);
 				}
 			}
 			Friend_mode_session::Object_frame_event frame_event;

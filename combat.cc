@@ -164,12 +164,8 @@ void Combat_schedule::danger_music() {
 		return;    // Already in combat, let combat music handle it
 	}
 
-	MyMidiPlayer* player = Audio::get_ptr()->get_midi();
-	if (!player) {
-		return;
-	}
 	const bool nearby_hostile = gwin->is_hostile_nearby();
-	const int  current_track  = player->get_current_track();
+	const int  current_track  = Audio::get_ptr()->current_music_track();
 
 	// Check if any combat music is currently playing
 	bool is_combat_music_playing
@@ -202,7 +198,10 @@ void Combat_schedule::start_battle() {
 	// If this is the avatar, and it has been at least .5 minute since last
 	// start, then change music. This allows the danger music to be heard.
 	Game_object* target = npc->get_target();
-	if (npc == gwin->get_main_actor() && curtime - battle_time >= 30000 && (!opponents.empty() || (target && target->as_actor()))) {
+	// A Friend Mode guest's companion fights for a player too: its battles
+	// get the same music (and victory tune) as the Avatar's.
+	const bool player_fighter = npc == gwin->get_main_actor() || npc == gwin->get_remote_friend_actor();
+	if (player_fighter && curtime - battle_time >= 30000 && (!opponents.empty() || (target && target->as_actor()))) {
 		start_music_combat((rand() % 2) ? CSAttacked1 : CSAttacked2, false);
 		battle_time     = curtime;
 		battle_end_time = curtime - 1;
@@ -1372,8 +1371,7 @@ bool Combat_schedule::attack_target(
 		// attack music.
 		Actor* target_actor = target->as_actor();
 		if (target == gwin->get_main_actor() || (target_actor != nullptr && target_actor->is_in_party())) {
-			MyMidiPlayer* player = Audio::get_ptr()->get_midi();
-			if (player && player->get_current_track() == CSDanger) {
+			if (Audio::get_ptr()->current_music_track() == CSDanger) {
 				start_music_combat(CSAttacked1, false);
 			}
 		}

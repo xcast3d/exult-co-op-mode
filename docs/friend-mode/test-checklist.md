@@ -308,6 +308,66 @@ the first request and the second person's drag snaps back.
       the guest watches, then picks it again with Tab.
 - [ ] Guest opens Game Engine options: there is no Cheats line.
 
+## Combat
+
+Shift+F9 on the host gives a rat, a wolf and a rabbit to fight.
+
+- [ ] Guest presses C: the guest is in combat mode; the guest's view of the
+      Avatar doesn't start fighting on its own.
+- [ ] Guest double-clicks the wolf: the companion walks up and attacks it on
+      both screens, with attack frames. The host log says "<companion>
+      attacks Wolf for guest".
+- [ ] When the wolf dies, the companion stops and waits; its body shows on
+      both. Host log: "guest's attack ended (foe defeated)".
+- [ ] Guest double-clicks the rat, then walks away mid-fight: the companion
+      stops fighting and follows the guest's steps ("guest moved").
+- [ ] Guest double-clicks a peaceful townsperson in combat mode: "The Avatar
+      must do this", and nothing happens on the host.
+- [ ] Guest double-clicks a door in combat mode: it opens as usual.
+- [ ] Host toggles combat mode while the guest's companion fights: the
+      companion keeps its foe, or stops and waits; it never wanders off
+      following the Avatar.
+
+## Journal
+
+- [ ] Host writes a note and closes the journal (N, type, Escape). Guest
+      opens the journal: the note is there.
+- [ ] Guest writes a new note and closes the journal. Host opens it: the
+      note is there, at the end.
+- [ ] Guest changes an old note and clicks into another note: the host's
+      journal shows the change (open it again if it was open).
+- [ ] Both have the journal open. Host types in a note: on the guest, the
+      host's name shows next to that note's date, and typing in it gives a
+      red X. When the host clicks elsewhere, the name goes and the guest
+      sees the new text.
+- [ ] The same the other way: guest types, host gets the red X.
+- [ ] Both type in the same note at the same instant: one keeps it; the
+      other's change goes back.
+- [ ] An automatic story note on the host (if one comes up) shows on the
+      guest.
+- [ ] Host loads a save: the guest's journal matches the save's.
+- [ ] Host opens the journal: the guest sees "Someone is writing in the
+      party journal." at the bottom until the host closes it.
+- [ ] Guest opens the journal: the host sees the same bar.
+- [ ] With the bar showing, open your own journal: the bar is still readable.
+
+## Music
+
+Turn music on in the guest's audio options if it is off.
+
+- [ ] Guest joins: it plays the same tune as the host.
+- [ ] Host walks into a place with its own music (a town, a dungeon): the
+      guest's tune changes with it.
+- [ ] Kill a creature (Shift+F9): the combat and victory music plays on the
+      guest when it does on the host.
+- [ ] Guest walks alone past a spot that starts music: nothing changes on
+      the guest unless the host's music changes.
+- [ ] Guest's companion alone (host not in combat) attacks the wolf: the
+      battle music starts on the guest, and the victory tune plays when it
+      dies.
+- [ ] Host disables audio, then the guest fights the rat: the guest still
+      plays the battle and victory music.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".
@@ -320,7 +380,7 @@ the first request and the second person's drag snaps back.
   by design.)
 - Stats other than health, food level and status effects (poison, sleep,
   paralysis, charm, curse, protection, might) aren't mirrored to the guest.
-- Creature health and combat (Phase 5); creatures only move and appear or
-  disappear on the guest.
+- Creature health (Phase 5); a guest's companion fights, but the guest
+  doesn't see a creature's health go down.
 - Doors whose script swaps to a shape that isn't flagged as a door.
 - Sounds for changes made on the other machine.

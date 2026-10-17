@@ -774,6 +774,15 @@ long Game_window::check_time_stopped() {
 
 void Game_window::toggle_combat() {
 	combat = !combat;
+	if (Friend_mode_is_guest()) {
+		// The host runs every fight.  Here combat mode only changes what a
+		// double-click does (Friend_mode_guest_attack); our copies of the
+		// Avatar and party must not start fights of their own.
+		if (g_shortcutBar) {
+			g_shortcutBar->set_changed();
+		}
+		return;
+	}
 	// Change party member's schedules.
 	int       newsched = combat ? Schedule::combat : Schedule::follow_avatar;
 	const int cnt      = party_man->get_count();
@@ -2696,7 +2705,13 @@ void Game_window::double_clicked(
 	if (!obj || !avatar_can_act) {
 		return;    // Nothing found or avatar disabled.
 	}
-	if (combat && !gump &&    // In combat?
+	if (network_friend_control && controlled_actor && controlled_actor != main_actor) {
+		// Guest in combat: the host fights for our companion.  Anything
+		// that isn't a foe follows the guest's usual rules below.
+		if (combat && !gump && !Combat::is_paused() && Friend_mode_guest_attack(obj)) {
+			return;
+		}
+	} else if (combat && !gump &&    // In combat?
 		!Combat::is_paused() && main_actor_can_act_charmed() && (!gump_man->gump_mode() || gump_man->gumps_dont_pause_game())) {
 		Actor*                        npc  = obj->as_actor();
 		const Shape_info&             info = obj->get_info();
@@ -3061,8 +3076,7 @@ void Game_window::call_guards(
 			guard->approach_another(main_actor);
 		}
 		// Guaranteed way to do it.
-		MyMidiPlayer* player = Audio::get_ptr()->get_midi();
-		if (player && !Background_noise::is_combat_music(player->get_current_track())) {
+		if (!Background_noise::is_combat_music(Audio::get_ptr()->current_music_track())) {
 			Audio::get_ptr()->start_music(Audio::game_music(10), true);
 		}
 	}
@@ -3132,8 +3146,7 @@ void Game_window::attack_avatar(
 		}
 	}
 	// Guaranteed way to do it.
-	MyMidiPlayer* player = Audio::get_ptr()->get_midi();
-	if (player && !Background_noise::is_combat_music(player->get_current_track())) {
+	if (!Background_noise::is_combat_music(Audio::get_ptr()->current_music_track())) {
 		Audio::get_ptr()->start_music(Audio::game_music(10), true);
 	}
 }
