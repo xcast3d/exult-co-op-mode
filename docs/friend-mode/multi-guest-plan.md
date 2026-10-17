@@ -126,7 +126,7 @@ and while the guest's current companion is in a transition that
   companions they can claim, plus "Watch" entries for the Avatar and each
   player-controlled companion. While everyone shares the Avatar-centred view,
   watching only re-centres the camera on that actor. Once each player has their
-  own camera (Phase 6), the host must also send the area around the watched
+  own camera (independent exploration, a possible future project), the host must also send the area around the watched
   actor.
 - **Chat:** with many players, overhead bubbles fade and overlap, and
   spectators have no body to speak from. Add a small chat log for everyone (a
@@ -162,7 +162,7 @@ starts N guests with `--friend-join 127.0.0.1`.
 ## Out of scope here
 
 - Host-assigned creature network IDs (separate plan; needed before large fights).
-- Independent cameras (Phase 6). Everyone still shares the Avatar-centred view.
+- Independent cameras (a possible future project). Everyone still shares the Avatar-centred view.
 - Inventory and object sync (Phase 4).
 
 ## Open questions

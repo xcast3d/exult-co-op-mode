@@ -34,7 +34,7 @@ what that takes and what to expect.
 
 **Carrier-grade NAT:** some internet providers (most mobile, some fiber)
 share one public address between customers. Port forwarding can't work
-then. Lobby codes over WebRTC (Phase 5b in the
+then. Lobby codes over WebRTC (Phase 8 in the
 [project brief](../ultima-7-friend-mode.md)) are the planned answer.
 
 ## Security

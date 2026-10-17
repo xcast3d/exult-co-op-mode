@@ -1,9 +1,9 @@
 # Ultima VII: Friend Mode
 
-**Status:** Concept / pre-development planning  
+**Status:** In development. Two-player co-op works on Mac, and Mac and Windows have played together  
 **Project type:** Experimental cooperative multiplayer fork of Exult  
 **Initial target:** macOS development, Mac/Windows cross-play  
-**Players:** 2 initially, eventually one active player per eligible party actor plus spectators
+**Players:** 2 today; next, one player per eligible party companion plus spectators
 
 ## Vision
 
@@ -28,9 +28,8 @@ The emphasis is on preserving the original game: its story, handcrafted world, c
 - Both players move independently, initially within a shared camera/view area.
 - Only the Avatar controller initiates story dialogue, quest decisions, and scripted story interactions.
 - Players communicate through **Ultima Online-style overhead text**, rendered above their characters and fading after a few seconds.
-- Companions can eventually interact with objects, manage their own equipment and inventory, and participate in combat.
-- Any guest can request control of the Avatar. The current Avatar controller accepts or declines. On acceptance, the two players swap their assigned actors, **not** the underlying actor identities.
-- Later, companions can explore distant areas with independent cameras.
+- Companions interact with objects, manage their own equipment and inventory, and take part in combat.
+- The Avatar stays with the host. Guests don't take over the Avatar; a guest can switch to another free companion (Tab).
 
 ## Joining, party capacity, and spectators
 
@@ -69,26 +68,19 @@ should leave room for them from the start:
 The host may eventually expose a session option to reject excess connections
 instead of allowing spectators, with spectators allowed as the default.
 
-## Avatar control and character switching
+## Who controls what
 
-Distinguish these concepts in the engine:
+Keep these concepts separate in the engine:
 
-| Concept | Meaning | Changes during a swap? |
-| --- | --- | --- |
-| Story Avatar | The existing Avatar actor and canonical quest identity | No |
-| Network host | The machine running authoritative world simulation | No |
-| Player controller | A local or remote human's input assignment to an actor | Yes |
+| Concept | Meaning |
+| --- | --- |
+| Story Avatar | The existing Avatar actor and canonical quest identity, always the host's |
+| Network host | The machine running authoritative world simulation |
+| Player controller | A local or remote human's input assignment to an actor |
 
-### Request-and-approval flow
-
-1. Player B selects **Request Avatar**.
-2. Current Avatar controller receives a nonblocking request: **Accept / Decline**.
-3. If declined or timed out, nothing changes.
-4. If accepted, the host atomically reassigns controllers: Player B → Avatar; former Avatar controller → Player B's previous companion.
-5. Each client updates input focus and camera target. Character inventories, stats, NPC IDs, and story state stay with the actors.
-6. Avoid swapping during a cutscene, active dialogue, scripted movement, or another unsafe transition; queue or reject the request with an explanation.
-
-For 3–4 players, later allow companion-to-companion swaps with consent from both affected players.
+Handing the Avatar to a guest was considered and dropped: the Avatar stays
+with the host, which keeps story authority simple. Guests may switch between
+free companions.
 
 ## Story and script safety
 
@@ -113,12 +105,8 @@ Initial restrictions:
 - Use a forgiving distance threshold or grace period to avoid abrupt teleporting at the edge of the viewport.
 - Teleport/return decisions come from the host and are synchronized to clients.
 
-### Later: independent exploration
-
-- Each client camera follows its assigned actor.
-- Characters can occupy distant parts of Britannia without being snapped back.
-- Investigate whether Exult's simulation, map loading, NPC schedules, proximity processing, and audio are currently tied to the Avatar's position or viewport.
-- Preserve one authoritative world while supporting multiple independently observed regions.
+Independent exploration (separate cameras far apart) is a possible future
+project; see the end of the roadmap.
 
 ## Overhead chat
 
@@ -160,7 +148,6 @@ Suggested early network messages:
 - `SpectatorState`, `ActorAvailable`
 - `ActorAssignment`, `MovementInput`, `ActorState`
 - `ChatMessage`
-- `ControlSwapRequest`, `ControlSwapDecision`, `ControlSwapCommitted`
 - `CompanionReturn`, `Disconnect`, `Heartbeat`
 
 Later add object interactions, inventory transactions, combat events, state snapshots, resynchronization, and save/load coordination.
@@ -169,81 +156,114 @@ Protocol considerations: versioning, explicit serialization (no raw C++ structs)
 
 ## Roadmap
 
-### Phase 0 — Research and baseline
+Progress notes and what each piece does are in
+[the Friend Mode README](friend-mode/README.md).
 
-- [ ] Obtain legitimate original Ultima VII game data.
-- [ ] Clone the official Exult source and compile an **unmodified** build on macOS.
-- [ ] Launch The Black Gate and verify saves, party behavior, dialogue, and combat.
-- [ ] Trace actor identity, input dispatch, camera focus, party AI, script invocation, and object ownership in source.
-- [ ] Document build instructions and a reproducible test save.
+### Phase 0 — Research and baseline (done)
 
-**Exit criterion:** Clean local Exult build and a short architecture note identifying the control points.
+- [x] Obtain legitimate original Ultima VII game data.
+- [x] Clone the official Exult source and compile an **unmodified** build on macOS.
+- [x] Launch The Black Gate and verify saves, party behavior, dialogue, and combat.
+- [x] Trace actor identity, input dispatch, camera focus, party AI, script invocation, and object ownership in source.
+- [x] Document build instructions and a reproducible test save.
 
-### Phase 1 — Local character possession
+### Phase 1 — Local character possession (done)
 
-- [ ] Add a development command to select an active party member as the controlled actor.
-- [ ] Redirect movement input and camera focus without changing the canonical Avatar actor.
-- [ ] Suspend companion follow AI while locally controlled.
-- [ ] Restore NPC AI on release.
-- [ ] Verify dialogue/quest logic still references the Avatar.
-- [ ] Support switching back safely, including scripted interruptions.
+- [x] Add a development command to select an active party member as the controlled actor.
+- [x] Redirect movement input and camera focus without changing the canonical Avatar actor.
+- [x] Suspend companion follow AI while locally controlled.
+- [x] Restore NPC AI on release.
+- [x] Verify dialogue/quest logic still references the Avatar.
+- [x] Support switching back safely, including scripted interruptions.
 
-**Exit criterion:** One local user can switch between Avatar and Iolo without breaking the story.
+### Phase 2 — Two-player network movement (done)
 
-### Phase 2 — Two-player network movement
+- [x] Start a LAN listen-server session from the host.
+- [x] Add host-address entry after **Connect to Host** (now **Co-Op Mode →
+      Join a Game**).
+- [x] Send the eligible, unclaimed party roster to a connected guest.
+- [x] Let the guest select a companion and have the host atomically assign it.
+- [x] Keep an unassigned guest in a spectator state when no companion is
+      available (Tab picks one later).
+- [x] Synchronize independent movement and actor positions.
+- [x] Keep a shared Avatar-centered camera.
+- [x] Implement distance-based companion return (the leash).
+- [x] Handle disconnect by restoring companion AI.
 
-- [ ] Start a LAN listen-server session from the host.
-- [ ] Add host-address entry after **Connect to Host**.
-- [ ] Send the eligible, unclaimed party roster to a connected guest.
-- [ ] Let the guest select a companion and have the host atomically assign it.
-- [ ] Keep an unassigned guest in a non-interactive spectator state when no
-      companion is available.
-- [ ] Synchronize independent movement and actor positions.
-- [ ] Keep a shared Avatar-centered camera initially.
-- [ ] Implement distance-based companion return.
-- [ ] Handle disconnect by restoring companion AI.
-
-**Exit criterion:** Two computers can walk around the same Britannia area without diverging.
-
-### Phase 3 — Overhead chat and Avatar handoff
+### Phase 3 — Overhead chat (done)
 
 - [x] Add UO-style overhead text chat.
 - [x] Permit connected spectators to use chat while they wait for an actor.
-- [ ] Implement request/accept/decline for Avatar control.
-- [ ] Atomically swap controller assignments without swapping actor identities.
-- [ ] Test host remains authoritative after handing over Avatar control.
 
-**Exit criterion:** Two players can talk and hand over the Avatar during a live session.
+### Phase 4 — Shared world interactions (done)
 
-### Phase 4 — Shared world interactions
+- [x] Synchronize picking up, dropping, moving, and using permitted objects.
+- [x] Synchronize containers, equipment, and inventories.
+- [x] Resolve simultaneous interactions and object ownership conflicts
+      (built; the two-person checks still need a second player).
+- [x] Add host-side validation and resynchronization checks.
+- [x] Shared journal, world sounds, music, clock and weather.
 
-- [ ] Synchronize picking up, dropping, moving, and using permitted objects.
-- [ ] Synchronize containers, equipment, and inventories.
-- [ ] Resolve simultaneous interactions and object ownership conflicts.
-- [ ] Add host-side validation and resynchronization checks.
+### Phase 5 — Co-op story and combat (done)
 
-**Exit criterion:** One player moves an item; both see the same result and inventories agree.
+- [x] Synchronize combat, damage, death, and recovery (guest attacks,
+      missiles, spell effects, hits, health; optional enemy health bars).
+- [x] Ensure the Avatar alone starts story dialogue and makes quest choices.
+- [x] Mirror dialogue presentation to guests as spectators.
+- [x] Pause guests during host conversations and menus.
+- [x] Validate saving, loading, and guest reconnect behavior.
+- [x] Co-Op Mode in the title and Escape menus; IPv4 and IPv6; quick
+      connect and messages.
 
-### Phase 5 — Co-op story and combat
+### Phase 6 — More than one guest
 
-- [ ] Synchronize combat, damage, death, and recovery.
-- [ ] Ensure the Avatar alone starts story dialogue and makes quest choices.
-- [ ] Mirror dialogue presentation to guests as spectators.
-- [ ] Support scripted temporary control overrides.
-- [ ] Validate saving, loading, and guest reconnect behavior.
+One player per eligible party companion, plus spectators. See the
+[multi-guest plan](friend-mode/multi-guest-plan.md).
 
-**Exit criterion:** A short story sequence and combat encounter work end-to-end with two players.
+- [ ] Several peers on the host, each with its own assignment, held items
+      and leash.
+- [ ] The host relays chat and world updates to every guest.
+- [ ] Put the socket code in `friendnet.cc` behind one small connection
+      interface at the same time, ready for WebRTC (Phase 8).
+- [ ] The two-person checks (two people grabbing the same item), now with
+      three or more.
 
-### Phase 5b — Lobby codes over WebRTC
+**Exit criterion:** Three players (host and two guests) play a session
+together.
+
+### Phase 7 — Shops and trainers for guests
+
+Guests can buy from merchants and train with trainers without touching the
+story. The conversation runs on the guest's own copy only, like books and
+signs today, so no story flag on the host changes; a guest who learns
+something can tell the Avatar ("I think you have to talk to Nicodemus").
+Only the purchase or training itself is carried out by the host.
+
+- [ ] Find how Black Gate's merchant and trainer scripts buy, sell and
+      train (the gold checks, item creation and stat changes inside the
+      conversation), and which NPCs offer them.
+- [ ] Let a guest's companion talk to merchants and trainers locally; other
+      NPCs keep "The Avatar must do this".
+- [ ] Catch the purchase, sale or training on the guest and send it to the
+      host as one request; the host checks and applies it and the usual
+      sync brings the result back.
+- [ ] Money stays the party's: the host checks and takes the party's gold,
+      as the game already does, with no separate guest purse.
+- [ ] Keep anything else the local conversation changes (flags, items,
+      remarks) on the guest only, and throw it away when it ends.
+
+**Exit criterion:** A guest buys a sword in Britain and trains with a
+trainer; the gold leaves the party and the item and stat change show on
+both machines; no story flag changes.
+
+### Phase 8 — Lobby codes over WebRTC, and release
+
+The last step before an official release.
 
 Joining today means typing the host's address and, over the internet, setting
 up port forwarding. Replace that with a short code the host reads out and the
 guest types in.
 
-- [ ] Put the socket code in `friendnet.cc` behind one small connection
-      interface, so the transport can change without touching game code. Do
-      this together with multi-guest support, which needs several peers
-      anyway ([multi-guest plan](friend-mode/multi-guest-plan.md)).
 - [ ] A small lobby service that hands out codes and passes WebRTC connection
       details between host and guest. It never sees game traffic.
 - [ ] Native WebRTC data channels (for example libdatachannel), reliable and
@@ -251,32 +271,33 @@ guest types in.
       pieces.
 - [ ] A relay (TURN) fallback for the networks where a direct connection fails.
 - [ ] Keep direct address entry for LAN play and debugging.
+- [ ] Optional session password; WebRTC also encrypts the connection.
+- [x] Windows build ([Windows build plan](friend-mode/windows-build.md));
+      Mac and Windows have played together.
+- [ ] Mac/Windows compatibility testing and builds for release.
+- [ ] Packaging, compatibility matrix, installation instructions, and
+      GPL-compliant distribution.
 
 **Exit criterion:** Two players on different home networks join with a code
 and no router setup.
 
-**When:** after the two-player gameplay sync settles (Phase 4 and 5 work), and
-before Phase 7 distribution. It gets friends who aren't technical playing, and
-it is also the transport a browser build would need.
+## Possible future projects
 
-### Phase 6 — Independent exploration
+Not part of this build-out; ideas for after the release.
+
+### Independent exploration
+
+Separate cameras, so the Avatar and companions can explore distant parts of
+Britannia at once. See the [independent-views
+research](friend-mode/independent-views-research.md): the host would have to
+simulate several regions.
 
 - [ ] Per-client camera tracking.
 - [ ] Support distant regions with correct NPC and world simulation.
 - [ ] Remove companion-return range restrictions.
 - [ ] Test quests, schedules, sound, pathfinding, and world changes at long distance.
 
-**Exit criterion:** Avatar and companion can explore separate locations without desynchronization.
-
-### Phase 7 — 3–4 players and distribution
-
-- [ ] Additional companion assignments and consensual companion swaps.
-- [ ] Mac/Windows compatibility testing and automated builds (brought
-      forward: see the [Windows build plan](friend-mode/windows-build.md)).
-- [ ] Easier remote connections: lobby codes from Phase 5b.
-- [ ] Packaging, compatibility matrix, installation instructions, and GPL-compliant distribution.
-
-### Phase 8 (possible) — Exult in the browser
+### Exult in the browser
 
 Play from a web page with nothing to install, joining by lobby code. Exult has
 no web build today, but it is C++ on SDL3, which can target the browser
@@ -288,13 +309,10 @@ through Emscripten.
       rewriting any loops, and measure speed and download size.
 - [ ] Game data and saves in browser storage (see Licensing and game data).
 - [ ] Digital (OGG) music first; MIDI synthesizers later, if at all.
-- [ ] Friend Mode on the browser's own WebRTC, through the Phase 5b connection
-      interface.
+- [ ] Friend Mode on the browser's own WebRTC, through the Phase 8 connection
+      code.
 - [ ] Hosting: browsers slow down background tabs, so a host in a hidden tab
       slows everyone. Warn the host, or keep hosting to native builds.
-
-**Exit criterion:** A guest in a browser joins a native or browser host by
-code and plays a short session.
 
 ## Infrastructure choices
 
@@ -303,9 +321,9 @@ code and plays a short session.
 | Source hosting | Private Bitbucket repository | Public release when ready |
 | Main development machine | Mac | Windows CI / testing |
 | Authoritative simulation | Host Exult process | Dedicated server only if needed |
-| Connection | Loopback / LAN | WebRTC data channels with TURN relay fallback (Phase 5b) |
+| Connection | LAN, or internet with port forwarding (TCP 1992) | WebRTC data channels with TURN relay fallback (Phase 8) |
 | Lobby and invitations | None | Small lobby service for codes (Supabase or similar) |
-| Client platform | Native Mac / Windows | Browser via Emscripten (Phase 8, possible) |
+| Client platform | Native Mac / Windows | Browser via Emscripten (possible future project) |
 | Chat | Direct host-relayed packets | Optional history / moderation |
 | Saves | Host local storage | Optional cloud backup |
 
@@ -346,17 +364,15 @@ Keep project planning in `docs/friend-mode/` within the source tree. Track upstr
 4. Does the engine update NPC schedules and objects outside the Avatar's vicinity?
 5. What state needs authoritative replication for movement, object changes, and combat?
 6. How do save/load and character-controller mappings interact?
-7. What happens when the Avatar is controlled remotely but the original host remains connected as a companion?
-8. How do we detect incompatible Exult builds, mods, and game data?
-9. What parts of Exult Studio and the existing debugging tools can accelerate development?
+7. How do we detect incompatible Exult builds, mods, and game data?
+8. What parts of Exult Studio and the existing debugging tools can accelerate development?
 
-## Immediate next steps
+## Next steps
 
-1. Find the original Ultima VII data (or obtain a legitimate digital copy).
-2. Set up the private Bitbucket repository and preserve the official Exult upstream remote.
-3. Compile and launch unmodified Exult on the Mac.
-4. Inspect the actor/input/camera implementation before changing code.
-5. Build **Phase 1: local party-member character switching** as the first proof of concept.
+1. **More than one guest** (Phase 6).
+2. **Shops and trainers for guests** (Phase 7).
+3. **Lobby codes over WebRTC**, the last step before an official release
+   (Phase 8).
 
 ---
 

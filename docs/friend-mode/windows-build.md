@@ -2,7 +2,7 @@
 
 Goal: a Windows Exult with Friend Mode that joins (and hosts) games with the
 Mac build, so a Mac and a Windows player can play together. This is part of
-Phase 7 in the [project brief](../ultima-7-friend-mode.md), brought forward.
+part of Phase 8 (release) in the [project brief](../ultima-7-friend-mode.md), brought forward.
 
 ## Where things stand
 

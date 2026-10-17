@@ -13,7 +13,7 @@ request a limited set of safe actions without becoming the story Avatar.
 | View another party member's paperdoll | Allow | Deny | The Avatar is the party inventory administrator. |
 | Open ordinary containers | Allow | Allow | Host validates reach, locks, and container state. |
 | Take, move, or drop ordinary items | Allow | Allow | Synchronize object ownership and resolve simultaneous actions. |
-| Buy and sell with a shopkeeper | Allow | Allow | Restrict the conversation to commerce paths and the acting companion's inventory/funds. |
+| Buy, sell and train with merchants and trainers | Allow | Planned (Phase 7) | The conversation runs on the guest's copy only; the host carries out the purchase or training with the party's gold. |
 | General NPC conversation | Allow | Deny | Companion input must not advance story or expose quest choices. |
 | Quest decisions and story dialogue | Allow | Deny | Always attributed to the canonical Avatar. |
 | Story-critical object Usecode | Allow | Deny | Requires an explicit allowlist or classification before guests can invoke it. |

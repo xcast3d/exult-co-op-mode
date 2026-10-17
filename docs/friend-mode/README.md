@@ -242,14 +242,10 @@ can join at once, as they already join mid-game. Either way the host sees
 still work as shortcuts. The default port is 1992, the year Ultima VII
 came out (`--friend-port` changes it). The Join player name starts empty.
 
-Next after that: a [Windows build](windows-build.md) soon, so Mac and
-Windows players can play together; [internet play](internet-play.md) notes
-what's needed to play across the internet (set `TCP_NODELAY` before the
-first real test). Also: monster eggs hatch for the guest's companion as for the
-Avatar (only monster eggs; story, music and weather eggs stay
-Avatar-only), so creatures appear wherever the guest walks inside the
-leash, plus keeping creatures near the guest awake; then the rest of
-Phase 5 and sounds from the other machine.
+Next (see the roadmap in the [project brief](../ultima-7-friend-mode.md)):
+Phase 6, more than one guest; Phase 7, shops and trainers for guests;
+Phase 8, lobby codes over WebRTC and the release. The Windows build, guest
+egg hatching, sounds and the rest of Phase 5 are done.
 
 Tested 2026-10-16/17 and working (protocol version 17): guest combat,
 the shared journal and the journal bar, and music from the host, as
@@ -316,7 +312,7 @@ NPCs saying it was tested and works.
 Minor, test later: an item a guest is mid-drag on when a new guest joins is
 missing from the save the new guest downloads.
 
-Later: multi-guest sessions ([plan](multi-guest-plan.md)) and a 30-minute
+Later: multi-guest sessions (Phase 6, [plan](multi-guest-plan.md)) and a 30-minute
 two-player soak test.
 
 Decided: the Avatar is the game master. It can open and change every party
