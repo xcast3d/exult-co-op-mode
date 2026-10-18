@@ -72,6 +72,12 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Serpent Isle (decided 2026-10-18):** not supported yet. Friend Mode is
+Black Gate only; the co-op core is game-independent, but guests' world use
+(shape lists), shops and trainers (`GAME_BG`), picker descriptions, the
+test kit and Serpent Isle's companion-heavy story need their own pass.
+Planned as Phase 10, after the Phase 8 release (see the brief's roadmap).
+
 **Three quality-of-life features, built 2026-10-18 (protocol version
 30); not tested yet.** See "Main Menu, Suggest a reply, WASD" in the
 [test checklist](test-checklist.md).

@@ -382,8 +382,37 @@ upstream.
       guest's toggles apply to that guest only.
 
 **Exit criterion:** With both toggles on, a guest walks with WASD, cycles
-targets with Q/E and attacks the selected enemy, while the host plays with
+targets with Q and attacks the selected enemy, while the host plays with
 the classic mouse controls.
+
+### Phase 10 — Serpent Isle (after release)
+
+Friend Mode is built and tested for The Black Gate only. Both players must
+run the same game (the handshake turns away a mismatch), and most of the
+co-op core doesn't care which game it is: joining, the picker and
+spectating, movement and the leash, combat through the host, mirrored
+conversations and Suggest a reply, chat, saving and autosave, Main Menu,
+WASD, targeting and the minimap. What is tied to Black Gate today:
+
+- [ ] **What guests may use:** doors, shutters, lamps, levers, secret walls,
+      food, potions, keys and lockpicks are lists of Black Gate shape
+      numbers; Serpent Isle numbers many differently. Add its lists, chosen
+      by game.
+- [ ] **Shops and trainers for guests** are switched off outside Black Gate
+      (`GAME_BG` in `Friend_mode_guest_talk_to_merchant`): find Serpent
+      Isle's merchants and trainers in its scripts, as was done for Black
+      Gate ([shops and trainers](friend-mode/shops-and-trainers.md)).
+- [ ] **Picker descriptions** of the companions, for Serpent Isle's.
+- [ ] **The test kit** (F9) with Serpent Isle shapes.
+- [ ] **Its story:** Serpent Isle separates and swaps companions far more
+      often (Iolo, Shamino and Dupre are parted from the Avatar early). The
+      "losing a companion" handling covers the mechanics; test it through
+      those scenes, and the scripted events checklist in Serpent Isle.
+- [ ] Silver Seed, once Serpent Isle works.
+
+**Exit criterion:** Host and two guests play Serpent Isle's opening on
+Monitor, through the first separation of companions, with shops and the
+guests' world use working.
 
 ### Co-op quality of life
 
