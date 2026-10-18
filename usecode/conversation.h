@@ -25,6 +25,7 @@
 
 #include <array>
 #include <deque>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -48,6 +49,8 @@ private:
 
 	std::vector<std::string>             answers;
 	std::deque<std::vector<std::string>> answer_stack;
+	// Friend Mode: choices a guest suggested, drawn in that player's color.
+	std::map<std::string, unsigned char> suggestions;
 
 public:
 	inline int get_num_answers() const {
@@ -70,6 +73,13 @@ public:
 	void show_avatar_choices();
 	void clear_avatar_choices();
 	void show_remote_choices(const std::vector<std::string>& choices);
+	// Friend Mode: draw 'choice' in palette color 'color' (one choice per
+	// color, so a player's new suggestion replaces their last).  False if
+	// 'choice' isn't being offered.
+	bool suggest_choice(const std::string& choice, unsigned char color);
+	bool choices_shown() const {
+		return choices_active;
+	}
 	int  conversation_choice(int x, int y);
 
 	void set_slot(int i) {

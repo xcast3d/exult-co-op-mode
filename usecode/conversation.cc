@@ -41,6 +41,10 @@
 #include "touchui.h"
 #include "tqueue.h"
 #include "useval.h"
+#include "font.h"
+#include "palette.h"
+
+#include <algorithm>
 
 using std::size_t;
 using std::string;
@@ -826,12 +830,24 @@ void Conversation::show_avatar_choices(int num_choices, char** choices) {
 			gwin->layer_set_visible(bgl, true);
 		}
 	}
-	// Second pass: draw all text on top of backgrounds.
+	// Second pass: draw all text on top of backgrounds; a guest's suggested
+	// choice in that player's color instead of the font's yellow.
 	for (int i = 0; i < num_choices; i++) {
 		char text[256];
 		text[0] = 127;    // A circle.
 		strcpy(&text[1], choices[i]);
-		sman->paint_text(0, text, conv_choices[i].x, conv_choices[i].y);
+		const auto suggested = suggestions.find(choices[i]);
+		if (suggested == suggestions.end()) {
+			sman->paint_text(0, text, conv_choices[i].x, conv_choices[i].y);
+			continue;
+		}
+		const Palette* pal = gwin->get_pal();
+		unsigned char  recolor[256];
+		for (int c = 0; c < 256; ++c) {
+			const bool body = pal->get_red(c) > 35 && pal->get_green(c) > 35 && pal->get_blue(c) < 30;
+			recolor[c]      = body ? suggested->second : static_cast<unsigned char>(c);
+		}
+		sman->get_font(0)->paint_text(nullptr, text, conv_choices[i].x, conv_choices[i].y, recolor);
 	}
 	avatar_face.enlarge((3 * c_tilesize) / 4);    // Encloses entire area.
 	avatar_face = avatar_face.intersect(sbox);
@@ -867,8 +883,21 @@ void Conversation::show_avatar_choices() {
 	repaint_conversation();
 }
 
+bool Conversation::suggest_choice(const std::string& choice, unsigned char color) {
+	if (!choices_active || std::find(answers.begin(), answers.end(), choice) == answers.end()) {
+		return false;
+	}
+	for (auto it = suggestions.begin(); it != suggestions.end();) {
+		it = it->second == color ? suggestions.erase(it) : std::next(it);
+	}
+	suggestions[choice] = color;
+	repaint_conversation();
+	return true;
+}
+
 void Conversation::clear_avatar_choices() {
 	Friend_mode_note_dialogue_clear_choices();
+	suggestions.clear();
 	choices_active = false;
 	avatar_face.w  = 0;
 	repaint_conversation();    // Repaint the faces without the choices.

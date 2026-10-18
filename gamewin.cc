@@ -788,6 +788,9 @@ void Game_window::toggle_combat() {
 		if (g_shortcutBar) {
 			g_shortcutBar->set_changed();
 		}
+		if (combat) {
+			Friend_mode_combat_started();    // A hostile picked with Q.
+		}
 		return;
 	}
 	// Change party member's schedules.
@@ -834,7 +837,9 @@ void Game_window::toggle_combat() {
 				touchui->showPauseControls();
 			}
 		}
+		Friend_mode_combat_started();    // A hostile picked with Q.
 	} else {                 // Ending combat.
+		Friend_mode_combat_ended();    // Its attack mode back, if targeting made it manual.
 		Combat::resume();    // Make sure not still paused.
 		if (touchui != nullptr && Combat::mode != Combat::original) {
 			touchui->hidePauseControls();
@@ -1207,6 +1212,15 @@ bool Game_window::toggle_friend_mode_control() {
  * network host selects by stable NPC number; the guest resolves that actor in
  * its copy of the loaded world.
  */
+Actor* Game_window::get_action_target() const {
+	const Game_object_shared target = action_target.lock();
+	return target ? target->as_actor() : nullptr;
+}
+
+void Game_window::set_action_target(Actor* target) {
+	action_target = weak_from_obj(target);
+}
+
 bool Game_window::take_friend_mode_control(int npc_num, bool network_guest) {
 	Actor* companion = get_npc(npc_num);
 	// The host decides for a network guest, which may get back a companion

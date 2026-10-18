@@ -72,6 +72,93 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Three quality-of-life features, built 2026-10-18 (protocol version
+30); not tested yet.** See "Main Menu, Suggest a reply, WASD" in the
+[test checklist](test-checklist.md).
+
+- **Main Menu** in the game menu (Escape), above Quit, with "Return to the
+  main menu?". Exult can't run its title menu again inside one game, so
+  it closes the co-op session (guests see the host leave; a guest's
+  companion is held for a rejoin), then starts Exult again with the same
+  arguments minus `--friend-host`/`--friend-join`/`--friend-port`, plus
+  `--skip-intro`, and lands on the title menu.
+- **Suggest a reply.** While the Avatar talks, a guest clicks one of the
+  choices. The host checks it is on offer, draws it in that player's
+  color (their minimap dot color) and passes it to every guest; the log
+  says "Marc suggests: Name". One suggestion per player, cleared when the
+  Avatar picks. New text message `Text_kind::suggestion`; the host now
+  reads guests' messages while waiting for a click (`Get_click`), since
+  its main loop is not running during a conversation.
+- **WASD movement** (Game Input → "WASD movement", off by default, kept
+  in the config). W, A, S, D walk like the arrow keys, two at once
+  diagonally; Shift with one of them does what the key alone did
+  (Shift+W the watch, Shift+S Save/Restore). Guests walk through the
+  usual host requests.
+
+First try (host only): WASD lagged, the game seemed to freeze, mostly
+when attacking or toggling combat, and Shift+W did nothing. Found: a new
+direction waited for the current walk (about 6 tiles) to finish; keys were
+tracked by their key-up events, so a W let go while Shift, Cmd or a menu
+had the keyboard stayed held and the Avatar kept walking (stuck in combat);
+and Shift+W could arrive as a capital W, which nothing is bound to. Now the
+main loop reads W, A, S, D by keyboard position every frame and re-aims at
+once; Shift+W and Shift+S are passed on as the plain keys. The single-click
+attack is taken out until target cycling (next step). The host logs
+"main loop waited N ms" for any pass over 750 ms, to catch freezes.
+
+**Target cycling with Q** (with WASD movement on), built after that: Q
+picks the next person or creature on screen who isn't in the party,
+nearest first, Shift+Q the previous; it gets a lasting red outline (drawn
+in `Actor::paint`, like the hit flash; `Game_window::set_action_target`).
+First version attacked every pick; the user liked the feel and asked for
+targeting only: out of combat Q just marks. In combat mode Q cycles only
+hostiles and attacks the pick through the usual combat code (the
+Avatar's target, or the guest's attack request), and turning combat on
+(`toggle_combat` → `Friend_mode_combat_started`) attacks a hostile pick;
+a peaceful one is left alone, so combat never starts a crime by accident
+(double-click still attacks anyone). Tested and liked; then the red outline
+(confused with the hit flash) became gold, which still read as a status
+effect, so the pick now gets a small arrow over its head instead: white
+out of combat, red in combat mode, in its own layer placed over the target
+each frame (`Friend_mode_paint_target_arrow`). Q past the last target
+clears the pick, the next Q starting again. "No target" replaces the
+"Targeting" line when the pick clears (Q past the end, or the target dies
+or leaves). **Space** with a target picked attacks it, peaceful or not,
+turning combat on (`Friend_mode_force_attack`); in a fight against a
+hostile pick it keeps pausing combat. The user loves the targeting and
+thinks it may be enough without reworking combat.
+
+Then: targeting works with WASD off too, and for guests (double-click was
+hard on moving foes). Fighting through targeting puts the Avatar in
+Exult's "manual" attack mode (the combat AI picks no foes itself) until
+combat ends (`Friend_mode_take_manual`, `Friend_mode_combat_ended` from
+`toggle_combat`); clearing the target or walking stops the attack, and
+Space takes it up again (Space pauses combat only while the Avatar is
+already attacking the pick). A save writes the Avatar's own mode. A
+guest clearing its target in combat sends a stop (`friend_attack_stop`
+in the guest attack message), and the host ends its companion's fight.
+
+Then: in combat mode Q also picks peaceful people (hostiles first, then
+the rest, nearest first within each), attacking only a hostile pick at
+once; a peaceful pick waits for Space, and whatever was being attacked is
+let go. The notice says "Targeting Deer" while only marked and "Attacking
+Deer" once the attack starts (and "Targeting" again after walking stops
+it). Before, a peaceful target in combat meant leaving combat, picking,
+and coming back. Tested on a guest too ("Iolo attacks wolf for guest").
+
+Targeting got its own Game Input option, "Targeting (Q, Space)", on by
+default, separate from WASD movement; turning it off drops any pick.
+
+Also tested and working: clearing the target or walking stops the
+attack; Main Menu returns to the title menu.
+Each pick shows "Targeting Wolf" near the top (one such line at a time). The outline goes when the target dies, leaves or is more
+than 30 tiles off. A Q with no hostile on screen flashes the red X. Next
+step: taking the controlled character's fight away from the party AI.
+
+Second try: walking is fluid, and combat no longer gets stuck (walking
+slows in combat, as in U7: Exult's combat walking speed). The only long
+passes logged were outside combat (menus).
+
 **Test round, 2026-10-18 (no protocol change).** Host and two guests on
 one Mac.
 
@@ -127,12 +214,16 @@ guest's; L's notices; the chat log pinned bottom left; notices pinned
 near the top; session notices in one place; the log above the status
 bar; the picker card's wrapped text.
 
-Still to test from this round: emote asterisks (drawn into font 0); the
-chat log's size and whisper color after the pinning fix; a companion
-dying (not just knocked out), knocked out and paralyzed; a rejoin or
-host load while asleep; "Iolo is free again" after 3 minutes; held items
-in saves; the minimap slowdown check; then four players, scripted events
-and the Phase 7 leftovers.
+Also working after the commit: emote asterisks; the chat log's size and
+whisper color; a rejoin and a host load while the companion is asleep;
+the minimap (no slowdown).
+
+Still to test: a companion dying (not just knocked out), knocked out and
+paralyzed; "Iolo is free again" after 3 minutes; held items in saves and
+in a newcomer's world; four players and a fifth window spectating;
+scripted events; the Phase 7 leftovers (undoing a guest's merchant or
+trainer conversation, spell shops, shop hours, clocks and the
+telescope/sextant).
 
 First pass, working: the corner minimap, chat, the chat log, whispers.
 Changed after that (retested in the second pass unless noted):

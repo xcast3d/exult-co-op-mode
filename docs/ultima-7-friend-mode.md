@@ -318,24 +318,60 @@ keyboard, and keep the mouse for attacking and using things. It does not
 depend on Phase 8, so it can ship in the first update after release or be
 brought forward.
 
-Both parts are off by default, each with its own toggle in the Game Input or
-Game Engine options, and they work in single-player too. They change engine
+Two separate Game Input options: "WASD movement" (off by default) and
+"Targeting (Q, Space)" (`config/gameplay/keyboard_targeting`, on by
+default, since Q had no binding and Space only acts with a target picked;
+off for players who pause combat with Space or bind Q). Each machine has
+its own settings. Both work in single-player too. They change engine
 input code (Exult's key bindings and combat targeting), so they are part of
 our Exult build; a usecode mod pack cannot add them. Keep them in their own
 commits, separate from the network code, so they could be offered to Exult
 upstream.
 
-- [ ] **WASD movement.** Build on Exult's existing keyboard walking
-      (`ActionWalk*` in `keyactions.cc`), which already slows down in combat.
-      Holding two keys walks diagonally (W+D = north-east).
-- [ ] Move Save from S to Ctrl+S (Cmd+S on Mac) when WASD is on; the main menu
-      still saves too. S is the only default key that conflicts.
+- [x] **WASD movement** (built 2026-10-18, ahead of the rest of Phase 9).
+      Game Input option "WASD movement", off by default
+      (`config/gameplay/wasd_movement`). Walks like the arrow keys
+      (`ActionWalk*`), slowing down in combat; two keys walk diagonally
+      (W+D = north-east).
+- [x] With WASD on, Shift plus W, A, S or D does what the key alone did:
+      Shift+W the watch, Shift+S Save/Restore (W was a conflict too, not
+      only S). Ctrl+S stays quicksave.
+- [ ] Single-click attack: tried 2026-10-18 and taken out again (combat
+      felt stuck, partly from WASD keys that stayed held). Replaced by the
+      targeting below.
 - [ ] Guests: send held movement keys to the host as a steady walk stream, and
       check it feels responsive over a real internet connection, not just a
       local one.
-- [ ] **Target cycling.** Q and E step to the previous or next hostile on
-      screen, nearest first, with a highlight ring that works alongside the
-      enemy health bars. Tab stays as the guest's character swap.
+- [x] **Targeting** (built 2026-10-18; with or without WASD movement, for
+      the host and every guest, so guests don't have to double-click
+      moving foes). Q picks the next person or creature on screen who
+      isn't in the party, nearest first (Shift+Q the previous), with a
+      small arrow over its head: white, or red in combat mode (outlines
+      felt like status effects). Past the last one the pick clears and the
+      next Q starts again. The notice near the top says "Targeting Deer",
+      "Attacking Deer" or "No target". E stays the guest's follow key.
+- [x] **When the pick is attacked.** Out of combat never. In combat mode
+      Q goes through hostiles first, then everyone else; a hostile pick is
+      attacked at once (the Avatar's target, or the host fighting for a
+      guest's companion), a peaceful one waits for Space. Turning combat
+      mode on with a hostile picked attacks it.
+- [x] **Space attacks the target**, peaceful or not, turning combat mode
+      on. While the Avatar is already attacking the pick, Space pauses
+      combat as before. Guests still can't attack peaceful people. Space
+      was weighed against F (with food on Shift+F), double-clicking the
+      target and an on-screen button, and kept: it only acts while the
+      chat line is closed, and pausing combat does nothing in "original"
+      combat.
+- [x] **Fighting by target.** Once the Avatar fights through targeting,
+      it attacks only what is picked: its attack mode is "manual" (Exult's
+      combat AI then picks no foes of its own) until combat mode ends.
+      Clearing the target, or walking, stops the attack; Space takes it up
+      again. Saves keep the Avatar's own mode. A guest's companion already
+      fights only the guest's pick (the host ends it when the guest walks
+      or clears the target). Someone who never presses Q fights as U7
+      always did; the party's combat AI still drives everyone else.
+- Decided 2026-10-18: this may be enough; a deeper rework of the party's
+  combat AI waits until play shows a need.
 - [ ] Attack the selected target with a key or left-click, through the
       existing attack code. Hit chance, damage, and timing stay unchanged.
 - [ ] Each player has their own target; the host relays it, and other players
@@ -364,10 +400,11 @@ after Phase 8.
 - [ ] ~~**Arrows to other players.**~~ Built, then removed after testing
       (2026-10-18): messy on screen, and the corner minimap already shows
       where everyone is. Only the arrow back to the Avatar stays.
-- [ ] **Suggest a reply.** During the Avatar's conversation, a guest clicks
-      a keyword to highlight it on the host's screen with their name. The
-      Avatar still chooses. Few U7 choices really matter, but it lets
-      guests take part.
+- [x] **Suggest a reply** (built 2026-10-18). During the Avatar's
+      conversation, a guest clicks a keyword: it is drawn in that player's
+      color on every screen and the log says "Marc suggests: Name". One
+      suggestion per player; cleared when the Avatar picks. The Avatar
+      still chooses.
 - [x] **Spectator camera.** Spectators press a key to cycle the view
       between players.
 - [x] **Autosave every 5 minutes** on the host, in their own rotating slots
@@ -400,14 +437,16 @@ after Phase 8.
       version could show only the dungeon chunks the party has visited,
       kept in the save and shared by every player.
 
-- [ ] **Return to Main Menu.** Exult has none: the game menu's Quit exits,
-      and upstream left a stub (`Gamemenu_gump::quit`, "IMPLEMENT
-      RETURN_TO_MENU"). Leaving to the title screen would close any co-op
-      session cleanly (guests see the host leave, a guest frees its
-      companion) and reset the world, gumps and layers before running the
-      title menu again, so switching between hosting and joining needs no
-      restart. Exult's restart path (`QUIT_TIME_RESTART`, `gwin->read()`)
-      is a start. Asked for 2026-10-18.
+- [x] **Return to Main Menu** (built 2026-10-18). A "Main Menu" button
+      above Quit in the game menu. Exult can't tear a game down and run the
+      title menu again in one process, so it closes the co-op session and
+      starts Exult afresh with the same arguments, minus the co-op ones,
+      skipping the intro (`--skip-intro`).
+- [ ] **Keyboard command list in game** (asked for 2026-10-18, once the
+      in-game features are done): every key, including Friend Mode's (J,
+      L, X, E, Tab, WASD, Shift+W/S, chat commands).
+- [ ] **Feature list for the project webpage** (same time): every
+      feature and enhancement Friend Mode adds, written for players.
 
 Later: players' positions on the cloth map (M); pings to point at a spot
 or object (more useful with a longer leash).

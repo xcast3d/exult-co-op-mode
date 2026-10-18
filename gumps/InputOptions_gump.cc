@@ -186,6 +186,14 @@ void InputOptions_gump::build_buttons() {
 			this, &InputOptions_gump::toggle_touch_pathfind, yesNo, touch_pathfind,
 			get_button_pos_for_label(Strings::PathfindwithLongTouch_()), yForRow(++y_index), 44);
 
+	buttons[id_wasd_movement] = std::make_unique<InputTextToggle>(
+			this, &InputOptions_gump::toggle_wasd_movement, yesNo, wasd_movement,
+			get_button_pos_for_label("WASD movement:"), yForRow(++y_index), 44);
+
+	buttons[id_keyboard_targeting] = std::make_unique<InputTextToggle>(
+			this, &InputOptions_gump::toggle_keyboard_targeting, yesNo, keyboard_targeting,
+			get_button_pos_for_label("Targeting (Q, Space):"), yForRow(++y_index), 44);
+
 	// Risize to fit all
 	ResizeWidthToFitWidgets(tcb::span(buttons.data() + id_first, id_count));
 
@@ -206,6 +214,8 @@ void InputOptions_gump::load_settings() {
 	item_menu        = gwin->get_item_menu();
 	dpad_location    = gwin->get_dpad_location();
 	touch_pathfind   = gwin->get_touch_pathfind();
+	wasd_movement    = Friend_wasd_movement ? 1 : 0;
+	keyboard_targeting = Friend_keyboard_targeting ? 1 : 0;
 }
 
 InputOptions_gump::InputOptions_gump() : Modal_gump(nullptr, -1) {
@@ -254,6 +264,11 @@ void InputOptions_gump::save_settings() {
 	gwin->set_touch_pathfind(touch_pathfind != 0);
 	config->set("config/touch/touch_pathfind", touch_pathfind ? "yes" : "no", false);
 
+	Friend_wasd_movement = wasd_movement != 0;
+	config->set("config/gameplay/wasd_movement", Friend_wasd_movement ? "yes" : "no", false);
+	Friend_keyboard_targeting = keyboard_targeting != 0;
+	config->set("config/gameplay/keyboard_targeting", Friend_keyboard_targeting ? "yes" : "no", false);
+
 	config->write_back();
 
 	if (touchui != nullptr) {
@@ -283,6 +298,8 @@ void InputOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::Itemhelpermenu_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::DPadscreenlocation_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::PathfindwithLongTouch_(), x + label_margin, y + yForRow(++y_index) + 1);
+	font->paint_text(iwin->get_ib8(), "WASD movement:", x + label_margin, y + yForRow(++y_index) + 1);
+	font->paint_text(iwin->get_ib8(), "Targeting (Q, Space):", x + label_margin, y + yForRow(++y_index) + 1);
 
 	gwin->set_painted();
 }

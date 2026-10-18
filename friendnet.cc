@@ -11,7 +11,7 @@
 #include <iostream>
 
 namespace {
-constexpr unsigned short protocol_version = 29;
+constexpr unsigned short protocol_version = 30;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -519,6 +519,21 @@ void Friend_mode_session::send_whisper(int target, uint32 speaker, int player, c
 	deliver(to);
 }
 
+void Friend_mode_session::send_suggestion(int player, const std::string& choice, int to) {
+	stage_text(Text_kind::suggestion, choice, 80, 0, static_cast<uint32>(player));
+	deliver(to);
+}
+
+bool Friend_mode_session::take_suggestion(int& player, std::string& choice) {
+	if (suggestions.empty()) {
+		return false;
+	}
+	player = suggestions.front().first;
+	choice = std::move(suggestions.front().second);
+	suggestions.pop_front();
+	return true;
+}
+
 bool Friend_mode_session::take_chat(uint32& speaker, int& player, std::string& text, int* from, int* target) {
 	if (chat_events.empty()) {
 		return false;
@@ -654,6 +669,14 @@ void Friend_mode_session::handle_text(Peer& peer) {
 		}
 		break;
 	}
+	case Text_kind::suggestion: {
+		std::string choice = printable(peer.text);
+		if (!choice.empty()) {
+			// The host knows who sent it; guests trust the host.
+			suggestions.emplace_back(host ? peer.player : static_cast<int>(peer.text_b), std::move(choice));
+		}
+		break;
+	}
 	case Text_kind::speech:
 		if (!host) {
 			speech_events.push_back({peer.text_a, std::move(peer.text)});
@@ -736,7 +759,9 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 		}
 	} else if (ready && type == text_begin_packet) {
 		const auto kind = static_cast<Text_kind>(buffer[7]);
-		const uint32 limit = kind == Text_kind::chat || kind == Text_kind::whisper ? 80
+		const uint32 limit = kind == Text_kind::chat || kind == Text_kind::whisper
+										 || kind == Text_kind::suggestion
+									 ? 80
 							 : kind == Text_kind::identity         ? 20
 							 : kind == Text_kind::dialogue_message ? 4096
 																   : 1024;
@@ -747,8 +772,9 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 		peer.text_pending = true;
 		peer.text.clear();
 		peer.text.reserve(peer.text_length);
-		if (host && kind != Text_kind::chat && kind != Text_kind::whisper && kind != Text_kind::identity) {
-			peer.text_pending = false;    // Guests send only chat, whispers and their name.
+		if (host && kind != Text_kind::chat && kind != Text_kind::whisper && kind != Text_kind::identity
+			&& kind != Text_kind::suggestion) {
+			peer.text_pending = false;    // Guests send only chat, whispers, suggestions and their name.
 		} else if (peer.text_length == 0) {
 			handle_text(peer);
 		}
@@ -983,6 +1009,7 @@ void Friend_mode_session::stop() {
 	peers.clear();
 	listener.reset();
 	staged.clear();
+	suggestions.clear();
 	next_player     = 1;
 	local_player_id = 0;
 	roster.clear();

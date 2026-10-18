@@ -137,6 +137,7 @@ class Game_window {
 	bool                      network_spectating = false;
 	bool                      friend_leash_blocked = false;
 	bool                      network_host_paused  = false;
+	std::weak_ptr<Game_object> action_target;    // Picked with Q (WASD movement), under a red arrow.
 public:
 	// Friend Mode host: a companion a guest controls, and its schedule from
 	// before (restored when released).
@@ -631,6 +632,9 @@ public:
 	Actor* get_controlled_actor() const {
 		return controlled_actor;
 	}
+	// The person or creature picked with Q (WASD movement), or null.
+	Actor* get_action_target() const;
+	void   set_action_target(Actor* target);
 	const std::vector<Remote_friend>& get_remote_friends() const {
 		return remote_friends;
 	}

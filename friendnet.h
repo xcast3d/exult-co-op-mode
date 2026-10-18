@@ -170,6 +170,10 @@ public:
 	// A whisper: a guest sends it to the host for 'target'; the host passes
 	// it on to that player alone.
 	void send_whisper(int target, uint32 speaker, int player, const std::string& text, int to = everyone);
+	// Suggest a reply: a guest names one of the Avatar's choices; the host
+	// passes it on to everyone with who suggested it.
+	void send_suggestion(int player, const std::string& choice, int to = everyone);
+	bool take_suggestion(int& player, std::string& choice);
 	void send_dialogue_begin();
 	void send_dialogue_end();
 	void send_dialogue_face(int shape, int frame, int slot);
@@ -201,7 +205,15 @@ public:
 
 private:
 	static constexpr std::size_t packet_size = 20;
-	enum class Text_kind : unsigned char { speech = 1, chat, identity, dialogue_message, dialogue_choice, whisper };
+	enum class Text_kind : unsigned char {
+		speech = 1,
+		chat,
+		identity,
+		dialogue_message,
+		dialogue_choice,
+		whisper,
+		suggestion
+	};
 
 	// One connection: the host's link to a guest, or a guest's to the host.
 	struct Peer {
@@ -276,6 +288,7 @@ private:
 		int         target = -1;    // A whisper's player.
 	};
 	std::deque<Chat_event>               chat_events;
+	std::deque<std::pair<int, std::string>> suggestions;    // Player, choice.
 	std::deque<Dialogue_event>           dialogue_events;
 	std::vector<std::string>             pending_dialogue_choices;
 	bool                              connection_lost = false;

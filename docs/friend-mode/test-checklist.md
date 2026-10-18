@@ -542,7 +542,7 @@ config and gamedat. The host needs a party with at least two companions
       doesn't offer Iolo. Rejoin with the same name within 3 minutes: no
       picker, straight into Iolo, "<name> is back as Iolo".
 - [ ] **Rejoin too late:** wait 3 minutes instead: "Iolo is free again".
-- [ ] **Chat log:** chat, whispers and session notices (joins, leaves,
+- [x] **Chat log:** chat, whispers and session notices (joins, leaves,
       switches, autosaves on the host) show bottom left, 20 pixels above
       the bottom, in white letters the size of overhead chat (whispers in
       purple), and fade after about 20 seconds; L hides and shows it, with
@@ -567,7 +567,7 @@ config and gamedat. The host needs a party with at least two companions
       Tab again cycles to the next player starting with J; `/wa` + Tab gives
       `/wave `; no match flashes a red X. Holding Tab outside the chat line
       still shows the player list.
-- [ ] **Emotes:** `/wave`, `/bow`, `/point`, `/cheer` pose for a moment;
+- [x] **Emotes:** `/wave`, `/bow`, `/point`, `/cheer` pose for a moment;
       `/kneel` and `/sit` until you move. Everyone sees "*waves*" over the
       actor (the asterisks were invisible: font 0 has none, so one is drawn
       in now), and "Marc waves." in the log. From the host (the Avatar) and from a guest. A spectator gets
@@ -587,6 +587,69 @@ config and gamedat. The host needs a party with at least two companions
       host saves or another guest joins: the save, and the newcomer's
       world, still have the item.
 
+## Main Menu, Suggest a reply, WASD (built 2026-10-18, protocol version 30)
+
+- [x] **Main Menu:** Escape → Main Menu → "Return to the main menu?" Yes:
+      Exult restarts at the title menu without the intro, and you can host
+      or join from there. On the host, guests see it leave; on a guest,
+      the host keeps its companion for a rejoin. No leftover window or
+      process. Answering No stays in the game.
+- [ ] **Suggest a reply:** the Avatar talks to an NPC; a guest clicks a
+      choice: it turns that guest's color on the host and every guest,
+      and the log says "<name> suggests: <choice>". The guest clicks
+      another: the first goes back to yellow. Two guests: both colors at
+      once. The Avatar's pick clears them. A click elsewhere does nothing
+      new.
+- [ ] **WASD off** (the default): W uses the watch, S opens Save/Restore,
+      as before.
+- [ ] **WASD on** (Game Input → "WASD movement: Yes"): W, A, S, D walk; two
+      keys walk diagonally; letting go stops (walking is fluid, 2026-10-18;
+      slower in combat, as U7 always is). Shift+W shows the watch,
+      Shift+S opens Save/Restore, Ctrl+S quicksaves. Typing in the chat
+      line or the journal doesn't walk. The setting is kept after a
+      restart.
+- [x] **WASD in combat:** C toggles combat; walking with WASD in a fight
+      (F9 with Shift spawns test creatures) never leaves the Avatar stuck
+      walking; double-click attacks as usual.
+- [x] **Targeting (WASD on), out of combat:** Q outlines the nearest
+      person or creature on screen (townsfolk too) and nothing is
+      attacked; Q again goes to the next nearest, Shift+Q back. Nobody on
+      screen: a red X.
+- [ ] **Arrow, clearing:** the pick gets a small arrow over its head,
+      white out of combat and red in combat mode (no outline; a hit still
+      flashes red); it follows the target and leaves no marks. Q past the last target clears it; the next Q
+      picks the nearest again (Shift+Q likewise, from the far end). Each
+      pick shows "Targeting <name>" near the top, replacing the last one;
+      clearing shows "No target" (also when the target dies).
+- [ ] **Targeting toggle:** Game Input shows "WASD movement" and
+      "Targeting (Q, Space)" as separate options; targeting is on in a
+      fresh config; off, Q does nothing, Space pauses combat as before and
+      any arrow goes; the setting is kept after a restart.
+- [x] **Peaceful targets in combat:** in combat mode Q picks hostiles
+      first, then townsfolk and animals; a hostile pick says "Attacking
+      Wolf" and is attacked, a peaceful one says "Targeting Deer" and
+      isn't until Space ("Attacking Deer").
+- [x] **Stopping:** in a fight through targeting, Q past the last target
+      ("No target") stops the Avatar attacking; so does walking (WASD or
+      right-click), with the arrow still on the target, and Space attacks
+      it again. With nothing picked and Q never used, C fights as U7 always
+      did. Save mid-fight, load: the Avatar's attack mode is its own.
+- [x] **Guests target too:** with WASD off on a guest, Q picks and the
+      arrow shows; in combat mode the companion attacks the pick; clearing
+      it stops the companion; walking stops it as before.
+- [ ] **Space attacks the target:** pick a townsperson with Q out of
+      combat, press C: nothing; press Space: combat comes on and the
+      Avatar attacks them. In a fight with a hostile picked, Space pauses
+      combat as before (if that combat mode pauses). On a guest, Space on
+      a peaceful pick gets "The Avatar must do this".
+- [x] **Targeting in combat:** with combat on (C) and test creatures
+      (Shift+F9), Q cycles only hostiles and the Avatar attacks each pick.
+      Picking a wolf out of combat, then C: the Avatar attacks the wolf.
+      Picking a townsperson, then C: nobody attacks them. The outline goes
+      when the target dies.
+- [ ] **WASD on a guest:** walking works for a guest's companion (the
+      host's leash and refusals apply).
+
 ## Maps
 
 The world map on U is shelved (see
@@ -598,7 +661,7 @@ The world map on U is shelved (see
 - [x] The minimap's smaller dots are still easy to see.
 - [x] Dungeon: the minimap hides, and comes back outside.
 - [x] The setting is kept after restarting Exult.
-- [ ] No slowdown with the corner minimap on (walk around a town).
+- [x] No slowdown with the corner minimap on (walk around a town).
 
 ## Losing a companion, and four players (Phase 6, M5)
 
@@ -611,8 +674,8 @@ The world map on U is shelved (see
 - [x] A guest's companion is put to sleep: it stays theirs, and they move
       it again when it wakes (2026-10-18, after a fix: the guest had gone
       to spectating).
-- [ ] The same for knocked out and paralyzed, and for a rejoin or a host
-      load while it is asleep.
+- [x] A rejoin, or a host load, while it is asleep: it stays theirs.
+- [ ] The same for knocked out and paralyzed.
 - [x] The host loads a save where a guest's companion isn't in the party:
       "... is not in the party in this save; <name> is now spectating", and
       the picker opens; the other guest keeps its companion.

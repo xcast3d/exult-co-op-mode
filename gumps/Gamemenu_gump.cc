@@ -119,6 +119,8 @@ void Gamemenu_gump::createButtons() {
 	}
 #if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
 	if (!gwin->is_in_exult_menu()) {
+		buttons[id_main_menu] = std::make_unique<Gamemenu_button>(
+				this, &Gamemenu_gump::quit_to_menu, "Main Menu", margin, yForRow(y++), preferred_button_width, 11);
 		buttons[id_quit] = std::make_unique<Gamemenu_button>(
 				this, &Gamemenu_gump::quit_exult, Strings::Quit(), margin, yForRow(y++), preferred_button_width, 11);
 	}
@@ -138,11 +140,14 @@ void Gamemenu_gump::createButtons() {
 	}
 }
 
-//++++++ IMPLEMENT RETURN_TO_MENU!
+// Quit Exult, or (Main Menu) go back to the title menu: Exult starts
+// again there once this game has shut down.
 void Gamemenu_gump::quit(bool return_to_menu) {
-	ignore_unused_variable_warning(return_to_menu);
-	if (!Yesno_gump::ask(Strings::Doyoureallywanttoquit_())) {
+	if (!Yesno_gump::ask(return_to_menu ? "Return to the main menu?" : Strings::Doyoureallywanttoquit_())) {
 		return;
+	}
+	if (return_to_menu) {
+		Friend_mode_request_main_menu();
 	}
 	quitting_time = QUIT_TIME_YES;
 	done          = true;

@@ -38,6 +38,7 @@ private:
 		id_game_engine_options,
 		id_input,
 		id_open_coop,
+		id_main_menu,
 		id_quit,
 		id_count
 	};

@@ -105,6 +105,11 @@
 #include <cstring>
 #include <filesystem>
 #include <iomanip>
+#if defined(_WIN32)
+#	include <process.h>
+#else
+#	include <unistd.h>
+#endif
 #include <sstream>
 #include <unordered_map>
 #include <unordered_set>
@@ -266,6 +271,7 @@ static bool friend_world_sent     = false;    // Host: the guest has our world, 
 static string friend_player_name;    // Typed on Join (starts empty), or the Avatar's.
 static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
+static int  friend_saved_attack_mode    = -1;    // The Avatar's, while targeting made it manual.
 static std::vector<uint32> friend_sent_party;    // Party last sent to guests.
 // Grace period before a companion left beyond the leash returns to the Avatar.
 static constexpr uint32 friend_leash_grace_ms  = 5000;
@@ -1866,6 +1872,17 @@ static void Friend_return_held_item(Friend_held_item& friend_guest_held) {
 // the guest's hand again afterwards.  Otherwise a save made mid-drag (an
 // autosave, or a joining guest's world) loses the item.
 void Friend_mode_saving(bool before) {
+	// Targeting's manual attack mode is for this fight only: saves keep the
+	// Avatar's own.
+	static bool swapped = false;
+	Main_actor* avatar  = gwin->get_main_actor();
+	if (before && avatar && friend_saved_attack_mode >= 0 && avatar->get_attack_mode() == Actor::manual) {
+		avatar->set_attack_mode(static_cast<Actor::Attack_mode>(friend_saved_attack_mode), avatar->did_user_set_attack());
+		swapped = true;
+	} else if (!before && swapped && avatar) {
+		avatar->set_attack_mode(Actor::manual, avatar->did_user_set_attack());
+		swapped = false;
+	}
 	for (auto& [player, guest] : friend_guests) {
 		Friend_held_item& held = guest.held;
 		if (!held.obj) {
@@ -2278,7 +2295,7 @@ static void Friend_mode_wake_near_guest() {
 // combat schedule for the guest's companion against that foe alone.  When
 // the foe dies or is lost, or the guest walks, the companion waits again.
 
-enum Friend_attack_target { friend_attack_npc = 0, friend_attack_creature = 1 };
+enum Friend_attack_target { friend_attack_npc = 0, friend_attack_creature = 1, friend_attack_stop = 2 };
 constexpr int friend_attack_max_tiles = 24;    // Reach for picking a foe.
 
 // Creatures, and NPCs who are hostile.  Peaceful people stay the Avatar's
@@ -2325,6 +2342,299 @@ bool Friend_mode_guest_attack(Game_object* obj) {
 	return true;
 }
 
+// Targeting (with or without WASD movement): Q picks the next person or creature on screen
+// who isn't in the party (Shift+Q the previous), nearest first, and puts a
+// small red arrow over it; past the last one it clears.  In combat mode it picks only hostiles, and attacks the pick
+// through the usual combat code: the Avatar's target on the host, or the
+// host fighting for a guest's companion.  Turning combat mode on with a
+// hostile picked attacks it too.
+static bool Friend_is_hostile_target(const Actor* own, const Actor* foe) {
+	if (!Friend_is_attack_target(own, foe)) {
+		return false;
+	}
+	const int align = foe->get_effective_alignment();
+	return align == Actor::evil || align == Actor::chaotic;
+}
+
+static void Friend_mode_take_manual();
+
+// "Targeting Deer", "Attacking Deer" or "No target" near the top, replacing
+// the last one.
+static void Friend_mode_target_notice(const std::string& text) {
+	friend_notices.erase(std::remove_if(friend_notices.begin(), friend_notices.end(),
+								 [](const Friend_log_line& line) {
+									 return line.text.rfind("Targeting ", 0) == 0
+											|| line.text.rfind("Attacking ", 0) == 0 || line.text == "No target";
+								 }),
+						 friend_notices.end());
+	Friend_mode_top_line(text);
+}
+
+static std::string Friend_target_name(const Actor* actor) {
+	const std::string name = actor->get_name();
+	return name.empty() ? std::string("someone") : name;
+}
+
+// Combat mode on, the pick not (or no longer) attacked: the Avatar stands,
+// or the host stops fighting for a guest's companion.
+static void Friend_mode_stop_attack() {
+	if (!gwin->in_combat()) {
+		return;
+	}
+	if (Friend_mode_is_guest()) {
+		if (friend_session.connected()) {
+			friend_session.send_blob(Friend_mode_session::Blob_kind::guest_attack, {friend_attack_stop, 0, 0, 0, 0});
+		}
+	} else {
+		Friend_mode_take_manual();
+		gwin->get_main_actor()->set_target(nullptr);
+	}
+}
+
+void Friend_mode_combat_ended();
+
+// Clearing the target in combat stops the attack: the Avatar (now
+// manual) stands, or the host stops fighting for a guest's companion.
+static void Friend_mode_clear_target() {
+	if (!gwin->get_action_target()) {
+		return;
+	}
+	gwin->set_action_target(nullptr);
+	Friend_mode_target_notice("No target");
+	Friend_mode_stop_attack();
+}
+
+static void Friend_mode_cycle_target(int step) {
+	Actor* own = gwin->get_controlled_actor();
+	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
+		|| !gwin->main_actor_can_act()) {
+		Mouse::mouse()->flash_shape(Mouse::redx);
+		return;
+	}
+	const bool   fighting = gwin->in_combat();
+	Actor_vector nearby;
+	own->find_nearby_actors(nearby, c_any_shapenum, 24);
+	const TileRect      view = gwin->get_win_tile_rect();
+	std::vector<Actor*> foes;
+	for (Actor* actor : nearby) {
+		const Tile_coord at = actor->get_tile();
+		if (Friend_is_attack_target(own, actor) && view.has_point(at.tx, at.ty)) {
+			foes.push_back(actor);
+		}
+	}
+	if (foes.empty()) {
+		Friend_mode_clear_target();
+		Mouse::mouse()->flash_shape(Mouse::redx);
+		return;
+	}
+	// Nearest first; in combat mode hostiles come before everyone else.
+	const Tile_coord from = own->get_tile();
+	std::stable_sort(foes.begin(), foes.end(), [&](const Actor* a, const Actor* b) {
+		if (fighting) {
+			const bool ha = Friend_is_hostile_target(own, a);
+			const bool hb = Friend_is_hostile_target(own, b);
+			if (ha != hb) {
+				return ha;
+			}
+		}
+		return from.distance(a->get_tile()) < from.distance(b->get_tile());
+	});
+	// Past the last (or, going back, the first) the pick clears; the next Q
+	// starts again.
+	const auto current = std::find(foes.begin(), foes.end(), gwin->get_action_target());
+	const int  count   = static_cast<int>(foes.size());
+	int        index   = step < 0 ? count - 1 : 0;
+	if (current != foes.end()) {
+		index = static_cast<int>(current - foes.begin()) + step;
+		if (index < 0 || index >= count) {
+			Friend_mode_clear_target();
+			return;
+		}
+	}
+	// In combat mode a hostile pick is attacked at once; a peaceful one waits
+	// for Space (and whatever was being attacked is let go).
+	Actor* foe = foes[index];
+	gwin->set_action_target(foe);
+	if (fighting && Friend_is_hostile_target(own, foe) && Friend_mode_attack_target(foe)) {
+		return;
+	}
+	Friend_mode_target_notice("Targeting " + Friend_target_name(foe));
+	Friend_mode_stop_attack();
+}
+
+// Once the Avatar fights through targeting, it attacks only what is picked:
+// its attack mode is "manual" (the combat AI picks no foes of its own) until
+// combat mode ends, when its own mode comes back (friend_saved_attack_mode;
+// saves keep the own one).  Someone who never uses Q fights as U7 always did.
+
+static void Friend_mode_take_manual() {
+	Main_actor* avatar = gwin->get_main_actor();
+	if (Friend_mode_is_guest() || !avatar || avatar->get_attack_mode() == Actor::manual) {
+		return;    // Already (a fresh load brings the Avatar's own mode back).
+	}
+	friend_saved_attack_mode = avatar->get_attack_mode();
+	avatar->set_attack_mode(Actor::manual, avatar->did_user_set_attack());
+}
+
+void Friend_mode_combat_ended() {
+	Main_actor* avatar = gwin->get_main_actor();
+	if (avatar && friend_saved_attack_mode >= 0 && avatar->get_attack_mode() == Actor::manual) {
+		avatar->set_attack_mode(static_cast<Actor::Attack_mode>(friend_saved_attack_mode), avatar->did_user_set_attack());
+	}
+	friend_saved_attack_mode = -1;
+}
+
+// Attack the picked target (combat mode is on): "Attacking Deer".  False
+// if it can't be (a guest and a peaceful person: "The Avatar must do this").
+bool Friend_mode_attack_target(Actor* foe) {
+	Actor* own = gwin->get_controlled_actor();
+	if (!foe || !Friend_is_attack_target(own, foe)) {
+		return false;
+	}
+	if (Friend_mode_is_guest()) {
+		const bool allowed = Friend_guest_may_attack(foe);
+		Friend_mode_guest_attack(foe);    // The host fights for our companion.
+		if (!allowed) {
+			return false;
+		}
+	} else {
+		Main_actor* avatar = gwin->get_main_actor();
+		if (!avatar->can_act_charmed()) {
+			return false;
+		}
+		Friend_mode_take_manual();
+		avatar->set_target(foe);    // As a double-click in combat mode.
+	}
+	Friend_mode_target_notice("Attacking " + Friend_target_name(foe));
+	return true;
+}
+
+// Combat mode came on: a hostile picked with Q is attacked.  A peaceful one
+// isn't, so that turning on combat never starts a fight with townsfolk.
+void Friend_mode_combat_started() {
+	Actor* target = gwin->get_action_target();
+	if (target && Friend_is_hostile_target(gwin->get_controlled_actor(), target)) {
+		Friend_mode_attack_target(target);
+	}
+}
+
+// The arrow over the target, red in combat mode and white otherwise: its own
+// layer, placed over the target's head every frame at the world's scale, so
+// it leaves nothing behind as the target moves and draws over roofs and
+// trees.
+static void Friend_mode_paint_target_arrow() {
+	static int    layer   = -1;
+	static int    painted = -1;    // The combat mode its colors are for.
+	Image_window* iwin    = gwin->get_win();
+	Actor*        target  = gwin->get_action_target();
+	Shape_frame*  frame   = target ? target->get_shape() : nullptr;
+	const bool    visible = target && frame && target->get_chunk() && !gwin->is_in_exult_menu();
+	if (!visible) {
+		if (layer >= 0 && iwin->layer_is_visible(layer)) {
+			gwin->layer_set_visible(layer, false);
+			gwin->set_painted();
+		}
+		return;
+	}
+	// A 9x6 arrow pointing down: red (or white) inside a black edge.
+	constexpr int         aw         = 9;
+	constexpr int         ah         = 6;
+	constexpr const char* arrow[ah] = {"BBBBBBBBB", "BRRRRRRRB", ".BRRRRRB.", "..BRRRB..", "...BRB...", "....B...."};
+	if (layer < 0) {
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);
+		layer                      = gwin->create_layer("Target arrow", aw, ah, 255, 0, text_layer_z - 1);
+		painted                    = -1;
+		if (layer < 0) {
+			return;
+		}
+	}
+	const int fighting = gwin->in_combat() ? 1 : 0;
+	if (painted != fighting) {
+		Image_buffer8* lbuf = gwin->get_layer_ibuf(layer);
+		if (!lbuf) {
+			return;
+		}
+		const unsigned char fill
+				= Shape_manager::get_instance()->get_special_pixel(fighting ? HIT_PIXEL : PROTECT_PIXEL);
+		lbuf->fill8(255);
+		for (int y = 0; y < ah; ++y) {
+			for (int x = 0; x < aw; ++x) {
+				if (arrow[y][x] != '.') {
+					lbuf->put_pixel8(arrow[y][x] == 'R' ? fill : 0, x, y);
+				}
+			}
+		}
+		gwin->layer_set_dirty(layer);
+		painted = fighting;
+	}
+	int x;
+	int y;
+	gwin->get_shape_location(target, x, y);
+	const int left = x - frame->get_xleft();
+	const int top  = y - frame->get_yabove();
+	const int ax   = left + frame->get_width() / 2 - aw / 2;
+	const int ay   = top - ah - 1;
+	int       sx0;
+	int       sy0;
+	int       sx1;
+	int       sy1;
+	iwin->game_to_screen(ax, ay, false, sx0, sy0);
+	iwin->game_to_screen(ax + aw, ay + ah, false, sx1, sy1);
+	gwin->layer_set_dest(layer, sx0, sy0, sx1 - sx0, sy1 - sy0);
+	gwin->layer_set_visible(layer, true);
+	gwin->set_painted();
+}
+
+// Walking in combat with a target picked stops the attack (the target stays
+// picked; Space takes it up again).  A guest's walking already ends the
+// host's attack for it.
+static void Friend_mode_walking_stops_attack() {
+	if (Friend_mode_is_guest() || !gwin->in_combat() || !gwin->get_action_target()) {
+		return;
+	}
+	Main_actor* avatar = gwin->get_main_actor();
+	if (avatar->get_target()) {
+		Friend_mode_take_manual();
+		avatar->set_target(nullptr);
+		Friend_mode_target_notice("Targeting " + Friend_target_name(gwin->get_action_target()));
+	}
+}
+
+// Every frame: drop the target once it is dead, gone or far off screen.
+static void Friend_mode_check_target() {
+	Actor* target = gwin->get_action_target();
+	Actor* own    = gwin->get_controlled_actor();
+	if (!target) {
+		return;
+	}
+	if (!Friend_keyboard_targeting || !own || !Friend_is_attack_target(own, target) || !target->get_chunk()
+		|| own->get_tile().distance(target->get_tile()) > 30) {
+		Friend_mode_clear_target();
+	}
+}
+
+// Space with a target picked: attack it, peaceful or not, turning combat
+// mode on (or again, after walking stopped the attack).  While the Avatar
+// is already attacking it, Space pauses combat as before.  False if Space
+// should do its usual thing.
+static bool Friend_mode_force_attack() {
+	Actor* target = gwin->get_action_target();
+	Actor* own    = gwin->get_controlled_actor();
+	if (!target || !own || !Friend_is_attack_target(own, target)
+		|| (gwin->in_combat() && !Friend_mode_is_guest() && gwin->get_main_actor()->get_target() == target)) {
+		return false;
+	}
+	if (gwin->network_input_blocked() || !gwin->main_actor_can_act()) {
+		Mouse::mouse()->flash_shape(Mouse::redx);
+		return true;
+	}
+	if (!gwin->in_combat()) {
+		gwin->toggle_combat();
+	}
+	Friend_mode_attack_target(target);
+	return true;
+}
+
 // Host: a guest's companion stops fighting and waits for the guest again.
 static void Friend_mode_end_guest_attack(Friend_guest& guest, const char* why) {
 	if (guest.attacker < 0) {
@@ -2348,6 +2658,10 @@ static void Friend_mode_attack_for_guest(const std::vector<unsigned char>& data,
 		return;
 	}
 	const int    kind = data[0];
+	if (kind == friend_attack_stop) {
+		Friend_mode_end_guest_attack(guest, "guest cleared target");
+		return;
+	}
 	const uint32 id   = data[1] | (data[2] << 8) | (data[3] << 16) | (static_cast<uint32>(data[4]) << 24);
 	Actor*       foe  = kind == friend_attack_npc ? gwin->get_npc(static_cast<int>(id))
 						: kind == friend_attack_creature ? static_cast<Actor*>(Friend_creature_by_id(id))
@@ -3643,6 +3957,52 @@ bool Friend_mode_is_guest() {
 	return friend_session.mode() == Friend_mode_session::Mode::guest;
 }
 
+// Return to Main Menu: Exult cannot tear its game down and run the title
+// menu again in the same process, so main() starts it afresh (the same
+// arguments without the Co-Op ones, skipping the intro).
+bool                            Friend_wasd_movement  = false;
+bool                            Friend_keyboard_targeting = true;
+static int                      friend_wasd_dx        = 0;    // The direction walked last frame.
+static int                      friend_wasd_dy        = 0;
+
+// WASD movement: one of the four keys, by where it sits on the keyboard.
+static bool Friend_is_wasd_key(SDL_Scancode code) {
+	return code == SDL_SCANCODE_W || code == SDL_SCANCODE_A || code == SDL_SCANCODE_S || code == SDL_SCANCODE_D;
+}
+static bool                     friend_return_to_menu = false;
+static bool                     arg_skip_intro        = false;
+static std::vector<std::string> friend_restart_args;    // As launched; [0] is the program.
+
+void Friend_mode_request_main_menu() {
+	friend_return_to_menu = true;
+}
+
+static void Friend_mode_restart_at_menu() {
+	friend_session.stop();    // Guests (or the host) see us leave now.
+	std::vector<std::string> args;
+	for (std::size_t i = 0; i < friend_restart_args.size(); ++i) {
+		const std::string& arg = friend_restart_args[i];
+		if (arg == "--friend-join" || arg == "--friend-port") {
+			++i;    // And its value.
+		} else if (arg != "--friend-host" && arg != "--skip-intro") {
+			args.push_back(arg);
+		}
+	}
+	args.emplace_back("--skip-intro");
+	std::vector<char*> argv;
+	for (std::string& arg : args) {
+		argv.push_back(arg.data());
+	}
+	argv.push_back(nullptr);
+	SDL_Quit();
+#if defined(_WIN32)
+	_spawnv(_P_NOWAIT, argv[0], argv.data());
+#else
+	execv(argv[0], argv.data());
+	perror("Return to Main Menu: could not start Exult again");
+#endif
+}
+
 // Co-Op Mode hosting: chosen on the title menu (or --friend-host) before a
 // game starts, or switched on during play from the game menu.
 bool Friend_mode_hosting() {
@@ -4132,6 +4492,50 @@ static void Friend_mode_paint_chat_log() {
 	}
 	Friend_mode_paint_pinned(log, friend_chat_log, friend_chat_log_changed, on && !friend_chat_log_hidden, 6, bottom, false);
 	Friend_mode_paint_pinned(notices, friend_notices, friend_notices_changed, true, gwin->get_width() / 2, 4, true);
+}
+
+// Suggest a reply: a guest clicks one of the Avatar's choices during the
+// Avatar's conversation.  The host checks it is on offer, draws it in that
+// player's color and passes it on; everyone logs "Marc suggests: Name".
+// The host reads these while waiting for its own click (Get_click), since
+// its main loop is not running during a conversation.
+static void Friend_mode_take_suggestions() {
+	if (friend_session.mode() == Friend_mode_session::Mode::off) {
+		return;
+	}
+	const bool    hosting      = friend_session.mode() == Friend_mode_session::Mode::host;
+	Conversation* conversation = gwin->get_usecode()->get_conversation();
+	int           player       = 0;
+	std::string   choice;
+	bool          any = false;
+	while (friend_session.take_suggestion(player, choice)) {
+		if (hosting && (!Friend_guest_of(player) || !friend_host_dialogue_active)) {
+			continue;
+		}
+		const auto color = static_cast<unsigned char>(Friend_player_color(player));
+		if (!conversation || !conversation->suggest_choice(choice, color)) {
+			continue;    // Not on offer (any more).
+		}
+		if (hosting) {
+			friend_session.send_suggestion(player, choice);
+		}
+		Friend_mode_session_notice(Friend_mode_player_name(player) + " suggests: " + choice);
+		any = true;
+	}
+	if (any) {
+		Friend_mode_paint_chat_log();    // Also while the host's conversation waits.
+		gwin->set_painted();
+	}
+}
+
+// Host, waiting for a click (a conversation's choices among others): keep
+// reading guests' suggestions.
+static void Friend_mode_click_wait_poll() {
+	if (friend_session.mode() != Friend_mode_session::Mode::host) {
+		return;
+	}
+	friend_session.poll();
+	Friend_mode_take_suggestions();
 }
 
 // Hold Tab: a list of the players, their characters and health.
@@ -4815,6 +5219,7 @@ int main(int argc, char* argv[]) {
 	parameters.declare("--friend-host", &arg_friend_host, true);
 	parameters.declare("--friend-join", &arg_friend_join, "");
 	parameters.declare("--friend-port", &arg_friend_port, 1992);
+	parameters.declare("--skip-intro", &arg_skip_intro, true);    // Set by Return to Main Menu.
 	parameters.declare("--installdata", &arg_installdata);
 	parameters.declare("--installmod", &arg_installmod);
 #if defined _WIN32
@@ -4823,6 +5228,17 @@ int main(int argc, char* argv[]) {
 #endif
 	// Process the args
 	parameters.process(argc, argv);
+	for (int i = 0; i < argc; ++i) {
+		friend_restart_args.emplace_back(argv[i]);
+	}
+	if (!friend_restart_args.empty()) {
+		// The program by full path, in case the working folder changes.
+		std::error_code   error;
+		const auto        program = std::filesystem::absolute(friend_restart_args[0], error);
+		if (!error && friend_restart_args[0].find('/') != std::string::npos) {
+			friend_restart_args[0] = program.string();
+		}
+	}
 	add_system_path("<alt_cfg>", arg_configfile);
 #if defined _WIN32
 	if (portable) {
@@ -4976,6 +5392,9 @@ int main(int argc, char* argv[]) {
 
 	try {
 		result = exult_main(argv[0]);
+		if (friend_return_to_menu) {
+			Friend_mode_restart_at_menu();
+		}
 	} catch (const quit_exception& /*e*/) {
 		// Your basic "shutup Valgrind" code.
 		Free_text();
@@ -5600,6 +6019,8 @@ static void Init() {
 		// Skip splash screen?
 		bool skip_splash;
 		config->value("config/gameplay/skip_splash", skip_splash);
+		config->value("config/gameplay/wasd_movement", Friend_wasd_movement);
+		config->value("config/gameplay/keyboard_targeting", Friend_keyboard_targeting, true);
 
 		// Check for mod overrides
 		bool force_skip_splash   = false;
@@ -5629,7 +6050,7 @@ static void Init() {
 		// Make sure we have a proper palette before playing the intro.
 		gwin->get_pal()->load(BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX), EXULT_FLX_EXULT0_PAL);
 		gwin->get_pal()->apply();
-		if ((!skip_splash && !force_skip_splash) && (Game::get_game_type() != EXULT_DEVEL_GAME || U7exists(INTRO_DAT))) {
+		if ((!skip_splash && !force_skip_splash && !arg_skip_intro) && (Game::get_game_type() != EXULT_DEVEL_GAME || U7exists(INTRO_DAT))) {
 			if (midi) {
 				midi->set_timbre_lib(MyMidiPlayer::TIMBRE_LIB_INTRO);
 			}
@@ -5883,7 +6304,18 @@ static void Handle_events() {
 	std::unordered_set<int> guest_frozen_npcs;
 	uint32                     guest_close_at = 0;    // Ticks when a disconnected guest exits.
 	uint32                     guest_leash_notice_at = 0;    // Last "must return" notice.
+	uint32 friend_last_loop = SDL_GetTicks();
 	while (!quitting_time) {
+		{
+			// A main-loop pass that took long (a hang, or a conversation or menu
+			// it waited in): logged to help find freezes.
+			const uint32 now = SDL_GetTicks();
+			if (now - friend_last_loop > 750) {
+				cout << "Friend Mode: main loop waited " << (now - friend_last_loop) << " ms"
+					 << (gwin->in_combat() ? " (in combat)" : "") << endl;
+			}
+			friend_last_loop = now;
+		}
 		friend_session.poll();
 		Friend_mode_journal_open_pass(false);
 		std::string incoming_chat;
@@ -5920,6 +6352,7 @@ static void Handle_events() {
 						chat_from, incoming_chat, Friend_mode_session::everyone, chat_from);
 			}
 		}
+		Friend_mode_take_suggestions();
 		if (arg_friend_host) {
 			if (friend_host_paused_sent) {    // Back from a menu or dialog.
 				if (friend_session.connected()) {
@@ -6697,7 +7130,7 @@ static void Handle_events() {
 			int       x  = Mouse::mouse()->get_mousex();
 			int       y  = Mouse::mouse()->get_mousey();
 			const int ms = SDL_GetMouseState(nullptr, nullptr);
-			if ((SDL_BUTTON_RMASK & ms) && !right_on_gump) {
+			if ((SDL_BUTTON_RMASK & ms) && !right_on_gump && !friend_wasd_dx && !friend_wasd_dy) {
 				gwin->start_actor(x, y, Mouse::mouse()->avatar_speed);
 			} else if (ticks > last_rest) {
 				const int resttime = ticks - last_rest;
@@ -6716,6 +7149,31 @@ static void Handle_events() {
 				last_rest = ticks;
 			}
 		}
+
+		// WASD movement: walk toward the held keys every frame, as the arrow
+		// keys do (two keys walk diagonally), so a new direction takes effect
+		// at once.  Read from the keyboard itself, so a key let go while a
+		// menu or another window had it never sticks.
+		if (Friend_wasd_movement) {
+			const bool*      keys   = SDL_GetKeyboardState(nullptr);
+			const SDL_Keymod mod    = SDL_GetModState();
+			const bool       typing = friend_chat_active || Notebook_gump::get_instance()
+								|| (mod & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) || !gwin->have_focus()
+								|| dragging;
+			const int dx = typing ? 0 : (keys[SDL_SCANCODE_D] ? 1 : 0) - (keys[SDL_SCANCODE_A] ? 1 : 0);
+			const int dy = typing ? 0 : (keys[SDL_SCANCODE_S] ? 1 : 0) - (keys[SDL_SCANCODE_W] ? 1 : 0);
+			if ((dx || dy) && gwin->main_actor_can_act_charmed()) {
+				if (!friend_wasd_dx && !friend_wasd_dy) {
+					Friend_mode_walking_stops_attack();
+				}
+				gwin->start_actor(gwin->get_width() / 2 + 50 * dx, gwin->get_height() / 2 + 50 * dy, get_walking_speed(nullptr));
+			} else if (friend_wasd_dx || friend_wasd_dy) {
+				gwin->stop_actor();    // Let go.
+			}
+			friend_wasd_dx = dx;
+			friend_wasd_dy = dy;
+		}
+		Friend_mode_check_target();
 
 		// handle delayed showing of clicked items (wait for possible dblclick)
 		if (show_items_clicked && ticks > show_items_time) {
@@ -6816,6 +7274,7 @@ static void Handle_events() {
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
 		Friend_mode_paint_maps();
+		Friend_mode_paint_target_arrow();
 		Friend_mode_paint_leash_arrow();
 		Friend_mode_paint_dialogue_wait();
 		Friend_mode_paint_chat_input();
@@ -6997,6 +7456,29 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
  */
 
 static void Handle_event(SDL_Event& event) {
+	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_Q
+		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
+		&& !Notebook_gump::get_instance()) {
+		Friend_mode_cycle_target((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);    // Q: the next one.
+		return;
+	}
+	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_SPACE
+		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
+		&& !Notebook_gump::get_instance() && Friend_mode_force_attack()) {
+		return;    // Space: attack the target.
+	}
+	if (Friend_wasd_movement && (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
+		&& Friend_is_wasd_key(event.key.scancode) && !friend_chat_active && !Notebook_gump::get_instance()) {
+		// WASD movement: the keys alone walk (the main loop reads them as
+		// they are held), so the key bindings don't get them; with Shift
+		// they do what the key alone did (Shift+W the watch, Shift+S Save).
+		if (event.key.mod & SDL_KMOD_SHIFT) {
+			event.key.mod = static_cast<SDL_Keymod>(event.key.mod & ~SDL_KMOD_SHIFT);
+			event.key.key = SDL_GetKeyFromScancode(event.key.scancode, SDL_KMOD_NONE, false);
+		} else if (!(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
+			return;
+		}
+	}
 	if (friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active
 		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_L && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
@@ -7279,6 +7761,7 @@ static void Handle_event(SDL_Event& event) {
 				gump          = nullptr;
 				right_on_gump = true;
 			} else if (avatar_can_act && gwin->main_actor_can_act_charmed()) {
+				Friend_mode_walking_stops_attack();
 				// Try removing old queue entry.
 				gwin->get_tqueue()->remove(gwin->get_main_actor());
 				gwin->start_actor(x, y, Mouse::mouse()->avatar_speed);
@@ -7343,13 +7826,22 @@ static void Handle_event(SDL_Event& event) {
 	}
 	case SDL_EVENT_MOUSE_BUTTON_UP: {
 		SDL_SetWindowMouseGrab(gwin->get_win()->get_screen_window(), false);
-		if (dont_move_mode) {
-			break;
-		}
 		SDL_ConvertEventToRenderCoordinates(renderer, &event);
 		int x;
 		int y;
 		gwin->get_win()->screen_to_game(event.button.x, event.button.y, gwin->get_fastmouse(), x, y);
+		if (Friend_mode_is_guest() && event.button.button == 1 && gwin->is_network_dialogue_paused()) {
+			// Suggest a reply: a click on one of the Avatar's choices.
+			Conversation* conversation = gwin->get_usecode()->get_conversation();
+			const int     choice = conversation && conversation->choices_shown() ? conversation->conversation_choice(x, y) : -1;
+			if (choice >= 0 && choice < conversation->get_num_answers()) {
+				friend_session.send_suggestion(friend_session.local_player(), conversation->get_answer(choice));
+				break;
+			}
+		}
+		if (dont_move_mode) {
+			break;
+		}
 
 		if (event.button.button == 3) {
 			const uint32 curtime = SDL_GetTicks();
@@ -7766,6 +8258,7 @@ static bool Get_click(
 	while (true) {
 		SDL_Event event;
 		Delay();    // Wait a fraction of a second.
+		Friend_mode_click_wait_poll();
 
 		const uint32 ticks = SDL_GetTicks();
 		Game::set_ticks(ticks);

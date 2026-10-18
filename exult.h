@@ -52,6 +52,25 @@ void Friend_mode_note_drag_put_back();
 // (a dropped stack that merged into another is left detached).
 void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container, bool whole);
 
+// Game Input option "WASD movement" (config/gameplay/wasd_movement, off by
+// default): W, A, S and D walk (two at once diagonally), and Shift with one
+// of them does what the key alone did (Shift+W the watch, Shift+S Save).
+extern bool Friend_wasd_movement;
+// Game Input option "Targeting (Q, Space)" (config/gameplay/keyboard_targeting,
+// on by default): Q picks a target, Space attacks it.
+extern bool Friend_keyboard_targeting;
+
+// WASD movement's targeting (Q): attack the picked target; and, when
+// combat mode comes on, attack it if it is hostile.
+bool Friend_mode_attack_target(Actor* foe);
+void Friend_mode_combat_started();
+// Combat mode ended: the Avatar's own attack mode comes back.
+void Friend_mode_combat_ended();
+
+// Game menu "Main Menu": when the game ends, close any Co-Op session and
+// start Exult again at the title menu.
+void Friend_mode_request_main_menu();
+
 // This instance joined a Friend Mode host: the host owns the world, so
 // monster and weather eggs (among others) do nothing here.
 bool Friend_mode_is_guest();
