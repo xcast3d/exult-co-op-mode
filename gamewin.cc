@@ -1658,6 +1658,7 @@ void Game_window::write(bool nopaint) {
 		shape_man->paint_text(0, Strings::SavingGame(), centre_x - text_width / 2, centre_y - text_height);
 		show(true);
 	}
+	Friend_mode_saving(true);    // Items guests hold count as where they came from.
 	for (auto* map : maps) {
 		if (map) {
 			map->write_ireg();    // Write ireg files.
@@ -1676,6 +1677,7 @@ void Game_window::write(bool nopaint) {
 			remote_friends[i].actor->set_schedule_type(held_schedules[i]);
 		}
 	}
+	Friend_mode_saving(false);
 	usecode->write();          // Usecode.dat (party, global flags).
 	Notebook_gump::write();    // Write out journal.
 	write_gwin();              // Write our data.

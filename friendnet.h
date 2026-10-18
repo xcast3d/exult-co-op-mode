@@ -165,7 +165,11 @@ public:
 	// Asked for instead of a companion: give it up and spectate.
 	static constexpr uint32 spectate_actor = 0xffffffffU;
 	void send_chat(uint32 speaker, int player, const std::string& text, int to = everyone, int except = -1);
-	bool take_chat(uint32& speaker, int& player, std::string& text, int* from = nullptr);
+	// 'target' (optional) is the player a whisper is for, or -1 for chat.
+	bool take_chat(uint32& speaker, int& player, std::string& text, int* from = nullptr, int* target = nullptr);
+	// A whisper: a guest sends it to the host for 'target'; the host passes
+	// it on to that player alone.
+	void send_whisper(int target, uint32 speaker, int player, const std::string& text, int to = everyone);
 	void send_dialogue_begin();
 	void send_dialogue_end();
 	void send_dialogue_face(int shape, int frame, int slot);
@@ -197,7 +201,7 @@ public:
 
 private:
 	static constexpr std::size_t packet_size = 20;
-	enum class Text_kind : unsigned char { speech = 1, chat, identity, dialogue_message, dialogue_choice };
+	enum class Text_kind : unsigned char { speech = 1, chat, identity, dialogue_message, dialogue_choice, whisper };
 
 	// One connection: the host's link to a guest, or a guest's to the host.
 	struct Peer {
@@ -269,6 +273,7 @@ private:
 		uint32      speaker;
 		int         player;
 		std::string text;
+		int         target = -1;    // A whisper's player.
 	};
 	std::deque<Chat_event>               chat_events;
 	std::deque<Dialogue_event>           dialogue_events;

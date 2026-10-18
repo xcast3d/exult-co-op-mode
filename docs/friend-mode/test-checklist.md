@@ -329,16 +329,16 @@ Best in Trinsic near the start of the game (the stables).
 ## Spectating and switching companions
 
 - [ ] Guest presses Escape at the companion picker: the bar says "You are
-      watching. Press Tab to choose a companion"; the view follows the
+      Spectating. J: choose a companion. X: watch another player."; the view follows the
       Avatar as the host walks, creatures and items keep updating, and chat
       still works.
-- [ ] Guest presses Tab and picks a companion: the bar goes and the guest
+- [ ] Guest presses J and picks a companion: the bar goes and the guest
       controls it.
-- [ ] Guest presses Tab again and picks another: "<name> switches to
+- [ ] Guest presses J again and picks another: "<name> switches to
       <companion>" on the host; the first companion follows the party again.
-- [ ] Guest presses Tab during a host conversation: a red X, nothing opens.
+- [ ] Guest presses J during a host conversation: a red X, nothing opens.
 - [ ] Host loads a save without the guest's companion, then one with it:
-      the guest watches, then picks it again with Tab.
+      the guest watches, then picks it again with J.
 - [ ] Guest opens Game Engine options: there is no Cheats line.
 
 ## Combat
@@ -510,7 +510,7 @@ config and gamedat. The host needs a party with at least two companions
 - [ ] Each guest's leash works on its own ("The Avatar needs you").
 - [ ] Guest 1 writes in the journal: the host and guest 2 see the bar and
       guest 1's name on the note.
-- [ ] Guest 1 presses Tab and picks a companion guest 2 has just taken:
+- [ ] Guest 1 presses J and picks a companion guest 2 has just taken:
       "That companion is taken".
 - [ ] Close guest 1: "<name> has left; Iolo rejoins the party"; guest 2
       keeps playing.
@@ -518,15 +518,58 @@ config and gamedat. The host needs a party with at least two companions
       and their companions back.
 - [ ] Join, "enters the world as", switch and leave notices show on the
       host and on both guests.
-- [ ] Guest 1 presses Tab and moves from Iolo to a free companion (Dupre,
+- [ ] Guest 1 presses J and moves from Iolo to a free companion (Dupre,
       Shamino, or whoever is in the party): everyone sees "<name> switches
       to <companion>"; Iolo follows the party again on all three screens.
-- [ ] Guest 2 presses Tab: Iolo is offered now, and guest 2 takes it.
+- [ ] Guest 2 presses J: Iolo is offered now, and guest 2 takes it.
 - [ ] In combat mode, a guest switches away mid-fight: the companion left
       behind keeps fighting.
 - [ ] Both guests press Tab and pick the same free companion: the second
       gets "That companion is taken" and the picker again.
-- [ ] Tab does nothing (red X) while the Avatar talks to someone.
+- [ ] J does nothing (red X) while the Avatar talks to someone.
+
+## Co-op quality of life (built 2026-10-17, protocol version 29)
+
+- [ ] **Player list:** hold Tab on the host and on a guest: Player,
+      Character and Health for everyone; spectators show "Spectating", a
+      following companion "(following)". Let go and it closes.
+- [ ] **Picker on J:** J opens the companion picker (J does nothing in the
+      journal or chat line).
+- [ ] **Rejoin:** close a guest that has Iolo: "<name> has left; Iolo
+      follows the party until they return", and the other guest's picker
+      doesn't offer Iolo. Rejoin with the same name within 3 minutes: no
+      picker, straight into Iolo, "<name> is back as Iolo". Wait 3 minutes
+      instead: "Iolo is free again".
+- [ ] **Chat log:** chat, whispers and session notices (joins, leaves,
+      switches, autosaves on the host) show bottom left and fade after
+      about 20 seconds; L hides and shows it. Spectator chat shows in the
+      log (near the top only while the log is hidden).
+- [ ] **Whispers:** `/w <name> text` from a guest to the other guest, to
+      the host, and from the host to a guest: only those two see it,
+      "[to Name]" and "[Name whispers]". A name with a space works; an
+      unknown name gets "Whisper to whom?".
+- [ ] **Tab completion:** in the chat line, `/w J` + Tab gives `/w Jeff `;
+      Tab again cycles to the next player starting with J; `/wa` + Tab gives
+      `/wave `; no match flashes a red X. Holding Tab outside the chat line
+      still shows the player list.
+- [ ] **Emotes:** `/wave`, `/bow`, `/point`, `/cheer` pose for a moment;
+      `/kneel` and `/sit` until you move. Everyone sees "*waves*" over the
+      actor. From the host (the Avatar) and from a guest. A spectator gets
+      "Spectators have no one to move"; anything else starting with "/"
+      lists the commands.
+- [ ] **Arrows to players:** a companion another player controls, off
+      screen, gets an arrow at the edge with a colored mark and the
+      player's name; each player has their own color.
+- [ ] **Spectator camera:** a spectating guest presses X: "Watching Iolo
+      (Marc)", the view follows Iolo; X again goes to the next player and
+      back to the Avatar. If the watched player switches or leaves, the
+      view goes back to the Avatar.
+- [ ] **Autosave:** with a guest connected, the host autosaves every 5
+      minutes ("Autosaved" in the host's log) into "Co-Op Autosave" slots
+      997-999, over the oldest; your own saves stay untouched. Load one.
+- [ ] **Held item in saves:** a guest holds an item (mid-drag) while the
+      host saves or another guest joins: the save, and the newcomer's
+      world, still have the item.
 
 ## Losing a companion, and four players (Phase 6, M5)
 
@@ -588,12 +631,12 @@ them with two guests on companions.
       fights with the party.
 - [ ] The guest walks (or presses E again): the bar goes and the companion
       is the guest's again, where it stood.
-- [ ] While one guest follows, the other guest's Tab picker doesn't offer
+- [ ] While one guest follows, the other guest's J picker doesn't offer
       that companion.
 - [ ] E does nothing (red X) while watching or during a host conversation;
       typing "e" in the journal or chat still works.
-- [ ] Tab → Spectate: everyone sees "<name> is now spectating; <companion>
-      rejoins the party"; the guest gets the spectating bar, and Tab again
+- [ ] J → Spectate: everyone sees "<name> is now spectating; <companion>
+      rejoins the party"; the guest gets the spectating bar, and J again
       offers that companion.
 
 ## Leaving

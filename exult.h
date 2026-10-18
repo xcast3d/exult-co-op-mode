@@ -57,6 +57,8 @@ void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object*
 bool Friend_mode_is_guest();
 // Host: a saved game was loaded, so guests need the new world.
 void Friend_mode_note_world_loaded();
+// Host: a save is about to be written ('before') or was written.
+void Friend_mode_saving(bool before);
 
 // Keep the Friend Mode connection moving (accept, handshake, send and
 // receive) from loops other than the main one, such as modal gumps.  What

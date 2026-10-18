@@ -327,36 +327,45 @@ Modern conveniences that fit U7's "the Avatar leads" style, decided
 2026-10-17. Not tied to a phase; most are small and can land before or
 after Phase 8.
 
-- [ ] **Rejoin your companion.** When a guest drops, the host holds its
+- [x] **Rejoin your companion.** When a guest drops, the host holds its
       companion for a few minutes (the party's AI drives it, as in follow
       mode). The same player name reconnecting gets it straight back,
       without the picker.
-- [ ] **Player list.** A simple overlay: Player | Character | Health. Most
-      games put it on Tab, so either the companion picker moves to another
-      key or the list gets a free one. Alternative: add the player's name
-      under each portrait in Exult's party bar.
-- [ ] **Arrows to other players.** Like the arrow back to the Avatar when
+- [x] **Player list.** A simple overlay: Player | Character | Health. Hold
+      Tab; the companion picker moved to J.
+- [x] **Arrows to other players.** Like the arrow back to the Avatar when
       out of range, one per player, each in its own color.
 - [ ] **Suggest a reply.** During the Avatar's conversation, a guest clicks
       a keyword to highlight it on the host's screen with their name. The
       Avatar still chooses. Few U7 choices really matter, but it lets
       guests take part.
-- [ ] **Spectator camera.** Spectators press a key to cycle the view
+- [x] **Spectator camera.** Spectators press a key to cycle the view
       between players.
-- [ ] **Autosave every 5 minutes** on the host, in their own rotating slots
+- [x] **Autosave every 5 minutes** on the host, in their own rotating slots
       (for example the last 3), never over a player's own saves, with the
       oldest deleted so they don't pile up. Exult has no autosave of its own
       to build on.
-- [ ] **Chat log.** A small log of recent lines that fades and can be
+- [x] **Chat log.** A small log of recent lines that fades and can be
       dismissed, for spectators (who have no body) and everyone else.
       Players with a companion show overhead and in the log. Keep it to
       player chat and a few session notices, so it never fills up like an
       old MMO chat window.
-- [ ] **Whispers and emotes**, Ultima Online style: `/w name text`, and
+- [x] **Whispers and emotes**, Ultima Online style: `/w name text`, and
       emotes such as `/wave` or `/bow` that animate the companion.
 - [ ] **Shared objective (to think about).** A short line the Avatar sets
       and keeps updated ("Find Christopher's murderer") as a reminder for
       the companions. No quest log or guide arrows.
+
+- [ ] **World map with player dots.** A key toggles a whole-world overview
+      (Exult's cheat map, drawn from each chunk's ground colours, one
+      pixel per chunk, made in memory) with a dot per player in their
+      arrow color. Small.
+- [ ] **Corner minimap (option, off by default).** A small map of the
+      ground around your character with player dots, overworld only.
+      Walls and roofs are objects, so towns show as floors without walls.
+      In dungeons (`Game_window::is_in_dungeon`) it hides at first; a later
+      version could show only the dungeon chunks the party has visited,
+      kept in the save and shared by every player.
 
 Later: players' positions on the cloth map (M); pings to point at a spot
 or object (more useful with a longer leash).

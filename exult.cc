@@ -102,6 +102,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
@@ -296,6 +297,16 @@ struct Friend_guest {
 };
 static std::map<int, Friend_guest> friend_guests;
 
+// Host: a guest that drops keeps its companion for a while.  The party's AI
+// drives it meanwhile, nobody else may pick it, and the same player name
+// reconnecting gets it straight back.
+static constexpr uint32 friend_rejoin_hold_ms = 3 * 60 * 1000;
+struct Friend_rejoin_hold {
+	int    actor;
+	uint32 until;    // Ticks.
+};
+static std::map<std::string, Friend_rejoin_hold> friend_rejoin_holds;    // By player name.
+
 static Friend_guest* Friend_guest_of(int player) {
 	const auto found = friend_guests.find(player);
 	return found == friend_guests.end() ? nullptr : &found->second;
@@ -314,7 +325,8 @@ static const Friend_guest* Friend_guest_with_actor(const Actor* actor) {
 // Guest: every player in the session (from the host's player list).
 struct Friend_player {
 	std::string name;
-	int         actor = -1;    // NPC number, or -1 (watching).
+	int         actor     = -1;    // NPC number, or -1 (spectating).
+	bool        following = false;    // The party's AI drives its companion.
 };
 static std::map<int, Friend_player> friend_players;
 static std::vector<unsigned char>   friend_player_list_sent;    // Host.
@@ -358,14 +370,45 @@ static std::string Friend_mode_player_name(int player) {
 	return found != friend_players.end() ? found->second.name : friend_session.player_name(player);
 }
 
+// Chat log: the last few lines of player chat, whispers and session
+// notices, bottom left, each fading after a while.  L hides or shows it.
+// Kept to these, so it never fills up.
+struct Friend_log_line {
+	std::string text;
+	uint32      time;
+};
+static std::deque<Friend_log_line> friend_chat_log;
+static bool                        friend_chat_log_hidden = false;
+static constexpr std::size_t       friend_chat_log_lines  = 6;
+static constexpr uint32            friend_chat_log_ms     = 20000;
+
+static void Friend_mode_log(const std::string& text) {
+	friend_chat_log.push_back({text, static_cast<uint32>(SDL_GetTicks())});
+	while (friend_chat_log.size() > friend_chat_log_lines) {
+		friend_chat_log.pop_front();
+	}
+	gwin->set_all_dirty();
+}
+
 static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, const std::string& text) {
 	if (text.empty()) {
 		return;
 	}
+	const std::string line = (sender.empty() ? std::string("Spectator") : sender) + ": " + text;
+	Friend_mode_log(line);
 	if (speaker) {
 		gwin->get_effects()->add_chat_text(text.c_str(), speaker);
-	} else {
-		const std::string line = (sender.empty() ? std::string("Spectator") : sender) + ": " + text;
+	} else if (friend_chat_log_hidden) {
+		// Spectators have no body: with the log hidden, near the top.
+		gwin->get_effects()->add_chat_text(line.c_str(), nullptr);
+	}
+}
+
+// A whisper only the two players see: in the log (or near the top while
+// the log is hidden).
+static void Friend_mode_show_whisper(const std::string& line) {
+	Friend_mode_log(line);
+	if (friend_chat_log_hidden) {
 		gwin->get_effects()->add_chat_text(line.c_str(), nullptr);
 	}
 }
@@ -380,6 +423,7 @@ static void Friend_mode_notice(const std::string& text) {
 // except 'except' (a newcomer has its own welcome).
 static void Friend_mode_announce(const std::string& text, int except = -1) {
 	Friend_mode_notice(text);
+	Friend_mode_log(text);
 	if (friend_session.connected()) {
 		const size_t length = std::min<size_t>(text.size(), 120);
 		friend_session.send_blob(Friend_mode_session::Blob_kind::notice,
@@ -392,11 +436,223 @@ static std::string Friend_mode_actor_name(int npc_num) {
 	return actor ? actor->get_name() : std::string("a companion");
 }
 
+// Emotes, Ultima Online style: "/wave" in the chat line.  The host poses
+// the speaker's actor (guests' requests come as chat) and everyone sees
+// "*waves*" over it.  Quick gestures end by themselves; kneeling and
+// sitting last until the actor moves.
+struct Friend_emote {
+	const char* command;
+	const char* text;
+	int         frame;
+	uint32      ms;    // How long the pose lasts, or 0 until it moves.
+};
+static const Friend_emote friend_emotes[] = {
+		{"/wave", "*waves*", Actor::raise1_frame, 1200},
+		{"/bow", "*bows*", Actor::bow_frame, 1500},
+		{"/point", "*points*", Actor::reach1_frame, 1500},
+		{"/cheer", "*cheers*", Actor::up_frame, 1500},
+		{"/kneel", "*kneels*", Actor::kneel_frame, 0},
+		{"/sit", "*sits down*", Actor::sit_frame, 0},
+};
+
+static const Friend_emote* Friend_find_emote(const std::string& command) {
+	for (const Friend_emote& emote : friend_emotes) {
+		if (command == emote.command) {
+			return &emote;
+		}
+	}
+	return nullptr;
+}
+
+struct Friend_emote_pose {
+	int    npc;
+	int    frame;    // The frame set, with direction.
+	uint32 until;
+};
+static std::vector<Friend_emote_pose> friend_emote_poses;    // Host: quick gestures to end.
+
+static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, const std::string& text);
+
+// Host: pose 'actor' for 'player' and tell everyone.
+static void Friend_mode_emote(Actor* actor, int player, const Friend_emote& emote) {
+	const int frame = actor->get_dir_framenum(emote.frame);
+	actor->change_frame(frame);
+	if (emote.ms > 0) {
+		friend_emote_poses.push_back({actor->get_npc_num(), frame, static_cast<uint32>(SDL_GetTicks()) + emote.ms});
+	}
+	Friend_mode_show_chat(actor, friend_session.player_name(player), emote.text);
+	if (friend_session.connected()) {
+		friend_session.send_chat(static_cast<uint32>(actor->get_npc_num()), player, emote.text);
+	}
+}
+
+// The player a whisper is for: the longest known name that 'rest' starts
+// with (names may have spaces), not counting case.  'message' gets the rest.
+static int Friend_mode_find_player(const std::string& rest, std::string& message) {
+	std::vector<std::pair<int, std::string>> known;
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		for (const auto& [player, guest] : friend_guests) {
+			known.emplace_back(player, guest.name);
+		}
+	} else {
+		for (const auto& [player, entry] : friend_players) {
+			if (player != friend_session.local_player()) {
+				known.emplace_back(player, entry.name);
+			}
+		}
+	}
+	auto lower = [](std::string text) {
+		std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		return text;
+	};
+	const std::string wanted = lower(rest);
+	int               best   = -1;
+	std::size_t       length = 0;
+	for (const auto& [player, name] : known) {
+		const std::string key = lower(name);
+		if (!key.empty() && key.size() > length && wanted.compare(0, key.size(), key) == 0
+			&& (wanted.size() == key.size() || wanted[key.size()] == ' ')) {
+			best   = player;
+			length = key.size();
+		}
+	}
+	message = best < 0 ? std::string() : rest.substr(std::min(rest.size(), length + 1));
+	return best;
+}
+
+static std::string Friend_mode_player_name(int player);
+static Actor*      Friend_mode_local_speaker();
+static void        Friend_mode_show_whisper(const std::string& line);
+
+// Enter in the chat line: chat, or a command (/w name text, emotes).
+static void Friend_mode_send_chat_line(const std::string& line) {
+	Actor*     speaker = Friend_mode_local_speaker();
+	const bool host    = friend_session.mode() == Friend_mode_session::Mode::host;
+	const auto npc = speaker ? static_cast<uint32>(speaker->get_npc_num()) : Friend_mode_session::chat_spectator;
+	if (line.empty() || line[0] != '/') {
+		Friend_mode_show_chat(speaker, friend_player_name, line);
+		friend_session.send_chat(npc, friend_session.local_player(), line);
+		return;
+	}
+	const std::size_t space = line.find(' ');
+	std::string       command = line.substr(0, space);
+	std::transform(command.begin(), command.end(), command.begin(), [](unsigned char c) {
+		return static_cast<char>(std::tolower(c));
+	});
+	const std::string rest = space == std::string::npos ? std::string() : line.substr(space + 1);
+	if (command == "/w" || command == "/whisper") {
+		std::string message;
+		const int   target = Friend_mode_find_player(rest, message);
+		if (target < 0 || message.empty()) {
+			Friend_mode_show_whisper("Whisper to whom? /w name text");
+			return;
+		}
+		Friend_mode_show_whisper("[to " + Friend_mode_player_name(target) + "] " + message);
+		if (host) {
+			friend_session.send_whisper(target, npc, Friend_mode_session::host_player, message, target);
+		} else {
+			friend_session.send_whisper(target, npc, friend_session.local_player(), message);
+		}
+		return;
+	}
+	const Friend_emote* emote = Friend_find_emote(command);
+	if (!emote) {
+		Friend_mode_show_whisper("Try /w name text, /wave, /bow, /point, /cheer, /kneel or /sit");
+	} else if (!speaker) {
+		Friend_mode_show_whisper("Spectators have no one to move");
+	} else if (host) {
+		Friend_mode_emote(speaker, Friend_mode_session::host_player, *emote);
+	} else {
+		friend_session.send_chat(npc, friend_session.local_player(), command);    // The host poses us.
+	}
+}
+
+// Tab in the chat line: complete the word being typed to a player's name
+// (or, after "/", a command).  Tab again goes to the next match.
+static std::string friend_complete_base;      // Text before the word.
+static std::string friend_complete_prefix;    // What was typed of it.
+static std::string friend_complete_result;    // The line after the last Tab.
+static std::size_t friend_complete_index = 0;
+
+static void Friend_mode_complete_chat(std::string& text) {
+	if (text != friend_complete_result || friend_complete_result.empty()) {
+		// A new completion: the word after the last space.
+		const std::size_t start = text.rfind(' ') == std::string::npos ? 0 : text.rfind(' ') + 1;
+		friend_complete_base   = text.substr(0, start);
+		friend_complete_prefix = text.substr(start);
+		friend_complete_index  = 0;
+	} else {
+		++friend_complete_index;    // The next match.
+	}
+	std::vector<std::string> names;
+	if (!friend_complete_prefix.empty() && friend_complete_prefix[0] == '/') {
+		names = {"/w"};
+		for (const Friend_emote& emote : friend_emotes) {
+			names.emplace_back(emote.command);
+		}
+	} else if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		for (const auto& [player, guest] : friend_guests) {
+			names.push_back(guest.name);
+		}
+	} else {
+		for (const auto& [player, entry] : friend_players) {
+			if (player != friend_session.local_player()) {
+				names.push_back(entry.name);
+			}
+		}
+	}
+	auto lower = [](std::string word) {
+		std::transform(word.begin(), word.end(), word.begin(), [](unsigned char c) {
+			return static_cast<char>(std::tolower(c));
+		});
+		return word;
+	};
+	const std::string        typed = lower(friend_complete_prefix);
+	std::vector<std::string> matches;
+	for (const std::string& name : names) {
+		if (!name.empty() && lower(name).compare(0, typed.size(), typed) == 0) {
+			matches.push_back(name);
+		}
+	}
+	if (matches.empty()) {
+		Mouse::mouse()->flash_shape(Mouse::redx);
+		friend_complete_result.clear();
+		return;
+	}
+	text = friend_complete_base + matches[friend_complete_index % matches.size()] + ' ';
+	if (text.size() > 80) {
+		text.resize(80);
+	}
+	friend_complete_result = text;
+}
+
+// Host, every frame: quick gestures go back to standing.
+static void Friend_mode_end_emotes() {
+	const uint32 now = static_cast<uint32>(SDL_GetTicks());
+	for (auto it = friend_emote_poses.begin(); it != friend_emote_poses.end();) {
+		if (static_cast<sint32>(now - it->until) < 0) {
+			++it;
+			continue;
+		}
+		Actor* actor = gwin->get_npc(it->npc);
+		if (actor && actor->get_framenum() == it->frame) {    // Still posing.
+			actor->change_frame(actor->get_dir_framenum(Actor::standing));
+		}
+		it = friend_emote_poses.erase(it);
+	}
+}
+
 // Guest leash state, shown locally from the synced Avatar position.
 enum class Friend_leash_zone { near, straying, beyond };
 static Friend_leash_zone friend_leash_zone = Friend_leash_zone::near;
 
 // While straying, an arrow at the screen edge points back to the Avatar.
+// An arrow at the screen edge from 'from' toward 'to'; with a color, a
+// small mark of it and 'label' just inside the arrow.
+static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to, int color, const std::string& label);
+
 static void Friend_mode_paint_leash_arrow() {
 	if (friend_session.mode() != Friend_mode_session::Mode::guest || friend_leash_zone == Friend_leash_zone::near) {
 		return;
@@ -406,8 +662,10 @@ static void Friend_mode_paint_leash_arrow() {
 	if (!actor || actor == avatar) {
 		return;
 	}
-	const Tile_coord from = actor->get_tile();
-	const Tile_coord to   = avatar->get_tile();
+	Friend_mode_paint_arrow(actor->get_tile(), avatar->get_tile(), -1, std::string());
+}
+
+static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to, int color, const std::string& label) {
 	const int        dx   = to.tx - from.tx;
 	const int        dy   = to.ty - from.ty;
 	if (dx == 0 && dy == 0) {
@@ -430,8 +688,63 @@ static void Friend_mode_paint_leash_arrow() {
 	const float scale  = std::min(sx, sy);
 	const int   x      = w / 2 + static_cast<int>(ux * scale);
 	const int   y      = h / 2 + static_cast<int>(uy * scale);
-	arrow->paint_rle(gwin->get_win()->get_ib8(), x, y);
+	Image_buffer8* buffer = gwin->get_win()->get_ib8();
+	arrow->paint_rle(buffer, x, y);
+	if (color >= 0) {
+		// The player's color and name, a little inward from the arrow.
+		Shape_manager* sman = Shape_manager::get_instance();
+		const int      mx   = x - static_cast<int>(ux * 20);
+		const int      my   = y - static_cast<int>(uy * 20);
+		buffer->fill8(static_cast<unsigned char>(color), 6, 6, mx - 3, my - 3);
+		const int text_w = sman->get_text_width(0, label.c_str());
+		const int lx     = std::clamp(mx - text_w / 2, 2, w - text_w - 2);
+		const int ly     = std::clamp(my + 5, 2, h - sman->get_text_height(0) - 2);
+		sman->paint_text(0, label.c_str(), lx, ly);
+	}
 	gwin->set_painted();
+}
+
+// Each other player's color: a few clear ones from the palette, by player
+// number.
+static int Friend_player_color(int player) {
+	static const int rgb[][3] = {{63, 12, 12}, {15, 30, 63}, {63, 58, 10}, {15, 58, 15},
+			{58, 15, 58}, {10, 58, 58}, {63, 35, 5}, {63, 63, 63}};
+	const auto&      c        = rgb[(player + 7) % 8];
+	return gwin->get_pal()->find_color(c[0], c[1], c[2]);
+}
+
+// Arrows toward the other players' companions that are off screen.
+static void Friend_mode_paint_player_arrows() {
+	if (friend_session.mode() == Friend_mode_session::Mode::off || !friend_session.connected()) {
+		return;
+	}
+	Actor* viewer = gwin->get_camera_actor();
+	if (!viewer) {
+		return;
+	}
+	std::vector<std::pair<int, std::pair<int, std::string>>> others;    // Player, NPC, name.
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		for (const auto& [player, guest] : friend_guests) {
+			others.push_back({player, {guest.actor, guest.name}});
+		}
+	} else {
+		for (const auto& [player, entry] : friend_players) {
+			if (player != friend_session.local_player() && player != Friend_mode_session::host_player) {
+				others.push_back({player, {entry.actor, entry.name}});
+			}
+		}
+	}
+	const TileRect view = gwin->get_win_tile_rect();
+	for (const auto& [player, who] : others) {
+		Actor* actor = who.first > 0 ? gwin->get_npc(who.first) : nullptr;
+		if (!actor || actor == viewer || actor->get_map() != viewer->get_map()) {
+			continue;
+		}
+		const Tile_coord at = actor->get_tile();
+		if (!view.has_point(at.tx, at.ty)) {
+			Friend_mode_paint_arrow(viewer->get_tile(), at, Friend_player_color(player), who.second);
+		}
+	}
 }
 
 static void Friend_mode_update_leash_zone(Actor* actor) {
@@ -1507,11 +1820,9 @@ static void Friend_force_item_resync(Actor* actor) {
 }
 
 // Return the held item (or what is left of it) to where it came from.
-static void Friend_return_held_item(Friend_held_item& friend_guest_held) {
-	if (!friend_guest_held.obj) {
-		return;
-	}
-	const Game_object_shared obj      = std::move(friend_guest_held.obj);
+// Put a held item where it came from: its container (its slot, for a
+// party member's equipment) or its tile.
+static void Friend_place_held_item(const Friend_held_item& friend_guest_held, const Game_object_shared& obj) {
 	const Game_object_shared owner    = friend_guest_held.owner.lock();
 	Container_game_object*   container = owner ? owner->as_container() : nullptr;
 	bool                     placed    = false;
@@ -1526,8 +1837,34 @@ static void Friend_return_held_item(Friend_held_item& friend_guest_held) {
 	if (!placed) {
 		obj->move(friend_guest_held.tile);
 	}
+}
+
+static void Friend_return_held_item(Friend_held_item& friend_guest_held) {
+	if (!friend_guest_held.obj) {
+		return;
+	}
+	const Game_object_shared obj = std::move(friend_guest_held.obj);
+	Friend_place_held_item(friend_guest_held, obj);
 	friend_guest_held = Friend_held_item();
 	gwin->set_all_dirty();
+}
+
+// Host: a save is being written.  Items guests hold are out of the world,
+// so each goes back where it came from for the save ('before'), and into
+// the guest's hand again afterwards.  Otherwise a save made mid-drag (an
+// autosave, or a joining guest's world) loses the item.
+void Friend_mode_saving(bool before) {
+	for (auto& [player, guest] : friend_guests) {
+		Friend_held_item& held = guest.held;
+		if (!held.obj) {
+			continue;
+		}
+		if (before) {
+			Friend_place_held_item(held, held.obj);
+		} else if (Game_object* obj = held.obj.get(); obj->get_owner() || !obj->is_pos_invalid()) {
+			obj->remove_this(&held.obj);
+		}
+	}
 }
 
 // Host: a guest picked an item up.
@@ -3333,6 +3670,30 @@ bool Friend_mode_open_to_coop() {
 static bool friend_world_reloaded = false;    // Host loaded a save.
 static bool friend_picker_requested = false;    // Guest pressed Tab; roster on its way.
 static bool friend_spectate_requested = false;    // Guest chose Spectate itself.
+// Guest spectating: the player companion the view follows (X cycles), or
+// -1 for the Avatar.
+static int        friend_watched_npc = -1;
+static Tile_coord friend_watched_at(-1, -1, -1);
+
+// Guest: X while spectating watches the next player (the Avatar first).
+static void Friend_mode_watch_next() {
+	std::vector<int> actors = {-1};
+	for (const auto& [player, entry] : friend_players) {
+		if (entry.actor > 0 && gwin->get_npc(entry.actor)) {
+			actors.push_back(entry.actor);
+		}
+	}
+	auto      current = std::find(actors.begin(), actors.end(), friend_watched_npc);
+	const int next    = current == actors.end() || current + 1 == actors.end() ? actors.front() : *(current + 1);
+	friend_watched_npc = next;
+	friend_watched_at  = Tile_coord(-1, -1, -1);
+	Actor* actor       = next >= 0 ? gwin->get_npc(next) : gwin->get_main_actor();
+	gwin->set_camera_actor(actor);
+	gwin->center_view(actor->get_tile());
+	const std::string who = next >= 0 ? Friend_player_with_actor(actor) : friend_session.remote_player_name_value();
+	Friend_mode_notice("Watching " + (next >= 0 ? actor->get_name() : std::string("the Avatar"))
+					   + (who.empty() ? std::string() : " (" + who + ")"));
+}
 
 
 void Friend_mode_note_world_loaded() {
@@ -3428,6 +3789,44 @@ static void Friend_mode_show_status(const std::string& line1, const std::string&
 }
 
 static bool friend_host_paused_sent = false;    // Host: guests told we paused.
+
+// Host autosave while guests play: every 5 minutes, into three slots of
+// its own at the far end of the numbering (997-999, shown in the load
+// menu as "Co-Op Autosave"), each time over the oldest.  A player's own
+// saves take the first free numbers, so they are never touched.
+static constexpr uint32 friend_autosave_ms    = 5 * 60 * 1000;
+static constexpr int    friend_autosave_first = 997;
+static constexpr int    friend_autosave_slots = 3;
+static uint32           friend_next_autosave  = 0;
+
+static void Friend_mode_autosave() {
+	int                             slot = friend_autosave_first;
+	std::filesystem::file_time_type oldest;
+	for (int i = 0; i < friend_autosave_slots; ++i) {
+		char fname[50];
+		snprintf(fname, sizeof(fname), SAVENAME, friend_autosave_first + i,
+				 GAME_BG ? "bg" : (GAME_SI ? "si" : "dev"));
+		if (!U7exists(fname)) {
+			slot = friend_autosave_first + i;    // An unused one first.
+			break;
+		}
+		std::error_code                       error;
+		const std::filesystem::file_time_type time
+				= std::filesystem::last_write_time(get_system_path(fname), error);
+		if (!error && (i == 0 || time < oldest)) {
+			oldest = time;
+			slot   = friend_autosave_first + i;
+		}
+	}
+	try {
+		gwin->write(true);
+		gwin->save_gamedat(slot, "Co-Op Autosave");
+		cout << "Friend Mode: autosaved to slot " << slot << endl;
+		Friend_mode_log("Autosaved");
+	} catch (exult_exception& /*e*/) {
+		Friend_mode_notice("Autosave failed");
+	}
+}
 
 void Friend_mode_background_poll() {
 	if (friend_session.mode() == Friend_mode_session::Mode::off) {
@@ -3560,8 +3959,8 @@ static void Friend_mode_paint_dialogue_wait() {
 	} else if (friend_following && friend_session.connected()) {
 		lines = {"Following the Avatar. Move to take over.", "Following the Avatar.", "Move to take over."};
 	} else if (gwin->is_network_spectating() && friend_session.connected()) {
-		lines = {"You are spectating. Press Tab to choose a companion.", "You are spectating. Press Tab",
-				 "to choose a companion."};
+		lines = {"Spectating. J: choose a companion. X: watch another player.", "Spectating. J: choose a companion.",
+				 "X: watch another player."};
 	} else if (friend_peer_journal_open && friend_session.connected()) {
 		lines = {"Someone is writing in the party journal.", "Someone is writing in", "the party journal."};
 	} else {
@@ -3595,6 +3994,89 @@ static void Friend_mode_paint_dialogue_wait() {
 	for (std::size_t i = 0; i < lines.size(); ++i) {
 		const int line_x = x + (w - font->get_text_width(lines[i].c_str())) / 2;
 		font->draw_text(buffer, line_x, y + 4 + static_cast<int>(i) * line_h, lines[i].c_str());
+	}
+	gwin->set_painted();
+}
+
+// The chat log, bottom left: recent lines only, newest at the bottom.
+static void Friend_mode_paint_chat_log() {
+	if (friend_chat_log_hidden || friend_chat_log.empty() || friend_session.mode() == Friend_mode_session::Mode::off) {
+		return;
+	}
+	const uint32 now = static_cast<uint32>(SDL_GetTicks());
+	while (!friend_chat_log.empty() && now - friend_chat_log.front().time > friend_chat_log_ms) {
+		friend_chat_log.pop_front();
+		gwin->set_all_dirty();    // The line fades out.
+	}
+	Shape_manager* sman   = Shape_manager::get_instance();
+	const int      line_h = sman->get_text_height(0) + 1;
+	int            y      = gwin->get_height() - 44 - static_cast<int>(friend_chat_log.size()) * line_h;
+	if (friend_chat_active) {
+		y -= 16;    // Clear of the chat line.
+	}
+	for (const Friend_log_line& line : friend_chat_log) {
+		sman->paint_text(0, line.text.c_str(), 6, y);
+		y += line_h;
+	}
+	gwin->set_painted();
+}
+
+// Hold Tab: a list of the players, their characters and health.
+static bool friend_player_list_shown = false;
+
+static void Friend_mode_paint_player_list() {
+	if (!friend_player_list_shown || friend_session.mode() == Friend_mode_session::Mode::off) {
+		return;
+	}
+	auto font = fontManager.get_font("MENU_FONT");
+	if (!font) {
+		return;
+	}
+	struct Row {
+		std::string player, character, health;
+	};
+	auto row_for = [](const std::string& player, int npc, bool following) {
+		Row row{player.empty() ? std::string("Player") : player, "Spectating", "-"};
+		if (Actor* actor = npc >= 0 ? gwin->get_npc(npc) : nullptr) {
+			row.character = actor == gwin->get_main_actor() ? std::string("Avatar") : actor->get_name();
+			if (following) {
+				row.character += " (following)";
+			}
+			row.health = std::to_string(actor->get_property(Actor::health)) + "/"
+						 + std::to_string(actor->get_property(Actor::strength));
+		}
+		return row;
+	};
+	std::vector<Row> rows = {{"Player", "Character", "Health"}};
+	if (friend_session.mode() == Friend_mode_session::Mode::host) {
+		rows.push_back(row_for(friend_player_name, 0, false));
+		for (const auto& [player, guest] : friend_guests) {
+			rows.push_back(row_for(guest.name, guest.actor, guest.following));
+		}
+	} else {
+		for (const auto& [player, entry] : friend_players) {
+			rows.push_back(row_for(entry.name, entry.actor, entry.following));
+		}
+	}
+	int widths[3] = {0, 0, 0};
+	for (const Row& row : rows) {
+		widths[0] = std::max(widths[0], font->get_text_width(row.player.c_str()));
+		widths[1] = std::max(widths[1], font->get_text_width(row.character.c_str()));
+		widths[2] = std::max(widths[2], font->get_text_width(row.health.c_str()));
+	}
+	constexpr int gap    = 12;
+	const int     line_h = font->get_text_height() + 3;
+	const int     w      = std::min(gwin->get_width() - 8, widths[0] + widths[1] + widths[2] + 2 * gap + 16);
+	const int     h      = static_cast<int>(rows.size()) * line_h + 8;
+	const int     x      = (gwin->get_width() - w) / 2;
+	const int     y      = std::max(8, gwin->get_height() / 6);
+	Image_buffer8* buffer = gwin->get_win()->get_ib8();
+	buffer->draw_box(x, y, w, h, 1, 0, 15);
+	for (std::size_t i = 0; i < rows.size(); ++i) {
+		const int line_y = y + 5 + static_cast<int>(i) * line_h;
+		font->draw_text(buffer, x + 8, line_y, rows[i].player.c_str());
+		font->draw_text(buffer, x + 8 + widths[0] + gap, line_y, rows[i].character.c_str());
+		font->draw_text(buffer, x + 8 + widths[0] + widths[1] + 2 * gap, line_y, rows[i].health.c_str());
 	}
 	gwin->set_painted();
 }
@@ -3845,6 +4327,12 @@ static bool Friend_actor_is_free(uint32 npc_num, int player) {
 			return false;
 		}
 	}
+	const Friend_guest* asking = Friend_guest_of(player);
+	for (const auto& [name, hold] : friend_rejoin_holds) {
+		if (hold.actor == static_cast<int>(npc_num) && (!asking || asking->name != name)) {
+			return false;    // Kept for a player who dropped.
+		}
+	}
 	return true;
 }
 
@@ -3880,17 +4368,18 @@ static void Friend_mode_drop_companion(int player, Friend_guest& guest, const st
 // Host: every player, their name and companion, sent when it changes.
 static void Friend_mode_player_list_pass() {
 	std::vector<unsigned char> payload;
-	auto put_player = [&](int player, const std::string& name, int actor) {
+	auto put_player = [&](int player, const std::string& name, int actor, bool following) {
 		Friend_put8(payload, player);
 		Friend_put16(payload, actor >= 0 ? actor : 0xffff);
+		Friend_put8(payload, following ? 1 : 0);
 		const size_t length = std::min<size_t>(name.size(), 20);
 		Friend_put8(payload, static_cast<int>(length));
 		payload.insert(payload.end(), name.begin(), name.begin() + length);
 	};
 	Friend_put8(payload, static_cast<int>(friend_guests.size() + 1));
-	put_player(Friend_mode_session::host_player, friend_player_name, 0);
+	put_player(Friend_mode_session::host_player, friend_player_name, 0, false);
 	for (const auto& [player, guest] : friend_guests) {
-		put_player(player, guest.name, guest.actor);
+		put_player(player, guest.name, guest.actor, guest.following);
 	}
 	if (payload != friend_player_list_sent) {
 		friend_session.send_blob(Friend_mode_session::Blob_kind::player_list, payload);
@@ -3902,11 +4391,12 @@ static void Friend_mode_player_list_pass() {
 static void Friend_mode_apply_player_list(const std::vector<unsigned char>& data) {
 	friend_players.clear();
 	size_t pos = 1;
-	for (int i = 0; i < (data.empty() ? 0 : data[0]) && pos + 4 <= data.size(); ++i) {
-		const int    player = data[pos];
-		const int    actor  = data[pos + 1] | (data[pos + 2] << 8);
-		const size_t length = data[pos + 3];
-		pos += 4;
+	for (int i = 0; i < (data.empty() ? 0 : data[0]) && pos + 5 <= data.size(); ++i) {
+		const int    player    = data[pos];
+		const int    actor     = data[pos + 1] | (data[pos + 2] << 8);
+		const bool   following = data[pos + 3] != 0;
+		const size_t length    = data[pos + 4];
+		pos += 5;
 		if (pos + length > data.size()) {
 			break;
 		}
@@ -3917,7 +4407,7 @@ static void Friend_mode_apply_player_list(const std::vector<unsigned char>& data
 			}
 		}
 		pos += length;
-		friend_players[player] = {name, actor == 0xffff ? -1 : actor};
+		friend_players[player] = {name, actor == 0xffff ? -1 : actor, following};
 	}
 	gwin->set_all_dirty();    // Name labels.
 }
@@ -5278,10 +5768,30 @@ static void Handle_events() {
 		uint32      incoming_speaker = 0;
 		int         incoming_player  = 0;
 		int         chat_from        = 0;
-		while (friend_session.take_chat(incoming_speaker, incoming_player, incoming_chat, &chat_from)) {
-			Actor* speaker = Friend_mode_remote_speaker(incoming_speaker, incoming_player);
+		int         chat_target      = -1;
+		while (friend_session.take_chat(incoming_speaker, incoming_player, incoming_chat, &chat_from, &chat_target)) {
+			Actor*     speaker = Friend_mode_remote_speaker(incoming_speaker, incoming_player);
+			const bool hosting = friend_session.mode() == Friend_mode_session::Mode::host;
+			if (chat_target >= 0) {    // A whisper.
+				if (!hosting || chat_target == Friend_mode_session::host_player) {
+					Friend_mode_show_whisper(
+							"[" + Friend_mode_player_name(incoming_player) + " whispers] " + incoming_chat);
+				} else if (Friend_guest_of(chat_target)) {
+					friend_session.send_whisper(chat_target,
+							speaker ? static_cast<uint32>(speaker->get_npc_num()) : Friend_mode_session::chat_spectator,
+							chat_from, incoming_chat, chat_target);
+				}
+				continue;
+			}
+			if (hosting && incoming_chat[0] == '/') {    // A guest's emote.
+				const Friend_emote* emote = Friend_find_emote(incoming_chat);
+				if (emote && speaker) {
+					Friend_mode_emote(speaker, chat_from, *emote);
+				}
+				continue;
+			}
 			Friend_mode_show_chat(speaker, Friend_mode_player_name(incoming_player), incoming_chat);
-			if (friend_session.mode() == Friend_mode_session::Mode::host) {
+			if (hosting) {
 				// Pass it on to the other guests, with the speaker we know.
 				friend_session.send_chat(
 						speaker ? static_cast<uint32>(speaker->get_npc_num()) : Friend_mode_session::chat_spectator,
@@ -5305,7 +5815,27 @@ static void Handle_events() {
 			while (friend_session.take_peer_joined(&joined)) {
 				Friend_guest& guest = friend_guests[joined];
 				guest.name          = friend_session.player_name(joined);
-				Friend_mode_announce(guest.name + " has joined", joined);
+				const auto hold     = friend_rejoin_holds.find(guest.name);
+				const int  kept     = hold != friend_rejoin_holds.end() ? hold->second.actor : -1;
+				if (hold != friend_rejoin_holds.end()) {
+					friend_rejoin_holds.erase(hold);
+				}
+				if (kept >= 0 && Friend_actor_is_eligible(static_cast<uint32>(kept))
+					&& Friend_actor_is_free(static_cast<uint32>(kept), joined) && gwin->reserve_friend_mode_actor(kept)) {
+					// Back from a drop: straight to its companion, no picker.
+					guest.actor       = kept;
+					guest.roster_sent = true;
+					friend_session.send_party_members(Friend_party_members(), joined);
+					friend_session.accept_actor(static_cast<uint32>(kept), joined);
+					Actor* actor     = gwin->get_npc(kept);
+					guest.last_state = actor->get_tile();
+					guest.last_frame = actor->get_framenum();
+					friend_session.send_actor_state(
+							guest.last_state.tx, guest.last_state.ty, guest.last_state.tz, guest.last_frame, joined);
+					Friend_mode_announce(guest.name + " is back as " + Friend_mode_actor_name(kept), joined);
+				} else {
+					Friend_mode_announce(guest.name + " has joined", joined);
+				}
 				if (friend_host_paused_sent) {
 					friend_session.send_host_paused(true, joined);    // We're in a menu.
 				}
@@ -5329,13 +5859,38 @@ static void Handle_events() {
 					Friend_mode_send_journal_writers();    // Its note is free again.
 				}
 				if (guest->actor >= 0) {
+					// Kept for a while in case they reconnect; the party's AI
+					// drives it meanwhile.
 					gwin->release_remote_friend_mode_actor(guest->actor);
-					Friend_mode_announce(
-							left_name + " has left; " + Friend_mode_actor_name(guest->actor) + " rejoins the party");
+					friend_rejoin_holds[left_name]
+							= {guest->actor, static_cast<uint32>(SDL_GetTicks()) + friend_rejoin_hold_ms};
+					Friend_mode_announce(left_name + " has left; " + Friend_mode_actor_name(guest->actor)
+										 + " follows the party until they return");
 				} else {
 					Friend_mode_announce(left_name + " has left");
 				}
 				friend_guests.erase(left);
+			}
+			Friend_mode_end_emotes();
+			if (friend_session.connected() && friend_world_sent) {
+				const uint32 now = static_cast<uint32>(SDL_GetTicks());
+				if (friend_next_autosave == 0) {
+					friend_next_autosave = now + friend_autosave_ms;
+				} else if (static_cast<sint32>(now - friend_next_autosave) >= 0 && !gwin->get_usecode()->in_usecode()
+						   && !friend_host_dialogue_active && !dragging) {
+					Friend_mode_autosave();
+					friend_next_autosave = now + friend_autosave_ms;
+				}
+			} else {
+				friend_next_autosave = 0;    // Starts again with the next guest.
+			}
+			for (auto it = friend_rejoin_holds.begin(); it != friend_rejoin_holds.end();) {
+				if (static_cast<sint32>(static_cast<uint32>(SDL_GetTicks()) - it->second.until) >= 0) {
+					Friend_mode_announce(Friend_mode_actor_name(it->second.actor) + " is free again");
+					it = friend_rejoin_holds.erase(it);
+				} else {
+					++it;
+				}
 			}
 			if (friend_world_reloaded) {
 				friend_world_reloaded = false;
@@ -5724,6 +6279,7 @@ static void Handle_events() {
 					}
 					if (!text.empty()) {
 						Friend_mode_notice(text);
+						Friend_mode_log(text);
 					}
 				}
 			}
@@ -5742,6 +6298,26 @@ static void Handle_events() {
 			const bool spectating = guest_assigned_actor < 0 || !gwin->has_network_friend_control();
 			if (spectating != gwin->is_network_spectating()) {
 				gwin->set_network_spectating(spectating);
+				friend_watched_npc = -1;    // Spectating starts (or ends) on the Avatar.
+			}
+			if (spectating && friend_watched_npc >= 0) {
+				// Follow the watched player; if they switched, spectate or left,
+				// back to the Avatar.
+				Actor* watched = gwin->get_npc(friend_watched_npc);
+				const bool still_played = watched && !Friend_player_with_actor(watched).empty();
+				if (!still_played) {
+					friend_watched_npc = -1;
+					gwin->set_camera_actor(gwin->get_main_actor());
+					gwin->center_view(gwin->get_main_actor()->get_tile());
+				} else if (watched->get_tile() != friend_watched_at) {
+					const Tile_coord at = watched->get_tile();
+					if (friend_watched_at.tx < 0 || friend_watched_at.distance(at) > 8) {
+						gwin->center_view(at);
+					} else {
+						gwin->scroll_if_needed(watched, at);
+					}
+					friend_watched_at = at;
+				}
 			}
 			if (friend_session.take_connection_lost()) {
 				gwin->set_network_dialogue_paused(false);
@@ -5759,7 +6335,7 @@ static void Handle_events() {
 			// the party in one).
 			if (friend_picker_requested && !gwin->is_network_dialogue_paused()
 				&& friend_session.take_roster_update()) {
-				// Tab: pick a companion again (or a first one, if watching).
+				// J: pick a companion again (or a first one, if spectating).
 				friend_picker_requested = false;
 				friend_selection_shown  = true;
 				const int selected = Select_friend_actor(friend_session.party_roster(), guest_assigned_actor >= 0);
@@ -5837,7 +6413,9 @@ static void Handle_events() {
 				Main_actor* avatar = gwin->get_main_actor();
 				const Tile_coord state(tx, ty, tz);
 				if (avatar && avatar->get_tile() != state) {
-					if (gwin->is_network_spectating()) {
+					if (gwin->is_network_spectating() && friend_watched_npc >= 0) {
+						avatar->Actor::move(state.tx, state.ty, state.tz);    // Watching another player.
+					} else if (gwin->is_network_spectating()) {
 						// Watching: the view (and roofs) follow the Avatar.
 						const Tile_coord from = avatar->get_tile();
 						avatar->move(state.tx, state.ty, state.tz);
@@ -6117,8 +6695,11 @@ static void Handle_events() {
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
 		Friend_mode_paint_leash_arrow();
+		Friend_mode_paint_player_arrows();
 		Friend_mode_paint_dialogue_wait();
 		Friend_mode_paint_chat_input();
+		Friend_mode_paint_chat_log();
+		Friend_mode_paint_player_list();
 
 		if (!gwin->show() &&          // Blit to screen if necessary.
 			Mouse::mouse_update) {    // If not, did mouse change?
@@ -6295,9 +6876,34 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
  */
 
 static void Handle_event(SDL_Event& event) {
+	if (friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active
+		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_L && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
+		friend_chat_log_hidden = !friend_chat_log_hidden;    // L: hide or show the chat log.
+		gwin->set_all_dirty();
+		return;
+	}
+	if (friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active
+		&& (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP) && event.key.key == SDLK_TAB) {
+		// Hold Tab: who plays whom.
+		const bool shown = event.type == SDL_EVENT_KEY_DOWN;
+		if (shown != friend_player_list_shown) {
+			friend_player_list_shown = shown;
+			gwin->set_all_dirty();
+		}
+		return;
+	}
 	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active
-		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_TAB && !event.key.repeat) {
-		// Pick a companion (again).  Not while the host is in a conversation
+		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_X && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()
+		&& gwin->is_network_spectating()) {
+		Friend_mode_watch_next();    // X: watch the next player.
+		return;
+	}
+	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active
+		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_J && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
+		// J: pick a companion (again).  Not while the host is in a conversation
 		// or paused; the picker waits for the host's current list.
 		if (gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
 			Mouse::mouse()->flash_shape(Mouse::redx);
@@ -6348,6 +6954,9 @@ static void Handle_event(SDL_Event& event) {
 					friend_chat_text.clear();
 					SDL_StopTextInput(gwin->get_win()->get_screen_window());
 					gwin->set_all_dirty();
+				} else if (event.key.key == SDLK_TAB) {
+					Friend_mode_complete_chat(friend_chat_text);    // Player names, commands.
+					gwin->set_all_dirty();
 				} else if (event.key.key == SDLK_BACKSPACE) {
 					if (!friend_chat_text.empty()) {
 						friend_chat_text.pop_back();
@@ -6355,12 +6964,7 @@ static void Handle_event(SDL_Event& event) {
 					}
 				} else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
 					if (!friend_chat_text.empty()) {
-						Actor* speaker = Friend_mode_local_speaker();
-						Friend_mode_show_chat(speaker, friend_player_name, friend_chat_text);
-						friend_session.send_chat(
-								speaker ? static_cast<uint32>(speaker->get_npc_num())
-										: Friend_mode_session::chat_spectator,
-								friend_session.local_player(), friend_chat_text);
+						Friend_mode_send_chat_line(friend_chat_text);
 						friend_session.poll();
 					}
 					friend_chat_active = false;

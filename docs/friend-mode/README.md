@@ -72,6 +72,31 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Co-op quality of life, built 2026-10-17 (protocol version 29); not
+tested yet.** See "Co-op quality of life" in the
+[test checklist](test-checklist.md).
+
+- **Keys:** hold **Tab** for the player list (Player, Character,
+  Health); **J** opens the companion picker (it was Tab); **L** hides or
+  shows the chat log; **X** (spectating) watches the next player; **E**
+  follows the Avatar. In the chat line, **Tab** completes a player's name
+  (or a command after "/"); Tab again goes to the next match.
+- **Rejoin:** a guest that drops keeps its companion for 3 minutes (the
+  party's AI drives it and nobody else can pick it); reconnecting with the
+  same player name goes straight back into it.
+- **Chat log, whispers, emotes:** a small fading log, bottom left, of
+  chat, whispers and session notices only. `/w name text` whispers through
+  the host to one player. `/wave`, `/bow`, `/point`, `/cheer`, `/kneel` and
+  `/sit` pose the speaker's actor on the host, with "*waves*" over it for
+  everyone.
+- **Arrows to players:** off-screen player companions get an edge arrow
+  with a colored mark and the player's name.
+- **Autosave:** every 5 minutes while a guest is connected, into slots
+  997-999 ("Co-Op Autosave"), over the oldest; never a player's own saves.
+- **Held items stay in saves.** An item a guest held mid-drag was missing
+  from saves (now including autosaves) and from a joining guest's world;
+  saves now put it back where it came from for the moment of saving.
+
 **Phase 6, M5, built 2026-10-17 (protocol version 28); not tested yet.**
 Follow mode, Spectate and Enter in the journal were tested and work, and
 so did Iolo following again after the saved-waiting fix. "Watch" is now
@@ -442,9 +467,6 @@ Still to test:
   this" and pays nothing.
 - Shop hours: a merchant outside business hours turns the guest away, as
   for the Avatar.
-
-Minor, test later: an item a guest is mid-drag on when a new guest joins is
-missing from the save the new guest downloads.
 
 Later: a 30-minute soak test with two or more guests, and scripted events
 with several guests (see "Scripted events" in the
