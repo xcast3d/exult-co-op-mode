@@ -36,6 +36,8 @@
 #include "Configuration.h"
 #include "Enabled_button.h"
 #include "GameEngineOptions_gump.h"
+
+#include "friendmap.h"
 #include "Gump_ToggleButton.h"
 #include "Gump_button.h"
 #include "Gump_manager.h"
@@ -121,6 +123,10 @@ namespace {
 
 		static auto EnemyHealthBars_() {
 			return "Enemy health bars:";
+		}
+
+		static auto CornerMinimap_() {
+			return "Corner minimap:";
 		}
 
 		static auto CombatpausedwithSpace_() {
@@ -217,6 +223,10 @@ void GameEngineOptions_gump::build_buttons() {
 			this, &GameEngineOptions_gump::toggle_health_bars, yesNo, health_bars,
 			get_button_pos_for_label(Strings::EnemyHealthBars_()), yForRow(++y_index), small_size);
 
+	buttons[id_minimap] = std::make_unique<GameEngineTextToggle>(
+			this, &GameEngineOptions_gump::toggle_minimap, yesNo, minimap,
+			get_button_pos_for_label(Strings::CornerMinimap_()), yForRow(++y_index), small_size);
+
 	// std::vector<std::string> modes = {"Original", "Space pauses"};
 	buttons[id_mode] = std::make_unique<GameEngineTextToggle>(
 			this, &GameEngineOptions_gump::toggle_mode, yesNo, mode, get_button_pos_for_label(Strings::CombatpausedwithSpace_()),
@@ -280,6 +290,7 @@ void GameEngineOptions_gump::load_settings() {
 	difficulty += 3;    // Scale to choices (0-6).
 	show_hits   = Combat::show_hits ? 1 : 0;
 	health_bars = Combat::health_bars ? 1 : 0;
+	minimap     = Friend_minimap_enabled ? 1 : 0;
 	mode        = static_cast<int>(Combat::mode);
 	if (mode < 0 || mode > 1) {
 		mode = 0;
@@ -335,6 +346,8 @@ void GameEngineOptions_gump::save_settings() {
 	config->set("config/gameplay/combat/show_hits", show_hits ? "yes" : "no", false);
 	Combat::health_bars = (health_bars != 0);
 	config->set("config/gameplay/combat/health_bars", health_bars ? "yes" : "no", false);
+	Friend_minimap_enabled = (minimap != 0);
+	config->set("config/gameplay/minimap", minimap ? "yes" : "no", false);
 	Combat::mode = static_cast<Combat::Mode>(mode);
 	str          = Combat::mode == Combat::keypause ? "keypause" : "original";
 	config->set("config/gameplay/combat/mode", str, false);
@@ -371,6 +384,7 @@ void GameEngineOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::Speed_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatShowHits_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::EnemyHealthBars_(), x + label_margin, y + yForRow(++y_index) + 1);
+	font->paint_text(iwin->get_ib8(), Strings::CornerMinimap_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatpausedwithSpace_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatCharmedDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);

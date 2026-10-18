@@ -283,6 +283,34 @@ guest types in.
 **Exit criterion:** Two players on different home networks join with a code
 and no router setup.
 
+**Possible path (not decided, 2026-10-18): Cloudflare.**
+
+- **Lobby:** a Cloudflare Worker with one Durable Object per code. The host
+  opens a WebSocket and gets a code (`RAVEN-42`); each guest connects with
+  it; the lobby passes the WebRTC offers, answers and ICE candidates, then
+  steps aside. No game traffic, so it fits the free plan.
+- **STUN:** Cloudflare's public `stun.cloudflare.com:3478`.
+- **TURN:** Cloudflare's managed TURN service. The Worker keeps the key
+  and hands out short-lived credentials when a game starts, so no secret
+  ships in Exult. Check its pricing first; a lobby without TURN returns
+  STUN only.
+- **Exult:** libdatachannel (MPL-2.0) data channels, reliable and ordered,
+  behind `Friend_connection` as `friendrtc.cc` next to `friendtcp.cc`.
+  Getting it into the Mac and Windows builds is the biggest risk, so prove
+  it first.
+- **No hard-coded server:** the lobby address is a setting
+  (`config/friend/lobby_url`), defaulting to the project's Worker. The
+  Worker's source lives in the repo (`tools/lobby/`, deployed with
+  `wrangler deploy`), so anyone can run their own. TURN settings come from
+  the lobby, not the build. Direct IP stays for LAN, Tailscale, and when
+  the lobby is down.
+- **Avoided:** relaying all game traffic through a Worker over WebSockets.
+  Simpler, but every small packet would count against Workers' request
+  limits and add latency.
+- **Until then:** Tailscale (each player installs it; the host shares the
+  Mac with them; guests type its `100.x` address) gets through carrier
+  NAT with no code changes, and is the way to run internet tests now.
+
 ### Phase 9 — Action controls (optional)
 
 Optional, more Diablo-like controls: walk with WASD, pick targets from the
@@ -356,11 +384,11 @@ after Phase 8.
       and keeps updated ("Find Christopher's murderer") as a reminder for
       the companions. No quest log or guide arrows.
 
-- [ ] **World map with player dots.** A key toggles a whole-world overview
+- [x] **World map with player dots.** U toggles a whole-world overview
       (Exult's cheat map, drawn from each chunk's ground colours, one
       pixel per chunk, made in memory) with a dot per player in their
       arrow color. Small.
-- [ ] **Corner minimap (option, off by default).** A small map of the
+- [x] **Corner minimap (option, off by default).** A small map of the
       ground around your character with player dots, overworld only.
       Walls and roofs are objects, so towns show as floors without walls.
       In dungeons (`Game_window::is_in_dungeon`) it hides at first; a later

@@ -30,6 +30,8 @@
 
 #include "gamewin.h"
 
+#include "friendmap.h"
+
 #include "Astar.h"
 #include "Audio.h"
 #include "AudioMixer.h"
@@ -368,6 +370,9 @@ Game_window::Game_window(
 	config->value("config/gameplay/combat/health_bars", str, "no");
 	Combat::health_bars = (str == "yes");
 	config->set("config/gameplay/combat/health_bars", str, false);
+	config->value("config/gameplay/minimap", str, "no");    // Friend Mode corner minimap.
+	Friend_minimap_enabled = (str == "yes");
+	config->set("config/gameplay/minimap", str, false);
 	config->value("config/audio/disablepause", str, "no");
 	config->set("config/audio/disablepause", str, false);
 

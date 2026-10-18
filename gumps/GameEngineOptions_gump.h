@@ -37,6 +37,7 @@ private:
 	int                      difficulty;
 	int                      show_hits;
 	int                      health_bars;
+	int                      minimap;
 	int                      mode;
 	bool                     charmDiff;
 	int                      cheats;
@@ -55,6 +56,7 @@ private:
 		id_frames,
 		id_show_hits,
 		id_health_bars,
+		id_minimap,
 		id_mode,
 		id_charmDiff,
 		id_difficulty,
@@ -109,6 +111,10 @@ public:
 
 	void toggle_health_bars(int state) {
 		health_bars = state;
+	}
+
+	void toggle_minimap(int state) {
+		minimap = state;
 	}
 
 	void toggle_mode(int state) {

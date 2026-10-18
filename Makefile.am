@@ -64,6 +64,8 @@ EXULTSOURCES =	\
 	fnames.h	\
 	frameseq.h	\
 	friendconn.h	\
+	friendmap.cc	\
+	friendmap.h	\
 	friendnet.cc	\
 	friendnet.h	\
 	friendtcp.cc	\

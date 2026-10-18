@@ -61,6 +61,7 @@
 #include "fnames.h"
 #include "font.h"
 #include "font_map.h"
+#include "friendmap.h"
 #include "friendnet.h"
 #include "game.h"
 #include "gamemap.h"
@@ -711,6 +712,32 @@ static int Friend_player_color(int player) {
 			{58, 15, 58}, {10, 58, 58}, {63, 35, 5}, {63, 63, 63}};
 	const auto&      c        = rgb[(player + 7) % 8];
 	return gwin->get_pal()->find_color(c[0], c[1], c[2]);
+}
+
+// Where every player is, for the maps: the Avatar, and each player's
+// companion (just the Avatar in single player).
+static void Friend_mode_paint_maps() {
+	std::vector<Friend_map_dot> dots;
+	auto add = [&](Actor* actor, int player, const std::string& name) {
+		if (!actor || actor->get_map() != gwin->get_main_actor()->get_map()) {
+			return;
+		}
+		const std::string character = actor == gwin->get_main_actor() ? std::string("Avatar") : actor->get_name();
+		dots.push_back({actor->get_tile(), Friend_player_color(player),
+						name.empty() ? character : name + " (" + character + ")"});
+	};
+	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
+		for (const auto& [player, entry] : friend_players) {
+			add(entry.actor >= 0 ? gwin->get_npc(entry.actor) : nullptr, player, entry.name);
+		}
+	} else {
+		add(gwin->get_main_actor(), Friend_mode_session::host_player,
+			friend_session.mode() == Friend_mode_session::Mode::host ? friend_player_name : std::string());
+		for (const auto& [player, guest] : friend_guests) {
+			add(guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr, player, guest.name);
+		}
+	}
+	Friend_map_paint(dots);
 }
 
 // Arrows toward the other players' companions that are off screen.
@@ -6694,8 +6721,11 @@ static void Handle_events() {
 		}
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
-		Friend_mode_paint_leash_arrow();
-		Friend_mode_paint_player_arrows();
+		Friend_mode_paint_maps();
+		if (!Friend_map_shown()) {
+			Friend_mode_paint_leash_arrow();
+			Friend_mode_paint_player_arrows();
+		}
 		Friend_mode_paint_dialogue_wait();
 		Friend_mode_paint_chat_input();
 		Friend_mode_paint_chat_log();
@@ -6876,6 +6906,12 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
  */
 
 static void Handle_event(SDL_Event& event) {
+	if (!friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_U && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()
+		&& gwin->get_main_actor()) {
+		Friend_map_toggle();    // U: the world map with every player on it.
+		return;
+	}
 	if (friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active
 		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_L && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {

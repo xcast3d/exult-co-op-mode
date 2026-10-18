@@ -37,6 +37,23 @@ share one public address between customers. Port forwarding can't work
 then. Lobby codes over WebRTC (Phase 8 in the
 [project brief](../ultima-7-friend-mode.md)) are the planned answer.
 
+## Without port forwarding: Tailscale
+
+Tailscale makes a private, encrypted network between players and gets
+through routers and carrier-grade NAT by itself, so Co-Op Mode works as on
+a LAN:
+
+1. Everyone installs Tailscale and signs in with their own account.
+2. The host shares their computer with each player (Tailscale admin
+   console, **Share**); players accept and see only that machine.
+3. The host starts hosting as usual. Guests use **Join a Game** with the
+   host's Tailscale address (`100.x.y.z`, or its MagicDNS name, shown in
+   the Tailscale menu); the port stays 1992.
+
+Connections are usually direct; when they can't be, Tailscale relays them,
+which adds lag (the Tailscale menu shows "direct" or "relay"). Lobby codes
+(Phase 8) are the planned way to do without any of this.
+
 ## Security
 
 There is no password and no encryption. While you host, anyone who finds

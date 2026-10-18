@@ -72,11 +72,24 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Maps, built 2026-10-17; not tested yet** (no protocol change). Both are
+drawn from the ground under each map chunk, so towns show as floors
+without walls ([friendmap.cc](../../friendmap.cc)).
+
+- **U: world map.** The whole world with a dot for every player (the
+  Avatar and each player's companion, in their arrow colors) and a key
+  naming them. Works in single player too. The first time it fills in over
+  a second or so instead of freezing the game.
+- **Corner minimap** (Game Engine options: "Corner minimap", off by
+  default): the ground around the view, top right, with player dots.
+  Overworld only; it hides in dungeons. Showing only the dungeon parts the
+  party has explored is a later step.
+
 **Co-op quality of life, built 2026-10-17 (protocol version 29); not
 tested yet.** See "Co-op quality of life" in the
 [test checklist](test-checklist.md).
 
-- **Keys:** hold **Tab** for the player list (Player, Character,
+- **Keys:** **U** world map; hold **Tab** for the player list (Player, Character,
   Health); **J** opens the companion picker (it was Tab); **L** hides or
   shows the chat log; **X** (spectating) watches the next player; **E**
   follows the Avatar. In the chat line, **Tab** completes a player's name

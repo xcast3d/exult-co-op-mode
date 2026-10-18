@@ -571,6 +571,18 @@ config and gamedat. The host needs a party with at least two companions
       host saves or another guest joins: the save, and the newcomer's
       world, still have the item.
 
+## Maps
+
+- [ ] **U** opens the world map on the host, on a guest and in single
+      player: the world fills in within a second or two, with a dot and a
+      key line for the Avatar and for each player's companion, in the same
+      colors as their arrows. The game keeps running (players move on the
+      map). U again closes it. U does nothing in the journal or chat line.
+- [ ] Game Engine options → "Corner minimap: Yes": a small map at the top
+      right follows your view, with player dots; it is gone in a dungeon
+      and back outside. The setting is kept after restarting Exult.
+- [ ] No slowdown with the corner minimap on (walk around a town).
+
 ## Losing a companion, and four players (Phase 6, M5)
 
 - [ ] A guest's companion dies in a fight: everyone sees "<companion> has
