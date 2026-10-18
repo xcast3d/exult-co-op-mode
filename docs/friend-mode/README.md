@@ -150,7 +150,24 @@ Targeting got its own Game Input option, "Targeting (Q, Space)", on by
 default, separate from WASD movement; turning it off drops any pick.
 
 Also tested and working: clearing the target or walking stops the
-attack; Main Menu returns to the title menu.
+attack; Main Menu returns to the title menu; WASD and targeting on a
+guest; Suggest a reply with two guests (two players suggesting the same
+choice: it shows the later one's color; the log has both).
+
+Found with two guests: chat sent while the Avatar was in a conversation
+reached nobody until it ended (the host's conversation waits in
+`Get_click`, outside the main loop). The chat handling is now one
+function (`Friend_mode_take_chats`), also called from the host's click
+wait, so chat, whispers and emotes go through during conversations. Retested:
+it works; then, by request, chat during a conversation no longer shows
+over the speaker (it sat on top of the conversation), only in the log.
+The host couldn't chat during its own conversation either: its keys went
+to the conversation's click loop. Typing in the chat line is now one
+function (`Friend_mode_chat_event`), also called from that loop, and the
+chat line has its own layer above the conversation (it was drawn into the
+game view, under the conversation's layer). Enter is free there: Exult's
+conversations pick choices with 1-9 and a-z (the Nth choice), not Enter;
+while the chat line is open, typing goes to it, not to the choices.
 Each pick shows "Targeting Wolf" near the top (one such line at a time). The outline goes when the target dies, leaves or is more
 than 30 tiles off. A Q with no hostile on screen flashes the red X. Next
 step: taking the controlled character's fight away from the party AI.

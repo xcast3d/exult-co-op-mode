@@ -455,7 +455,10 @@ static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, con
 		}
 	}
 	Friend_mode_log(line);
-	if (speaker) {
+	// Not over the speaker while the Avatar is in a conversation: it would
+	// sit on top of the conversation.  The log has it.
+	const bool in_dialogue = friend_host_dialogue_active || gwin->is_network_dialogue_paused();
+	if (speaker && !in_dialogue) {
 		gwin->get_effects()->add_chat_text(text.c_str(), speaker);
 	} else if (friend_chat_log_hidden) {
 		// Spectators have no body: with the log hidden, near the top.
@@ -4291,25 +4294,61 @@ bool Friend_mode_download_world() {
 	}
 }
 
+// The chat line, bottom of the view: its own layer at the world's scale,
+// above a conversation (whose layer would cover it in the game view).
 static void Friend_mode_paint_chat_input() {
-	if (!friend_chat_active) {
+	static int         layer = -1;
+	static std::string painted;
+	static int         painted_w = 0;
+	Image_window*      iwin      = gwin->get_win();
+	auto               font      = fontManager.get_font("MENU_FONT");
+	if (!friend_chat_active || !font) {
+		if (layer >= 0 && iwin->layer_is_visible(layer)) {
+			gwin->layer_set_visible(layer, false);
+			gwin->set_painted();
+		}
 		return;
 	}
-	auto font = fontManager.get_font("MENU_FONT");
-	if (!font) {
-		return;
-	}
-	Image_buffer8* buffer = gwin->get_win()->get_ib8();
-	const int x = 8;
-	const int h = font->get_text_height() + 8;
-	const int y = gwin->get_height() - h - 8;
-	const int w = std::max(120, gwin->get_width() - 16);
-	buffer->draw_box(x, y, w, h, 1, 0, 15);
+	const int   x     = 8;
+	const int   h     = font->get_text_height() + 8;
+	const int   y     = gwin->get_height() - h - 8;
+	const int   w     = std::max(120, gwin->get_width() - 16);
 	std::string shown = "Say: " + friend_chat_text + "_";
 	while (shown.size() > 6 && font->get_text_width(shown.c_str()) > w - 10) {
 		shown.erase(5, 1);
 	}
-	font->draw_text(buffer, x + 5, y + 4, shown.c_str());
+	if (layer < 0 || shown != painted || w != painted_w) {
+		if (layer >= 0) {
+			gwin->destroy_layer(layer);
+		}
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As effects.cc's text.
+		layer                      = gwin->create_layer("Chat line", w, h, 255, 0, text_layer_z);
+		if (layer < 0) {
+			return;
+		}
+		Image_buffer8* lbuf = gwin->get_layer_ibuf(layer);
+		if (!lbuf) {
+			return;
+		}
+		lbuf->clear_clip();
+		lbuf->fill8(255);
+		// Fonts paint into the current render target, not the buffer given.
+		Image_buffer8* prev = gwin->push_render_target(lbuf);
+		lbuf->draw_box(0, 0, w, h, 1, 0, 15);
+		font->draw_text(lbuf, 5, 4, shown.c_str());
+		gwin->pop_render_target(prev);
+		gwin->layer_set_dirty(layer);
+		painted   = shown;
+		painted_w = w;
+	}
+	int sx0;
+	int sy0;
+	int sx1;
+	int sy1;
+	iwin->game_to_screen(x, y, false, sx0, sy0);
+	iwin->game_to_screen(x + w, y + h, false, sx1, sy1);
+	gwin->layer_set_dest(layer, sx0, sy0, sx1 - sx0, sy1 - sy0);
+	gwin->layer_set_visible(layer, true);
 	gwin->set_painted();
 }
 
@@ -4494,6 +4533,50 @@ static void Friend_mode_paint_chat_log() {
 	Friend_mode_paint_pinned(notices, friend_notices, friend_notices_changed, true, gwin->get_width() / 2, 4, true);
 }
 
+// Chat, whispers and guests' emotes that arrived: shown, and on the host
+// passed on.  From the main loop, and on the host also while it waits for a
+// click (a conversation), so chat isn't held up until the Avatar is done.
+// Returns whether anything came.
+static bool Friend_mode_take_chats() {
+	bool any = false;
+	std::string incoming_chat;
+	uint32      incoming_speaker = 0;
+	int         incoming_player  = 0;
+	int         chat_from        = 0;
+	int         chat_target      = -1;
+	while (friend_session.take_chat(incoming_speaker, incoming_player, incoming_chat, &chat_from, &chat_target)) {
+		any = true;
+		Actor*     speaker = Friend_mode_remote_speaker(incoming_speaker, incoming_player);
+		const bool hosting = friend_session.mode() == Friend_mode_session::Mode::host;
+		if (chat_target >= 0) {    // A whisper.
+			if (!hosting || chat_target == Friend_mode_session::host_player) {
+				Friend_mode_show_whisper(
+						"[" + Friend_mode_player_name(incoming_player) + " whispers] " + incoming_chat);
+			} else if (Friend_guest_of(chat_target)) {
+				friend_session.send_whisper(chat_target,
+						speaker ? static_cast<uint32>(speaker->get_npc_num()) : Friend_mode_session::chat_spectator,
+						chat_from, incoming_chat, chat_target);
+			}
+			continue;
+		}
+		if (hosting && incoming_chat[0] == '/') {    // A guest's emote.
+			const Friend_emote* emote = Friend_find_emote(incoming_chat);
+			if (emote && speaker) {
+				Friend_mode_emote(speaker, chat_from, *emote);
+			}
+			continue;
+		}
+		Friend_mode_show_chat(speaker, Friend_mode_player_name(incoming_player), incoming_chat);
+		if (hosting) {
+			// Pass it on to the other guests, with the speaker we know.
+			friend_session.send_chat(
+					speaker ? static_cast<uint32>(speaker->get_npc_num()) : Friend_mode_session::chat_spectator,
+					chat_from, incoming_chat, Friend_mode_session::everyone, chat_from);
+		}
+	}
+	return any;
+}
+
 // Suggest a reply: a guest clicks one of the Avatar's choices during the
 // Avatar's conversation.  The host checks it is on offer, draws it in that
 // player's color and passes it on; everyone logs "Marc suggests: Name".
@@ -4535,7 +4618,12 @@ static void Friend_mode_click_wait_poll() {
 		return;
 	}
 	friend_session.poll();
+	Friend_mode_take_chats();
 	Friend_mode_take_suggestions();
+	if (friend_host_dialogue_active) {
+		Friend_mode_paint_chat_input();
+		Friend_mode_paint_chat_log();
+	}
 }
 
 // Hold Tab: a list of the players, their characters and health.
@@ -6318,40 +6406,7 @@ static void Handle_events() {
 		}
 		friend_session.poll();
 		Friend_mode_journal_open_pass(false);
-		std::string incoming_chat;
-		uint32      incoming_speaker = 0;
-		int         incoming_player  = 0;
-		int         chat_from        = 0;
-		int         chat_target      = -1;
-		while (friend_session.take_chat(incoming_speaker, incoming_player, incoming_chat, &chat_from, &chat_target)) {
-			Actor*     speaker = Friend_mode_remote_speaker(incoming_speaker, incoming_player);
-			const bool hosting = friend_session.mode() == Friend_mode_session::Mode::host;
-			if (chat_target >= 0) {    // A whisper.
-				if (!hosting || chat_target == Friend_mode_session::host_player) {
-					Friend_mode_show_whisper(
-							"[" + Friend_mode_player_name(incoming_player) + " whispers] " + incoming_chat);
-				} else if (Friend_guest_of(chat_target)) {
-					friend_session.send_whisper(chat_target,
-							speaker ? static_cast<uint32>(speaker->get_npc_num()) : Friend_mode_session::chat_spectator,
-							chat_from, incoming_chat, chat_target);
-				}
-				continue;
-			}
-			if (hosting && incoming_chat[0] == '/') {    // A guest's emote.
-				const Friend_emote* emote = Friend_find_emote(incoming_chat);
-				if (emote && speaker) {
-					Friend_mode_emote(speaker, chat_from, *emote);
-				}
-				continue;
-			}
-			Friend_mode_show_chat(speaker, Friend_mode_player_name(incoming_player), incoming_chat);
-			if (hosting) {
-				// Pass it on to the other guests, with the speaker we know.
-				friend_session.send_chat(
-						speaker ? static_cast<uint32>(speaker->get_npc_num()) : Friend_mode_session::chat_spectator,
-						chat_from, incoming_chat, Friend_mode_session::everyone, chat_from);
-			}
-		}
+		Friend_mode_take_chats();
 		Friend_mode_take_suggestions();
 		if (arg_friend_host) {
 			if (friend_host_paused_sent) {    // Back from a menu or dialog.
@@ -7450,6 +7505,65 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
 			&& event.key.key != SDLK_NUMLOCKCLEAR);
 }
 
+// The chat line: Enter opens it (not while writing in the journal), typing,
+// Tab completion, Enter sends, Escape closes.  From Handle_event, and on the
+// host also while a conversation waits for a click.  True if the event was
+// the chat line's.
+static bool Friend_mode_chat_event(SDL_Event& event) {
+	if (friend_session.connected()) {
+		if (friend_chat_active) {
+			if (event.type == SDL_EVENT_TEXT_INPUT) {
+				for (const char* ch = event.text.text; *ch && friend_chat_text.size() < 80; ++ch) {
+					if (static_cast<unsigned char>(*ch) >= 32 && static_cast<unsigned char>(*ch) < 127) {
+						friend_chat_text.push_back(*ch);
+					}
+				}
+				gwin->set_all_dirty();
+				return true;
+			}
+			if (event.type == SDL_EVENT_KEY_DOWN) {
+				if (event.key.key == SDLK_ESCAPE) {
+					friend_chat_active = false;
+					friend_chat_text.clear();
+					SDL_StopTextInput(gwin->get_win()->get_screen_window());
+					gwin->set_all_dirty();
+				} else if (event.key.key == SDLK_TAB) {
+					Friend_mode_complete_chat(friend_chat_text);    // Player names, commands.
+					gwin->set_all_dirty();
+				} else if (event.key.key == SDLK_BACKSPACE) {
+					if (!friend_chat_text.empty()) {
+						friend_chat_text.pop_back();
+						gwin->set_all_dirty();
+					}
+				} else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
+					if (!friend_chat_text.empty()) {
+						Friend_mode_send_chat_line(friend_chat_text);
+						friend_session.poll();
+					}
+					friend_chat_active = false;
+					friend_chat_text.clear();
+					SDL_StopTextInput(gwin->get_win()->get_screen_window());
+					gwin->set_all_dirty();
+				}
+				return true;
+			}
+			if (event.type == SDL_EVENT_KEY_UP) {
+				return true;
+			}
+		} else if (event.type == SDL_EVENT_KEY_DOWN
+				   && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)
+				   && !Notebook_gump::get_instance()) {    // Enter in the journal is a new line.
+			friend_chat_active = true;
+			friend_chat_text.clear();
+			gwin->stop_actor();
+			SDL_StartTextInput(gwin->get_win()->get_screen_window());
+			gwin->set_all_dirty();
+			return true;
+		}
+	}
+	return false;
+}
+
 /*
  *  Handle an event.  This should work for all platforms, and should only
  *  be called in 'normal' and 'gump' modes.
@@ -7540,56 +7654,8 @@ static void Handle_event(SDL_Event& event) {
 		}
 		return;
 	}
-	if (friend_session.connected()) {
-		if (friend_chat_active) {
-			if (event.type == SDL_EVENT_TEXT_INPUT) {
-				for (const char* ch = event.text.text; *ch && friend_chat_text.size() < 80; ++ch) {
-					if (static_cast<unsigned char>(*ch) >= 32 && static_cast<unsigned char>(*ch) < 127) {
-						friend_chat_text.push_back(*ch);
-					}
-				}
-				gwin->set_all_dirty();
-				return;
-			}
-			if (event.type == SDL_EVENT_KEY_DOWN) {
-				if (event.key.key == SDLK_ESCAPE) {
-					friend_chat_active = false;
-					friend_chat_text.clear();
-					SDL_StopTextInput(gwin->get_win()->get_screen_window());
-					gwin->set_all_dirty();
-				} else if (event.key.key == SDLK_TAB) {
-					Friend_mode_complete_chat(friend_chat_text);    // Player names, commands.
-					gwin->set_all_dirty();
-				} else if (event.key.key == SDLK_BACKSPACE) {
-					if (!friend_chat_text.empty()) {
-						friend_chat_text.pop_back();
-						gwin->set_all_dirty();
-					}
-				} else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
-					if (!friend_chat_text.empty()) {
-						Friend_mode_send_chat_line(friend_chat_text);
-						friend_session.poll();
-					}
-					friend_chat_active = false;
-					friend_chat_text.clear();
-					SDL_StopTextInput(gwin->get_win()->get_screen_window());
-					gwin->set_all_dirty();
-				}
-				return;
-			}
-			if (event.type == SDL_EVENT_KEY_UP) {
-				return;
-			}
-		} else if (event.type == SDL_EVENT_KEY_DOWN
-				   && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)
-				   && !Notebook_gump::get_instance()) {    // Enter in the journal is a new line.
-			friend_chat_active = true;
-			friend_chat_text.clear();
-			gwin->stop_actor();
-			SDL_StartTextInput(gwin->get_win()->get_screen_window());
-			gwin->set_all_dirty();
-			return;
-		}
+	if (Friend_mode_chat_event(event)) {
+		return;
 	}
 	// Mouse scale factor
 	const bool dont_move_mode = gwin->main_actor_dont_move();
@@ -8289,6 +8355,10 @@ static bool Get_click(
 		static bool rightclick;
 		while (SDL_PollEvent(&event)) {
 			SDL_ConvertEventToRenderCoordinates(renderer, &event);
+			// The host chats during a conversation too.
+			if (friend_host_dialogue_active && Friend_mode_chat_event(event)) {
+				continue;
+			}
 			switch (event.type) {
 			case SDL_EVENT_MOUSE_BUTTON_DOWN:
 				SDL_SetWindowMouseGrab(gwin->get_win()->get_screen_window(), true);

@@ -594,7 +594,7 @@ config and gamedat. The host needs a party with at least two companions
       or join from there. On the host, guests see it leave; on a guest,
       the host keeps its companion for a rejoin. No leftover window or
       process. Answering No stays in the game.
-- [ ] **Suggest a reply:** the Avatar talks to an NPC; a guest clicks a
+- [x] **Suggest a reply:** the Avatar talks to an NPC; a guest clicks a
       choice: it turns that guest's color on the host and every guest,
       and the log says "<name> suggests: <choice>". The guest clicks
       another: the first goes back to yellow. Two guests: both colors at
@@ -602,6 +602,16 @@ config and gamedat. The host needs a party with at least two companions
       new.
 - [ ] **WASD off** (the default): W uses the watch, S opens Save/Restore,
       as before.
+- [x] **Chat during a conversation:** while the Avatar talks, a guest's
+      chat (and a whisper) shows on the host and the other guest at once,
+      not only when the conversation ends.
+- [ ] **Host chats during its conversation:** Enter opens the chat line
+      over the conversation, typing doesn't pick choices, Enter sends (the
+      guests see it at once), Escape closes it without leaving the
+      conversation. Choices still work with clicks and 1-9.
+- [ ] **No overhead chat during a conversation:** chat then shows only in
+      the log (near the top with the log hidden), not over anyone's head;
+      overhead chat is back once the conversation ends.
 - [ ] **WASD on** (Game Input → "WASD movement: Yes"): W, A, S, D walk; two
       keys walk diagonally; letting go stops (walking is fluid, 2026-10-18;
       slower in combat, as U7 always is). Shift+W shows the watch,
@@ -647,7 +657,7 @@ config and gamedat. The host needs a party with at least two companions
       Picking a wolf out of combat, then C: the Avatar attacks the wolf.
       Picking a townsperson, then C: nobody attacks them. The outline goes
       when the target dies.
-- [ ] **WASD on a guest:** walking works for a guest's companion (the
+- [x] **WASD on a guest:** walking works for a guest's companion (the
       host's leash and refusals apply).
 
 ## Maps
