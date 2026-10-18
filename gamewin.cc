@@ -1209,8 +1209,11 @@ bool Game_window::toggle_friend_mode_control() {
  */
 bool Game_window::take_friend_mode_control(int npc_num, bool network_guest) {
 	Actor* companion = get_npc(npc_num);
+	// The host decides for a network guest, which may get back a companion
+	// that is asleep or paralyzed (see enforce_friend_mode_control_safety).
 	if (!companion || companion == main_actor || !companion->is_in_party() || companion->is_dead()
-		|| companion->get_flag(Obj_flags::asleep) || companion->get_flag(Obj_flags::paralyzed)) {
+		|| (!network_guest
+			&& (companion->get_flag(Obj_flags::asleep) || companion->get_flag(Obj_flags::paralyzed)))) {
 		return false;
 	}
 	if (controlled_actor && controlled_actor != main_actor) {
@@ -1341,17 +1344,21 @@ bool Game_window::release_friend_mode_control() {
 /*
  * Scripted movement, incapacitation, and party removal take precedence over
  * local companion possession. Return control to the Avatar before either actor
- * enters a state that could fight the local controller.
+ * enters a state that could fight the local controller.  A network guest
+ * keeps its companion while it is asleep (or knocked out) or paralyzed: the
+ * host refuses its moves meanwhile, and frees it only if it dies or leaves
+ * the party.
  */
 void Game_window::enforce_friend_mode_control_safety() {
 	Actor* current = get_controlled_actor();
 	if (!current || current == main_actor) {
 		return;
 	}
+	const bool incapacitated = current->get_flag(Obj_flags::asleep) || current->get_flag(Obj_flags::paralyzed);
 	if ((!network_friend_control
-			 && (main_actor_dont_move() || main_actor->in_usecode_control() || current->in_usecode_control()))
-		|| !current->is_in_party() || current->is_dead() || current->get_flag(Obj_flags::asleep)
-		|| current->get_flag(Obj_flags::paralyzed)) {
+		 && (main_actor_dont_move() || main_actor->in_usecode_control() || current->in_usecode_control()
+			 || incapacitated))
+		|| !current->is_in_party() || current->is_dead()) {
 		release_friend_mode_control();
 	}
 }

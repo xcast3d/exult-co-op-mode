@@ -215,7 +215,7 @@ static int  drag_cnknum = -1;
 static void BuildGameMap(BaseGameInfo* game, int mapnum);
 static void Handle_events();
 static void Handle_event(SDL_Event& event);
-static bool Friend_actor_is_eligible(uint32 npc_num);
+static bool Friend_actor_is_eligible(uint32 npc_num, bool keeping = false);
 // The picker's answer for "Spectate" (give the companion up).
 constexpr int friend_pick_spectate = -4;
 static int  Select_friend_actor(const std::vector<uint32>& roster, bool offer_watch = false);
@@ -377,54 +377,116 @@ static std::string Friend_mode_player_name(int player) {
 struct Friend_log_line {
 	std::string text;
 	uint32      time;
+	bool        whisper;    // Shown in purple.
 };
 static std::deque<Friend_log_line> friend_chat_log;
-static bool                        friend_chat_log_hidden = false;
-static constexpr std::size_t       friend_chat_log_lines  = 6;
-static constexpr uint32            friend_chat_log_ms     = 20000;
+static bool                        friend_chat_log_hidden  = false;
+static bool                        friend_chat_log_changed = false;    // Its layer needs repainting.
+static constexpr std::size_t       friend_chat_log_lines   = 6;
+static constexpr uint32            friend_chat_log_ms      = 20000;
 
-static void Friend_mode_log(const std::string& text) {
-	friend_chat_log.push_back({text, static_cast<uint32>(SDL_GetTicks())});
+// Notices (and spectator chat or whispers while the log is hidden) near the
+// top of the view, centred, for a few seconds each.
+static std::deque<Friend_log_line> friend_notices;
+static bool                        friend_notices_changed = false;
+static constexpr std::size_t       friend_notice_lines    = 3;
+static constexpr uint32            friend_notice_ms       = 4000;
+
+static void Friend_mode_top_line(const std::string& text, bool whisper = false) {
+	friend_notices.push_back({text, static_cast<uint32>(SDL_GetTicks()), whisper});
+	while (friend_notices.size() > friend_notice_lines) {
+		friend_notices.pop_front();
+	}
+	friend_notices_changed = true;
+}
+
+static void Friend_mode_log(const std::string& text, bool whisper = false) {
+	friend_chat_log.push_back({text, static_cast<uint32>(SDL_GetTicks()), whisper});
 	while (friend_chat_log.size() > friend_chat_log_lines) {
 		friend_chat_log.pop_front();
 	}
-	gwin->set_all_dirty();
+	friend_chat_log_changed = true;
+}
+
+// Emotes, Ultima Online style: "/wave" in the chat line.  The host poses
+// the speaker's actor (guests' requests come as chat) and everyone sees
+// "*waves*" over it, and "Marc waves." in the log.  Quick gestures end by
+// themselves; kneeling and sitting last until the actor moves.
+struct Friend_emote {
+	const char* command;
+	const char* text;    // Over the actor.
+	const char* log;     // In the log, after the name.
+	int         frame;
+	uint32      ms;    // How long the pose lasts, or 0 until it moves.
+};
+static const Friend_emote friend_emotes[] = {
+		{"/wave", "*waves*", "waves", Actor::raise1_frame, 1200},
+		{"/bow", "*bows*", "bows", Actor::bow_frame, 1500},
+		{"/point", "*points*", "points", Actor::reach1_frame, 1500},
+		{"/cheer", "*cheers*", "cheers", Actor::up_frame, 1500},
+		{"/kneel", "*kneels*", "kneels", Actor::kneel_frame, 0},
+		{"/sit", "*sits down*", "sits down", Actor::sit_frame, 0},
+};
+
+static const Friend_emote* Friend_find_emote(const std::string& command) {
+	for (const Friend_emote& emote : friend_emotes) {
+		if (command == emote.command) {
+			return &emote;
+		}
+	}
+	return nullptr;
 }
 
 static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, const std::string& text) {
 	if (text.empty()) {
 		return;
 	}
-	const std::string line = (sender.empty() ? std::string("Spectator") : sender) + ": " + text;
+	const std::string who  = sender.empty() ? std::string("Spectator") : sender;
+	std::string       line = who + ": " + text;
+	for (const Friend_emote& emote : friend_emotes) {
+		if (text == emote.text) {    // An emote comes as its "*waves*".
+			line = who + " " + emote.log + ".";
+		}
+	}
 	Friend_mode_log(line);
 	if (speaker) {
 		gwin->get_effects()->add_chat_text(text.c_str(), speaker);
 	} else if (friend_chat_log_hidden) {
 		// Spectators have no body: with the log hidden, near the top.
-		gwin->get_effects()->add_chat_text(line.c_str(), nullptr);
+		Friend_mode_top_line(line);
 	}
 }
 
 // A whisper only the two players see: in the log (or near the top while
 // the log is hidden).
 static void Friend_mode_show_whisper(const std::string& line) {
-	Friend_mode_log(line);
+	Friend_mode_log(line, true);
 	if (friend_chat_log_hidden) {
-		gwin->get_effects()->add_chat_text(line.c_str(), nullptr);
+		Friend_mode_top_line(line, true);
 	}
 }
 
 // Session status shown near the top of the view, like spectator chat.
 static void Friend_mode_notice(const std::string& text) {
 	cout << "Friend Mode: " << text << endl;
-	gwin->get_effects()->add_chat_text(text.c_str(), nullptr);
+	Friend_mode_top_line(text);
 }
 
-// Host: a notice every player sees (joins, leaves, companion changes),
-// except 'except' (a newcomer has its own welcome).
+// A session notice (joins, leaves, companion changes): in the chat log, or
+// near the top while the log is hidden; not both.
+static void Friend_mode_session_notice(const std::string& text) {
+	cout << "Friend Mode: " << text << endl;
+	if (friend_chat_log_hidden) {
+		Friend_mode_top_line(text);
+	} else {
+		Friend_mode_log(text);
+	}
+}
+
+// Host: a notice every player sees, except 'except' (a newcomer has its
+// own welcome).
 static void Friend_mode_announce(const std::string& text, int except = -1) {
-	Friend_mode_notice(text);
-	Friend_mode_log(text);
+	Friend_mode_session_notice(text);
 	if (friend_session.connected()) {
 		const size_t length = std::min<size_t>(text.size(), 120);
 		friend_session.send_blob(Friend_mode_session::Blob_kind::notice,
@@ -435,34 +497,6 @@ static void Friend_mode_announce(const std::string& text, int except = -1) {
 static std::string Friend_mode_actor_name(int npc_num) {
 	Actor* actor = gwin->get_npc(npc_num);
 	return actor ? actor->get_name() : std::string("a companion");
-}
-
-// Emotes, Ultima Online style: "/wave" in the chat line.  The host poses
-// the speaker's actor (guests' requests come as chat) and everyone sees
-// "*waves*" over it.  Quick gestures end by themselves; kneeling and
-// sitting last until the actor moves.
-struct Friend_emote {
-	const char* command;
-	const char* text;
-	int         frame;
-	uint32      ms;    // How long the pose lasts, or 0 until it moves.
-};
-static const Friend_emote friend_emotes[] = {
-		{"/wave", "*waves*", Actor::raise1_frame, 1200},
-		{"/bow", "*bows*", Actor::bow_frame, 1500},
-		{"/point", "*points*", Actor::reach1_frame, 1500},
-		{"/cheer", "*cheers*", Actor::up_frame, 1500},
-		{"/kneel", "*kneels*", Actor::kneel_frame, 0},
-		{"/sit", "*sits down*", Actor::sit_frame, 0},
-};
-
-static const Friend_emote* Friend_find_emote(const std::string& command) {
-	for (const Friend_emote& emote : friend_emotes) {
-		if (command == emote.command) {
-			return &emote;
-		}
-	}
-	return nullptr;
 }
 
 struct Friend_emote_pose {
@@ -650,9 +684,8 @@ enum class Friend_leash_zone { near, straying, beyond };
 static Friend_leash_zone friend_leash_zone = Friend_leash_zone::near;
 
 // While straying, an arrow at the screen edge points back to the Avatar.
-// An arrow at the screen edge from 'from' toward 'to'; with a color, a
-// small mark of it and 'label' just inside the arrow.
-static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to, int color, const std::string& label);
+// An arrow at the screen edge from 'from' toward 'to'.
+static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to);
 
 static void Friend_mode_paint_leash_arrow() {
 	if (friend_session.mode() != Friend_mode_session::Mode::guest || friend_leash_zone == Friend_leash_zone::near) {
@@ -663,10 +696,10 @@ static void Friend_mode_paint_leash_arrow() {
 	if (!actor || actor == avatar) {
 		return;
 	}
-	Friend_mode_paint_arrow(actor->get_tile(), avatar->get_tile(), -1, std::string());
+	Friend_mode_paint_arrow(actor->get_tile(), avatar->get_tile());
 }
 
-static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to, int color, const std::string& label) {
+static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to) {
 	const int        dx   = to.tx - from.tx;
 	const int        dy   = to.ty - from.ty;
 	if (dx == 0 && dy == 0) {
@@ -691,21 +724,10 @@ static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to
 	const int   y      = h / 2 + static_cast<int>(uy * scale);
 	Image_buffer8* buffer = gwin->get_win()->get_ib8();
 	arrow->paint_rle(buffer, x, y);
-	if (color >= 0) {
-		// The player's color and name, a little inward from the arrow.
-		Shape_manager* sman = Shape_manager::get_instance();
-		const int      mx   = x - static_cast<int>(ux * 20);
-		const int      my   = y - static_cast<int>(uy * 20);
-		buffer->fill8(static_cast<unsigned char>(color), 6, 6, mx - 3, my - 3);
-		const int text_w = sman->get_text_width(0, label.c_str());
-		const int lx     = std::clamp(mx - text_w / 2, 2, w - text_w - 2);
-		const int ly     = std::clamp(my + 5, 2, h - sman->get_text_height(0) - 2);
-		sman->paint_text(0, label.c_str(), lx, ly);
-	}
 	gwin->set_painted();
 }
 
-// Each other player's color: a few clear ones from the palette, by player
+// Each player's minimap color: a few clear ones from the palette, by player
 // number.
 static int Friend_player_color(int player) {
 	static const int rgb[][3] = {{63, 12, 12}, {15, 30, 63}, {63, 58, 10}, {15, 58, 15},
@@ -714,64 +736,27 @@ static int Friend_player_color(int player) {
 	return gwin->get_pal()->find_color(c[0], c[1], c[2]);
 }
 
-// Where every player is, for the maps: the Avatar, and each player's
-// companion (just the Avatar in single player).
+// Where every player is, for the corner minimap: the Avatar, and each
+// player's companion (just the Avatar in single player).
 static void Friend_mode_paint_maps() {
 	std::vector<Friend_map_dot> dots;
-	auto add = [&](Actor* actor, int player, const std::string& name) {
+	auto add = [&](Actor* actor, int player) {
 		if (!actor || actor->get_map() != gwin->get_main_actor()->get_map()) {
 			return;
 		}
-		const std::string character = actor == gwin->get_main_actor() ? std::string("Avatar") : actor->get_name();
-		dots.push_back({actor->get_tile(), Friend_player_color(player),
-						name.empty() ? character : name + " (" + character + ")"});
+		dots.push_back({actor->get_tile(), Friend_player_color(player)});
 	};
 	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
 		for (const auto& [player, entry] : friend_players) {
-			add(entry.actor >= 0 ? gwin->get_npc(entry.actor) : nullptr, player, entry.name);
+			add(entry.actor >= 0 ? gwin->get_npc(entry.actor) : nullptr, player);
 		}
 	} else {
-		add(gwin->get_main_actor(), Friend_mode_session::host_player,
-			friend_session.mode() == Friend_mode_session::Mode::host ? friend_player_name : std::string());
+		add(gwin->get_main_actor(), Friend_mode_session::host_player);
 		for (const auto& [player, guest] : friend_guests) {
-			add(guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr, player, guest.name);
+			add(guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr, player);
 		}
 	}
 	Friend_map_paint(dots);
-}
-
-// Arrows toward the other players' companions that are off screen.
-static void Friend_mode_paint_player_arrows() {
-	if (friend_session.mode() == Friend_mode_session::Mode::off || !friend_session.connected()) {
-		return;
-	}
-	Actor* viewer = gwin->get_camera_actor();
-	if (!viewer) {
-		return;
-	}
-	std::vector<std::pair<int, std::pair<int, std::string>>> others;    // Player, NPC, name.
-	if (friend_session.mode() == Friend_mode_session::Mode::host) {
-		for (const auto& [player, guest] : friend_guests) {
-			others.push_back({player, {guest.actor, guest.name}});
-		}
-	} else {
-		for (const auto& [player, entry] : friend_players) {
-			if (player != friend_session.local_player() && player != Friend_mode_session::host_player) {
-				others.push_back({player, {entry.actor, entry.name}});
-			}
-		}
-	}
-	const TileRect view = gwin->get_win_tile_rect();
-	for (const auto& [player, who] : others) {
-		Actor* actor = who.first > 0 ? gwin->get_npc(who.first) : nullptr;
-		if (!actor || actor == viewer || actor->get_map() != viewer->get_map()) {
-			continue;
-		}
-		const Tile_coord at = actor->get_tile();
-		if (!view.has_point(at.tx, at.ty)) {
-			Friend_mode_paint_arrow(viewer->get_tile(), at, Friend_player_color(player), who.second);
-		}
-	}
 }
 
 static void Friend_mode_update_leash_zone(Actor* actor) {
@@ -3849,7 +3834,11 @@ static void Friend_mode_autosave() {
 		gwin->write(true);
 		gwin->save_gamedat(slot, "Co-Op Autosave");
 		cout << "Friend Mode: autosaved to slot " << slot << endl;
-		Friend_mode_log("Autosaved");
+		if (friend_chat_log_hidden) {
+			Friend_mode_top_line("Autosaved");
+		} else {
+			Friend_mode_log("Autosaved");
+		}
 	} catch (exult_exception& /*e*/) {
 		Friend_mode_notice("Autosave failed");
 	}
@@ -3967,7 +3956,10 @@ static void Friend_mode_paint_chat_input() {
 // Guest: while the host is in conversation or has paused the game, explain
 // it in a bar at the bottom of the screen, clear of the conversation (and
 // above the chat line when that is open).  It stays until the wait ends.
+static int friend_status_bar_top = -1;    // Its top this frame, or -1: the chat log sits above it.
+
 static void Friend_mode_paint_dialogue_wait() {
+	friend_status_bar_top = -1;
 	if (friend_session.mode() == Friend_mode_session::Mode::off) {
 		return;
 	}
@@ -4018,6 +4010,7 @@ static void Friend_mode_paint_dialogue_wait() {
 	}
 	Image_buffer8* buffer = gwin->get_win()->get_ib8();
 	buffer->draw_box(x, y, w, h, 1, 0, 15);
+	friend_status_bar_top = y;
 	for (std::size_t i = 0; i < lines.size(); ++i) {
 		const int line_x = x + (w - font->get_text_width(lines[i].c_str())) / 2;
 		font->draw_text(buffer, line_x, y + 4 + static_cast<int>(i) * line_h, lines[i].c_str());
@@ -4025,27 +4018,120 @@ static void Friend_mode_paint_dialogue_wait() {
 	gwin->set_painted();
 }
 
-// The chat log, bottom left: recent lines only, newest at the bottom.
-static void Friend_mode_paint_chat_log() {
-	if (friend_chat_log_hidden || friend_chat_log.empty() || friend_session.mode() == Friend_mode_session::Mode::off) {
+// Lines pinned to the screen rather than the world (the chat log, the
+// notices): their own layer, scaled like overhead chat (the text-effect UI
+// size), with the same white letters and dark shadow; whispers are purple.
+struct Friend_pinned_text {
+	const char* name;
+	int         layer   = -1;
+	int         dest[4] = {0, 0, 0, 0};
+};
+
+// Paint 'lines' (when 'changed') into 'pinned' and place it: its bottom
+// left corner at game point (x, y), or with 'centre_top' its top centre.
+static void Friend_mode_paint_pinned(Friend_pinned_text& pinned, const std::deque<Friend_log_line>& lines,
+		bool& changed, bool shown, int x, int y, bool centre_top) {
+	Image_window* iwin = gwin->get_win();
+	if (!shown || lines.empty()) {
+		if (pinned.layer >= 0 && iwin->layer_is_visible(pinned.layer)) {
+			gwin->layer_set_visible(pinned.layer, false);
+			gwin->set_painted();
+		}
 		return;
-	}
-	const uint32 now = static_cast<uint32>(SDL_GetTicks());
-	while (!friend_chat_log.empty() && now - friend_chat_log.front().time > friend_chat_log_ms) {
-		friend_chat_log.pop_front();
-		gwin->set_all_dirty();    // The line fades out.
 	}
 	Shape_manager* sman   = Shape_manager::get_instance();
 	const int      line_h = sman->get_text_height(0) + 1;
-	int            y      = gwin->get_height() - 44 - static_cast<int>(friend_chat_log.size()) * line_h;
+	int            w      = 8;
+	for (const Friend_log_line& line : lines) {
+		w = std::max(w, sman->get_text_width(0, line.text.c_str()) + 2);
+	}
+	const int h = static_cast<int>(lines.size()) * line_h;
+	if (changed || pinned.layer < 0) {
+		if (pinned.layer >= 0) {
+			gwin->destroy_layer(pinned.layer);
+		}
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As effects.cc's text.
+		pinned.layer               = gwin->create_layer(pinned.name, w, h, 255, 0, text_layer_z);
+		if (pinned.layer < 0) {
+			return;
+		}
+		gwin->layer_set_ui_kind(pinned.layer, Image_window::UiLayerTextEffects);
+		Image_buffer8* lbuf = gwin->get_layer_ibuf(pinned.layer);
+		if (!lbuf) {
+			return;
+		}
+		lbuf->clear_clip();
+		lbuf->fill8(255);    // Fully transparent.
+		// Recolor the font's yellow body, keeping its shadow and outline.
+		const Palette*      pal    = gwin->get_pal();
+		const unsigned char white  = sman->get_special_pixel(PROTECT_PIXEL);
+		const unsigned char purple = static_cast<unsigned char>(pal->find_color(52, 30, 63));
+		unsigned char       plain[256];
+		unsigned char       whisper[256];
+		for (int i = 0; i < 256; ++i) {
+			const bool body = pal->get_red(i) > 35 && pal->get_green(i) > 35 && pal->get_blue(i) < 30;
+			plain[i]        = body ? white : static_cast<unsigned char>(i);
+			whisper[i]      = body ? purple : static_cast<unsigned char>(i);
+		}
+		// Fonts paint into the current render target, not the buffer given.
+		Image_buffer8* prev = gwin->push_render_target(lbuf);
+		int            ly   = 0;
+		for (const Friend_log_line& line : lines) {
+			const int lx = centre_top ? (w - sman->get_text_width(0, line.text.c_str())) / 2 : 0;
+			sman->get_font(0)->paint_text(lbuf, line.text.c_str(), static_cast<int>(line.text.size()), lx, ly,
+					line.whisper ? whisper : plain);
+			ly += line_h;
+		}
+		gwin->pop_render_target(prev);
+		gwin->layer_set_dirty(pinned.layer);
+		changed        = false;
+		pinned.dest[2] = -1;    // Place it again.
+	}
+	const float f = iwin->get_ui_scale_factor(Image_window::UiLayerTextEffects);
+	int         sx;
+	int         sy;
+	iwin->game_to_screen(x, y, false, sx, sy);
+	const int dw      = static_cast<int>(w * f);
+	const int dh      = static_cast<int>(h * f);
+	const int dest[4] = {centre_top ? sx - dw / 2 : sx, centre_top ? sy : sy - dh, dw, dh};
+	if (!std::equal(dest, dest + 4, pinned.dest) || !iwin->layer_is_visible(pinned.layer)) {
+		std::copy(dest, dest + 4, pinned.dest);
+		gwin->layer_set_dest(pinned.layer, dest[0], dest[1], dest[2], dest[3]);
+		gwin->layer_set_visible(pinned.layer, true);
+		gwin->set_painted();
+	}
+}
+
+// Drop lines older than 'ms'.
+static void Friend_mode_expire_lines(std::deque<Friend_log_line>& lines, uint32 ms, bool& changed) {
+	const uint32 now = static_cast<uint32>(SDL_GetTicks());
+	while (!lines.empty() && now - lines.front().time > ms) {
+		lines.pop_front();    // The line fades out.
+		changed = true;
+	}
+}
+
+// The chat log, bottom left: recent lines only, newest at the bottom; and
+// the notices, centred near the top.
+static void Friend_mode_paint_chat_log() {
+	static Friend_pinned_text log{"Chat log"};
+	static Friend_pinned_text notices{"Notices"};
+	const bool                on = friend_session.mode() != Friend_mode_session::Mode::off;
+	Friend_mode_expire_lines(friend_chat_log, friend_chat_log_ms, friend_chat_log_changed);
+	Friend_mode_expire_lines(friend_notices, friend_notice_ms, friend_notices_changed);
+	// The log's bottom 20 pixels above the bottom of the view, 6 from the
+	// left, and clear of the chat line and the status bar (spectating,
+	// following, paused) when those show.
+	int bottom = gwin->get_height() - 20;
 	if (friend_chat_active) {
-		y -= 16;    // Clear of the chat line.
+		auto font = fontManager.get_font("MENU_FONT");
+		bottom    = std::min(bottom, gwin->get_height() - 8 - (font ? font->get_text_height() : 8) - 8 - 3);
 	}
-	for (const Friend_log_line& line : friend_chat_log) {
-		sman->paint_text(0, line.text.c_str(), 6, y);
-		y += line_h;
+	if (friend_status_bar_top >= 0) {
+		bottom = std::min(bottom, friend_status_bar_top - 3);
 	}
-	gwin->set_painted();
+	Friend_mode_paint_pinned(log, friend_chat_log, friend_chat_log_changed, on && !friend_chat_log_hidden, 6, bottom, false);
+	Friend_mode_paint_pinned(notices, friend_notices, friend_notices_changed, true, gwin->get_width() / 2, 4, true);
 }
 
 // Hold Tab: a list of the players, their characters and health.
@@ -4332,10 +4418,13 @@ static void Friend_apply_party_members(const std::vector<uint32>& members) {
 	}
 }
 
-static bool Friend_actor_is_eligible(uint32 npc_num) {
+// A companion a guest can take: in the party and alive, and awake and able
+// to move unless the guest is 'keeping' one it already had (after a load or
+// a rejoin), which it keeps asleep or paralyzed too.
+static bool Friend_actor_is_eligible(uint32 npc_num, bool keeping) {
 	Actor* actor = gwin->get_npc(npc_num);
-	if (!actor || actor == gwin->get_main_actor() || actor->is_dead() || actor->get_flag(Obj_flags::asleep)
-		|| actor->get_flag(Obj_flags::paralyzed)) {
+	if (!actor || actor == gwin->get_main_actor() || actor->is_dead()
+		|| (!keeping && (actor->get_flag(Obj_flags::asleep) || actor->get_flag(Obj_flags::paralyzed)))) {
 		return false;
 	}
 	Party_manager* party = gwin->get_party_man();
@@ -4511,29 +4600,35 @@ public:
 		const int text_width = x2 - text_left - 8;
 		auto name_font = selected ? hot_font : font;
 		name_font->center_text(buffer, text_left + text_width / 2, y1 + 13, actor->get_name().c_str());
-		int line_y = y1 + 34;
-		std::size_t line_start = 0;
-		while (line_start <= description.size()) {
-			const std::size_t line_end = description.find('\n', line_start);
-			const std::string line = description.substr(line_start, line_end - line_start);
-			std::vector<std::string> words;
-			std::istringstream line_stream(line);
-			std::string word;
-			int line_width = 0;
-			const int space_width = font->get_text_width(" ");
-			while (line_stream >> word) {
-				if (!words.empty()) {
-					line_width += space_width;
-				}
-				line_width += font->get_text_width(word.c_str());
-				words.push_back(word);
-			}
+		// Each line of the description, wrapped to the text area and centred.
+		const int   space_width = font->get_text_width(" ");
+		int         line_y      = y1 + 34;
+		auto        paint_line  = [&](const std::vector<std::string>& words, int line_width) {
 			int word_x = text_left + (text_width - line_width) / 2;
 			for (const std::string& current_word : words) {
 				font->paint_text(buffer, current_word.c_str(), word_x, line_y);
 				word_x += font->get_text_width(current_word.c_str()) + space_width;
 			}
 			line_y += font->get_text_height() + 2;
+		};
+		std::size_t line_start = 0;
+		while (line_start <= description.size()) {
+			const std::size_t        line_end = description.find('\n', line_start);
+			std::istringstream       line_stream(description.substr(line_start, line_end - line_start));
+			std::vector<std::string> words;
+			std::string              word;
+			int                      line_width = 0;
+			while (line_stream >> word) {
+				const int word_width = font->get_text_width(word.c_str());
+				if (!words.empty() && line_width + space_width + word_width > text_width) {
+					paint_line(words, line_width);
+					words.clear();
+					line_width = 0;
+				}
+				line_width += (words.empty() ? 0 : space_width) + word_width;
+				words.push_back(word);
+			}
+			paint_line(words, line_width);
 			if (line_end == std::string::npos) {
 				break;
 			}
@@ -5847,7 +5942,7 @@ static void Handle_events() {
 				if (hold != friend_rejoin_holds.end()) {
 					friend_rejoin_holds.erase(hold);
 				}
-				if (kept >= 0 && Friend_actor_is_eligible(static_cast<uint32>(kept))
+				if (kept >= 0 && Friend_actor_is_eligible(static_cast<uint32>(kept), true)
 					&& Friend_actor_is_free(static_cast<uint32>(kept), joined) && gwin->reserve_friend_mode_actor(kept)) {
 					// Back from a drop: straight to its companion, no picker.
 					guest.actor       = kept;
@@ -5942,7 +6037,7 @@ static void Handle_events() {
 							continue;
 						}
 						const auto actor_num = static_cast<uint32>(guest.actor);
-						if (Friend_actor_is_eligible(actor_num) && gwin->reserve_friend_mode_actor(guest.actor)) {
+						if (Friend_actor_is_eligible(actor_num, true) && gwin->reserve_friend_mode_actor(guest.actor)) {
 							friend_session.accept_actor(actor_num, player);
 							Actor* actor     = gwin->get_npc(guest.actor);
 							guest.last_state = actor->get_tile();
@@ -6305,8 +6400,7 @@ static void Handle_events() {
 						}
 					}
 					if (!text.empty()) {
-						Friend_mode_notice(text);
-						Friend_mode_log(text);
+						Friend_mode_session_notice(text);
 					}
 				}
 			}
@@ -6722,10 +6816,7 @@ static void Handle_events() {
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
 		Friend_mode_paint_maps();
-		if (!Friend_map_shown()) {
-			Friend_mode_paint_leash_arrow();
-			Friend_mode_paint_player_arrows();
-		}
+		Friend_mode_paint_leash_arrow();
 		Friend_mode_paint_dialogue_wait();
 		Friend_mode_paint_chat_input();
 		Friend_mode_paint_chat_log();
@@ -6906,17 +6997,11 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
  */
 
 static void Handle_event(SDL_Event& event) {
-	if (!friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_U && !event.key.repeat
-		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()
-		&& gwin->get_main_actor()) {
-		Friend_map_toggle();    // U: the world map with every player on it.
-		return;
-	}
 	if (friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active
 		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_L && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
 		friend_chat_log_hidden = !friend_chat_log_hidden;    // L: hide or show the chat log.
-		gwin->set_all_dirty();
+		Friend_mode_notice(friend_chat_log_hidden ? "Chat Log Disabled" : "Chat Log Enabled");
 		return;
 	}
 	if (friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active

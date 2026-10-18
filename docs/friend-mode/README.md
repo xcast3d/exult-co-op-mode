@@ -72,6 +72,86 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Test round, 2026-10-18 (no protocol change).** Host and two guests on
+one Mac.
+
+Second pass, working: minimap dots, dungeon hiding and the setting kept;
+U doing nothing; whispers; no arrows to other players; the player list
+(Tab); J picker; Tab completion; rejoin within 3 minutes (straight back
+into Spark); the spectator camera (X); autosave rotating through slots
+997-999; dismissal in conversation; a host load without a guest's
+companion; a co-op save loaded in single player. Found and changed:
+
+- **Knocked out or asleep sent the guest to spectating.** The guest's own
+  safety check (`Game_window::enforce_friend_mode_control_safety`, made
+  for local possession) dropped control while its companion was asleep
+  (which is also how Exult knocks people out) or paralyzed. A network
+  guest now keeps it: the host refuses its moves meanwhile and frees it
+  only if it dies or leaves the party. A rejoin or host load also keeps
+  a companion that is asleep (`Friend_actor_is_eligible(..., keeping)`),
+  and the guest takes it back asleep (`take_friend_mode_control`).
+- **Emote asterisks were invisible:** U7's font 0 (overhead text) has a
+  blank '*'. `Font::add_missing_asterisk()` draws one in the font's yellow
+  and black outline when the fonts load.
+- **L** now says "Chat Log Disabled" / "Chat Log Enabled".
+- **The chat log showed at the top left, too big, and vanished when you
+  walked.** Its layer was placed right, but fonts paint into the current
+  render target, not the buffer they are given, so the lines went into the
+  game view's top left (wiped by the next repaint) and the layer stayed
+  empty. It now switches the render target to its layer, as overhead text
+  does, so it stays pinned bottom left at the overhead text's size.
+
+- **Notices were anchored in the world too** (overhead-style text at a
+  map spot near the top, left behind as you walked). Notices, and
+  spectator chat or whispers while the log is hidden, are now pinned like
+  the log: centred near the top, 3 lines at most, 4 seconds each
+  (`Friend_mode_paint_pinned` paints both). The log's bottom moved to 20
+  pixels above the bottom of the view.
+
+- **The chat log overlapped the status bar** ("Spectating. J: choose a
+  companion...", following, paused). The bars stay where they are (clear
+  of conversations); the log now stacks above whichever shows, as it does
+  above the chat line.
+- **Picker descriptions ran off the card** ("Longtime friend of the
+  Avatar"). The card now wraps each line to its width.
+- **Session notices showed twice** (near the top and in the log). Joins,
+  leaves, companion changes and the host's "Autosaved" now go to the log
+  while it is shown, and near the top only while it is hidden, like
+  whispers (`Friend_mode_session_notice`). Notices for this machine alone
+  ("Joined Marc's world", "Chat Log Enabled") stay near the top.
+- **Backlog:** Return to Main Menu (in the brief's "Co-op quality of
+  life").
+
+Retested and working after these fixes: asleep companions stay the
+guest's; L's notices; the chat log pinned bottom left; notices pinned
+near the top; session notices in one place; the log above the status
+bar; the picker card's wrapped text.
+
+Still to test from this round: emote asterisks (drawn into font 0); the
+chat log's size and whisper color after the pinning fix; a companion
+dying (not just knocked out), knocked out and paralyzed; a rejoin or
+host load while asleep; "Iolo is free again" after 3 minutes; held items
+in saves; the minimap slowdown check; then four players, scripted events
+and the Phase 7 leftovers.
+
+First pass, working: the corner minimap, chat, the chat log, whispers.
+Changed after that (retested in the second pass unless noted):
+
+- **World map on U shelved.** With the current leash everyone is near the
+  Avatar, so the corner minimap is enough. The code is kept, unbuilt, in
+  [shelved/world-map.cc](shelved/world-map.cc), with how to bring it back.
+  U does nothing now.
+- **Arrows to other players removed** (messy, and the minimap shows where
+  everyone is). The arrow back to the Avatar stays.
+- **Minimap dots halved:** 2x2 in the player's color with a black edge.
+- **Chat log restyled:** its own layer, scaled like overhead chat (the
+  text-effect UI size) instead of with the game view, white letters with
+  the font's dark shadow, whispers in purple, its bottom 30 pixels above
+  the bottom of the view (it was 44).
+- **Emotes in the log** read "Marc bows." instead of "Marc: *bows*" (still
+  "*bows*" over the actor). Guests recognize an emote by its text, so a
+  player typing "*bows*" gets the same.
+
 **Maps, built 2026-10-17; not tested yet** (no protocol change). Both are
 drawn from the ground under each map chunk, so towns show as floors
 without walls ([friendmap.cc](../../friendmap.cc)).
@@ -89,7 +169,7 @@ without walls ([friendmap.cc](../../friendmap.cc)).
 tested yet.** See "Co-op quality of life" in the
 [test checklist](test-checklist.md).
 
-- **Keys:** **U** world map; hold **Tab** for the player list (Player, Character,
+- **Keys:** **U** world map (since shelved); hold **Tab** for the player list (Player, Character,
   Health); **J** opens the companion picker (it was Tab); **L** hides or
   shows the chat log; **X** (spectating) watches the next player; **E**
   follows the Avatar. In the chat line, **Tab** completes a player's name

@@ -127,6 +127,9 @@ public:
 	}
 
 	int center_text(Image_buffer8* iwin, int x, int y, const char* s, unsigned char* trans = nullptr);
+	// Draw an asterisk into a font that has only a blank one (Ultima VII's
+	// font 0, used for overhead text), so "*waves*" shows.
+	void add_missing_asterisk();
 };
 
 /*

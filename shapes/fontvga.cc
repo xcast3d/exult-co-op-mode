@@ -83,4 +83,7 @@ void Fonts_vga_file::init(
 				= (vlead_overrides && static_cast<int>(i) < num_overrides) ? vlead_overrides[i] : (i < vlead.size() ? vlead[i] : 0);
 		fonts[i] = std::make_shared<Font>(font_source, font_patch, i, i < hlead.size() ? hlead[i] : 0, vl);
 	}
+	if (!fonts.empty() && fonts[0]) {
+		fonts[0]->add_missing_asterisk();    // For emotes over actors.
+	}
 }

@@ -361,8 +361,9 @@ after Phase 8.
       without the picker.
 - [x] **Player list.** A simple overlay: Player | Character | Health. Hold
       Tab; the companion picker moved to J.
-- [x] **Arrows to other players.** Like the arrow back to the Avatar when
-      out of range, one per player, each in its own color.
+- [ ] ~~**Arrows to other players.**~~ Built, then removed after testing
+      (2026-10-18): messy on screen, and the corner minimap already shows
+      where everyone is. Only the arrow back to the Avatar stays.
 - [ ] **Suggest a reply.** During the Avatar's conversation, a guest clicks
       a keyword to highlight it on the host's screen with their name. The
       Avatar still chooses. Few U7 choices really matter, but it lets
@@ -384,16 +385,29 @@ after Phase 8.
       and keeps updated ("Find Christopher's murderer") as a reminder for
       the companions. No quest log or guide arrows.
 
-- [x] **World map with player dots.** U toggles a whole-world overview
-      (Exult's cheat map, drawn from each chunk's ground colours, one
-      pixel per chunk, made in memory) with a dot per player in their
-      arrow color. Small.
+- [ ] **World map with player dots (shelved).** U toggled a whole-world
+      overview (Exult's cheat map, drawn from each chunk's ground colours,
+      one pixel per chunk, made in memory) with a dot per player. Built,
+      then shelved after testing (2026-10-18): with the current leash
+      everyone is near the Avatar, so the corner minimap is enough. The
+      code is kept, unbuilt, in
+      [shelved/world-map.cc](friend-mode/shelved/world-map.cc), with how to
+      bring it back.
 - [x] **Corner minimap (option, off by default).** A small map of the
       ground around your character with player dots, overworld only.
       Walls and roofs are objects, so towns show as floors without walls.
       In dungeons (`Game_window::is_in_dungeon`) it hides at first; a later
       version could show only the dungeon chunks the party has visited,
       kept in the save and shared by every player.
+
+- [ ] **Return to Main Menu.** Exult has none: the game menu's Quit exits,
+      and upstream left a stub (`Gamemenu_gump::quit`, "IMPLEMENT
+      RETURN_TO_MENU"). Leaving to the title screen would close any co-op
+      session cleanly (guests see the host leave, a guest frees its
+      companion) and reset the world, gumps and layers before running the
+      title menu again, so switching between hosting and joining needs no
+      restart. Exult's restart path (`QUIT_TIME_RESTART`, `gwin->read()`)
+      is a start. Asked for 2026-10-18.
 
 Later: players' positions on the cloth map (M); pings to point at a spot
 or object (more useful with a longer leash).

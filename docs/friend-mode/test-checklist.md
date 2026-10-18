@@ -530,41 +530,57 @@ config and gamedat. The host needs a party with at least two companions
 
 ## Co-op quality of life (built 2026-10-17, protocol version 29)
 
-- [ ] **Player list:** hold Tab on the host and on a guest: Player,
+- [x] **Player list:** hold Tab on the host and on a guest: Player,
       Character and Health for everyone; spectators show "Spectating", a
       following companion "(following)". Let go and it closes.
-- [ ] **Picker on J:** J opens the companion picker (J does nothing in the
+- [x] **Picker on J:** J opens the companion picker (J does nothing in the
       journal or chat line).
-- [ ] **Rejoin:** close a guest that has Iolo: "<name> has left; Iolo
+- [x] **Picker card text:** a long description ("Longtime friend of the
+      Avatar") wraps inside the card.
+- [x] **Rejoin:** close a guest that has Iolo: "<name> has left; Iolo
       follows the party until they return", and the other guest's picker
       doesn't offer Iolo. Rejoin with the same name within 3 minutes: no
-      picker, straight into Iolo, "<name> is back as Iolo". Wait 3 minutes
-      instead: "Iolo is free again".
+      picker, straight into Iolo, "<name> is back as Iolo".
+- [ ] **Rejoin too late:** wait 3 minutes instead: "Iolo is free again".
 - [ ] **Chat log:** chat, whispers and session notices (joins, leaves,
-      switches, autosaves on the host) show bottom left and fade after
-      about 20 seconds; L hides and shows it. Spectator chat shows in the
+      switches, autosaves on the host) show bottom left, 20 pixels above
+      the bottom, in white letters the size of overhead chat (whispers in
+      purple), and fade after about 20 seconds; L hides and shows it, with
+      "Chat Log Disabled" / "Chat Log Enabled" (those work). It stays put
+      while you walk. (2026-10-18: it showed top left and vanished on
+      walking; fixed, retest.) Spectator chat shows in the
       log (near the top only while the log is hidden).
-- [ ] **Whispers:** `/w <name> text` from a guest to the other guest, to
+- [x] **Notices in one place:** a join, leave or switch shows in the log
+      only (not near the top too); with the log hidden (L), near the top
+      only.
+- [x] **Log above the bars:** while spectating (or following, or with the
+      host paused), the log sits above the bar, and above the chat line
+      too when that is open.
+- [x] **Notices stay on screen:** joins, switches, "Chat Log Enabled" and
+      spectator chat with the log hidden show centred near the top and
+      stay there while you walk, then go after a few seconds.
+- [x] **Whispers:** `/w <name> text` from a guest to the other guest, to
       the host, and from the host to a guest: only those two see it,
       "[to Name]" and "[Name whispers]". A name with a space works; an
       unknown name gets "Whisper to whom?".
-- [ ] **Tab completion:** in the chat line, `/w J` + Tab gives `/w Jeff `;
+- [x] **Tab completion:** in the chat line, `/w J` + Tab gives `/w Jeff `;
       Tab again cycles to the next player starting with J; `/wa` + Tab gives
       `/wave `; no match flashes a red X. Holding Tab outside the chat line
       still shows the player list.
 - [ ] **Emotes:** `/wave`, `/bow`, `/point`, `/cheer` pose for a moment;
       `/kneel` and `/sit` until you move. Everyone sees "*waves*" over the
-      actor. From the host (the Avatar) and from a guest. A spectator gets
+      actor (the asterisks were invisible: font 0 has none, so one is drawn
+      in now), and "Marc waves." in the log. From the host (the Avatar) and from a guest. A spectator gets
       "Spectators have no one to move"; anything else starting with "/"
       lists the commands.
-- [ ] **Arrows to players:** a companion another player controls, off
-      screen, gets an arrow at the edge with a colored mark and the
-      player's name; each player has their own color.
-- [ ] **Spectator camera:** a spectating guest presses X: "Watching Iolo
+- [x] **No arrows to players:** off-screen companions of other players
+      get no edge arrow (removed); a straying guest still gets the green
+      arrow back to the Avatar.
+- [x] **Spectator camera:** a spectating guest presses X: "Watching Iolo
       (Marc)", the view follows Iolo; X again goes to the next player and
       back to the Avatar. If the watched player switches or leaves, the
       view goes back to the Avatar.
-- [ ] **Autosave:** with a guest connected, the host autosaves every 5
+- [x] **Autosave:** with a guest connected, the host autosaves every 5
       minutes ("Autosaved" in the host's log) into "Co-Op Autosave" slots
       997-999, over the oldest; your own saves stay untouched. Load one.
 - [ ] **Held item in saves:** a guest holds an item (mid-drag) while the
@@ -573,29 +589,34 @@ config and gamedat. The host needs a party with at least two companions
 
 ## Maps
 
-- [ ] **U** opens the world map on the host, on a guest and in single
-      player: the world fills in within a second or two, with a dot and a
-      key line for the Avatar and for each player's companion, in the same
-      colors as their arrows. The game keeps running (players move on the
-      map). U again closes it. U does nothing in the journal or chat line.
-- [ ] Game Engine options → "Corner minimap: Yes": a small map at the top
-      right follows your view, with player dots; it is gone in a dungeon
-      and back outside. The setting is kept after restarting Exult.
+The world map on U is shelved (see
+[shelved/world-map.cc](shelved/world-map.cc)); U does nothing now.
+
+- [x] Game Engine options → "Corner minimap: Yes": a small map at the top
+      right follows your view, with player dots (2026-10-18; the dots were
+      then halved, to 2x2 with a black edge).
+- [x] The minimap's smaller dots are still easy to see.
+- [x] Dungeon: the minimap hides, and comes back outside.
+- [x] The setting is kept after restarting Exult.
 - [ ] No slowdown with the corner minimap on (walk around a town).
 
 ## Losing a companion, and four players (Phase 6, M5)
 
-- [ ] A guest's companion dies in a fight: everyone sees "<companion> has
+- [ ] A guest's companion dies in a fight (not just knocked out): everyone sees "<companion> has
       fallen; <name> is now spectating", and that guest's picker opens
       with the free companions.
-- [ ] The Avatar dismisses a guest's companion in conversation ("leave"):
+- [x] The Avatar dismisses a guest's companion in conversation ("leave"):
       after the conversation, "<companion> has left the party; ..." and
       the guest's picker opens.
-- [ ] A guest's companion is put to sleep or paralyzed: it stays theirs.
-- [ ] The host loads a save where a guest's companion isn't in the party:
+- [x] A guest's companion is put to sleep: it stays theirs, and they move
+      it again when it wakes (2026-10-18, after a fix: the guest had gone
+      to spectating).
+- [ ] The same for knocked out and paralyzed, and for a rejoin or a host
+      load while it is asleep.
+- [x] The host loads a save where a guest's companion isn't in the party:
       "... is not in the party in this save; <name> is now spectating", and
       the picker opens; the other guest keeps its companion.
-- [ ] Save on the host while guests hold companions, load it in single
+- [x] Save on the host while guests hold companions, load it in single
       player: every companion follows the Avatar.
 - [ ] Four players: host plus three guests, each on its own companion
       (needs three companions in the party). Third guest:

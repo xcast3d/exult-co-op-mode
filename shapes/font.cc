@@ -29,6 +29,9 @@
 #include "ignore_unused_variable_warning.h"
 #include "vgafile.h"
 
+#include <memory>
+#include <vector>
+
 using std::size_t;
 using std::string;
 using std::strncmp;
@@ -808,6 +811,47 @@ int Font::load(const File_spec& fname0, const File_spec& fname1, int index, int 
 
 int Font::center_text(Image_buffer8* win, int x, int y, const char* s, unsigned char* trans) {
 	return draw_text(win, x - get_text_width(s) / 2, y, s, trans);
+}
+
+void Font::add_missing_asterisk() {
+	if (!font_shapes || font_shapes->get_num_frames() <= '*') {
+		return;
+	}
+	Shape_frame* blank = font_shapes->get_frame('*');
+	Shape_frame* x     = font_shapes->get_frame('x');
+	if (!blank || !blank->is_rle() || blank->get_width() > 1 || !x || !x->is_rle()) {
+		return;    // It has one, or the font isn't like font 0.
+	}
+	// A 5x5 star in the font's yellow inside its black outline, as wide and
+	// as high above the baseline as 'x'.
+	constexpr unsigned char body    = 51;
+	constexpr unsigned char outline = 0;
+	constexpr const char*   star[5] = {"X.X.X", ".XXX.", "XXXXX", ".XXX.", "X.X.X"};
+	const int               w       = 9;
+	const int               h       = x->get_height();
+	const int               yabove  = x->get_yabove();
+	std::vector<unsigned char> pixels(w * h, 255);    // Transparent.
+	auto                       is_body = [&](int px, int py) {
+		const int sx = px - 2;
+		const int sy = py - 3;
+		return sx >= 0 && sx < 5 && sy >= 0 && sy < 5 && star[sy][sx] == 'X';
+	};
+	for (int py = 0; py < h; ++py) {
+		for (int px = 0; px < w; ++px) {
+			if (is_body(px, py)) {
+				pixels[py * w + px] = body;
+				continue;
+			}
+			for (int dy = -1; dy <= 1; ++dy) {
+				for (int dx = -1; dx <= 1; ++dx) {
+					if (is_body(px + dx, py + dy)) {
+						pixels[py * w + px] = outline;
+					}
+				}
+			}
+		}
+	}
+	font_shapes->set_frame(std::make_unique<Shape_frame>(pixels.data(), w, h, 0, yabove, true), '*');
 }
 
 void Font::calc_highlow() {
