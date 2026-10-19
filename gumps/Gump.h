@@ -154,6 +154,25 @@ protected:
 	void center_rect_on_screen(const TileRect& rect);
 
 public:
+	// Items with no spot in a container window yet (bought, given, picked
+	// up without the mouse) go to the first free place in a loose grid,
+	// instead of piling up from the top left corner.  An option
+	// (config/gameplay/smart_placement, on by default).
+	static bool smart_placement;
+	// A "Sort" button under the checkmark of a container in someone's
+	// inventory (the same as Shift+C).  An option (config/gameplay/sort_key, on by default),
+	// for windows opened after it is set.
+	static bool sort_button;
+
+	// Lay the window's items out in rows, sorted by kind: weapons, armour,
+	// ammunition, bags, potions, food, reagents, keys, money and gems,
+	// things to read, the rest; look-alikes stacked.  False unless the
+	// window is a container in someone's inventory.
+	bool sort_objects();
+	// A container in someone's inventory (a backpack, a bag in it): the
+	// windows that sort.
+	bool is_inventory_container() const;
+
 	const Gump_elems& get_elems() const {
 		return elems;
 	}

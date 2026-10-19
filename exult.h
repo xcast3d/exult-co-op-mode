@@ -68,6 +68,9 @@ extern bool Friend_targeting_furniture;      // Chairs, candles, anvils... (off)
 extern bool Friend_targeting_interactive;    // Doors, shutters, lamps (off).
 extern bool Friend_targeting_levers;         // Levers and switches (on).
 extern bool Friend_targeting_signs;          // Signs, plaques, tombstones (on).
+// Shift+C sorts the newest open container window (on); smart placement is
+// Gump::smart_placement.
+extern bool Friend_sort_key;
 void        Friend_targeting_load_settings();
 void        Friend_targeting_save_settings();
 

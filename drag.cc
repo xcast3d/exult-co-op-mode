@@ -899,6 +899,11 @@ bool Dragging_info::place(Container_game_object* dest, int spot, int count) {
 	if (dest) {
 		if (Check_weight(gwin, to_drop, dest)) {
 			Actor* holder = dest->as_actor();
+			if (spot < 0) {
+				// No spot in the window yet: Gump::paint finds it one
+				// (its old spot was a map tile, or another window's).
+				to_drop->set_shape_pos(255, 255);
+			}
 			placed        = spot >= 0 ? holder && holder->add_readied(to_drop, spot) : dest->add(to_drop, false, true);
 			if (!placed) {
 				Mouse::mouse()->flash_shape(Mouse::wontfit);

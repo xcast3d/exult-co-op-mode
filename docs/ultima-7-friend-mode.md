@@ -412,8 +412,12 @@ upstream.
     - one's own item: used if it has a use; worn or wielded ones are
       readied or put away, swapping out what is in their spot (put back
       if that fails); anything else is dropped at one's feet after
-      "Drop the gem? Space again".
-    - Not okay to take: "Not yours: Space again to take". Shift is the
+      "Drop the gem? Space again". Shift+Space always drops one's own
+      item at once (a stack: how many).
+    - Books, scrolls (letters and notes) and the cloth map: Space reads
+      them wherever they are; Shift+Space picks them up, or drops one's
+      own.
+    - Not okay to take: "Steal? Space again". Shift is the
       "more" key: on a stack it asks how many; on a single item in a
       window it takes everything there (asking once if any of it isn't
       yours).
@@ -430,6 +434,26 @@ upstream.
     levers (Shift picks furniture up). The groups are our own shape lists;
     see [targeting groups](friend-mode/targeting-groups.md), with the
     borderline items to review.
+  - **What Space does** (2026-10-19). Under "Targeting Spark" a second
+    line says what Space and Shift+Space would do with the pick: "Talk
+    (Space)", "Open (Space)  Pick up (Shift+Space)", "Take (Space)  Split
+    (Shift+Space)", "Use (Space)", "Read (Space)  Take (Shift+Space)",
+    "Ready (Space)", "Attack (Space)", and "Steal (Space)" for anything
+    taking would be a crime (`Friend_space_hint`, worked out by the same
+    rules as Space).
+  - **Tidy containers** (2026-10-19). Smart pickup placement: an item
+    with no spot in a container window yet (taken with Space, bought,
+    given by a script) goes to the first free place in a loose grid
+    instead of piling up in the top left corner (`Gump::paint`, which also
+    fixes Exult's own pile of purchases). **Shift+C**, or the **Sort**
+    button under the checkmark, sorts a container in someone's inventory
+    (a backpack, a bag in it; chests and bodies keep their layout) by
+    kind: weapons, armour, ammunition, bags, potions, food, reagents,
+    keys, money and gems, things to read, the rest. Rows run across the
+    whole window, then down, round again when full; look-alikes (seven
+    loaves of bread) lie on each other a couple of pixels apart, as a
+    stack (`Gump::sort_objects`, `Sort_button` in Gump.cc). Both are options on the Target
+    System page, on by default, shown even with targeting off.
   - **Backpacks and paperdolls by key** (2026-10-19). 1 to 8 open a party
     member's paperdoll as before, and pressing it again shuts it.
     Shift+1 to Shift+8 open or shut that member's backpack; Shift+I opens
@@ -545,7 +569,7 @@ after Phase 8.
       skipping the intro (`--skip-intro`).
 - [ ] **Keyboard command list in game** (asked for 2026-10-18, once the
       in-game features are done): every key, including Friend Mode's (J,
-      L, X, Y, Q, E, Space, Shift+I, 1-8 and Shift+1-8, Tab, WASD,
+      L, X, Y, Q, E, Space, Shift+I, Shift+C, 1-8 and Shift+1-8, Tab, WASD,
       Shift+W/S, chat commands).
 - [ ] **Feature list for the project webpage** (same time): every
       feature and enhancement Friend Mode adds, written for players.

@@ -736,6 +736,10 @@ resolution.
       scaled in UI options); Space takes one into the pack (a stack of gold
       with no "how many?") and the next is picked. Escape closes the
       window and E is on the world again.
+- [x] **Staying in place:** a chest with 12 things, E to the 9th, Space:
+      the pick moves to what is now 9th (the 10th before), not back to the
+      first; taking the last picks the one before it. Dropping from your
+      own pack does the same.
 - [x] **Shift:** Shift+Space on 30 gold: "How many?" 10 → 10 taken, 20
       left. Shift+Space on a single item in a body: everything taken.
       Shift+Space on a bag on the floor picks the bag up.
@@ -776,6 +780,47 @@ resolution.
 - [x] **Space closes signs:** Space on a sign reads it; Space again
       closes it. A book: Space turns the pages, then closes. A crosshair
       (a key on a door) is not answered by Space.
+
+## Reading with Space (2026-10-19)
+
+- [x] **On the floor or in a chest:** E on a book, scroll or letter: Space
+      reads it and leaves it there; Shift+Space picks it up (one item,
+      not the whole chest).
+- [x] **In your pack:** Space reads it; Shift+Space drops it beside you,
+      with no confirm.
+
+## Tidy containers (2026-10-19)
+
+- [x] **Smart placement:** with the backpack open, take five things with
+      E and Space: each lands in a free place, not on top of each other in
+      the top left. Buy something from a shop: same.
+- [x] **Shift+C:** a messy backpack open: Shift+C lays it out by kind,
+      in rows across the whole window, top to bottom; look-alikes (bread,
+      arrows of one kind) stacked a couple of pixels apart. A chest open
+      and no backpack: "No backpack open".
+- [x] **Sort button:** "Sort", a little below the checkmark, on backpacks
+      and bags in someone's inventory only (not chests, bodies,
+      paperdolls); it sorts that window.
+- [x] **Options:** Target System page: "Smart pickup placement" and "Sort
+      container (Shift+C)" show even with Enable off; turning them off
+      brings back the old pile, and Shift+C does nothing.
+
+## What Space does (2026-10-19)
+
+- [x] Under each "Targeting ..." a second line: a person "Talk (Space)"
+      (a deer or rat "Attack (C, then Space)"; on a guest, anyone but a
+      merchant or trainer "Avatar only")
+      (in combat "Attack (Space)", while attacking it "Pause (Space)"); a
+      chest "Open (Space)", a bag on the floor "Open (Space)  Pick up
+      (Shift+Space)"; a stack in a chest "Take (Space)  Split
+      (Shift+Space)", a single item there "Take (Space)  Take all
+      (Shift+Space)"; a lamp post "Use (Space)"; a sign "Read (Space)"; a
+      book "Read (Space)  Take (Shift+Space)"; in the pack a potion "Use
+      (Space)  Drop (Shift+Space)", a sword "Ready (Space)  Drop
+      (Shift+Space)" or "Put away (Space)  Drop (Shift+Space)", a gem
+      "Drop (Space)", food "Use (Space)  Drop some (Shift+Space)";
+      Shift+Space drops at once (a stack asks how many). A shop item says "Steal (Space)", and Space asks "Steal?
+      Space again". Each matches what Space then does.
 
 ## Maps
 

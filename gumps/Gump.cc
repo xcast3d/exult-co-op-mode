@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "Dynamic_text_widget.h"
 #include "Gump_button.h"
 #include "Gump_manager.h"
+#include "Text_button.h"
 #include "U7obj.h"
 #include "cheat.h"
 #include "contain.h"
@@ -406,6 +407,154 @@ bool Gump::add(
 	return true;
 }
 
+bool Gump::smart_placement = true;
+bool Gump::sort_button     = true;
+
+namespace {
+	// The sort button: one of Exult's drawn text buttons, "Sort".
+	class Sort_button : public Text_button {
+	public:
+		Sort_button(Gump* par, int px, int py) : Text_button(par, "Sort", px, py) {}
+
+		bool activate(MouseButton button) override {
+			auto* gump = dynamic_cast<Gump*>(parent);
+			if (button == MouseButton::Left && gump) {
+				gump->sort_objects();
+				return true;
+			}
+			return false;
+		}
+	};
+}    // namespace
+
+/*
+ *  Is this window a container in someone's inventory (a backpack, a bag in
+ *  it)?  Only those get sorted: a chest or a body keeps its own layout.
+ */
+
+bool Gump::is_inventory_container() const {
+	if (!container || container->as_actor()) {
+		return false;
+	}
+	Game_object* outer = container->get_outermost();
+	return outer != container && outer->as_actor();
+}
+
+/*
+ *  Lay the items out in rows, grouped by kind (see Gump.h).  Rows that
+ *  don't fit wrap round onto the first, overlapping.
+ */
+
+bool Gump::sort_objects() {
+	if (!is_inventory_container()) {
+		return false;
+	}
+	auto kind = [](Game_object* obj) {
+		const Shape_info& info  = obj->get_info();
+		const int         shape = obj->get_shapenum();
+		if (info.get_weapon_info()) {
+			return 0;
+		}
+		if (info.get_armor_info()) {
+			return 1;
+		}
+		if (info.get_ammo_info()) {
+			return 2;
+		}
+		if (info.get_shape_class() == Shape_info::container) {
+			return 3;
+		}
+		if (!GAME_BG) {
+			return 10;
+		}
+		switch (shape) {
+		case 340:    // Potion.
+			return 4;
+		case 377:    // Food.
+		case 616:    // Bottle.
+		case 772:    // Honey.
+			return 5;
+		case 842:    // Reagent.
+			return 6;
+		case 641:    // Key.
+		case 627:    // Lockpick.
+			return 7;
+		case 644:    // Gold coins, nuggets and bars, gems.
+		case 645:
+		case 646:
+		case 760:
+			return 8;
+		case 642:    // Book, scroll, cloth map.
+		case 797:
+		case 178:
+			return 9;
+		default:
+			return 10;
+		}
+	};
+	std::vector<Game_object*> items;
+	Object_iterator           next(container->get_objects());
+	while (Game_object* obj = next.get_next()) {
+		if (obj->get_shape()) {
+			items.push_back(obj);
+		}
+	}
+	std::stable_sort(items.begin(), items.end(), [&kind](Game_object* a, Game_object* b) {
+		const int ka = kind(a);
+		const int kb = kind(b);
+		if (ka != kb) {
+			return ka < kb;
+		}
+		if (a->get_shapenum() != b->get_shapenum()) {
+			return a->get_shapenum() < b->get_shapenum();
+		}
+		return a->get_framenum() < b->get_framenum();
+	});
+	// Rows across the whole area, left to right, then the next row down;
+	// when the area is full, round again a little lower, overlapping.
+	// Look-alikes (same shape and frame) lie on top of each other, each a
+	// pixel or two further, so they read as a stack.
+	constexpr int gap   = 0;    // Between neighbours.
+	constexpr int fan   = 2;    // Between the pieces of a stack.
+	constexpr int fan_max = 4;    // Pieces drawn apart; the rest share the last spot.
+	int           x     = 0;
+	int           y     = 0;
+	int           row_h = 0;
+	int           round = 0;
+	for (size_t i = 0; i < items.size();) {
+		// The run of look-alikes starting here.
+		size_t end = i + 1;
+		while (end < items.size() && items[end]->get_shapenum() == items[i]->get_shapenum()
+			   && items[end]->get_framenum() == items[i]->get_framenum()) {
+			++end;
+		}
+		Shape_frame* shape = items[i]->get_shape();
+		const int    pieces = std::min(static_cast<int>(end - i), fan_max) - 1;
+		const int    w      = std::min(shape->get_width() + fan * pieces, static_cast<int>(object_area.w));
+		const int    h      = std::min(shape->get_height() + fan * pieces, static_cast<int>(object_area.h));
+		if (x > 0 && x + w > object_area.w) {    // Next row.
+			x = 0;
+			y += row_h + gap;
+			row_h = 0;
+		}
+		if (y > 0 && y + h > object_area.h) {    // Full: round again.
+			++round;
+			x = 2 * round;
+			y = 2 * round;
+			row_h = 0;
+		}
+		for (size_t j = i; j < end; ++j) {
+			const int k = std::min(static_cast<int>(j - i), fan_max - 1);
+			items[j]->set_shape_pos(x + fan * k + shape->get_xleft(), y + fan * k + shape->get_yabove());
+		}
+		x += w + gap;
+		row_h = std::max(row_h, h);
+		i     = end;
+	}
+	gwin->set_all_dirty();
+	return true;
+}
+
 /*
  *  Remove object.
  */
@@ -494,17 +643,52 @@ void Gump::paint() {
 	check_elem_positions(objects);    // Set to place if new game.
 	Game_object*    obj;
 	Object_iterator next(objects);
+	// Does obj. appear to be placed?
+	auto placed = [this](Game_object* each, Shape_frame* shape) {
+		const int objx = each->get_tx() - shape->get_xleft() + 1 + object_area.x;
+		const int objy = each->get_ty() - shape->get_yabove() + 1 + object_area.y;
+		return object_area.has_point(objx, objy)
+			   && object_area.has_point(objx + shape->get_xright() - 1, objy + shape->get_ybelow() - 1);
+	};
+	// Smart placement: where the placed items are, relative to object_area.
+	std::vector<TileRect> taken;
+	if (smart_placement) {
+		while ((obj = next.get_next()) != nullptr) {
+			Shape_frame* shape = obj->get_shape();
+			if (shape && placed(obj, shape)) {
+				taken.emplace_back(obj->get_tx() - shape->get_xleft(), obj->get_ty() - shape->get_yabove(),
+						shape->get_width(), shape->get_height());
+			}
+		}
+		next.reset();
+	}
 	while ((obj = next.get_next()) != nullptr) {
 		Shape_frame* shape = obj->get_shape();
 		if (!shape) {
 			continue;
 		}
-		const int objx = obj->get_tx() - shape->get_xleft() + 1 + object_area.x;
-		const int objy = obj->get_ty() - shape->get_yabove() + 1 + object_area.y;
-		// Does obj. appear to be placed?
-		if (!object_area.has_point(objx, objy)
-			|| !object_area.has_point(objx + shape->get_xright() - 1, objy + shape->get_ybelow() - 1)) {
-			// No.
+		bool found = false;
+		if (!placed(obj, shape) && smart_placement) {
+			// The first free place in a loose grid, top to bottom and left
+			// to right; neighbours may overlap by a pixel or two.
+			const int w = shape->get_width();
+			const int h = shape->get_height();
+			for (int py = 0; !found && py + h <= object_area.h; py += 4) {
+				for (int px = 0; !found && px + w <= object_area.w; px += 4) {
+					const TileRect spot(px, py, w, h);
+					found = std::none_of(taken.begin(), taken.end(), [&spot](TileRect other) {
+						other.enlarge(-2);
+						return other.w > 0 && other.h > 0 && spot.intersects(other);
+					});
+					if (found) {
+						obj->set_shape_pos(px + shape->get_xleft(), py + shape->get_yabove());
+						taken.push_back(spot);
+					}
+				}
+			}
+		}
+		if (!found && !placed(obj, shape)) {
+			// No (and no free place): the old flow from the top left.
 			int px = curx + shape->get_width();
 			int py = cury + shape->get_height();
 			if (px > endx) {
@@ -626,5 +810,19 @@ void Container_gump::initialize(int shnum) {
 		set_object_area(TileRect(36, 46, 84, 40), 24, 58);
 	} else {
 		set_object_area(TileRect(52, 22, 60, 40), 24, 52);
+	}
+	// The sort button, a little below the checkmark (inventory only).
+	if (sort_button && is_inventory_container()) {
+		for (Gump_widget* elem : elems) {
+			if (dynamic_cast<Checkmark_button*>(elem)) {
+				// A shape is drawn around its hot spot; the button from its
+				// top left.
+				Shape_frame* check = elem->get_shape();
+				const int    left  = elem->get_x() - (check ? check->get_xleft() : 0);
+				const int    below = elem->get_y() + (check ? check->get_ybelow() : 8);
+				add_elem(new Sort_button(this, left - 10, below + 12));
+				break;
+			}
+		}
 	}
 }

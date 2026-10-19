@@ -126,6 +126,8 @@ class TargetingOptions_gump : public Modal_gump {
 private:
 	enum setting_ids {
 		set_enabled,
+		set_smart,    // These two show even with targeting off.
+		set_sort,
 		set_circle,
 		set_party,
 		set_loot,
