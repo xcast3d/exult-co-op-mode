@@ -399,6 +399,44 @@ upstream.
     it shows why something at the far edge of a big screen can't be
     picked. (A square frame was tried first and read as a box, not a
     range.)
+  - **Things, not just containers** (built 2026-10-19; not tested yet).
+    E is context-sensitive instead of adding a third key or a type key:
+    with no container window open it cycles containers, bodies and loose
+    items (within 6 tiles) nearest first; with one open (a chest, a body,
+    a pack, a paperdoll) it cycles what is inside, the newest window first.
+    Space by the pick:
+    - a container or body on the map opens; Shift+Space picks it up;
+    - a loose item, or one in someone else's container, goes into the
+      pack, whole stack, then the window's next item is picked (Space
+      again and again empties a chest);
+    - one's own item: used if it has a use; worn or wielded ones are
+      readied or put away, swapping out what is in their spot (put back
+      if that fails); anything else is dropped at one's feet after
+      "Drop the gem? Space again".
+    - Not okay to take: "Not yours: Space again to take". Shift is the
+      "more" key: on a stack it asks how many; on a single item in a
+      window it takes everything there (asking once if any of it isn't
+      yours).
+    It all moves items the way a drag and drop does
+    (`Game_window::move_object`, drag.cc: weight, theft, eggs, guests'
+    lift and move to the host), so guests need nothing new.
+  - **Target System options page and groups** (built 2026-10-19).
+    Game menu → **Target System**, next to Game Input (the "Targeting"
+    switch moved there): Enable (the rest hides when off), the range
+    circle, Q offering the party, and what E offers by group: loot (on),
+    decor (off), furniture (off), doors, shutters and lamps (off), levers
+    and switches (on), signs, plaques and graves (on; Space reads them).
+    Q and E start again at the nearest after you move. Space takes loot and decor, and uses furniture, doors, lamps and
+    levers (Shift picks furniture up). The groups are our own shape lists;
+    see [targeting groups](friend-mode/targeting-groups.md), with the
+    borderline items to review.
+  - **Backpacks and paperdolls by key** (2026-10-19). 1 to 8 open a party
+    member's paperdoll as before, and pressing it again shuts it.
+    Shift+1 to Shift+8 open or shut that member's backpack; Shift+I opens
+    the next backpack not open yet, the Avatar's first, and with all open
+    shuts them all. A guest only has its own companion's. While a sign,
+    plaque, tombstone, scroll or book is open, Space closes it (or turns
+    the page).
   - **Doors open by walking into them** (2026-10-19), standing or on the
     move, with WASD or the mouse; a guest's go through the host. Exult
     only opened a door when a walk already under way met it. The host keeps a
@@ -507,7 +545,8 @@ after Phase 8.
       skipping the intro (`--skip-intro`).
 - [ ] **Keyboard command list in game** (asked for 2026-10-18, once the
       in-game features are done): every key, including Friend Mode's (J,
-      L, X, Y, Q, E, Space, Tab, WASD, Shift+W/S, chat commands).
+      L, X, Y, Q, E, Space, Shift+I, 1-8 and Shift+1-8, Tab, WASD,
+      Shift+W/S, chat commands).
 - [ ] **Feature list for the project webpage** (same time): every
       feature and enhancement Friend Mode adds, written for players.
 

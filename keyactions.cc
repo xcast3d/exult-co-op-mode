@@ -362,9 +362,22 @@ void ActionInventory(const int* params) {
 	Actor*       actor;
 	Actor*       controlled = gwin->get_controlled_actor();
 
+	// Friend Mode: a number key (1-8) whose paperdoll is open closes it.
+	auto close_if_open = [gwin](Actor* who) {
+		Gump* open = who ? gwin->get_gump_man()->find_gump(who, who->inventory_shapenum()) : nullptr;
+		if (open) {
+			gwin->get_gump_man()->close_gump(open);
+			gwin->set_all_dirty();
+		}
+		return open != nullptr;
+	};
+
 	// A controlled companion owns only its paperdoll.  Ignore party-page
 	// cycling and explicit member bindings until control returns to Avatar.
 	if (controlled && controlled != gwin->get_main_actor()) {
+		if (params[0] >= 0 && close_if_open(controlled)) {
+			return;
+		}
 		if (controlled->can_act_charmed()) {
 			controlled->show_inventory();
 		}
@@ -394,6 +407,9 @@ void ActionInventory(const int* params) {
 	} else {
 		inventory_page = params[0];
 		if (inventory_page < 0 || inventory_page > gwin->get_party_man()->get_count()) {
+			return;
+		}
+		if (close_if_open(Get_party_member(inventory_page))) {
 			return;
 		}
 	}

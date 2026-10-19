@@ -56,9 +56,20 @@ void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object*
 // default): W, A, S and D walk (two at once diagonally), and Shift with one
 // of them does what the key alone did (Shift+W the watch, Shift+S Save).
 extern bool Friend_wasd_movement;
-// Game Input option "Targeting (Q, Space)" (config/gameplay/keyboard_targeting,
-// on by default): Q picks a target, Space attacks it.
-extern bool Friend_keyboard_targeting;
+// Targeting options page (Q, E, Space; config/gameplay/keyboard_targeting
+// and config/gameplay/targeting/...).  Each machine keeps its own.
+extern bool Friend_keyboard_targeting;    // Q, E and Space at all (on).
+extern bool Friend_targeting_circle;      // The range circle on big screens (on).
+extern bool Friend_targeting_party;       // Q offers the party out of combat (on).
+// What E offers besides containers and bodies, by group.
+extern bool Friend_targeting_loot;           // Weapons, coins, food... (on).
+extern bool Friend_targeting_decor;          // Dishes, papers, toys... (off).
+extern bool Friend_targeting_furniture;      // Chairs, candles, anvils... (off).
+extern bool Friend_targeting_interactive;    // Doors, shutters, lamps (off).
+extern bool Friend_targeting_levers;         // Levers and switches (on).
+extern bool Friend_targeting_signs;          // Signs, plaques, tombstones (on).
+void        Friend_targeting_load_settings();
+void        Friend_targeting_save_settings();
 
 // WASD movement's targeting (Q): attack the picked target; and, when
 // combat mode comes on, attack it if it is hostile.

@@ -34,6 +34,7 @@
 #include "Face_stats.h"
 #include "Gump_button.h"
 #include "Gump_manager.h"
+#include "Text_gump.h"
 #include "Notebook_gump.h"
 #include "Scroll_gump.h"
 #include "ShortcutBar_gump.h"
@@ -2425,7 +2426,8 @@ static void Friend_mode_clear_target() {
 // Out of combat the Avatar may also pick a party member (to talk to); a
 // guest's companions are the Avatar's business.
 static bool Friend_is_party_pick(const Actor* own, const Actor* actor) {
-	return own && actor && !Friend_mode_is_guest() && !gwin->in_combat() && actor != own && actor->is_in_party()
+	return own && actor && Friend_targeting_party && !Friend_mode_is_guest() && !gwin->in_combat() && actor != own
+		   && actor->is_in_party()
 		   && !actor->is_dead();
 }
 
@@ -2435,7 +2437,18 @@ static bool Friend_is_pickable(const Actor* own, const Actor* actor) {
 
 // E: things.  The picked container or body (Q picks people instead).
 static Game_object_weak friend_object_target;
+static bool             friend_object_in_window = false;    // It was picked in a window.
 static uint32           friend_range_shown_until = 0;    // Ticks; after Q or E.
+
+// Q and E start again at the nearest once one has moved; standing still,
+// they go on to the next (and past the last to "No target", then round).
+static Tile_coord friend_cycle_at(-1, -1, -1);
+
+static bool Friend_cycle_moved(const Actor* own) {
+	const bool moved = own->get_tile() != friend_cycle_at;
+	friend_cycle_at  = own->get_tile();
+	return moved;
+}
 
 // Who Q can pick: on screen, in range; party members out of combat (last).
 static std::vector<Actor*> Friend_target_candidates(Actor* own) {
@@ -2487,8 +2500,9 @@ static void Friend_mode_cycle_target(int step) {
 		return from.distance(a->get_tile()) < from.distance(b->get_tile());
 	});
 	// Past the last (or, going back, the first) the pick clears; the next Q
-	// starts again.
-	const auto current = std::find(foes.begin(), foes.end(), gwin->get_action_target());
+	// starts again, as does one after walking.
+	const bool moved   = Friend_cycle_moved(own);
+	const auto current = moved ? foes.end() : std::find(foes.begin(), foes.end(), gwin->get_action_target());
 	const int  count   = static_cast<int>(foes.size());
 	int        index   = step < 0 ? count - 1 : 0;
 	if (current != foes.end()) {
@@ -2602,7 +2616,11 @@ static void Friend_mode_paint_target_arrow() {
 		target = thing.get();
 	}
 	Shape_frame* frame = target ? target->get_shape() : nullptr;
-	const bool    visible = target && frame && target->get_chunk() && !gwin->is_in_exult_menu();
+	// A thing in a window is drawn in the window's own (scaled) layer.
+	Gump* window = thing && target == thing.get() && friend_object_in_window
+						   ? gwin->get_gump_man()->find_gump(thing.get())
+						   : nullptr;
+	const bool visible = target && frame && (target->get_chunk() || window) && !gwin->is_in_exult_menu();
 	if (!visible) {
 		if (layer >= 0 && iwin->layer_is_visible(layer)) {
 			gwin->layer_set_visible(layer, false);
@@ -2645,7 +2663,11 @@ static void Friend_mode_paint_target_arrow() {
 	}
 	int x;
 	int y;
-	gwin->get_shape_location(target, x, y);
+	if (window) {
+		window->get_shape_location(target, x, y);
+	} else {
+		gwin->get_shape_location(target, x, y);
+	}
 	const int left = x - frame->get_xleft();
 	const int top  = y - frame->get_yabove();
 	const int ax   = left + frame->get_width() / 2 - aw / 2;
@@ -2654,8 +2676,16 @@ static void Friend_mode_paint_target_arrow() {
 	int       sy0;
 	int       sx1;
 	int       sy1;
-	iwin->game_to_screen(ax, ay, false, sx0, sy0);
-	iwin->game_to_screen(ax + aw, ay + ah, false, sx1, sy1);
+	const int wl = window ? window->get_render_layer() : -1;
+	if (wl >= 0 && iwin->layer_is_visible(wl)) {
+		// Through the window's layer, as Gump_manager::map_game_to_gump
+		// does the other way.
+		iwin->layer_to_screen(wl, ax - window->layer_bounds.x, ay - window->layer_bounds.y, sx0, sy0);
+		iwin->layer_to_screen(wl, ax + aw - window->layer_bounds.x, ay + ah - window->layer_bounds.y, sx1, sy1);
+	} else {
+		iwin->game_to_screen(ax, ay, false, sx0, sy0);
+		iwin->game_to_screen(ax + aw, ay + ah, false, sx1, sy1);
+	}
 	gwin->layer_set_dest(layer, sx0, sy0, sx1 - sx0, sy1 - sy0);
 	gwin->layer_set_visible(layer, true);
 	gwin->set_painted();
@@ -2678,7 +2708,7 @@ static void Friend_mode_paint_range_frame() {
 	const TileRect view        = gwin->get_win_tile_rect();
 	const bool    bigger       = view.w > 2 * range + 1 || view.h > 2 * range + 1;
 	const bool    wanted       = gwin->in_combat() || SDL_GetTicks() < friend_range_shown_until;
-	const bool    visible      = Friend_keyboard_targeting && bigger && wanted && own && own->get_chunk()
+	const bool    visible      = Friend_keyboard_targeting && Friend_targeting_circle && bigger && wanted && own && own->get_chunk()
 						 && !gwin->is_in_exult_menu() && !gwin->network_input_blocked();
 	if (!visible) {
 		for (const int layer : {fill_layer, border_layer}) {
@@ -2776,10 +2806,14 @@ static void Friend_mode_walking_stops_attack() {
 static void Friend_mode_check_target() {
 	Actor* target = gwin->get_action_target();
 	Actor* own    = gwin->get_controlled_actor();
-	// A thing (E) goes when it is taken, gone or far off.
+	// A thing (E) goes when it is gone: on the map, taken or far off; in a
+	// window, out of it or the window closed.
 	if (const Game_object_shared thing = friend_object_target.lock()) {
-		if (!Friend_keyboard_targeting || !own || thing->get_owner() || !thing->get_chunk()
-			|| own->get_tile().distance(thing->get_tile()) > friend_attack_max_tiles + 4) {
+		const bool gone = friend_object_in_window
+								  ? !thing->get_owner() || !gwin->get_gump_man()->find_gump(thing.get())
+								  : thing->get_owner() || !thing->get_chunk() || !own
+											|| own->get_tile().distance(thing->get_tile()) > friend_attack_max_tiles + 4;
+		if (!Friend_keyboard_targeting || !own || gone) {
 			friend_object_target.reset();
 		}
 	}
@@ -2818,13 +2852,234 @@ static void Friend_mode_check_target() {
 	}
 }
 
-// Space with a pick.  A thing (E) is opened or used, as a double-click
-// does.  A person out of combat is talked to (or used: a guest gets its
-// usual answer, a merchant or "The Avatar must do this").  In combat mode
-// the pick is attacked, peaceful or not (after walking stopped an attack,
-// again); while the Avatar is already attacking it, Space pauses combat as
-// before.  False if Space should do its usual thing.
-static bool Friend_mode_space() {
+// What E may offer, by group (the Targeting options page turns groups on
+// and off).  Black Gate's shape classes lump a chair, a plate and a gem
+// together, so the groups are our own lists, from the shapes that can be
+// picked up (tools/friend-mode/pickup_items.py lists them); see
+// docs/friend-mode/targeting-groups.md.  Weapons, armour and ammunition
+// are loot by their game data; anything not listed is decor.
+enum class Friend_thing_group { box, loot, decor, furniture, interactive, lever, sign };
+
+static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
+	static const std::unordered_set<int> loot{
+			159, 178, 194, 285, 295, 296, 298, 330, 340, 377, 444, 581, 583, 584, 585, 616, 627, 640, 641, 642, 644,
+			645, 646, 648, 649, 650, 662, 668, 691, 692, 693, 726, 728, 738, 746, 747, 754, 756, 760, 761, 769, 771,
+			772, 785, 786, 790, 797, 827, 838, 839, 842, 877, 914, 915, 916, 921, 937, 955, 981};
+	static const std::unordered_set<int> furniture{
+			336, 338, 997, 873, 697, 702, 704, 812, 813, 837, 987, 991, 992, 995, 1013};
+	static const std::unordered_set<int> interactive{290, 291, 322, 372, 435, 481, 526, 657, 678, 889};
+	const Shape_info& info  = obj->get_info();
+	const int         shape = obj->get_shapenum();
+	if (info.get_shape_class() == Shape_info::container || info.is_body_shape()) {
+		return Friend_thing_group::box;
+	}
+	if (shape == 787 || shape == 788) {    // Levers and switches.
+		return Friend_thing_group::lever;
+	}
+	if (shape == 379 || shape == 820 || shape == 715) {    // Sign, plaque, tombstone.
+		return Friend_thing_group::sign;
+	}
+	if (info.is_door() || interactive.count(shape)) {
+		return Friend_thing_group::interactive;
+	}
+	if (furniture.count(shape)) {
+		return Friend_thing_group::furniture;
+	}
+	if (loot.count(shape) || info.get_weapon_info() || info.get_armor_info() || info.get_ammo_info()) {
+		return Friend_thing_group::loot;
+	}
+	return Friend_thing_group::decor;
+}
+
+static bool Friend_thing_group_on(Friend_thing_group group) {
+	switch (group) {
+	case Friend_thing_group::box:
+		return true;
+	case Friend_thing_group::loot:
+		return Friend_targeting_loot;
+	case Friend_thing_group::decor:
+		return Friend_targeting_decor;
+	case Friend_thing_group::furniture:
+		return Friend_targeting_furniture;
+	case Friend_thing_group::interactive:
+		return Friend_targeting_interactive;
+	case Friend_thing_group::lever:
+		return Friend_targeting_levers;
+	case Friend_thing_group::sign:
+		return Friend_targeting_signs;
+	}
+	return false;
+}
+
+// "10 gold coins", "sword": a thing's name for the notices (Exult's names
+// already carry the quantity).
+static std::string Friend_thing_name(Game_object* obj) {
+	const std::string name = obj->get_name();
+	return name.empty() ? std::string("something") : name;
+}
+
+// Space asks twice for a theft or a drop: the second Space must be on the
+// same thing, for the same action, within 3 seconds.
+enum class Friend_confirm { none, take, drop };
+static Game_object_weak friend_confirm_object;
+static Friend_confirm   friend_confirm_action = Friend_confirm::none;
+static uint32           friend_confirm_until  = 0;
+
+static bool Friend_confirmed(Game_object* obj, Friend_confirm action, const std::string& ask) {
+	const uint32 now = SDL_GetTicks();
+	if (friend_confirm_action == action && friend_confirm_object.lock().get() == obj && now < friend_confirm_until) {
+		friend_confirm_action = Friend_confirm::none;
+		return true;
+	}
+	friend_confirm_object = weak_from_obj(obj);
+	friend_confirm_action = action;
+	friend_confirm_until  = now + 3000;
+	Friend_mode_target_notice(ask);
+	return false;
+}
+
+// Where taken things go: the backpack, else whatever the actor can hold.
+static Container_game_object* Friend_pack_of(Actor* own) {
+	Game_object*           pack      = own->get_readied(backpack);
+	Container_game_object* container = pack ? pack->as_container() : nullptr;
+	return container ? container : own;
+}
+
+// "How many?" for a stack, with Shift; 0 if cancelled.  Without Shift, all.
+static int Friend_how_many(Game_object* obj, bool shift) {
+	const int count = obj->get_quantity();
+	if (!shift || count <= 1) {
+		return count;
+	}
+	bool      escaped = false;
+	const int chosen  = gwin->get_gump_man()->prompt_for_number(0, count, 1, count, nullptr, &escaped);
+	return escaped ? 0 : chosen;
+}
+
+// After a take from a window, pick the next thing in it, so that Space
+// again and again empties a chest.
+static std::vector<Game_object*> Friend_window_candidates();
+static void Friend_mode_pick_thing(Game_object* obj, bool in_window);
+
+static void Friend_mode_pick_next_in_window() {
+	const std::vector<Game_object*> things = Friend_window_candidates();
+	if (things.empty()) {
+		friend_object_target.reset();
+		Friend_mode_target_notice("No target");
+	} else {
+		Friend_mode_pick_thing(things.front(), true);
+	}
+}
+
+// Readying: an item meant to be worn or wielded.  Anything can be held in
+// a hand, so a gem doesn't count: weapons, armour, and items whose own
+// spot isn't a hand.
+static bool Friend_is_wearable(Actor* own, Game_object* obj) {
+	const Shape_info& info = obj->get_info();
+	int               prefered;
+	int               alt1;
+	int               alt2;
+	own->get_prefered_slots(obj, prefered, alt1, alt2);
+	return info.get_weapon_info() || info.get_armor_info()
+		   || (prefered != lhand && prefered != rhand && prefered != backpack
+			   && prefered != belt && prefered >= 0);
+}
+
+// The spot an item would go in, if free; -1 if none is.
+static int Friend_free_spot(Actor* own, Game_object* obj) {
+	int prefered;
+	int alt1;
+	int alt2;
+	own->get_prefered_slots(obj, prefered, alt1, alt2);
+	for (const int spot : {prefered, alt1, alt2}) {
+		if (spot >= 0 && own->fits_in_spot(obj, spot)) {
+			return spot;
+		}
+	}
+	return -1;
+}
+
+// Space on a worn or wielded thing in one's own inventory: off to the pack.
+// On one in the pack: readied, swapping out what is in its spot.
+static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
+	Container_game_object* pack = Friend_pack_of(own);
+	if (own->find_readied(obj) >= 0) {
+		if (pack == own) {
+			Friend_mode_target_notice("No backpack");
+		} else if (gwin->move_object(obj, window, pack)) {
+			Friend_mode_target_notice("Put away " + Friend_thing_name(obj));
+		}
+		return;
+	}
+	int spot = Friend_free_spot(own, obj);
+	std::vector<Game_object_shared> swapped;    // Taken off to make room.
+	if (spot < 0) {
+		int prefered;
+		int alt1;
+		int alt2;
+		own->get_prefered_slots(obj, prefered, alt1, alt2);
+		// The spot itself (a two-handed weapon's is the left hand, and it
+		// needs the right free too).
+		int main = prefered;
+		if (main == both_hands) {
+			main = lhand;
+		} else if (main == lrgloves) {
+			main = lfinger;
+		} else if (main == neck) {
+			main = amulet;
+		} else if (main == scabbard) {
+			main = belt;
+		}
+		std::vector<int> spots{main};
+		if (prefered == both_hands) {
+			spots.push_back(rhand);
+		}
+		for (const int each : spots) {
+			Game_object* worn = own->get_readied(each);
+			if (!worn) {
+				continue;
+			}
+			if (pack == own || !gwin->move_object(worn, gwin->get_gump_man()->find_gump(worn), pack)) {
+				Friend_mode_target_notice("No room");
+				break;
+			}
+			swapped.push_back(worn->shared_from_this());
+		}
+		spot = Friend_free_spot(own, obj);
+	}
+	Gump* from = gwin->get_gump_man()->find_gump(obj);
+	if (spot < 0 || !gwin->move_object(obj, from ? from : window, own, spot)) {
+		// Couldn't: what was taken off goes back on.
+		for (const Game_object_shared& worn : swapped) {
+			const int back = Friend_free_spot(own, worn.get());
+			if (back >= 0) {
+				gwin->move_object(worn.get(), gwin->get_gump_man()->find_gump(worn.get()), own, back);
+			}
+		}
+		if (spot < 0) {
+			Friend_mode_target_notice("Can't ready that");
+		}
+		return;
+	}
+	Friend_mode_target_notice("Readied " + Friend_thing_name(obj));
+}
+
+// Space with a pick.
+//
+// A person out of combat is talked to (a guest gets its usual answer, a
+// merchant or "The Avatar must do this").  In combat mode the pick is
+// attacked, peaceful or not (after walking stopped an attack, again);
+// while the Avatar is already attacking it, Space pauses combat as before.
+//
+// A thing (E): on the map, a container or body opens, and a door, lamp,
+// lever or piece of furniture is used (Shift: picked up, if it can be).  A loose thing, or one in someone else's open container, goes
+// into the pack (Shift on a stack: how many; Shift on a single thing in a
+// window: everything in it).  Not okay to take: asks first.  One's own:
+// used if it has a use, readied or put away if it is worn, else dropped at
+// one's feet, after asking (Shift on a stack: how many to drop).
+//
+// False if Space should do its usual thing.
+static bool Friend_mode_space(bool shift) {
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
 	const Game_object_shared thing  = friend_object_target.lock();
@@ -2832,7 +3087,7 @@ static bool Friend_mode_space() {
 		return false;
 	}
 	const bool fighting = gwin->in_combat();
-	if (target && fighting
+	if (!thing && fighting
 		&& (!Friend_is_attack_target(own, target)
 			|| (!Friend_mode_is_guest() && gwin->get_main_actor()->get_target() == target))) {
 		return false;
@@ -2841,39 +3096,144 @@ static bool Friend_mode_space() {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return true;
 	}
-	if (thing) {
-		if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(own, thing.get())) {
-			Friend_mode_target_notice("Too far away");
-			Mouse::mouse()->flash_shape(Mouse::blocked);
+	if (!thing) {
+		if (!fighting) {
+			gwin->double_clicked_object(target);    // Talk.
+		} else {
+			Friend_mode_attack_target(target);
+		}
+		return true;
+	}
+	Game_object*      obj    = thing.get();
+	Gump*             window = friend_object_in_window ? gwin->get_gump_man()->find_gump(obj) : nullptr;
+	const bool        mine   = obj->get_outermost() == own;
+	if (!cheat.in_hack_mover() && !mine && !Fast_pathfinder_client::is_grabable(own, obj->get_outermost())) {
+		Friend_mode_target_notice("Too far away");
+		Mouse::mouse()->flash_shape(Mouse::outofrange);
+		return true;
+	}
+	// One's own: use, ready or put away, or drop.
+	if (mine) {
+		if (obj->as_container() || obj->usecode_exists()) {
+			gwin->double_clicked_object(obj, true);
+		} else if (Friend_is_wearable(own, obj)) {
+			Friend_mode_equip(own, obj, window);
+		} else {
+			const int         count = Friend_how_many(obj, shift);
+			const std::string name  = count < obj->get_quantity()
+											 ? std::to_string(count) + " of " + Friend_thing_name(obj)
+											 : Friend_thing_name(obj);
+			if (count > 0 && (shift || Friend_confirmed(obj, Friend_confirm::drop, "Drop " + name + "? Space again"))
+				&& gwin->move_object(obj, window, nullptr, -1, count)) {
+				Friend_mode_target_notice("Dropped " + name);
+			}
+		}
+		return true;
+	}
+	// On the map, a container or body opens, and a door, lamp, lever or
+	// piece of furniture is used; Shift picks it up instead, if it can be.
+	const Friend_thing_group group = Friend_thing_group_of(obj);
+	const bool use = !window && group != Friend_thing_group::loot && group != Friend_thing_group::decor;
+	if (use && !(shift && obj->is_dragable())) {
+		gwin->double_clicked_object(obj);
+		return true;
+	}
+	// Take it.  Shift on a single thing in a window: everything there.
+	Container_game_object* pack = Friend_pack_of(own);
+	if (shift && window && obj->get_quantity() <= 1) {
+		Container_game_object* from = obj->get_owner();
+		std::vector<Game_object_shared> all;
+		Object_iterator                 next(from->get_objects());
+		bool                            theirs = false;    // Some of it isn't okay to take.
+		while (Game_object* each = next.get_next()) {
+			all.push_back(each->shared_from_this());
+			theirs = theirs || !each->get_flag(Obj_flags::okay_to_take);
+		}
+		if (theirs && !gwin->is_in_dungeon() && !from->get_outermost()->get_flag(Obj_flags::in_party)
+			&& !Friend_confirmed(obj, Friend_confirm::take, "Not all yours: Shift+Space again to take all")) {
 			return true;
 		}
-		gwin->double_clicked_object(thing.get());
+		int taken = 0;
+		for (const Game_object_shared& each : all) {
+			if (!gwin->move_object(each.get(), gwin->get_gump_man()->find_gump(each.get()), pack)) {
+				break;
+			}
+			++taken;
+		}
+		Friend_mode_target_notice(taken ? "Took " + std::to_string(taken) + (taken == 1 ? " thing" : " things")
+										: std::string("Nothing taken"));
+		Friend_mode_pick_next_in_window();
 		return true;
 	}
-	if (!fighting) {
-		gwin->double_clicked_object(target);    // Talk.
+	if (!obj->get_flag(Obj_flags::okay_to_take) && !gwin->is_in_dungeon()
+		&& !obj->get_outermost()->get_flag(Obj_flags::in_party)
+		&& !Friend_confirmed(obj, Friend_confirm::take, "Not yours: Space again to take")) {
 		return true;
 	}
-	Friend_mode_attack_target(target);
+	const int         count = Friend_how_many(obj, shift);
+	const std::string name  = count < obj->get_quantity()
+									 ? std::to_string(count) + " of " + Friend_thing_name(obj)
+									 : Friend_thing_name(obj);
+	if (count > 0 && gwin->move_object(obj, window, pack, -1, count)) {
+		Friend_mode_target_notice("Took " + name);
+		if (window) {
+			Friend_mode_pick_next_in_window();
+		} else {
+			friend_object_target.reset();
+		}
+	}
 	return true;
 }
 
-// E: the next container or body within reach (chests, crates, barrels,
-// bags on the ground, the fallen), nearest first, Shift+E the previous;
-// past the last the pick clears.  Space opens it.  Only what can be
-// reached from here, as a double-click checks (not one in the next
-// building).
+// E: things.  With a container window open (a chest, a body, a pack, a
+// paperdoll), what is in the open windows, the newest window first, top to
+// bottom and left to right.  Otherwise things in the world within reach,
+// nearest first: containers and bodies, and loose things within 6 tiles
+// (not one in the next building).  Shift+E the previous; past the last the
+// pick clears.  See Friend_mode_space for what Space does with them.
+static std::vector<Game_object*> Friend_window_candidates() {
+	std::vector<Gump*> windows;
+	for (Gump* gump : *gwin->get_gump_man()) {
+		if (gump && gump->get_container() && !gump->is_persistent()) {
+			windows.insert(windows.begin(), gump);    // Newest first.
+		}
+	}
+	std::vector<Game_object*> things;
+	for (Gump* gump : windows) {
+		std::vector<Game_object*> inside;
+		Object_iterator           next(gump->get_container()->get_objects());
+		while (Game_object* obj = next.get_next()) {
+			if (!obj->get_flag(Obj_flags::invisible)) {
+				inside.push_back(obj);
+			}
+		}
+		std::stable_sort(inside.begin(), inside.end(), [](const Game_object* a, const Game_object* b) {
+			return a->get_ty() != b->get_ty() ? a->get_ty() < b->get_ty() : a->get_tx() < b->get_tx();
+		});
+		things.insert(things.end(), inside.begin(), inside.end());
+	}
+	return things;
+}
+
 static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
+	constexpr int      loose_tiles = 6;
 	Game_object_vector nearby;
 	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0);
 	const TileRect            view = gwin->get_win_tile_rect();
 	const Tile_coord          from = own->get_tile();
 	std::vector<Game_object*> things;
 	for (Game_object* obj : nearby) {
-		const Shape_info& info = obj->get_info();
-		const Tile_coord  at   = obj->get_tile();
-		if (!obj->as_actor() && !obj->get_owner() && obj->get_chunk()
-			&& (info.get_shape_class() == Shape_info::container || info.is_body_shape())
+		if (obj->as_actor() || obj->get_owner() || !obj->get_chunk()) {
+			continue;
+		}
+		const Tile_coord         at    = obj->get_tile();
+		const Friend_thing_group group = Friend_thing_group_of(obj);
+		// Containers, bodies and signs within reach; the rest near one's
+		// feet: things one can pick up, and doors, lamps and levers to use.
+		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::lever;
+		const bool near    = (obj->is_dragable() || fixture) && from.distance(at) <= loose_tiles;
+		const bool far     = group == Friend_thing_group::box || group == Friend_thing_group::sign;
+		if (Friend_thing_group_on(group) && (far || near)
 			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5
 			&& (cheat.in_hack_mover() || Fast_pathfinder_client::is_grabable(own, obj))) {
 			things.push_back(obj);
@@ -2885,6 +3245,90 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 	return things;
 }
 
+static void Friend_mode_pick_thing(Game_object* obj, bool in_window) {
+	friend_object_target    = weak_from_obj(obj);
+	friend_object_in_window = in_window;
+	friend_confirm_action   = Friend_confirm::none;
+	Friend_mode_target_notice("Targeting " + Friend_thing_name(obj));
+}
+
+// Backpacks.  Shift+1 to Shift+8 open one party member's backpack (Shift+1
+// the Avatar's), or shut it if open, as 1 to 8 do the paperdolls.  Shift+I
+// opens the next one not open yet, the Avatar's first; with all open, it
+// shuts them all.  A guest has only its companion's, which either opens
+// and shuts.  (I alone still opens the paperdolls.)
+static Gump* Friend_backpack_window(Actor* who) {
+	Game_object* pack = who ? who->get_readied(backpack) : nullptr;
+	if (!pack) {
+		return nullptr;
+	}
+	for (Gump* gump : *gwin->get_gump_man()) {
+		if (gump && gump->get_container() == pack) {
+			return gump;
+		}
+	}
+	return nullptr;
+}
+
+// Open or shut 'who's backpack.  True if it opened.
+static bool Friend_mode_toggle_backpack_of(Actor* who) {
+	if (Gump* open = Friend_backpack_window(who)) {
+		gwin->get_gump_man()->close_gump(open);
+		gwin->set_all_dirty();
+		return false;
+	}
+	Game_object*           pack      = who ? who->get_readied(backpack) : nullptr;
+	Container_game_object* container = pack ? pack->as_container() : nullptr;
+	if (!container) {
+		Friend_mode_target_notice("No backpack");
+		return false;
+	}
+	gwin->get_effects()->remove_text_effects();
+	container->show_gump();
+	return true;
+}
+
+static Actor* Friend_party_member(int index) {
+	if (index == 0) {
+		return gwin->get_main_actor();
+	}
+	Party_manager* party = gwin->get_party_man();
+	return index <= party->get_count() ? gwin->get_npc(party->get_member(index - 1)) : nullptr;
+}
+
+// 'member': 0 the Avatar, 1 the first companion..., or -1 for Shift+I.
+static void Friend_mode_backpack_key(int member) {
+	Actor* own = gwin->get_controlled_actor();
+	if (!own || gwin->network_input_blocked()) {
+		Mouse::mouse()->flash_shape(Mouse::redx);
+		return;
+	}
+	if (own != gwin->get_main_actor()) {    // A guest: its companion's only.
+		Friend_mode_toggle_backpack_of(own);
+		return;
+	}
+	if (member >= 0) {
+		if (Actor* who = Friend_party_member(member)) {
+			Friend_mode_toggle_backpack_of(who);
+		}
+		return;
+	}
+	const int count = gwin->get_party_man()->get_count();
+	for (int i = 0; i <= count; ++i) {
+		Actor* who = Friend_party_member(i);
+		if (who && who->get_readied(backpack) && !Friend_backpack_window(who)) {
+			Friend_mode_toggle_backpack_of(who);
+			return;
+		}
+	}
+	for (int i = 0; i <= count; ++i) {    // All open: shut them.
+		if (Gump* open = Friend_backpack_window(Friend_party_member(i))) {
+			gwin->get_gump_man()->close_gump(open);
+		}
+	}
+	gwin->set_all_dirty();
+}
+
 static void Friend_mode_cycle_object(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
@@ -2892,15 +3336,20 @@ static void Friend_mode_cycle_object(int step) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
-	friend_range_shown_until = SDL_GetTicks() + 2000;
 	if (gwin->get_action_target()) {
 		Friend_mode_clear_target();    // E picks things, Q people.
 	}
-	const std::vector<Game_object*> things = Friend_object_candidates(own);
-	const Game_object_shared        picked = friend_object_target.lock();
-	const auto current = std::find(things.begin(), things.end(), picked.get());
-	const int  count   = static_cast<int>(things.size());
-	int        index   = step < 0 ? count - 1 : 0;
+	std::vector<Game_object*> things    = Friend_window_candidates();
+	const bool                in_window = !things.empty();
+	if (!in_window) {
+		friend_range_shown_until = SDL_GetTicks() + 2000;
+		things                   = Friend_object_candidates(own);
+	}
+	const Game_object_shared picked  = friend_object_target.lock();
+	const bool               moved   = Friend_cycle_moved(own) && !in_window;
+	const auto current = moved ? things.end() : std::find(things.begin(), things.end(), picked.get());
+	const int                count   = static_cast<int>(things.size());
+	int                      index   = step < 0 ? count - 1 : 0;
 	if (current != things.end()) {
 		index = static_cast<int>(current - things.begin()) + step;
 	}
@@ -2912,9 +3361,7 @@ static void Friend_mode_cycle_object(int step) {
 		}
 		return;
 	}
-	friend_object_target = weak_from_obj(things[index]);
-	const std::string name = things[index]->get_name();
-	Friend_mode_target_notice("Targeting " + (name.empty() ? std::string("something") : name));
+	Friend_mode_pick_thing(things[index], in_window);
 }
 
 // Host: a guest's companion stops fighting and waits for the guest again.
@@ -4320,6 +4767,42 @@ bool Friend_mode_is_guest() {
 // arguments without the Co-Op ones, skipping the intro).
 bool                            Friend_wasd_movement  = false;
 bool                            Friend_keyboard_targeting = true;
+bool                            Friend_targeting_circle      = true;
+bool                            Friend_targeting_party       = true;
+bool                            Friend_targeting_loot        = true;
+bool                            Friend_targeting_decor       = false;
+bool                            Friend_targeting_furniture   = false;
+bool                            Friend_targeting_interactive = false;
+bool                            Friend_targeting_levers      = true;
+bool                            Friend_targeting_signs       = true;
+
+void Friend_targeting_load_settings() {
+	config->value("config/gameplay/keyboard_targeting", Friend_keyboard_targeting, true);
+	config->value("config/gameplay/targeting/range_circle", Friend_targeting_circle, true);
+	config->value("config/gameplay/targeting/party", Friend_targeting_party, true);
+	config->value("config/gameplay/targeting/loot", Friend_targeting_loot, true);
+	config->value("config/gameplay/targeting/decor", Friend_targeting_decor, false);
+	config->value("config/gameplay/targeting/furniture", Friend_targeting_furniture, false);
+	config->value("config/gameplay/targeting/doors_and_lamps", Friend_targeting_interactive, false);
+	config->value("config/gameplay/targeting/levers", Friend_targeting_levers, true);
+	config->value("config/gameplay/targeting/signs", Friend_targeting_signs, true);
+}
+
+void Friend_targeting_save_settings() {
+	auto put = [](const char* key, bool on) {
+		config->set(key, on ? "yes" : "no", false);
+	};
+	put("config/gameplay/keyboard_targeting", Friend_keyboard_targeting);
+	put("config/gameplay/targeting/range_circle", Friend_targeting_circle);
+	put("config/gameplay/targeting/party", Friend_targeting_party);
+	put("config/gameplay/targeting/loot", Friend_targeting_loot);
+	put("config/gameplay/targeting/decor", Friend_targeting_decor);
+	put("config/gameplay/targeting/furniture", Friend_targeting_furniture);
+	put("config/gameplay/targeting/doors_and_lamps", Friend_targeting_interactive);
+	put("config/gameplay/targeting/levers", Friend_targeting_levers);
+	put("config/gameplay/targeting/signs", Friend_targeting_signs);
+	config->write_back();
+}
 static int                      friend_wasd_dx        = 0;    // The direction walked last frame.
 static int                      friend_wasd_dy        = 0;
 
@@ -6475,7 +6958,7 @@ static void Init() {
 		bool skip_splash;
 		config->value("config/gameplay/skip_splash", skip_splash);
 		config->value("config/gameplay/wasd_movement", Friend_wasd_movement);
-		config->value("config/gameplay/keyboard_targeting", Friend_keyboard_targeting, true);
+		Friend_targeting_load_settings();
 
 		// Check for mod overrides
 		bool force_skip_splash   = false;
@@ -7996,13 +8479,22 @@ static void Handle_event(SDL_Event& event) {
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_SPACE
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
-		&& !Notebook_gump::get_instance() && Friend_mode_space()) {
+		&& !Notebook_gump::get_instance() && Friend_mode_space(event.key.mod & SDL_KMOD_SHIFT)) {
 		return;    // Space: talk to, use or attack the pick.
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_E
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
 		&& !Notebook_gump::get_instance()) {
 		Friend_mode_cycle_object((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);    // E: the next thing.
+		return;
+	}
+	if (event.type == SDL_EVENT_KEY_DOWN && (event.key.mod & SDL_KMOD_SHIFT) && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
+		&& !Notebook_gump::get_instance() && gwin->get_main_actor()
+		&& (event.key.scancode == SDL_SCANCODE_I
+			|| (event.key.scancode >= SDL_SCANCODE_1 && event.key.scancode <= SDL_SCANCODE_8))) {
+		// Shift+I: the next backpack; Shift+1 to Shift+8: one member's.
+		Friend_mode_backpack_key(event.key.scancode == SDL_SCANCODE_I ? -1 : event.key.scancode - SDL_SCANCODE_1);
 		return;
 	}
 	if (Friend_wasd_movement && (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
@@ -8735,6 +9227,10 @@ static void Handle_event(SDL_Event& event) {
  *
  *  Output: false if user hit ESC.
  */
+// Friend Mode: while a sign, plaque, scroll or book waits, Space closes it
+// (or turns the page) as a click does.
+static bool get_click_space_continues = false;
+
 static bool Get_click(
 		int& x, int& y,
 		char* chr,             // Char. returned if not null.
@@ -8863,6 +9359,12 @@ static bool Get_click(
 						make_screenshot(true);
 						break;
 					}
+					if (!chr && c == SDLK_SPACE && get_click_space_continues && !event.key.repeat) {
+						x                   = -1;
+						y                   = -1;
+						g_waiting_for_click = false;
+						return true;
+					}
 					if (chr) {    // Looking for a character?
 						*chr                = (event.key.mod & SDL_KMOD_SHIFT) ? toupper(c) : c;
 						g_waiting_for_click = false;
@@ -8921,7 +9423,10 @@ bool Get_click(
 	Mouse::mouse()->show();
 	gwin->show(true);    // Want to see new mouse.
 	gwin->get_tqueue()->pause(Game::get_ticks());
-	const bool ret = Get_click(x, y, chr, drag_ok, rotate_colors);
+	const bool save_space     = get_click_space_continues;
+	get_click_space_continues = dynamic_cast<Text_gump*>(paint) != nullptr;
+	const bool ret            = Get_click(x, y, chr, drag_ok, rotate_colors);
+	get_click_space_continues = save_space;
 	gwin->get_tqueue()->resume(Game::get_ticks());
 	Mouse::mouse()->set_shape(saveshape);
 	return ret;

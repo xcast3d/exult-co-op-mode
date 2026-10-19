@@ -153,6 +153,29 @@ Dragging_info::Dragging_info(
 }
 
 /*
+ *  Create for an object in the world, in a window ('from'), or held by
+ *  someone with no window open (Friend Mode targeting: no mouse).
+ */
+Dragging_info::Dragging_info(Game_object* existing, Gump* from)
+		: obj(existing->shared_from_this()), is_new(false), gump(from), button(nullptr), mouse_widget(nullptr),
+		  widget_gump(nullptr), old_pos(-1, -1, -1), old_foot(0, 0, 0, 0), old_lift(-1),
+		  quantity(existing->get_quantity()), readied_index(-1), mousex(-1), mousey(-1), paintx(-1000), painty(-1000),
+		  mouse_shape(Mouse::mouse()->get_shape()), rect(0, 0, 0, 0), okay(true), possible_theft(false) {
+	if (gump) {
+		gump->get_shape_location(existing, paintx, painty);
+		old_pos = Tile_coord(existing->get_tx(), existing->get_ty(), 0);
+	} else if (existing->get_owner()) {
+		old_owner = existing->get_owner();
+		old_pos   = Tile_coord(existing->get_tx(), existing->get_ty(), 0);
+	} else {
+		gwin->get_shape_location(existing, paintx, painty);
+		old_pos  = existing->get_tile();
+		old_foot = existing->get_footprint();
+	}
+	old_lift = existing->get_outermost()->get_lift();
+}
+
+/*
  *  Clean up: free the dragged-object overlay layer.
  */
 Dragging_info::~Dragging_info() {
@@ -549,7 +572,13 @@ static bool Check_weight(
 
 void Dragging_info::put_back() {
 	Friend_mode_note_drag_put_back();    // Friend Mode guests: tell the host.
-	if (gump) {    // Put back remaining/orig. piece.
+	if (!gump && old_owner) {    // Taken without a window: back to its holder.
+		obj->set_shape_pos(old_pos.tx, old_pos.ty);
+		Actor* holder = old_owner->as_actor();
+		if (!(holder && readied_index >= 0 && holder->add_readied(obj.get(), readied_index, true, true))) {
+			old_owner->add(obj.get(), true);
+		}
+	} else if (gump) {    // Put back remaining/orig. piece.
 		// And don't check for volume!
 		// Restore saved vals.
 		obj->set_shape_pos(old_pos.tx, old_pos.ty);
@@ -793,6 +822,135 @@ bool Dragging_info::drop(
 	// Subtract quantity moved.
 	obj->modify_quantity(-quantity);
 	return false;    // Put back the rest.
+}
+
+/*
+ *  Friend Mode targeting: take the object out, as a drag's first motion
+ *  does (the same checks; guests tell the host).
+ *
+ *  Output: false if it can't be moved (nothing changed).
+ */
+
+bool Dragging_info::lift() {
+	Actor*       actor = gwin->get_controlled_actor();
+	Game_object* outer = gump ? gump->get_owner()->get_outermost() : obj->get_outermost();
+	if (!cheat.in_hack_mover()) {
+		if (!obj->is_dragable() && !obj->get_owner()) {
+			Mouse::mouse()->flash_shape(Mouse::tooheavy);
+			Audio::get_ptr()->play_sound_effect(Audio::game_sfx(76));
+			return false;
+		}
+		if (outer != actor && !Fast_pathfinder_client::is_grabable(actor, outer)) {
+			Mouse::mouse()->flash_shape(Mouse::outofrange);
+			return false;
+		}
+	}
+	// Taking from anyone outside the party may be theft.
+	possible_theft = outer != actor && !outer->get_flag(Obj_flags::in_party);
+	Friend_mode_note_drag_start(obj.get());
+	Container_game_object* owner = obj->get_owner();
+	if (owner) {
+		readied_index = owner->find_readied(obj.get());
+	}
+	if (gump) {
+		gump->remove(obj.get());
+	} else if (owner) {
+		owner->remove(obj.get());
+	} else {
+		Game_object_shared keep;
+		obj->remove_this(&keep);
+	}
+	gwin->set_all_dirty();
+	return true;
+}
+
+/*
+ *  Friend Mode targeting: put 'count' (0: all) of the lifted object into
+ *  'dest', at its readied 'spot' (or anywhere, -1), or with no 'dest' on a
+ *  free spot beside the controlled actor.  As a drop does: weight, guests,
+ *  the sound, eggs and theft.  What doesn't go is put back.
+ *
+ *  Output: true if 'count' went.
+ */
+
+bool Dragging_info::place(Container_game_object* dest, int spot, int count) {
+	const int          oldcx        = old_pos.tx / c_tiles_per_chunk;
+	const int          oldcy        = old_pos.ty / c_tiles_per_chunk;
+	const bool         okay_to_move = obj->get_flag(Obj_flags::okay_to_take);
+	const int          old_top      = old_pos.tz + obj->get_info().get_3d_height();
+	Game_object*       to_drop      = obj.get();
+	Game_object_shared to_drop_shared;
+	if (count <= 0 || count > quantity) {
+		count = quantity;
+	}
+	quantity = count;
+	if (count < obj->get_quantity()) {    // Part of a stack: a copy goes.
+		to_drop_shared = gmap->create_ireg_object(obj->get_shapenum(), obj->get_framenum());
+		to_drop        = to_drop_shared.get();
+		to_drop->modify_quantity(count - 1);
+		if (okay_to_move) {
+			to_drop->set_flag(Obj_flags::okay_to_take);
+		}
+		if (obj->get_flag(Obj_flags::is_temporary)) {
+			to_drop->set_flag(Obj_flags::is_temporary);
+		}
+	}
+	bool placed = false;
+	if (dest) {
+		if (Check_weight(gwin, to_drop, dest)) {
+			Actor* holder = dest->as_actor();
+			placed        = spot >= 0 ? holder && holder->add_readied(to_drop, spot) : dest->add(to_drop, false, true);
+			if (!placed) {
+				Mouse::mouse()->flash_shape(Mouse::wontfit);
+			}
+		}
+	} else {
+		Actor*           actor = gwin->get_controlled_actor();
+		const Tile_coord at    = Map_chunk::find_spot(
+                actor->get_tile(), 2, to_drop->get_shapenum(), to_drop->get_framenum(), 1);
+		if (at.tx >= 0) {
+			to_drop->move(at);
+			placed = true;
+		} else {
+			Mouse::mouse()->flash_shape(Mouse::blocked);
+		}
+	}
+	if (!placed) {
+		put_back();
+		return false;
+	}
+	Friend_mode_note_drag_drop(to_drop, count, dest, to_drop == obj.get());
+	Audio::get_ptr()->play_sound_effect(Audio::game_sfx(74));
+	if (!gump && !old_owner) {    // Do eggs where it came from.
+		gmap->get_chunk(oldcx, oldcy)->activate_eggs(obj.get(), old_pos.tx, old_pos.ty, old_pos.tz, old_pos.tx, old_pos.ty);
+	}
+	if (!okay_to_move && !cheat.in_hack_mover() && possible_theft && !gwin->is_in_dungeon()) {
+		gwin->theft();
+	}
+	if (to_drop == obj.get()) {
+		if (old_foot.w > 0) {    // Watch for stuff on top of it.
+			Map_chunk::gravity(old_foot, old_top);
+		}
+	} else {
+		obj->modify_quantity(-count);
+		put_back();    // The rest.
+	}
+	gwin->set_all_dirty();
+	return true;
+}
+
+/*
+ *  Friend Mode targeting (E and Space): move an object without the mouse,
+ *  as a drag and drop would.  'from' is the window it is in, if any.  See
+ *  Dragging_info::place for 'dest', 'spot' and 'count'.
+ */
+
+bool Game_window::move_object(Game_object* object, Gump* from, Container_game_object* dest, int spot, int count) {
+	if (!object || dragging) {
+		return false;
+	}
+	Dragging_info info(object, from);
+	return info.lift() && info.place(dest, spot, count);
 }
 
 /*

@@ -727,6 +727,56 @@ resolution.
       into it at an angle, too. A locked door says "Locked" (once every
       1.5 seconds). On a guest, the host opens it for everyone.
 
+## Targeting things (built 2026-10-19)
+
+- [x] **E in the world:** a chest, a body and a dagger on the floor:
+      nearest first, the dagger included; a loose item across town is not.
+- [x] **E in a window:** Space opens the chest; E now cycles its items,
+      with a green arrow over each in the window (also with the window
+      scaled in UI options); Space takes one into the pack (a stack of gold
+      with no "how many?") and the next is picked. Escape closes the
+      window and E is on the world again.
+- [x] **Shift:** Shift+Space on 30 gold: "How many?" 10 → 10 taken, 20
+      left. Shift+Space on a single item in a body: everything taken.
+      Shift+Space on a bag on the floor picks the bag up.
+- [x] **Own things:** backpack open, E on a potion, Space drinks it; on a
+      spare sword, Space wields it and the old one goes to the pack;
+      Space on the wielded one puts it away; on a gem, "Drop the gem?
+      Space again", and the second Space drops it beside you.
+- [x] **Not yours:** a shop item: the first Space warns, the second takes
+      it, and theft follows as usual. Shift+Space on a shop chest asks once.
+- [x] **Too heavy:** refused with the usual cursor; the item stays.
+- [ ] **On a guest:** the same, with the items moving on both machines.
+
+## Targeting options and groups (built 2026-10-19)
+
+- [x] **Notices:** "Targeting 10 gold coins" (not "10 10").
+- [x] **Options page:** Escape → Target System: "Enable" first; set to
+      No, the other lines hide. Nine lines in all, loot with "(gold, gems,
+      equipment)". Game Input no longer has Targeting. OK keeps changes
+      (also after a restart), Cancel drops them.
+- [x] **Signs:** E offers a sign, plaque or tombstone within reach; Space
+      reads it.
+- [x] **Moving restarts the cycle:** Q twice (second nearest), take a step,
+      Q: the nearest again. Standing still, Q goes on, then "No target",
+      then round. Same for E.
+- [x] **Groups:** in a house, E skips chairs, candles, plates, cups and
+      papers by default; turn decor or furniture on and they come in. With
+      doors and lamps on, E offers a door and Space opens it; Space on a
+      candle lights it. A lever (levers on by default): Space pulls it.
+- [x] **Circle and party:** "Show range circle: No" hides it; "Q: party
+      out of combat: No" leaves companions out of Q.
+- [x] **Targeting off:** Q, E and Space do nothing new; Space pauses
+      combat as in Exult.
+- [x] **Backpacks:** Shift+I opens the Avatar's backpack, again Iolo's,
+      and so on; with all open, Shift+I shuts them all. Shift+1 opens the
+      Avatar's, Shift+1 again shuts it; Shift+2 Iolo's. E cycles what is
+      open. On a guest, only its companion's opens.
+- [x] **Paperdolls:** 1 opens the Avatar's, 1 again shuts it; 2 Iolo's.
+- [x] **Space closes signs:** Space on a sign reads it; Space again
+      closes it. A book: Space turns the pages, then closes. A crosshair
+      (a key on a door) is not answered by Space.
+
 ## Maps
 
 The world map on U is shelved (see

@@ -67,6 +67,10 @@ class Dragging_info : public Game_singletons {
 
 	bool start(int x, int y);    // First motion.
 	void put_back();             // Put back object.
+	// Friend Mode targeting: a drag without the mouse (Game_window::move_object).
+	Container_game_object* old_owner = nullptr;    // Held it, with no window open.
+	bool                   lift();
+	bool                   place(Container_game_object* dest, int spot, int count);
 	bool drop_on_gump(int x, int y, Game_object* to_drop, Gump* gump);
 	bool drop_on_map(int x, int y, Game_object* to_drop);
 
@@ -75,6 +79,7 @@ public:
 	// Create for dropping new object.
 	Dragging_info(Game_object_shared newobj);
 	Dragging_info(int x, int y);    // Create for given mouse position.
+	Dragging_info(Game_object* existing, Gump* from);    // For a given object.
 	~Dragging_info();
 	bool moved(int x, int y);    // Mouse moved.
 	void paint();                // Paint object being dragged.

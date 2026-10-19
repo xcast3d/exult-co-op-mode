@@ -190,10 +190,6 @@ void InputOptions_gump::build_buttons() {
 			this, &InputOptions_gump::toggle_wasd_movement, yesNo, wasd_movement,
 			get_button_pos_for_label("WASD movement:"), yForRow(++y_index), 44);
 
-	buttons[id_keyboard_targeting] = std::make_unique<InputTextToggle>(
-			this, &InputOptions_gump::toggle_keyboard_targeting, yesNo, keyboard_targeting,
-			get_button_pos_for_label("Targeting (Q, Space):"), yForRow(++y_index), 44);
-
 	// Risize to fit all
 	ResizeWidthToFitWidgets(tcb::span(buttons.data() + id_first, id_count));
 
@@ -215,7 +211,6 @@ void InputOptions_gump::load_settings() {
 	dpad_location    = gwin->get_dpad_location();
 	touch_pathfind   = gwin->get_touch_pathfind();
 	wasd_movement    = Friend_wasd_movement ? 1 : 0;
-	keyboard_targeting = Friend_keyboard_targeting ? 1 : 0;
 }
 
 InputOptions_gump::InputOptions_gump() : Modal_gump(nullptr, -1) {
@@ -266,8 +261,6 @@ void InputOptions_gump::save_settings() {
 
 	Friend_wasd_movement = wasd_movement != 0;
 	config->set("config/gameplay/wasd_movement", Friend_wasd_movement ? "yes" : "no", false);
-	Friend_keyboard_targeting = keyboard_targeting != 0;
-	config->set("config/gameplay/keyboard_targeting", Friend_keyboard_targeting ? "yes" : "no", false);
 
 	config->write_back();
 
@@ -299,7 +292,108 @@ void InputOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::DPadscreenlocation_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::PathfindwithLongTouch_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), "WASD movement:", x + label_margin, y + yForRow(++y_index) + 1);
-	font->paint_text(iwin->get_ib8(), "Targeting (Q, Space):", x + label_margin, y + yForRow(++y_index) + 1);
 
+	gwin->set_painted();
+}
+
+/*
+ *  Friend Mode: the Targeting System options page.
+ */
+
+using TargetingOptions_button = CallbackTextButton<TargetingOptions_gump>;
+using TargetingToggle         = CallbackToggleTextButton<TargetingOptions_gump>;
+
+const char* TargetingOptions_gump::label(int setting) {
+	static const char* const labels[set_count] = {"Enable (Q, E, Space):",
+			"Show range circle:",
+			"Q: party out of combat:",
+			"E: loot (gold, gems, equipment):",
+			"E: decor (dishes, papers):",
+			"E: furniture (chairs, candles):",
+			"E: doors, shutters, lamps:",
+			"E: levers and switches:",
+			"E: signs, plaques, graves:"};
+	return labels[setting];
+}
+
+TargetingOptions_gump::TargetingOptions_gump() : Modal_gump(nullptr, -1) {
+	SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 2)), -1);
+	const bool* const values[set_count]
+			= {&Friend_keyboard_targeting, &Friend_targeting_circle,     &Friend_targeting_party,
+			   &Friend_targeting_loot,     &Friend_targeting_decor,      &Friend_targeting_furniture,
+			   &Friend_targeting_interactive, &Friend_targeting_levers, &Friend_targeting_signs};
+	for (int i = 0; i < set_count; ++i) {
+		settings[i] = *values[i] ? 1 : 0;
+	}
+	buttons[id_ok]     = std::make_unique<TargetingOptions_button>(this, &TargetingOptions_gump::close, Strings::OK(), 25,
+			yForRow(set_count + 1), 50);
+	buttons[id_cancel] = std::make_unique<TargetingOptions_button>(
+			this, &TargetingOptions_gump::cancel, Strings::CANCEL(), 75, yForRow(set_count + 1), 50);
+	const std::vector<std::string> yesNo = {Strings::No(), Strings::Yes()};
+	using Toggle                         = void (TargetingOptions_gump::*)(int);
+	Toggle toggles[set_count] = {&TargetingOptions_gump::toggle<0>, &TargetingOptions_gump::toggle<1>,
+			&TargetingOptions_gump::toggle<2>, &TargetingOptions_gump::toggle<3>, &TargetingOptions_gump::toggle<4>,
+			&TargetingOptions_gump::toggle<5>, &TargetingOptions_gump::toggle<6>, &TargetingOptions_gump::toggle<7>,
+			&TargetingOptions_gump::toggle<8>};
+	for (int i = 0; i < set_count; ++i) {
+		buttons[id_first_setting + i] = std::make_unique<TargetingToggle>(
+				this, std::move(toggles[i]), yesNo, settings[i], get_button_pos_for_label(label(i)), yForRow(i), 44);
+	}
+	ResizeWidthToFitWidgets(tcb::span(buttons.data() + id_first, id_count));
+	HorizontalArrangeWidgets(tcb::span(buttons.data() + id_ok, 2));
+	RightAlignWidgets(tcb::span(buttons.data() + id_first_setting, set_count));
+}
+
+void TargetingOptions_gump::close() {
+	bool* const values[set_count]
+			= {&Friend_keyboard_targeting, &Friend_targeting_circle,     &Friend_targeting_party,
+			   &Friend_targeting_loot,     &Friend_targeting_decor,      &Friend_targeting_furniture,
+			   &Friend_targeting_interactive, &Friend_targeting_levers, &Friend_targeting_signs};
+	for (int i = 0; i < set_count; ++i) {
+		*values[i] = settings[i] != 0;
+	}
+	Friend_targeting_save_settings();
+	done = true;
+}
+
+void TargetingOptions_gump::cancel() {
+	done = true;
+}
+
+void TargetingOptions_gump::set(int setting, int state) {
+	settings[setting] = state;
+	if (setting == set_enabled) {
+		gwin->set_all_dirty();    // The other lines show or hide.
+	}
+}
+
+bool TargetingOptions_gump::shown(int id) const {
+	return id <= id_first_setting || settings[set_enabled] != 0;
+}
+
+Gump_button* TargetingOptions_gump::on_button(int mx, int my) {
+	for (int id = 0; id < id_count; ++id) {
+		auto& btn   = buttons[id];
+		auto  found = btn && shown(id) ? btn->on_button(mx, my) : nullptr;
+		if (found) {
+			return found;
+		}
+	}
+	return Modal_gump::on_button(mx, my);
+}
+
+void TargetingOptions_gump::paint() {
+	Modal_gump::paint();
+	for (int id = 0; id < id_count; ++id) {
+		if (buttons[id] && shown(id)) {
+			buttons[id]->paint();
+		}
+	}
+	Image_window8* iwin = gwin->get_win();
+	for (int i = 0; i < set_count; ++i) {
+		if (shown(id_first_setting + i)) {
+			font->paint_text(iwin->get_ib8(), label(i), x + label_margin, y + yForRow(i) + 1);
+		}
+	}
 	gwin->set_painted();
 }

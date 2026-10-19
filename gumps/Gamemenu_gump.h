@@ -37,6 +37,7 @@ private:
 		id_game_display_options,
 		id_game_engine_options,
 		id_input,
+		id_targeting,
 		id_open_coop,
 		id_main_menu,
 		id_quit,
@@ -74,6 +75,7 @@ public:
 	void game_display_options();
 	void game_engine_options();
 	void input_options();
+	void targeting_options();    // Friend Mode: Q, E and Space.
 	void open_coop();    // Start hosting Co-Op Mode in this game.
 
 	static void  do_exult_menu();

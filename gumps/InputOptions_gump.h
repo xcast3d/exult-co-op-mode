@@ -40,7 +40,6 @@ private:
 	int  dpad_location;
 	bool touch_pathfind;
 	int  wasd_movement;
-	int  keyboard_targeting;
 
 	enum button_ids {
 		id_first = 0,
@@ -58,7 +57,6 @@ private:
 		id_dpad_location,
 		id_touch_pathfind,
 		id_wasd_movement,
-		id_keyboard_targeting,
 		id_count
 	};
 
@@ -118,10 +116,57 @@ public:
 		wasd_movement = state;
 	}
 
-	void toggle_keyboard_targeting(int state) {
-		keyboard_targeting = state;
+	Gump_button* on_button(int mx, int my) override;
+};
+
+// Friend Mode: the Targeting System options page (Q, E and Space), next to
+// Game Input in the game menu.  With "Enable" off the rest is hidden.  Kept
+// in this file so no build file changes.
+class TargetingOptions_gump : public Modal_gump {
+private:
+	enum setting_ids {
+		set_enabled,
+		set_circle,
+		set_party,
+		set_loot,
+		set_decor,
+		set_furniture,
+		set_interactive,
+		set_levers,
+		set_signs,
+		set_count
+	};
+
+	enum button_ids {
+		id_first = 0,
+		id_ok    = id_first,
+		id_cancel,
+		id_first_setting,
+		id_count = id_first_setting + set_count
+	};
+
+	std::array<int, set_count>                         settings{};
+	std::array<std::unique_ptr<Gump_button>, id_count> buttons;
+
+	static const char* label(int setting);
+
+public:
+	TargetingOptions_gump();
+
+	void paint() override;
+	void close() override;
+	void cancel();
+
+	void set(int setting, int state);
+
+	template <int setting>
+	void toggle(int state) {
+		set(setting, state);
 	}
 
 	Gump_button* on_button(int mx, int my) override;
+
+private:
+	bool shown(int id) const;    // Hidden while targeting is off.
 };
 #endif

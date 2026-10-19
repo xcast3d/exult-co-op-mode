@@ -45,6 +45,7 @@
 
 class Actor;
 class Barge_object;
+class Container_game_object;
 class Map_chunk;
 class Chunk_terrain;
 class Egg_object;
@@ -1022,6 +1023,8 @@ public:
 	// target picked with Q or E).
 	void double_clicked_object(Game_object* obj, bool gump = false);
 	bool start_dragging(int x, int y);
+	// Friend Mode targeting: a drag and drop without the mouse (drag.cc).
+	bool move_object(Game_object* object, Gump* from, Container_game_object* dest, int spot = -1, int count = 0);
 	bool drag(int x, int y);                        // During dragging.
 	bool drop_dragged(int x, int y, bool moved);    // Done dragging.
 	void stop_dragging();
