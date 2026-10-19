@@ -2009,6 +2009,45 @@ Gump* Game_window::get_dragging_gump() {
  *  Alternative start actor function
  *  Placed in an alternative function to prevent breaking barges
  */
+/*
+ *  Friend Mode: walking into a closed door opens it, from standing as well
+ *  as on the move.  Exult opened doors only when a walk already under way
+ *  met one, so from in front of a door the walker slid sideways or
+ *  stopped.  A guest asks the host, which opens it for everyone.  True if
+ *  'tile' has a closed door (opened now, asked for, or locked).
+ */
+
+static bool Open_door_ahead(Game_window* gwin, Actor* actor, const Tile_coord& tile) {
+	Game_object* door = Game_object::find_door(tile);
+	if (!door || !door->is_closed_door()) {
+		return false;
+	}
+	// Once per door every 1.5 seconds: opening toggles it, and a guest's
+	// door opens only when the host's answer comes back.
+	static Game_object_weak last_door;
+	static uint32           last_time = 0;
+	const uint32            now       = SDL_GetTicks();
+	if (last_door.lock().get() == door && now - last_time < 1500) {
+		return true;
+	}
+	last_door = weak_from_obj(door);
+	last_time = now;
+	if (door->get_framenum() % 4 >= 2) {
+		gwin->get_effects()->add_text("Locked", door);
+		return true;
+	}
+	if (gwin->has_network_friend_control() && actor != gwin->get_main_actor()) {
+		Friend_mode_request_object_use(door);
+		return true;
+	}
+	// As NPCs open doors: quality 0, so only the door's own toggle runs.
+	const int savequal = door->get_quality();
+	door->set_quality(0);
+	door->activate();
+	door->set_quality(savequal);
+	return true;
+}
+
 void Game_window::start_actor_alt(
 		int winx, int winy,    // Mouse position to aim for.
 		int speed              // Msecs. between frames.
@@ -2040,6 +2079,9 @@ void Game_window::start_actor_alt(
 
 	dir = Get_direction_NoWrap(ay - winy, winx - ax);
 
+	if (blocked[dir] && !cheat.in_map_editor() && Open_door_ahead(this, actor, start.get_neighbor(dir))) {
+		return;    // Walks through once it is open.
+	}
 	if (blocked[dir] && !blocked[(dir + 1) % 8]) {
 		dir = (dir + 1) % 8;
 	} else if (blocked[dir] && !blocked[(dir + 7) % 8]) {

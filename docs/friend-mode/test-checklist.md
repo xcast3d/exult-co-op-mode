@@ -714,6 +714,19 @@ resolution.
       screen (off the host's), C or Space: the companion goes after it
       and fights. The deer exists on the guest out to the frame.
 
+## Targeting, second round (2026-10-19)
+
+- [x] **E reach** and **doors** below: tested on one Mac, working.
+- [ ] **Range circle:** at a large game area, combat mode or Q/E shows a
+      faint circle with a border, wholly in view (it shrinks to fit the
+      shorter side). Small game areas: none.
+- [x] **E reach:** E skips containers you can't reach (one in the next
+      building, behind a wall); every pick opens with Space.
+- [x] **Doors:** stand still in front of a closed door, then walk into it
+      (WASD, and holding the mouse): it opens and you walk through. Walking
+      into it at an angle, too. A locked door says "Locked" (once every
+      1.5 seconds). On a guest, the host opens it for everyone.
+
 ## Maps
 
 The world map on U is shelved (see

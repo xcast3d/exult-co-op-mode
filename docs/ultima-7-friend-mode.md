@@ -384,16 +384,24 @@ upstream.
     starts a fight.
   - Out of combat **Q** also cycles the party (last), so the Avatar can
     talk to a companion. Not for guests.
-  - **E** cycles containers and bodies on screen (chests, crates, barrels,
-    bags on the ground, the fallen), nearest first, Shift+E back, with a
-    green arrow; Space opens it ("Too far away" when out of reach). Q and E
+  - **E** cycles containers and bodies within reach (chests, crates,
+    barrels, bags on the ground, the fallen; not one in the next
+    building), nearest first, Shift+E back, with a green arrow; Space
+    opens it. Q and E
     each clear the other's pick. Guests' follow mode moved from E to **Y**
     (E was otherwise only the host's egg cheat).
   - **Range:** anything on screen, at most 40 tiles off each way (a
     square, as Exult measures distance, and how far around a guest's
     companion the host keeps creatures awake). Screens bigger than that
-    show the limit as a faint square with a border, in combat mode and for
-    2 seconds after Q or E; smaller screens show nothing. The host keeps a
+    show the limit as a faint circle with a border, in combat mode and for
+    2 seconds after Q or E; smaller screens show nothing. The circle is a
+    picture of the range, not exact: it shrinks to stay wholly in view, so
+    it shows why something at the far edge of a big screen can't be
+    picked. (A square frame was tried first and read as a box, not a
+    range.)
+  - **Doors open by walking into them** (2026-10-19), standing or on the
+    move, with WASD or the mouse; a guest's go through the host. Exult
+    only opened a door when a walk already under way met it. The host keeps a
     guest's foe while it is in range of the companion, not on the host's
     screen (that was the "can't attack at large resolutions" bug), and
     guests get items and creatures 3 chunks around their companion (was

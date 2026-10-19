@@ -2661,13 +2661,17 @@ static void Friend_mode_paint_target_arrow() {
 	gwin->set_painted();
 }
 
-// The targeting range, on screens bigger than it: a faint square with a
+// The targeting range, on screens bigger than it: a faint circle with a
 // border around one's character, in combat mode and for a moment after Q
 // or E.  On smaller screens the screen's edge is the range, so nothing.
+// The circle is a picture of the range, not the range itself (a square
+// of 40 tiles each way): it shrinks to stay wholly in view, so it shows
+// why something at the far edge of a big screen can't be picked.
 
 static void Friend_mode_paint_range_frame() {
 	static int    fill_layer   = -1;
 	static int    border_layer = -1;
+	static int    drawn_radius = -1;
 	Image_window* iwin         = gwin->get_win();
 	Actor*        own          = gwin->get_controlled_actor();
 	const int     range        = friend_attack_max_tiles;
@@ -2690,37 +2694,55 @@ static void Friend_mode_paint_range_frame() {
 		// Under the target arrow and text.  The fill is one color, made faint
 		// by the layer's alpha; the border is its own, stronger layer.
 		constexpr int text_layer_z = (1 << 18) + (1 << 16);
-		const unsigned char color  = Shape_manager::get_instance()->get_special_pixel(PROTECT_PIXEL);
 		fill_layer                 = gwin->create_layer("Target range fill", size, size, 255, 0, text_layer_z - 4);
 		border_layer               = gwin->create_layer("Target range border", size, size, 255, 0, text_layer_z - 3);
 		if (fill_layer < 0 || border_layer < 0) {
 			return;
 		}
+		gwin->layer_set_alpha(fill_layer, 20);
+		gwin->layer_set_alpha(border_layer, 140);
+		drawn_radius = -1;
+	}
+	// Centred on the tile the character stands on (its shape's anchor is
+	// that tile's bottom right corner); as big as the range, or as fits
+	// in view with a few pixels to spare, in steps of 4 pixels.
+	int x;
+	int y;
+	gwin->get_shape_location(own, x, y);
+	const int cx     = x - c_tilesize / 2;
+	const int cy     = y - c_tilesize / 2;
+	constexpr int margin = 4;
+	int       radius = std::min({size / 2 - 1, cx - margin, gwin->get_width() - cx - margin, cy - margin,
+				  gwin->get_height() - cy - margin});
+	radius           = std::max(radius, 4 * c_tilesize) / 4 * 4;
+	if (radius != drawn_radius) {
 		Image_buffer8* fill = gwin->get_layer_ibuf(fill_layer);
 		Image_buffer8* line = gwin->get_layer_ibuf(border_layer);
 		if (!fill || !line) {
 			return;
 		}
-		fill->fill8(color);
+		const unsigned char color = Shape_manager::get_instance()->get_special_pixel(PROTECT_PIXEL);
+		fill->fill8(255);
 		line->fill8(255);
-		for (int i = 0; i < 2; ++i) {
-			line->fill8(color, size - 2 * i, 1, i, i);
-			line->fill8(color, size - 2 * i, 1, i, size - 1 - i);
-			line->fill8(color, 1, size - 2 * i, i, i);
-			line->fill8(color, 1, size - 2 * i, size - 1 - i, i);
+		const int inner = radius - 2;    // The border is 2 pixels wide.
+		for (int py = 0; py < size; ++py) {
+			const int dy = 2 * py + 1 - size;    // Doubled, from the centre.
+			for (int px = 0; px < size; ++px) {
+				const int dx = 2 * px + 1 - size;
+				const int d2 = dx * dx + dy * dy;
+				if (d2 <= 4 * inner * inner) {
+					fill->put_pixel8(color, px, py);
+				} else if (d2 <= 4 * radius * radius) {
+					line->put_pixel8(color, px, py);
+				}
+			}
 		}
-		gwin->layer_set_alpha(fill_layer, 20);
-		gwin->layer_set_alpha(border_layer, 140);
 		gwin->layer_set_dirty(fill_layer);
 		gwin->layer_set_dirty(border_layer);
+		drawn_radius = radius;
 	}
-	// Centred on the tile the character stands on (its shape's anchor is
-	// that tile's bottom right corner).
-	int x;
-	int y;
-	gwin->get_shape_location(own, x, y);
-	const int left = x - c_tilesize / 2 - size / 2;
-	const int top  = y - c_tilesize / 2 - size / 2;
+	const int left = cx - size / 2;
+	const int top  = cy - size / 2;
 	int       sx0;
 	int       sy0;
 	int       sx1;
@@ -2836,9 +2858,11 @@ static bool Friend_mode_space() {
 	return true;
 }
 
-// E: the next container or body on screen and in range (chests, crates,
-// barrels, bags on the ground, the fallen), nearest first, Shift+E the
-// previous; past the last the pick clears.  Space opens it.
+// E: the next container or body within reach (chests, crates, barrels,
+// bags on the ground, the fallen), nearest first, Shift+E the previous;
+// past the last the pick clears.  Space opens it.  Only what can be
+// reached from here, as a double-click checks (not one in the next
+// building).
 static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 	Game_object_vector nearby;
 	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0);
@@ -2850,7 +2874,8 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		const Tile_coord  at   = obj->get_tile();
 		if (!obj->as_actor() && !obj->get_owner() && obj->get_chunk()
 			&& (info.get_shape_class() == Shape_info::container || info.is_body_shape())
-			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5) {
+			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5
+			&& (cheat.in_hack_mover() || Fast_pathfinder_client::is_grabable(own, obj))) {
 			things.push_back(obj);
 		}
 	}
