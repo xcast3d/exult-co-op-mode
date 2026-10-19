@@ -676,6 +676,8 @@ public:
 		return network_spectating;
 	}
 	void set_network_spectating(bool spectating);
+	// Friend Mode targeting range in tiles (see exult.cc).
+	static constexpr int friend_target_range = 40;
 	bool network_input_blocked() const {
 		return network_dialogue_paused || network_spectating || network_host_paused;
 	}
@@ -1016,6 +1018,9 @@ public:
 	// Schedule object for deletion.
 	// Handle a double-click in window.
 	void double_clicked(int x, int y);
+	// The same for an object in the world, without the mouse (Space on a
+	// target picked with Q or E).
+	void double_clicked_object(Game_object* obj, bool gump = false);
 	bool start_dragging(int x, int y);
 	bool drag(int x, int y);                        // During dragging.
 	bool drop_dragged(int x, int y, bool moved);    // Done dragging.

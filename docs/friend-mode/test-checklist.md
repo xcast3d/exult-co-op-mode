@@ -660,6 +660,60 @@ config and gamedat. The host needs a party with at least two companions
 - [x] **WASD on a guest:** walking works for a guest's companion (the
       host's leash and refusals apply).
 
+## Fixes from the first internet test (built 2026-10-19, protocol version 31)
+
+Found when a second person joined over the internet (host's public
+address). Best tested over the internet again, the guest at a large
+resolution.
+
+- [ ] **Join screen:** no flicker. The player name and host address from
+      the last join are filled in; Enter alone connects (and the same
+      name gets the companion straight back).
+- [ ] **Stuck conversation bar:** the host talks to someone (Chantu, the
+      Trinsic healer, ends with Escape); the guest's "The Avatar is
+      having a conversation" goes when it ends. If it ever stays, it
+      should go by itself: the host's log says "conversation left open;
+      ending it for guests", or the guest's says "the Avatar moved; ending
+      a conversation we never saw end" once the Avatar walks.
+- [ ] **Running as a guest over the internet** (locally fine, 2026-10-19;
+      waits for the next Windows build): fastest mouse speed and
+      WASD walk smoothly, no stutter, flicker or pulling back. A step the
+      host refuses (the leash) still snaps the companion back once.
+- [x] **Knocked out is not done:** Space on a deer (or a hostile) in
+      combat: the attack goes on after it falls unconscious, until it is
+      dead; then the next hostile on screen is picked and attacked, never
+      a peaceful one, or "No target". On the host and on a guest.
+- [x] **Minimap size:** with the minimap on, a large game area (Video
+      options) shows it the same size as at a small one; the HUD size in
+      the UI options changes it. Still hidden in dungeons and menus.
+- [x] **Guest at a merchant:** only name, job, bye and the trade answers
+      (Dell: buy, then weapons, armour, provisions, nothing). No "murder"
+      or "Fellowship". The shop and training still work, including Perrin
+      (training from "job") and Snel.
+
+## Targeting for everything (built 2026-10-19, protocol version 31)
+
+- [x] **Space talks:** out of combat, Q to a townsperson, Space: the
+      conversation starts. On a guest: a merchant talks, anyone else says
+      "The Avatar must do this". Space on a wolf out of combat does not
+      start a fight; C attacks it (hostile pick), and C then Space attacks
+      a peaceful one.
+- [x] **Party in Q:** out of combat the Avatar's Q reaches Iolo and the
+      rest after everyone else; Space talks to them. In combat they aren't
+      offered, and a party pick clears when combat starts. Not on guests.
+- [x] **E:** cycles chests, crates, barrels, bags and bodies on screen,
+      nearest first (Shift+E back), with a green arrow; past the last,
+      "No target". Space opens the pick, or "Too far away". Q after E (and
+      E after Q) replaces the pick. A pick taken by someone goes.
+- [x] **Y follows** on a guest (E no longer does).
+- [x] **Range frame:** at a small game area nothing shows. At a game area
+      wider or taller than 81 tiles (648 pixels), combat mode or Q/E shows
+      a faint square with a border around your character; Q picks nothing
+      outside it.
+- [ ] **Guest at a large resolution:** Q a deer at the edge of the guest's
+      screen (off the host's), C or Space: the companion goes after it
+      and fights. The deer exists on the guest out to the frame.
+
 ## Maps
 
 The world map on U is shelved (see

@@ -375,6 +375,15 @@ inline bool Off_screen(Game_window* gwin, Game_object* npc) {
 	return !screen.has_world_point(t.tx, t.ty);
 }
 
+// Friend Mode: a guest's companion fights what the guest sees, not what
+// the host's screen shows, within the targeting range around it.
+inline bool Out_of_sight(Game_window* gwin, Actor* npc, Game_object* opponent) {
+	if (gwin->is_remote_friend(npc)) {
+		return npc->distance(opponent) > Game_window::friend_target_range;
+	}
+	return Off_screen(gwin, opponent);
+}
+
 bool Combat_schedule::is_enemy(int align, int other) {
 	switch (align) {
 	case Actor::good:
@@ -953,7 +962,8 @@ void Combat_schedule::approach_foe(bool for_projectile    // Want to attack with
 	// Start walking.  Delay a bit if
 	//   opponent is off-screen.
 	npc->start(
-			gwin->get_std_delay(), extra_delay + (Off_screen(gwin, opponent) ? 5 * gwin->get_std_delay() : gwin->get_std_delay()));
+			gwin->get_std_delay(),
+			extra_delay + (Out_of_sight(gwin, npc, opponent) ? 5 * gwin->get_std_delay() : gwin->get_std_delay()));
 }
 
 /*
@@ -1527,6 +1537,9 @@ inline int Need_new_opponent(Game_window* gwin, Actor* npc) {
 		return 1;
 	}
 	// See if off screen.
+	if (gwin->is_remote_friend(npc)) {
+		return Out_of_sight(gwin, npc, opponent);
+	}
 	return Off_screen(gwin, opponent) && !Off_screen(gwin, npc);
 }
 

@@ -2739,13 +2739,21 @@ void Game_window::double_clicked(
 	}
 	// Nothing going on?
 	// Look for obj. in open gump.
-	Game_object* obj            = nullptr;
-	const bool   gump           = gump_man->double_clicked(x, y, obj);
-	const bool   avatar_can_act = main_actor_can_act();
-
+	Game_object* obj  = nullptr;
+	const bool   gump = gump_man->double_clicked(x, y, obj);
 	// If gump manager didn't handle it, we search the world for an object
 	if (!gump) {
 		obj = find_object(x, y);
+	}
+	double_clicked_object(obj, gump);
+}
+
+void Game_window::double_clicked_object(Game_object* obj, bool gump) {
+	if (network_input_blocked() || main_actor_dont_move()) {
+		return;
+	}
+	const bool avatar_can_act = main_actor_can_act();
+	if (!gump) {
 		if (!avatar_can_act && obj && obj->as_actor() && obj->as_actor() == main_actor->as_actor()) {
 			ActionFileGump(nullptr);
 			return;

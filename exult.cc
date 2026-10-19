@@ -103,6 +103,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
 #include <filesystem>
 #include <iomanip>
 #if defined(_WIN32)
@@ -271,6 +272,10 @@ static bool friend_world_sent     = false;    // Host: the guest has our world, 
 static string friend_player_name;    // Typed on Join (starts empty), or the Avatar's.
 static Friend_mode_session friend_session;
 static bool friend_host_dialogue_active = false;
+// Guest: when the last conversation message came, and how long after it a
+// move of the Avatar means the conversation's end was missed.
+static uint32    friend_dialogue_event_at = 0;
+constexpr uint32 friend_dialogue_stale_ms = 2000;
 static int  friend_saved_attack_mode    = -1;    // The Avatar's, while targeting made it manual.
 static std::vector<uint32> friend_sent_party;    // Party last sent to guests.
 // Grace period before a companion left beyond the leash returns to the Avatar.
@@ -301,6 +306,7 @@ struct Friend_guest {
 	int              attacker = -1;    // Companion fighting for it.
 	Game_object_weak attack_foe;
 	bool             following = false;    // The party's AI drives its companion.
+	uint32           move_seq  = 0;        // Number of its last step handled.
 };
 static std::map<int, Friend_guest> friend_guests;
 
@@ -1125,7 +1131,7 @@ static void Friend_mode_spawn_test_creatures() {
 namespace {
 constexpr uint32 friend_item_sync_ms      = 250;
 constexpr int    friend_item_avatar_chunks = 3;    // Radius around the Avatar.
-constexpr int    friend_item_guest_chunks  = 2;    // Radius around the guest.
+constexpr int    friend_item_guest_chunks  = 3;    // Radius around the guest (past the 40-tile target range).
 constexpr int    friend_item_max_depth     = 8;    // Container nesting limit.
 
 void Friend_put8(std::vector<unsigned char>& out, int value) {
@@ -2299,7 +2305,11 @@ static void Friend_mode_wake_near_guest() {
 // the foe dies or is lost, or the guest walks, the companion waits again.
 
 enum Friend_attack_target { friend_attack_npc = 0, friend_attack_creature = 1, friend_attack_stop = 2 };
-constexpr int friend_attack_max_tiles = 24;    // Reach for picking a foe.
+// Targeting range: anything on screen, at most 40 tiles off each way (a
+// square, as Exult measures distance).  That is how far around a guest's
+// companion the host keeps creatures awake.  Screens bigger than that show
+// the limit as a faint frame.
+constexpr int friend_attack_max_tiles = Game_window::friend_target_range;
 
 // Creatures, and NPCs who are hostile.  Peaceful people stay the Avatar's
 // business, as with talking to them.
@@ -2361,6 +2371,10 @@ static bool Friend_is_hostile_target(const Actor* own, const Actor* foe) {
 
 static void Friend_mode_take_manual();
 
+// The pick is being attacked (through targeting), so a knockout doesn't end
+// the fight and a kill moves on to the next hostile.
+static bool friend_attacking_pick = false;
+
 // "Targeting Deer", "Attacking Deer" or "No target" near the top, replacing
 // the last one.
 static void Friend_mode_target_notice(const std::string& text) {
@@ -2381,6 +2395,7 @@ static std::string Friend_target_name(const Actor* actor) {
 // Combat mode on, the pick not (or no longer) attacked: the Avatar stands,
 // or the host stops fighting for a guest's companion.
 static void Friend_mode_stop_attack() {
+	friend_attacking_pick = false;
 	if (!gwin->in_combat()) {
 		return;
 	}
@@ -2407,6 +2422,36 @@ static void Friend_mode_clear_target() {
 	Friend_mode_stop_attack();
 }
 
+// Out of combat the Avatar may also pick a party member (to talk to); a
+// guest's companions are the Avatar's business.
+static bool Friend_is_party_pick(const Actor* own, const Actor* actor) {
+	return own && actor && !Friend_mode_is_guest() && !gwin->in_combat() && actor != own && actor->is_in_party()
+		   && !actor->is_dead();
+}
+
+static bool Friend_is_pickable(const Actor* own, const Actor* actor) {
+	return Friend_is_attack_target(own, actor) || Friend_is_party_pick(own, actor);
+}
+
+// E: things.  The picked container or body (Q picks people instead).
+static Game_object_weak friend_object_target;
+static uint32           friend_range_shown_until = 0;    // Ticks; after Q or E.
+
+// Who Q can pick: on screen, in range; party members out of combat (last).
+static std::vector<Actor*> Friend_target_candidates(Actor* own) {
+	Actor_vector nearby;
+	own->find_nearby_actors(nearby, c_any_shapenum, friend_attack_max_tiles);
+	const TileRect      view = gwin->get_win_tile_rect();
+	std::vector<Actor*> foes;
+	for (Actor* actor : nearby) {
+		const Tile_coord at = actor->get_tile();
+		if (Friend_is_pickable(own, actor) && view.has_point(at.tx, at.ty)) {
+			foes.push_back(actor);
+		}
+	}
+	return foes;
+}
+
 static void Friend_mode_cycle_target(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
@@ -2414,25 +2459,24 @@ static void Friend_mode_cycle_target(int step) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
-	const bool   fighting = gwin->in_combat();
-	Actor_vector nearby;
-	own->find_nearby_actors(nearby, c_any_shapenum, 24);
-	const TileRect      view = gwin->get_win_tile_rect();
-	std::vector<Actor*> foes;
-	for (Actor* actor : nearby) {
-		const Tile_coord at = actor->get_tile();
-		if (Friend_is_attack_target(own, actor) && view.has_point(at.tx, at.ty)) {
-			foes.push_back(actor);
-		}
-	}
+	friend_range_shown_until     = SDL_GetTicks() + 2000;
+	friend_object_target.reset();    // Q picks people, E things.
+	const bool          fighting = gwin->in_combat();
+	std::vector<Actor*> foes     = Friend_target_candidates(own);
 	if (foes.empty()) {
 		Friend_mode_clear_target();
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
-	// Nearest first; in combat mode hostiles come before everyone else.
+	// Nearest first; in combat mode hostiles come before everyone else, and
+	// out of it the party comes last.
 	const Tile_coord from = own->get_tile();
 	std::stable_sort(foes.begin(), foes.end(), [&](const Actor* a, const Actor* b) {
+		const bool pa = a->is_in_party();
+		const bool pb = b->is_in_party();
+		if (pa != pb) {
+			return pb;
+		}
 		if (fighting) {
 			const bool ha = Friend_is_hostile_target(own, a);
 			const bool hb = Friend_is_hostile_target(own, b);
@@ -2480,6 +2524,7 @@ static void Friend_mode_take_manual() {
 }
 
 void Friend_mode_combat_ended() {
+	friend_attacking_pick = false;
 	Main_actor* avatar = gwin->get_main_actor();
 	if (avatar && friend_saved_attack_mode >= 0 && avatar->get_attack_mode() == Actor::manual) {
 		avatar->set_attack_mode(static_cast<Actor::Attack_mode>(friend_saved_attack_mode), avatar->did_user_set_attack());
@@ -2509,7 +2554,29 @@ bool Friend_mode_attack_target(Actor* foe) {
 		avatar->set_target(foe);    // As a double-click in combat mode.
 	}
 	Friend_mode_target_notice("Attacking " + Friend_target_name(foe));
+	friend_attacking_pick = true;
 	return true;
+}
+
+// The pick died while being attacked: the nearest hostile on screen is
+// next (never a peaceful one), or nothing.
+static void Friend_mode_target_next_hostile() {
+	Actor* own = gwin->get_controlled_actor();
+	if (!own || !gwin->in_combat()) {
+		return;
+	}
+	const Tile_coord from = own->get_tile();
+	Actor*           next = nullptr;
+	for (Actor* actor : Friend_target_candidates(own)) {
+		if (Friend_is_hostile_target(own, actor)
+			&& (!next || from.distance(actor->get_tile()) < from.distance(next->get_tile()))) {
+			next = actor;
+		}
+	}
+	if (next) {
+		gwin->set_action_target(next);
+		Friend_mode_attack_target(next);
+	}
 }
 
 // Combat mode came on: a hostile picked with Q is attacked.  A peaceful one
@@ -2527,10 +2594,14 @@ void Friend_mode_combat_started() {
 // trees.
 static void Friend_mode_paint_target_arrow() {
 	static int    layer   = -1;
-	static int    painted = -1;    // The combat mode its colors are for.
+	static int    painted = -1;    // The colors it has: combat mode, and 2 for a thing.
 	Image_window* iwin    = gwin->get_win();
-	Actor*        target  = gwin->get_action_target();
-	Shape_frame*  frame   = target ? target->get_shape() : nullptr;
+	const Game_object_shared thing  = friend_object_target.lock();
+	Game_object*             target = gwin->get_action_target();
+	if (!target) {
+		target = thing.get();
+	}
+	Shape_frame* frame = target ? target->get_shape() : nullptr;
 	const bool    visible = target && frame && target->get_chunk() && !gwin->is_in_exult_menu();
 	if (!visible) {
 		if (layer >= 0 && iwin->layer_is_visible(layer)) {
@@ -2551,14 +2622,16 @@ static void Friend_mode_paint_target_arrow() {
 			return;
 		}
 	}
-	const int fighting = gwin->in_combat() ? 1 : 0;
+	// Red in combat, white out of it; green on a thing (E).
+	const int fighting = thing && target == thing.get() ? 2 : gwin->in_combat() ? 1 : 0;
 	if (painted != fighting) {
 		Image_buffer8* lbuf = gwin->get_layer_ibuf(layer);
 		if (!lbuf) {
 			return;
 		}
 		const unsigned char fill
-				= Shape_manager::get_instance()->get_special_pixel(fighting ? HIT_PIXEL : PROTECT_PIXEL);
+				= fighting == 2 ? static_cast<unsigned char>(gwin->get_pal()->find_color(15, 58, 15))
+								: Shape_manager::get_instance()->get_special_pixel(fighting ? HIT_PIXEL : PROTECT_PIXEL);
 		lbuf->fill8(255);
 		for (int y = 0; y < ah; ++y) {
 			for (int x = 0; x < aw; ++x) {
@@ -2588,6 +2661,79 @@ static void Friend_mode_paint_target_arrow() {
 	gwin->set_painted();
 }
 
+// The targeting range, on screens bigger than it: a faint square with a
+// border around one's character, in combat mode and for a moment after Q
+// or E.  On smaller screens the screen's edge is the range, so nothing.
+
+static void Friend_mode_paint_range_frame() {
+	static int    fill_layer   = -1;
+	static int    border_layer = -1;
+	Image_window* iwin         = gwin->get_win();
+	Actor*        own          = gwin->get_controlled_actor();
+	const int     range        = friend_attack_max_tiles;
+	const TileRect view        = gwin->get_win_tile_rect();
+	const bool    bigger       = view.w > 2 * range + 1 || view.h > 2 * range + 1;
+	const bool    wanted       = gwin->in_combat() || SDL_GetTicks() < friend_range_shown_until;
+	const bool    visible      = Friend_keyboard_targeting && bigger && wanted && own && own->get_chunk()
+						 && !gwin->is_in_exult_menu() && !gwin->network_input_blocked();
+	if (!visible) {
+		for (const int layer : {fill_layer, border_layer}) {
+			if (layer >= 0 && iwin->layer_is_visible(layer)) {
+				gwin->layer_set_visible(layer, false);
+				gwin->set_painted();
+			}
+		}
+		return;
+	}
+	const int size = (2 * range + 1) * c_tilesize;    // In game pixels.
+	if (fill_layer < 0) {
+		// Under the target arrow and text.  The fill is one color, made faint
+		// by the layer's alpha; the border is its own, stronger layer.
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);
+		const unsigned char color  = Shape_manager::get_instance()->get_special_pixel(PROTECT_PIXEL);
+		fill_layer                 = gwin->create_layer("Target range fill", size, size, 255, 0, text_layer_z - 4);
+		border_layer               = gwin->create_layer("Target range border", size, size, 255, 0, text_layer_z - 3);
+		if (fill_layer < 0 || border_layer < 0) {
+			return;
+		}
+		Image_buffer8* fill = gwin->get_layer_ibuf(fill_layer);
+		Image_buffer8* line = gwin->get_layer_ibuf(border_layer);
+		if (!fill || !line) {
+			return;
+		}
+		fill->fill8(color);
+		line->fill8(255);
+		for (int i = 0; i < 2; ++i) {
+			line->fill8(color, size - 2 * i, 1, i, i);
+			line->fill8(color, size - 2 * i, 1, i, size - 1 - i);
+			line->fill8(color, 1, size - 2 * i, i, i);
+			line->fill8(color, 1, size - 2 * i, size - 1 - i, i);
+		}
+		gwin->layer_set_alpha(fill_layer, 20);
+		gwin->layer_set_alpha(border_layer, 140);
+		gwin->layer_set_dirty(fill_layer);
+		gwin->layer_set_dirty(border_layer);
+	}
+	// Centred on the tile the character stands on (its shape's anchor is
+	// that tile's bottom right corner).
+	int x;
+	int y;
+	gwin->get_shape_location(own, x, y);
+	const int left = x - c_tilesize / 2 - size / 2;
+	const int top  = y - c_tilesize / 2 - size / 2;
+	int       sx0;
+	int       sy0;
+	int       sx1;
+	int       sy1;
+	iwin->game_to_screen(left, top, false, sx0, sy0);
+	iwin->game_to_screen(left + size, top + size, false, sx1, sy1);
+	for (const int layer : {fill_layer, border_layer}) {
+		gwin->layer_set_dest(layer, sx0, sy0, sx1 - sx0, sy1 - sy0);
+		gwin->layer_set_visible(layer, true);
+	}
+	gwin->set_painted();
+}
+
 // Walking in combat with a target picked stops the attack (the target stays
 // picked; Space takes it up again).  A guest's walking already ends the
 // host's attack for it.
@@ -2596,6 +2742,7 @@ static void Friend_mode_walking_stops_attack() {
 		return;
 	}
 	Main_actor* avatar = gwin->get_main_actor();
+	friend_attacking_pick = false;
 	if (avatar->get_target()) {
 		Friend_mode_take_manual();
 		avatar->set_target(nullptr);
@@ -2607,35 +2754,142 @@ static void Friend_mode_walking_stops_attack() {
 static void Friend_mode_check_target() {
 	Actor* target = gwin->get_action_target();
 	Actor* own    = gwin->get_controlled_actor();
+	// A thing (E) goes when it is taken, gone or far off.
+	if (const Game_object_shared thing = friend_object_target.lock()) {
+		if (!Friend_keyboard_targeting || !own || thing->get_owner() || !thing->get_chunk()
+			|| own->get_tile().distance(thing->get_tile()) > friend_attack_max_tiles + 4) {
+			friend_object_target.reset();
+		}
+	}
 	if (!target) {
+		// Gone while attacked: on a guest, a creature the host killed is
+		// simply removed.  The next hostile, as for a death.
+		if (friend_attacking_pick) {
+			friend_attacking_pick = false;
+			if (gwin->in_combat()) {
+				Friend_mode_target_next_hostile();
+				if (!gwin->get_action_target()) {
+					Friend_mode_target_notice("No target");
+				}
+			}
+		}
 		return;
 	}
-	if (!Friend_keyboard_targeting || !own || !Friend_is_attack_target(own, target) || !target->get_chunk()
-		|| own->get_tile().distance(target->get_tile()) > 30) {
+	if (!Friend_keyboard_targeting || !own || !target->get_chunk()
+		|| own->get_tile().distance(target->get_tile()) > friend_attack_max_tiles + 4) {
 		Friend_mode_clear_target();
+	} else if (!Friend_is_pickable(own, target)) {
+		// Dead, or a party member once combat starts.  A kill moves on to
+		// the next hostile.
+		const bool next = friend_attacking_pick && gwin->in_combat() && target->is_dead();
+		Friend_mode_clear_target();
+		if (next) {
+			Friend_mode_target_next_hostile();
+		}
+	} else if (friend_attacking_pick && gwin->in_combat() && !Friend_mode_is_guest()) {
+		// Knocked out: Exult stops everyone attacking it, but the Avatar
+		// keeps at its pick until it is dead.
+		Main_actor* avatar = gwin->get_main_actor();
+		if (!avatar->get_target() && target->get_flag(Obj_flags::asleep)) {
+			avatar->set_target(target);
+		}
 	}
 }
 
-// Space with a target picked: attack it, peaceful or not, turning combat
-// mode on (or again, after walking stopped the attack).  While the Avatar
-// is already attacking it, Space pauses combat as before.  False if Space
-// should do its usual thing.
-static bool Friend_mode_force_attack() {
-	Actor* target = gwin->get_action_target();
-	Actor* own    = gwin->get_controlled_actor();
-	if (!target || !own || !Friend_is_attack_target(own, target)
-		|| (gwin->in_combat() && !Friend_mode_is_guest() && gwin->get_main_actor()->get_target() == target)) {
+// Space with a pick.  A thing (E) is opened or used, as a double-click
+// does.  A person out of combat is talked to (or used: a guest gets its
+// usual answer, a merchant or "The Avatar must do this").  In combat mode
+// the pick is attacked, peaceful or not (after walking stopped an attack,
+// again); while the Avatar is already attacking it, Space pauses combat as
+// before.  False if Space should do its usual thing.
+static bool Friend_mode_space() {
+	Actor*                   own    = gwin->get_controlled_actor();
+	Actor*                   target = gwin->get_action_target();
+	const Game_object_shared thing  = friend_object_target.lock();
+	if (!own || (!target && !thing)) {
+		return false;
+	}
+	const bool fighting = gwin->in_combat();
+	if (target && fighting
+		&& (!Friend_is_attack_target(own, target)
+			|| (!Friend_mode_is_guest() && gwin->get_main_actor()->get_target() == target))) {
 		return false;
 	}
 	if (gwin->network_input_blocked() || !gwin->main_actor_can_act()) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return true;
 	}
-	if (!gwin->in_combat()) {
-		gwin->toggle_combat();
+	if (thing) {
+		if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(own, thing.get())) {
+			Friend_mode_target_notice("Too far away");
+			Mouse::mouse()->flash_shape(Mouse::blocked);
+			return true;
+		}
+		gwin->double_clicked_object(thing.get());
+		return true;
+	}
+	if (!fighting) {
+		gwin->double_clicked_object(target);    // Talk.
+		return true;
 	}
 	Friend_mode_attack_target(target);
 	return true;
+}
+
+// E: the next container or body on screen and in range (chests, crates,
+// barrels, bags on the ground, the fallen), nearest first, Shift+E the
+// previous; past the last the pick clears.  Space opens it.
+static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
+	Game_object_vector nearby;
+	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0);
+	const TileRect            view = gwin->get_win_tile_rect();
+	const Tile_coord          from = own->get_tile();
+	std::vector<Game_object*> things;
+	for (Game_object* obj : nearby) {
+		const Shape_info& info = obj->get_info();
+		const Tile_coord  at   = obj->get_tile();
+		if (!obj->as_actor() && !obj->get_owner() && obj->get_chunk()
+			&& (info.get_shape_class() == Shape_info::container || info.is_body_shape())
+			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5) {
+			things.push_back(obj);
+		}
+	}
+	std::stable_sort(things.begin(), things.end(), [&](const Game_object* a, const Game_object* b) {
+		return from.distance(a->get_tile()) < from.distance(b->get_tile());
+	});
+	return things;
+}
+
+static void Friend_mode_cycle_object(int step) {
+	Actor* own = gwin->get_controlled_actor();
+	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
+		|| !gwin->main_actor_can_act()) {
+		Mouse::mouse()->flash_shape(Mouse::redx);
+		return;
+	}
+	friend_range_shown_until = SDL_GetTicks() + 2000;
+	if (gwin->get_action_target()) {
+		Friend_mode_clear_target();    // E picks things, Q people.
+	}
+	const std::vector<Game_object*> things = Friend_object_candidates(own);
+	const Game_object_shared        picked = friend_object_target.lock();
+	const auto current = std::find(things.begin(), things.end(), picked.get());
+	const int  count   = static_cast<int>(things.size());
+	int        index   = step < 0 ? count - 1 : 0;
+	if (current != things.end()) {
+		index = static_cast<int>(current - things.begin()) + step;
+	}
+	if (things.empty() || index < 0 || index >= count) {
+		friend_object_target.reset();
+		Friend_mode_target_notice("No target");
+		if (things.empty()) {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		}
+		return;
+	}
+	friend_object_target = weak_from_obj(things[index]);
+	const std::string name = things[index]->get_name();
+	Friend_mode_target_notice("Targeting " + (name.empty() ? std::string("something") : name));
 }
 
 // Host: a guest's companion stops fighting and waits for the guest again.
@@ -2706,14 +2960,19 @@ static void Friend_mode_check_guest_attack(Friend_guest& guest) {
 	const Actor*             enemy = foe ? foe->as_actor() : nullptr;
 	if (!enemy || enemy->is_dead()) {
 		Friend_mode_end_guest_attack(guest, "foe defeated");
+	} else if (actor->get_schedule_type() == Schedule::combat && !actor->get_target()
+			   && enemy->get_flag(Obj_flags::asleep)) {
+		// Knocked out: Exult stops everyone attacking it, but the guest
+		// picked it, so keep at it until it is dead.
+		actor->set_target(foe.get());
 	} else if (actor->get_schedule_type() != Schedule::combat || actor->get_target() != enemy) {
 		Friend_mode_end_guest_attack(guest, "foe lost");
 	}
 }
 
-// Follow mode.  A guest presses E: the party's AI takes its companion (it
+// Follow mode.  A guest presses Y: the party's AI takes its companion (it
 // follows the Avatar, and fights when the party does) but the companion
-// stays the guest's, until the guest walks, attacks, switches or presses E
+// stays the guest's, until the guest walks, attacks, switches or presses Y
 // again.  For stepping away without losing one's companion.
 
 static bool friend_following = false;    // Guest: the host's AI drives ours.
@@ -3274,6 +3533,72 @@ static const std::unordered_set<int> friend_merchants{
 		7, 20, 36, 49, 76, 94, 95, 104, 115, 119, 159, 161, 192, 205, 228, 238};
 constexpr int friend_gold_shape = 644;
 
+// The answers a guest sees with each of them: name, job, bye, and those
+// that lead to buying, selling or training; not the story ("murder").
+// Made by tools/friend-mode/merchant_answers.py.
+static const std::unordered_map<int, std::vector<std::string>> friend_merchant_answers{
+		{7, {"bye", "job", "name", "train"}},
+		{18, {"armour", "buy", "bye", "job", "name", "nothing", "provisions", "weapons"}},
+		{19, {"buy", "bye", "job", "name"}},
+		{20, {"bye", "job", "name", "train"}},
+		{24, {"bye", "job", "magic", "name", "reagents"}},
+		{36, {"bye", "job", "name", "train"}},
+		{37, {"buy", "bye", "job", "name"}},
+		{38, {"buy", "bye", "job", "name"}},
+		{47, {"buy", "bye", "job", "name"}},
+		{49, {"bye", "job", "name", "train"}},
+		{50, {"buy", "bye", "job", "meats", "name"}},
+		{51, {"buy", "bye", "job", "name"}},
+		{52, {"bread", "buy", "bye", "job", "name", "sell flour"}},
+		{53, {"buy", "bye", "job", "name"}},
+		{54, {"buy", "bye", "job", "name"}},
+		{55, {"armour", "buy", "bye", "job", "name", "weapons"}},
+		{59, {"buy", "bye", "job", "name"}},
+		{67, {"bye", "job", "mutton", "name"}},
+		{74, {"bye", "job", "name", "reagents"}},
+		{76, {"bye", "job", "name", "train"}},
+		{79, {"buy", "bye", "job", "name"}},
+		{87, {"blacksmith", "buy armour", "buy weapons", "bye", "job", "name", "weapons and armour"}},
+		{92, {"buy", "bye", "job", "name"}},
+		{94, {"bye", "job", "name", "teacher"}},
+		{95, {"bye", "job", "name", "trainer"}},
+		{102, {"bye", "job", "name", "reagents"}},
+		{104, {"bye", "job", "name", "train"}},
+		{115, {"bye", "job", "name", "train"}},
+		{118, {"buy refreshment", "bye", "drink", "food", "job", "name", "tailor"}},
+		{119, {"Library of Scars", "bye", "dagger", "demonstration", "duellists", "job", "name", "potential", "weaponry"}},
+		{121, {"Armoury", "armour", "buy", "bye", "job", "name", "weapons"}},
+		{123, {"buy", "bye", "job", "name"}},
+		{130, {"Modest Damsel", "bye", "eat or drink", "job", "name"}},
+		{153, {"bye", "ink wells", "job", "name", "potions", "quills", "reagents", "sell", "shelves", "they"}},
+		{159, {"bye", "job", "name", "tutor"}},
+		{161, {"bye", "job", "name", "train"}},
+		{163, {"buy", "bye", "drink", "food", "job", "name"}},
+		{179, {"buy", "bye", "job", "name"}},
+		{181, {"buy", "bye", "job", "mage", "name", "train", "warrior"}},
+		{188, {"buy", "bye", "jewelry and potions", "job", "name", "reagents"}},
+		{189, {"buy", "bye", "job", "name"}},
+		{190, {"buy", "bye", "job", "name"}},
+		{192, {"bye", "job", "name", "train"}},
+		{194, {"bye", "job", "name", "provisions"}},
+		{196, {"armour", "bye", "job", "name", "weapons"}},
+		{198, {"bye", "job", "missiles", "name", "sell", "weapons"}},
+		{199, {"bye", "job", "name", "sell"}},
+		{205, {"bye", "job", "name", "train"}},
+		{206, {"buy", "bye", "job", "name"}},
+		{207, {"buy", "bye", "drink", "food", "job", "name"}},
+		{215, {"buy", "bye", "job", "name"}},
+		{216, {"bye", "job", "magic", "name", "potions", "reagents", "sell"}},
+		{219, {"buy provisions", "bye", "job", "name"}},
+		{222, {"bye", "drink", "job", "name"}},
+		{228, {"bye", "job", "name", "train"}},
+		{229, {"armour", "bye", "job", "name", "provisions", "weapons"}},
+		{231, {"buy", "bye", "job", "name"}},
+		{237, {"apothecary", "buy potions", "bye", "job", "name", "potions"}},
+		{238, {"bye", "job", "name"}},
+};
+
+
 static std::unordered_map<int, int>                    friend_host_schedules;    // Guest: NPC -> host's schedule.
 static std::vector<Usecode_machine::Party_trade_item> friend_pending_adds;      // Guest: bought, not paid yet.
 // Guest: gold paid for nothing yet (training pays first), and the
@@ -3440,10 +3765,15 @@ bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
 	friend_pending_payment.reset();
 	friend_pending_training.clear();
 	usecode->set_friend_shopper(own);
+	const auto answers = friend_merchant_answers.find(npc->get_npc_num());
+	if (answers != friend_merchant_answers.end()) {
+		usecode->set_friend_answers(npc->get_usecode(), answers->second);
+	}
 	gwin->get_effects()->remove_text_effects();
 	usecode->init_conversation();
 	npc->activate();
 	usecode->set_friend_shopper(nullptr);
+	usecode->set_friend_answers(-1, {});
 	Friend_mode_flush_training();
 	friend_pending_adds.clear();
 	// Throw away whatever else the conversation changed on this copy: the
@@ -4722,12 +5052,19 @@ bool Friend_mode_collect_connection_details() {
 	if (!font) {
 		return true;
 	}
-	std::array<std::string, 2> values{friend_player_name, arg_friend_join.empty() ? "127.0.0.1" : arg_friend_join};
+	// The last name and address typed here are kept in the config, so a
+	// rejoin needs only Enter (and the same name gets the companion back).
+	std::string last_name;
+	std::string last_host;
+	config->value("config/friend/player_name", last_name, "");
+	config->value("config/friend/last_host", last_host, "127.0.0.1");
+	std::array<std::string, 2> values{friend_player_name.empty() ? last_name : friend_player_name,
+			arg_friend_join.empty() ? last_host : arg_friend_join};
 	int active = 0;
 	SDL_Window* window = gwin->get_win()->get_screen_window();
 	SDL_StartTextInput(window);
 	for (;;) {
-		gwin->clear_screen(true);
+		gwin->clear_screen(false);
 		Image_buffer8* buffer = gwin->get_win()->get_ib8();
 		const int centerx = gwin->get_width() / 2;
 		const int top = std::max(20, gwin->get_height() / 4);
@@ -4770,6 +5107,8 @@ bool Friend_mode_collect_connection_details() {
 						   && !values[0].empty() && !values[1].empty()) {
 					friend_player_name = values[0];
 					arg_friend_join = values[1];
+					config->set("config/friend/player_name", friend_player_name, false);
+					config->set("config/friend/last_host", arg_friend_join, true);
 					SDL_StopTextInput(window);
 					return true;
 				}
@@ -4786,6 +5125,8 @@ static void Friend_mode_ensure_dialogue() {
 	if (friend_session.mode() == Friend_mode_session::Mode::host && friend_session.connected()
 			&& !friend_host_dialogue_active) {
 		friend_host_dialogue_active = true;
+		cout << "Friend Mode: conversation begins"
+			 << (gwin->get_usecode()->in_usecode() ? "" : " (outside a script)") << endl;
 		friend_session.send_dialogue_begin();
 	}
 }
@@ -4836,6 +5177,7 @@ void Friend_mode_note_dialogue_reset() {
 		friend_session.send_dialogue_end();
 		friend_session.poll();
 		friend_host_dialogue_active = false;
+		cout << "Friend Mode: conversation ends" << endl;
 	}
 }
 
@@ -5160,7 +5502,7 @@ static int Select_friend_actor(const std::vector<uint32>& roster, bool offer_wat
 		if (!actor) {
 			return -1;
 		}
-		gwin->clear_screen(true);
+		gwin->clear_screen(false);
 		font->center_text(gwin->get_win()->get_ib8(), centerx, title_y, "Select Your Character");
 		const std::string availability = std::to_string(choices.size()) + " travel companion"
 				+ (choices.size() == 1 ? " available" : "s available");
@@ -6389,6 +6731,9 @@ static void Handle_events() {
 	uint32 friend_next_clock_sync = 0;
 	int  guest_assigned_actor = -1;
 	Tile_coord last_guest_request(-1, -1, -1);
+	// Guest: the steps sent to the host, numbered, until it answers them.
+	uint32                                    guest_move_seq = 0;
+	std::deque<std::pair<uint32, Tile_coord>> guest_sent_steps;
 	std::unordered_set<int> guest_frozen_npcs;
 	uint32                     guest_close_at = 0;    // Ticks when a disconnected guest exits.
 	uint32                     guest_leash_notice_at = 0;    // Last "must return" notice.
@@ -6414,6 +6759,13 @@ static void Handle_events() {
 					friend_session.send_host_paused(false);
 				}
 				friend_host_paused_sent = false;
+			}
+			// The main loop runs only outside conversations (they wait for
+			// clicks in their own loop), so one still open here never sent
+			// its end: send it, or the guests stay paused.
+			if (friend_host_dialogue_active && !gwin->get_usecode()->in_usecode()) {
+				cout << "Friend Mode: conversation left open; ending it for guests" << endl;
+				Friend_mode_note_dialogue_reset();
 			}
 			int requester = 0;
 			while (friend_session.take_world_request(&requester)) {
@@ -6660,17 +7012,21 @@ static void Handle_events() {
 			int ty = 0;
 			int tz = 0;
 			int requested_frame = 0;
-			while (friend_session.take_move_request(tx, ty, tz, requested_frame, &requester)) {
+			uint32 move_seq = 0;
+			while (friend_session.take_move_request(tx, ty, tz, requested_frame, move_seq, &requester)) {
 				Friend_guest* guest = Friend_guest_of(requester);
 				Actor*        actor = guest && guest->actor >= 0 ? gwin->get_npc(guest->actor) : nullptr;
 				if (!actor) {
 					continue;
 				}
+				guest->move_seq = move_seq;
 				if (guest->following) {
 					Friend_mode_set_follow(requester, *guest, false);    // Walking takes over.
 				}
 				const Tile_coord requested(tx, ty, tz);
-				if (actor->get_tile().distance(requested) <= 2
+				// Up to 3 tiles: a guest running on a slow frame can cover
+				// more than one step between the positions it sends.
+				if (actor->get_tile().distance(requested) <= 3
 					&& gwin->friend_leash_allows(actor->get_tile(), requested)) {
 					cout << "Friend Mode: host accepted move to " << tx << ',' << ty << ',' << tz << endl;
 					Friend_mode_end_guest_attack(*guest, "guest moved");    // Walking takes over.
@@ -6777,8 +7133,8 @@ static void Handle_events() {
 				if (actor->get_tile() != guest.last_state || actor->get_framenum() != guest.last_frame) {
 					guest.last_state = actor->get_tile();
 					guest.last_frame = actor->get_framenum();
-					friend_session.send_actor_state(
-							guest.last_state.tx, guest.last_state.ty, guest.last_state.tz, guest.last_frame, player);
+					friend_session.send_actor_state(guest.last_state.tx, guest.last_state.ty, guest.last_state.tz,
+							guest.last_frame, player, guest.move_seq);
 				}
 			}
 			if (friend_session.connected()) {
@@ -6999,10 +7355,24 @@ static void Handle_events() {
 			int ty = 0;
 			int tz = 0;
 			int frame = 0;
-			if (guest_assigned_actor >= 0 && friend_session.take_actor_state(tx, ty, tz, frame)) {
+			uint32 state_seq = 0;
+			if (guest_assigned_actor >= 0 && friend_session.take_actor_state(tx, ty, tz, frame, state_seq)) {
 				Actor* actor = gwin->get_npc(guest_assigned_actor);
 				const Tile_coord state(tx, ty, tz);
-				if (actor && actor->get_tile() != state) {
+				// The host echoes each step it accepts, a round trip late.  An
+				// echo of a step we sent (and have since walked past) is
+				// ignored, or the companion is pulled back while running.
+				// Anything else (a refused step, the leash, a teleporter, the
+				// host's AI walking it) is the truth.
+				const auto sent = std::find_if(guest_sent_steps.begin(), guest_sent_steps.end(),
+						[state_seq](const std::pair<uint32, Tile_coord>& step) {
+							return step.first == state_seq;
+						});
+				const bool echo = sent != guest_sent_steps.end() && sent->second == state
+								  && state_seq != guest_move_seq;
+				if (echo) {
+					guest_sent_steps.erase(guest_sent_steps.begin(), sent);
+				} else if (actor && actor->get_tile() != state) {
 					// A long jump to beside the Avatar is the leash; anywhere else
 					// it was a teleporter.
 					const bool beckoned = actor->get_tile().distance_2d(state) > Game_window::friend_leash_warn_tiles
@@ -7013,15 +7383,27 @@ static void Handle_events() {
 						gwin->get_effects()->add_chat_text("You are beckoned by the Avatar", actor);
 					}
 				}
-				if (actor && actor->get_framenum() != frame) {
+				if (!echo && actor && actor->get_framenum() != frame) {
 					actor->change_frame(frame);
 				}
-				last_guest_request = state;
+				if (!echo) {
+					last_guest_request = state;
+				}
 			}
 			if (friend_session.take_avatar_state(tx, ty, tz, frame)) {
 				Main_actor* avatar = gwin->get_main_actor();
 				const Tile_coord state(tx, ty, tz);
 				if (avatar && avatar->get_tile() != state) {
+					// The Avatar can't move during the host's conversation (its
+					// main loop waits for the click), so a move long after the
+					// last conversation message means we missed its end.
+					if (gwin->is_network_dialogue_paused()
+						&& SDL_GetTicks() - friend_dialogue_event_at > friend_dialogue_stale_ms) {
+						cout << "Friend Mode: the Avatar moved; ending a conversation we never saw end" << endl;
+						gwin->get_usecode()->get_conversation()->init_faces();
+						gwin->set_network_dialogue_paused(false);
+						gwin->set_all_dirty();
+					}
 					if (gwin->is_network_spectating() && friend_watched_npc >= 0) {
 						avatar->Actor::move(state.tx, state.ty, state.tz);    // Watching another player.
 					} else if (gwin->is_network_spectating()) {
@@ -7082,6 +7464,13 @@ static void Handle_events() {
 			Friend_mode_session::Dialogue_event dialogue_event;
 			Conversation* conversation = gwin->get_usecode()->get_conversation();
 			while (friend_session.take_dialogue_event(dialogue_event)) {
+				friend_dialogue_event_at = SDL_GetTicks();
+				if (dialogue_event.type == Friend_mode_session::Dialogue_event_type::begin
+					|| dialogue_event.type == Friend_mode_session::Dialogue_event_type::end) {
+					cout << "Friend Mode: host conversation "
+						 << (dialogue_event.type == Friend_mode_session::Dialogue_event_type::begin ? "began" : "ended")
+						 << endl;
+				}
 				switch (dialogue_event.type) {
 				case Friend_mode_session::Dialogue_event_type::begin:
 					gwin->set_network_dialogue_paused(true);
@@ -7126,9 +7515,12 @@ static void Handle_events() {
 					last_guest_request = actor->get_tile();
 					cout << "Friend Mode: guest requested move to " << last_guest_request.tx << ','
 						 << last_guest_request.ty << ',' << last_guest_request.tz << endl;
-					friend_session.send_move_request(
-							last_guest_request.tx, last_guest_request.ty, last_guest_request.tz,
-							actor->get_framenum());
+					guest_sent_steps.emplace_back(++guest_move_seq, last_guest_request);
+					if (guest_sent_steps.size() > 64) {
+						guest_sent_steps.pop_front();
+					}
+					friend_session.send_move_request(last_guest_request.tx, last_guest_request.ty,
+							last_guest_request.tz, actor->get_framenum(), guest_move_seq);
 				}
 			}
 		}
@@ -7329,6 +7721,7 @@ static void Handle_events() {
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
 		Friend_mode_paint_maps();
+		Friend_mode_paint_range_frame();
 		Friend_mode_paint_target_arrow();
 		Friend_mode_paint_leash_arrow();
 		Friend_mode_paint_dialogue_wait();
@@ -7578,8 +7971,14 @@ static void Handle_event(SDL_Event& event) {
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_SPACE
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
-		&& !Notebook_gump::get_instance() && Friend_mode_force_attack()) {
-		return;    // Space: attack the target.
+		&& !Notebook_gump::get_instance() && Friend_mode_space()) {
+		return;    // Space: talk to, use or attack the pick.
+	}
+	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_E
+		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
+		&& !Notebook_gump::get_instance()) {
+		Friend_mode_cycle_object((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);    // E: the next thing.
+		return;
 	}
 	if (Friend_wasd_movement && (event.type == SDL_EVENT_KEY_DOWN || event.type == SDL_EVENT_KEY_UP)
 		&& Friend_is_wasd_key(event.key.scancode) && !friend_chat_active && !Notebook_gump::get_instance()) {
@@ -7632,9 +8031,9 @@ static void Handle_event(SDL_Event& event) {
 		return;
 	}
 	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active
-		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_E && !event.key.repeat
+		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_Y && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
-		// E: follow the Avatar (the party's AI drives our companion) until we
+		// Y: follow the Avatar (the party's AI drives our companion) until we
 		// walk, or press E again.
 		Actor* own = gwin->has_network_friend_control() ? gwin->get_controlled_actor() : nullptr;
 		if (!own || gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {

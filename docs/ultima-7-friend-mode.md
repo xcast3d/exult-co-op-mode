@@ -223,7 +223,7 @@ One player per eligible party companion, plus spectators. See the
 - [x] Several peers on the host, each with its own assignment, held items
       and leash.
 - [x] The host relays chat and world updates to every guest.
-- [x] Switching companions with Tab, follow mode (E) and Spectate.
+- [x] Switching companions with Tab, follow mode (Y, was E) and Spectate.
 - [x] Put the socket code in `friendnet.cc` behind one small connection
       interface at the same time, ready for WebRTC (Phase 8).
 - [ ] The two-person checks (two people grabbing the same item), now with
@@ -341,7 +341,8 @@ upstream.
       targeting below.
 - [ ] Guests: send held movement keys to the host as a steady walk stream, and
       check it feels responsive over a real internet connection, not just a
-      local one.
+      local one. (2026-10-19: the first internet test stuttered; steps are
+      now numbered so the guest ignores the host's late echoes. Retest.)
 - [x] **Targeting** (built 2026-10-18; with or without WASD movement, for
       the host and every guest, so guests don't have to double-click
       moving foes). Q picks the next person or creature on screen who
@@ -349,7 +350,8 @@ upstream.
       small arrow over its head: white, or red in combat mode (outlines
       felt like status effects). Past the last one the pick clears and the
       next Q starts again. The notice near the top says "Targeting Deer",
-      "Attacking Deer" or "No target". E stays the guest's follow key.
+      "Attacking Deer" or "No target". (Follow mode moved from E to Y
+      for the object key, below.)
 - [x] **When the pick is attacked.** Out of combat never. In combat mode
       Q goes through hostiles first, then everyone else; a hostile pick is
       attacked at once (the Avatar's target, or the host fighting for a
@@ -372,6 +374,30 @@ upstream.
       always did; the party's combat AI still drives everyone else.
 - Decided 2026-10-18: this may be enough; a deeper rework of the party's
   combat AI waits until play shows a need.
+- [x] **Targeting for everything** (built 2026-10-19, after the first
+      internet test; not tested yet). Targeting worked so well that it
+      now does more than fighting:
+  - **Space** out of combat talks to the pick or uses it, as a
+    double-click does (a guest gets its usual answer: merchants talk,
+    others say "The Avatar must do this"). In combat mode it attacks. So
+    attacking a peaceful pick takes C, then Space; Space alone no longer
+    starts a fight.
+  - Out of combat **Q** also cycles the party (last), so the Avatar can
+    talk to a companion. Not for guests.
+  - **E** cycles containers and bodies on screen (chests, crates, barrels,
+    bags on the ground, the fallen), nearest first, Shift+E back, with a
+    green arrow; Space opens it ("Too far away" when out of reach). Q and E
+    each clear the other's pick. Guests' follow mode moved from E to **Y**
+    (E was otherwise only the host's egg cheat).
+  - **Range:** anything on screen, at most 40 tiles off each way (a
+    square, as Exult measures distance, and how far around a guest's
+    companion the host keeps creatures awake). Screens bigger than that
+    show the limit as a faint square with a border, in combat mode and for
+    2 seconds after Q or E; smaller screens show nothing. The host keeps a
+    guest's foe while it is in range of the companion, not on the host's
+    screen (that was the "can't attack at large resolutions" bug), and
+    guests get items and creatures 3 chunks around their companion (was
+    2).
 - [ ] Attack the selected target with a key or left-click, through the
       existing attack code. Hit chance, damage, and timing stay unchanged.
 - [ ] Each player has their own target; the host relays it, and other players
@@ -473,7 +499,7 @@ after Phase 8.
       skipping the intro (`--skip-intro`).
 - [ ] **Keyboard command list in game** (asked for 2026-10-18, once the
       in-game features are done): every key, including Friend Mode's (J,
-      L, X, E, Tab, WASD, Shift+W/S, chat commands).
+      L, X, Y, Q, E, Space, Tab, WASD, Shift+W/S, chat commands).
 - [ ] **Feature list for the project webpage** (same time): every
       feature and enhancement Friend Mode adds, written for players.
 
@@ -502,6 +528,18 @@ simulate several regions.
 - [ ] Support distant regions with correct NPC and world simulation.
 - [ ] Remove companion-return range restrictions.
 - [ ] Test quests, schedules, sound, pathfinding, and world changes at long distance.
+
+### Controller support
+
+Play from a gamepad, without touching the keyboard. Targeting already
+covers most of it: a stick to walk (as WASD), buttons for Q, E and Space,
+combat mode, the inventory and the game menu. What a gamepad can't do is
+drag: picking up, moving and dropping items needs a "pick up" button on the
+E pick (into the companion's pack) and a way to move items between packs
+and equipment slots without the mouse. Exult already has quick pickups to
+look at. Also needs: picking conversation answers (they take 1-9 and a-z
+today), chat (an on-screen keyboard, or quick phrases), and the menus.
+Only an idea for now (2026-10-19).
 
 ### Exult in the browser
 

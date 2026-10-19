@@ -104,38 +104,102 @@ void paint_dot(Image_buffer8* buffer, int x, int y, int color) {
 	buffer->fill8(static_cast<unsigned char>(color), 2, 2, x - 1, y - 1);
 }
 
+// The map has its own layer, sized by Exult's HUD scale (Game Engine's UI
+// options), so it stays the same size on screen whatever the game area's
+// resolution; drawn in the game view, a big game area made it tiny.
+int  map_layer = -1;
+bool map_shown = false;
+
+void hide_corner_map() {
+	Game_window* gwin = Game_window::get_instance();
+	if (map_layer >= 0 && map_shown) {
+		gwin->layer_set_visible(map_layer, false);
+		gwin->set_painted();
+	}
+	map_shown = false;
+}
+
 void paint_corner_map(const std::vector<Friend_map_dot>& dots) {
 	Game_window* gwin   = Game_window::get_instance();
 	Actor*       viewer = gwin->get_camera_actor();
 	if (!viewer || gwin->is_in_dungeon()) {
-		return;    // Overworld only.
+		hide_corner_map();    // Overworld only.
+		return;
 	}
-	Game_map*      map    = gwin->get_map();
-	Image_buffer8* buffer = gwin->get_win()->get_ib8();
-	constexpr int  span   = 12 * cells;    // 12 chunks across, a pixel per cell.
-	const int      x0     = gwin->get_width() - span - 6;
-	const int      y0     = 6;
-	const Tile_coord at   = viewer->get_tile();
-	const int      left   = at.tx - span / 2 * cell_size;
-	const int      top    = at.ty - span / 2 * cell_size;
-	buffer->fill8(0, span + 2, span + 2, x0 - 1, y0 - 1);
-	for (int y = 0; y < span; ++y) {
-		const int ty = ((top + y * cell_size) % c_num_tiles + c_num_tiles) % c_num_tiles;
-		for (int x = 0; x < span; ++x) {
-			const int             tx     = ((left + x * cell_size) % c_num_tiles + c_num_tiles) % c_num_tiles;
-			const Terrain_colors& colors = colors_for(map->get_terrain_num(tx / c_tiles_per_chunk, ty / c_tiles_per_chunk));
-			if (colors.ready) {
-				const int cell = ((ty % c_tiles_per_chunk) / cell_size) * cells + (tx % c_tiles_per_chunk) / cell_size;
-				buffer->put_pixel8(colors.cell[cell], x0 + x, y0 + y);
+	constexpr int span = 12 * cells;    // 12 chunks across, a pixel per cell.
+	constexpr int size = span + 2;      // With a black edge.
+	if (map_layer < 0) {
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As effects.cc's text.
+		map_layer                  = gwin->create_layer("Corner minimap", size, size, 255, 0, text_layer_z - 2);
+		if (map_layer < 0) {
+			return;
+		}
+		gwin->layer_set_ui_kind(map_layer, Image_window::UiLayerHudGumps);
+	}
+	Image_buffer8* buffer = gwin->get_layer_ibuf(map_layer);
+	if (!buffer) {
+		return;
+	}
+	// Redrawn only when the view or a dot moves.
+	static Tile_coord                  drawn_at(-1, -1, -1);
+	static std::vector<Friend_map_dot> drawn_dots;
+	const Tile_coord                   at      = viewer->get_tile();
+	const bool                         changed = at != drawn_at || drawn_dots.size() != dots.size()
+						 || !std::equal(dots.begin(), dots.end(), drawn_dots.begin(),
+								 [](const Friend_map_dot& a, const Friend_map_dot& b) {
+									 return a.tile == b.tile && a.color == b.color;
+								 });
+	if (changed || !map_shown) {
+		drawn_at   = at;
+		drawn_dots = dots;
+		Game_map* map  = gwin->get_map();
+		const int left = at.tx - span / 2 * cell_size;
+		const int top  = at.ty - span / 2 * cell_size;
+		buffer->clear_clip();
+		buffer->fill8(0);
+		for (int y = 0; y < span; ++y) {
+			const int ty = ((top + y * cell_size) % c_num_tiles + c_num_tiles) % c_num_tiles;
+			for (int x = 0; x < span; ++x) {
+				const int tx = ((left + x * cell_size) % c_num_tiles + c_num_tiles) % c_num_tiles;
+				const Terrain_colors& colors
+						= colors_for(map->get_terrain_num(tx / c_tiles_per_chunk, ty / c_tiles_per_chunk));
+				if (colors.ready) {
+					const int cell
+							= ((ty % c_tiles_per_chunk) / cell_size) * cells + (tx % c_tiles_per_chunk) / cell_size;
+					buffer->put_pixel8(colors.cell[cell], 1 + x, 1 + y);
+				}
 			}
 		}
-	}
-	for (const Friend_map_dot& dot : dots) {
-		const int dx = (dot.tile.tx - left) / cell_size;
-		const int dy = (dot.tile.ty - top) / cell_size;
-		if (dx >= 2 && dy >= 2 && dx < span - 2 && dy < span - 2) {
-			paint_dot(buffer, x0 + dx, y0 + dy, dot.color);
+		for (const Friend_map_dot& dot : dots) {
+			const int dx = (dot.tile.tx - left) / cell_size;
+			const int dy = (dot.tile.ty - top) / cell_size;
+			if (dx >= 2 && dy >= 2 && dx < span - 2 && dy < span - 2) {
+				paint_dot(buffer, 1 + dx, 1 + dy, dot.color);
+			}
 		}
+		gwin->layer_set_dirty(map_layer);
+	}
+	// Top right of the game view, 5 game pixels in, at the HUD's scale.
+	Image_window* iwin = gwin->get_win();
+	const float   f    = iwin->get_ui_scale_factor(Image_window::UiLayerHudGumps);
+	int           sx;
+	int           sy;
+	iwin->game_to_screen(gwin->get_width() - 5, 5, false, sx, sy);
+	const int  dw        = static_cast<int>(size * f);
+	static int placed[3] = {-1, -1, -1};
+	const bool moved     = placed[0] != sx - dw || placed[1] != sy || placed[2] != dw;
+	if (moved) {
+		placed[0] = sx - dw;
+		placed[1] = sy;
+		placed[2] = dw;
+		gwin->layer_set_dest(map_layer, sx - dw, sy, dw, dw);
+	}
+	if (!map_shown) {
+		gwin->layer_set_visible(map_layer, true);
+		map_shown = true;
+	}
+	if (changed || moved) {
+		gwin->set_painted();
 	}
 }
 }    // namespace
@@ -145,8 +209,9 @@ void Friend_map_paint(const std::vector<Friend_map_dot>& dots) {
 	if (!gwin->get_map()) {
 		return;
 	}
-	if (Friend_minimap_enabled) {
+	if (Friend_minimap_enabled && !gwin->is_in_exult_menu()) {
 		paint_corner_map(dots);
-		gwin->set_painted();
+	} else {
+		hide_corner_map();
 	}
 }

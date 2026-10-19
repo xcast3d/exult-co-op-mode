@@ -150,6 +150,24 @@ USECODE_INTRINSIC(remove_npc_face) {
 }
 
 USECODE_INTRINSIC(add_answer) {
+	if (friend_shopper && friend_answers_function >= 0 && !call_stack.empty() && call_stack.front()
+		&& call_stack.front()->function && call_stack.front()->function->id == friend_answers_function) {
+		// Friend Mode guest with a merchant: only the trade answers.
+		auto allowed = [this](const char* str) {
+			return str && std::find(friend_answers.begin(), friend_answers.end(), str) != friend_answers.end();
+		};
+		const int size = parms[0].get_array_size();
+		for (int i = 0; i < size; i++) {
+			Usecode_value& elem = parms[0].get_elem(i);
+			if (allowed(elem.get_str_value())) {
+				conv->add_answer(elem);
+			}
+		}
+		if (!size && allowed(parms[0].get_str_value())) {
+			conv->add_answer(parms[0]);
+		}
+		return no_ret;
+	}
 	conv->add_answer(parms[0]);
 	//  user_choice = 0;
 	return no_ret;

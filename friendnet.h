@@ -147,10 +147,13 @@ public:
 		actor_rejected      = false;
 		return rejected;
 	}
-	void send_move_request(int tx, int ty, int tz, int frame);
-	bool take_move_request(int& tx, int& ty, int& tz, int& frame, int* from = nullptr);
-	void send_actor_state(int tx, int ty, int tz, int frame, int to);
-	bool take_actor_state(int& tx, int& ty, int& tz, int& frame);
+	// Moves carry the guest's step number; the host's actor state carries
+	// the number of the last step it handled, so the guest can tell an echo
+	// of a step it already took from a correction.
+	void send_move_request(int tx, int ty, int tz, int frame, uint32 seq);
+	bool take_move_request(int& tx, int& ty, int& tz, int& frame, uint32& seq, int* from = nullptr);
+	void send_actor_state(int tx, int ty, int tz, int frame, int to, uint32 seq = 0);
+	bool take_actor_state(int& tx, int& ty, int& tz, int& frame, uint32& seq);
 	void send_avatar_state(int tx, int ty, int tz, int frame);
 	bool take_avatar_state(int& tx, int& ty, int& tz, int& frame);
 	void send_npc_state(uint32 npc, int tx, int ty, int tz, int frame);
@@ -241,9 +244,12 @@ private:
 		bool   world_requested       = false;
 		bool   actor_request_pending = false;
 		uint32 requested_actor       = 0;
-		bool   move_request_pending  = false;
-		uint32 requested_position    = 0;
-		uint32 requested_frame       = 0;
+		struct Move_request {
+			uint32 position;
+			uint32 frame;
+			uint32 seq;
+		};
+		std::deque<Move_request> move_requests;
 	};
 
 	Mode                              session_mode = Mode::off;
@@ -265,6 +271,7 @@ private:
 	bool                              actor_state_pending = false;
 	uint32                            authoritative_position = 0;
 	uint32                            authoritative_frame = 0;
+	uint32                            authoritative_seq   = 0;
 	bool                              avatar_state_pending = false;
 	uint32                            authoritative_avatar_position = 0;
 	uint32                            authoritative_avatar_frame = 0;

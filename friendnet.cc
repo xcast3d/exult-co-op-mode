@@ -11,7 +11,7 @@
 #include <iostream>
 
 namespace {
-constexpr unsigned short protocol_version = 30;
+constexpr unsigned short protocol_version = 31;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -392,19 +392,24 @@ bool Friend_mode_session::take_actor_assignment(uint32& actor) {
 	return true;
 }
 
-void Friend_mode_session::send_move_request(int tx, int ty, int tz, int frame) {
+void Friend_mode_session::send_move_request(int tx, int ty, int tz, int frame, uint32 seq) {
 	unsigned char* packet = stage_packet(move_request_packet);
 	write_u32(packet + 8, pack_position(tx, ty, tz));
 	write_u32(packet + 12, static_cast<uint32>(frame));
+	write_u32(packet + 16, seq);
 	deliver(everyone);
 }
 
-bool Friend_mode_session::take_move_request(int& tx, int& ty, int& tz, int& frame, int* from) {
+// Every step, in order: several can arrive together over the internet, and
+// keeping only the last would look like a jump the host refuses.
+bool Friend_mode_session::take_move_request(int& tx, int& ty, int& tz, int& frame, uint32& seq, int* from) {
 	for (auto& peer : peers) {
-		if (peer->link && peer->move_request_pending) {
-			peer->move_request_pending = false;
-			unpack_position(peer->requested_position, tx, ty, tz);
-			frame = static_cast<int>(peer->requested_frame);
+		if (peer->link && !peer->move_requests.empty()) {
+			const Peer::Move_request request = peer->move_requests.front();
+			peer->move_requests.pop_front();
+			unpack_position(request.position, tx, ty, tz);
+			frame = static_cast<int>(request.frame);
+			seq   = request.seq;
 			if (from) {
 				*from = peer->player;
 			}
@@ -414,20 +419,22 @@ bool Friend_mode_session::take_move_request(int& tx, int& ty, int& tz, int& fram
 	return false;
 }
 
-void Friend_mode_session::send_actor_state(int tx, int ty, int tz, int frame, int to) {
+void Friend_mode_session::send_actor_state(int tx, int ty, int tz, int frame, int to, uint32 seq) {
 	unsigned char* packet = stage_packet(actor_state_packet);
 	write_u32(packet + 8, pack_position(tx, ty, tz));
 	write_u32(packet + 12, static_cast<uint32>(frame));
+	write_u32(packet + 16, seq);
 	deliver(to);
 }
 
-bool Friend_mode_session::take_actor_state(int& tx, int& ty, int& tz, int& frame) {
+bool Friend_mode_session::take_actor_state(int& tx, int& ty, int& tz, int& frame, uint32& seq) {
 	if (!actor_state_pending) {
 		return false;
 	}
 	actor_state_pending = false;
 	unpack_position(authoritative_position, tx, ty, tz);
 	frame = static_cast<int>(authoritative_frame);
+	seq   = authoritative_seq;
 	return true;
 }
 
@@ -838,12 +845,13 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 		actor_rejected = true;
 		std::cerr << "Friend Mode: selected companion is no longer available" << std::endl;
 	} else if (host && ready && type == move_request_packet) {
-		peer.requested_position   = game;
-		peer.requested_frame      = second;
-		peer.move_request_pending = true;
+		if (peer.move_requests.size() < 64) {
+			peer.move_requests.push_back({game, second, third});
+		}
 	} else if (guest && ready && type == actor_state_packet) {
 		authoritative_position = game;
 		authoritative_frame    = second;
+		authoritative_seq      = third;
 		actor_state_pending    = true;
 	} else if (guest && ready && type == avatar_state_packet) {
 		authoritative_avatar_position = game;

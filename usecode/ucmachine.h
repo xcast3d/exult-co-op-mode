@@ -29,6 +29,7 @@
 #include <array>
 #include <iosfwd>
 #include <optional>
+#include <string>
 #include <vector>
 
 class Game_window;
@@ -55,6 +56,9 @@ protected:
 	Conversation* conv = nullptr;
 	// Friend Mode guest: the companion talking to a merchant on this copy.
 	Actor* friend_shopper = nullptr;
+	// And the only answers the merchant's own script may offer it.
+	int                      friend_answers_function = -1;
+	std::vector<std::string> friend_answers;
 
 	// "Page size" for global flags.
 	constexpr static const size_t gflags_page_size = 2048;
@@ -194,6 +198,15 @@ public:
 
 	Actor* get_friend_shopper() const {
 		return friend_shopper;
+	}
+
+	// While a guest talks to a merchant, answers that the merchant's own
+	// script ('function') adds are kept to 'answers' (buying and training,
+	// not the story).  Answers added by the routines it calls (a shop's
+	// list, yes and no) all show.  -1 ends it.
+	void set_friend_answers(int function, std::vector<std::string> answers) {
+		friend_answers_function = function;
+		friend_answers          = std::move(answers);
 	}
 
 	// Host: carry out a guest's purchase.  Each entry is quantity, shape,

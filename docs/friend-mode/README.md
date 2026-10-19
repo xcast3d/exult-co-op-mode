@@ -72,6 +72,66 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Fixes from the first internet test, built 2026-10-19 (protocol
+version 31); not tested yet.** A second person joined the host's public
+address from his own home (Mac host, his PC and Mac). See "Fixes from the
+first internet test" in the [test checklist](test-checklist.md).
+
+- **Join screen flickered** on Mac and PC: each frame was shown black
+  first (`clear_screen(true)`). The picker had the same.
+- **Join remembers** the last player name and host address
+  (`config/friend/player_name`, `config/friend/last_host`).
+- **Guest stuck in "The Avatar is having a conversation"** after the host
+  talked to Chantu, the Trinsic healer (ended with Escape, which picks
+  "bye" as a click does), through switching, spectating and rejoining. The
+  cause wasn't found, so two failsafes and log lines: the host's main loop
+  only runs outside conversations, so a conversation still open there gets
+  its end sent; and a guest whose Avatar moves 2 seconds after the last
+  conversation message ends it. Both log, as do the host's begin and end.
+- **Running as a guest stuttered over the internet** (fine locally, fine
+  slowly). The host echoed every step it accepted, and the guest moved
+  its companion to the echo a round trip late, pulling it back while
+  running. And the host kept only a guest's latest move, so steps that
+  arrived together looked like a jump it refused. Moves now carry a step
+  number and queue on the host (up to 3 tiles apart); the actor state
+  carries the last step handled, and the guest ignores echoes of steps it
+  has walked past. Corrections (refusals, leash, teleporters, the host's
+  AI) still move it.
+- **Knocked out stopped the attack.** Exult stops everyone attacking an
+  actor that falls unconscious; a pick being attacked now stays attacked
+  until it dies (the Avatar's, and a guest's companion on the host), then
+  the nearest hostile on screen is next, never a peaceful one.
+- **Minimap tiny at large resolutions**: it is drawn in its own layer at
+  Exult's HUD scale (`UiLayerHudGumps`), not one game pixel per cell.
+- **Guests' merchant conversations** offer only name, job, bye and the
+  answers leading to buying, selling or training (and a shop's "nothing"),
+  per NPC, made by `tools/friend-mode/merchant_answers.py`; answers the
+  shop routines add (lists, yes/no) all show. Only "buy" and "train"
+  wasn't enough: 17 shops sell through "food", "weapons", "room" and the
+  like.
+- **Range at large resolutions.** Exult's combat dropped a foe off the
+  host's screen while the attacker was on it (`Need_new_opponent`), so a
+  guest seeing more than the host couldn't fight what only it saw. Now part
+  of the targeting batch below.
+
+**Targeting for everything, built 2026-10-19 (same protocol); tested on
+one Mac and working** (Q, Space, C, E, Y, merchants, the minimap and the
+range frame; walking as a guest still needs a try over the internet). See the brief's Phase 9 and "Targeting for everything" in the [test
+checklist](test-checklist.md).
+
+- **Space** out of combat talks to or uses the pick
+  (`Game_window::double_clicked_object`, the double-click without the
+  mouse); in combat it attacks. Q out of combat also offers the party,
+  last (the Avatar only).
+- **E** cycles containers and bodies (`Friend_mode_cycle_object`), green
+  arrow, Space opens. Guests' follow moved to **Y**.
+- **Range**: on screen and at most 40 tiles each way
+  (`Game_window::friend_target_range`). Bigger screens get a faint
+  square frame (two layers, fill and border, by layer alpha) in combat
+  and after Q or E. The host's combat keeps a guest companion's foe while
+  in range of the companion (`Out_of_sight` in combat.cc); the guest's
+  item and creature sync radius went from 2 to 3 chunks.
+
 **Serpent Isle (decided 2026-10-18):** not supported yet. Friend Mode is
 Black Gate only; the co-op core is game-independent, but guests' world use
 (shape lists), shops and trainers (`GAME_BG`), picker descriptions, the
@@ -285,7 +345,7 @@ tested yet.** See "Co-op quality of life" in the
 
 - **Keys:** **U** world map (since shelved); hold **Tab** for the player list (Player, Character,
   Health); **J** opens the companion picker (it was Tab); **L** hides or
-  shows the chat log; **X** (spectating) watches the next player; **E**
+  shows the chat log; **X** (spectating) watches the next player; **E** (now **Y**)
   follows the Avatar. In the chat line, **Tab** completes a player's name
   (or a command after "/"); Tab again goes to the next match.
 - **Rejoin:** a guest that drops keeps its companion for 3 minutes (the
@@ -323,7 +383,7 @@ spectating. Press Tab to choose a companion.").
 **Follow mode and Spectate, built and tested 2026-10-17 (protocol version
 28).** For stepping away without losing your companion, or giving it up:
 
-- **E: follow the Avatar.** The party's own AI takes your companion: it
+- **E: follow the Avatar** (moved to **Y** on 2026-10-19). The party's own AI takes your companion: it
   follows the Avatar and fights when the party fights, but stays yours
   (nobody else can pick it). A bar says "Following the Avatar. Move to take
   over." Walking, attacking, switching or pressing E again hands it back to
