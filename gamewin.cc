@@ -2790,6 +2790,12 @@ void Game_window::double_clicked(
 	double_clicked_object(obj, gump);
 }
 
+/*
+ *  Act on an object as a double-click does, without the mouse: 'gump' says
+ *  it is in an open window.  double_clicked() finds the object under the
+ *  mouse and calls this; the Target System's Space calls it directly.
+ */
+
 void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 	if (network_input_blocked() || main_actor_dont_move()) {
 		return;

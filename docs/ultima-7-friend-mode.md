@@ -578,7 +578,9 @@ simulate several regions.
 
 ### Controller support
 
-Play from a gamepad, without touching the keyboard. Targeting already
+Plan: [controller support](friend-mode/controller-plan.md) (button map,
+conversation choices by highlight, menus, chat phrases). Play from a
+gamepad, without touching the keyboard. Targeting already
 covers most of it: a stick to walk (as WASD), buttons for Q, E and Space,
 combat mode, the inventory and the game menu. What a gamepad can't do is
 drag: picking up, moving and dropping items needs a "pick up" button on the
@@ -604,6 +606,13 @@ through Emscripten.
       code.
 - [ ] Hosting: browsers slow down background tabs, so a host in a hidden tab
       slows everyone. Warn the host, or keep hosting to native builds.
+
+### Offering features to Exult
+
+Several additions don't need co-op (the Target System, moving items
+without the mouse, doors opening by walking, WASD, backpack keys, health
+bars). What could go upstream and what to untangle first:
+[upstreaming notes](friend-mode/upstreaming.md).
 
 ## Infrastructure choices
 

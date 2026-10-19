@@ -2322,6 +2322,8 @@ static bool Friend_guest_may_attack(const Actor* foe) {
 	return Friend_creature_id(foe) != 0;
 }
 
+// Someone 'own' may pick and fight: not oneself, the Avatar, the party, the
+// dead or a body.
 static bool Friend_is_attack_target(const Actor* own, const Actor* foe) {
 	return own && foe && foe != own && foe != gwin->get_main_actor() && !foe->is_in_party() && !foe->is_dead()
 		   && !foe->get_info().is_body_shape();
@@ -2356,12 +2358,38 @@ bool Friend_mode_guest_attack(Game_object* obj) {
 	return true;
 }
 
-// Targeting (with or without WASD movement): Q picks the next person or creature on screen
-// who isn't in the party (Shift+Q the previous), nearest first, and puts a
-// small red arrow over it; past the last one it clears.  In combat mode it picks only hostiles, and attacks the pick
-// through the usual combat code: the Avatar's target on the host, or the
-// host fighting for a guest's companion.  Turning combat mode on with a
-// hostile picked attacks it too.
+// ---- The Target System (Q, E, Space) -------------------------------------
+//
+// Keyboard targeting, for single player as well as Co-Op Mode (the
+// "Target System" options page, config/gameplay/keyboard_targeting and
+// config/gameplay/targeting/...; docs/friend-mode/targeting-groups.md).
+// It works for whoever is controlled: the Avatar, or a guest's companion,
+// whose actions go through the host as its mouse actions do.
+//
+// - Q picks people and creatures on screen within range
+//   (friend_attack_max_tiles), nearest first, Shift+Q the previous; in
+//   combat mode hostiles first; out of combat the party last.  The pick is
+//   Game_window's action target, with an arrow over it
+//   (Friend_mode_paint_target_arrow).
+// - E picks things (friend_object_target): with a container window open,
+//   what is in the open windows; otherwise containers, bodies and signs
+//   within reach and, near one's feet, the groups the options page turns
+//   on (Friend_thing_group_of).  Green arrow.
+// - Both start again at the nearest after one moves, and pass "No target"
+//   on the way round.
+// - Space acts on the pick (Friend_mode_space): talk or attack a person;
+//   open, use, read, take, ready or drop a thing.  Shift is "more".  Taking
+//   and dropping go through the drag code (Game_window::move_object).
+// - Fighting through targeting keeps to the pick: the Avatar's attack mode
+//   is "manual" until combat mode ends; a knocked-out pick stays attacked
+//   until dead, then the nearest hostile is next.
+// - On screens bigger than the range, a faint circle shows it
+//   (Friend_mode_paint_range_frame).
+//
+// Nothing here needs the network; the Friend_mode_is_guest() branches send
+// a guest's requests to the host.  See docs/friend-mode/upstreaming.md.
+
+// Hostile: evil or chaotic, and someone one may fight.
 static bool Friend_is_hostile_target(const Actor* own, const Actor* foe) {
 	if (!Friend_is_attack_target(own, foe)) {
 		return false;
@@ -2388,6 +2416,7 @@ static void Friend_mode_target_notice(const std::string& text) {
 	Friend_mode_top_line(text);
 }
 
+// A pick's name for the notices.
 static std::string Friend_target_name(const Actor* actor) {
 	const std::string name = actor->get_name();
 	return name.empty() ? std::string("someone") : name;
@@ -2431,6 +2460,7 @@ static bool Friend_is_party_pick(const Actor* own, const Actor* actor) {
 		   && !actor->is_dead();
 }
 
+// Anyone Q may pick just now.
 static bool Friend_is_pickable(const Actor* own, const Actor* actor) {
 	return Friend_is_attack_target(own, actor) || Friend_is_party_pick(own, actor);
 }
@@ -2444,6 +2474,7 @@ static uint32           friend_range_shown_until = 0;    // Ticks; after Q or E.
 // they go on to the next (and past the last to "No target", then round).
 static Tile_coord friend_cycle_at(-1, -1, -1);
 
+// True (once) if 'own' has moved since the last Q or E.
 static bool Friend_cycle_moved(const Actor* own) {
 	const bool moved = own->get_tile() != friend_cycle_at;
 	friend_cycle_at  = own->get_tile();
@@ -2465,6 +2496,8 @@ static std::vector<Actor*> Friend_target_candidates(Actor* own) {
 	return foes;
 }
 
+// Q (step 1) and Shift+Q (step -1): the next or previous person.  In combat
+// mode a hostile pick is attacked at once.
 static void Friend_mode_cycle_target(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
@@ -2537,6 +2570,8 @@ static void Friend_mode_take_manual() {
 	avatar->set_attack_mode(Actor::manual, avatar->did_user_set_attack());
 }
 
+// Combat mode went off (toggle_combat): the Avatar gets its own attack mode
+// back, and nothing is being attacked through targeting.
 void Friend_mode_combat_ended() {
 	friend_attacking_pick = false;
 	Main_actor* avatar = gwin->get_main_actor();
@@ -2860,6 +2895,7 @@ static void Friend_mode_check_target() {
 // are loot by their game data; anything not listed is decor.
 enum class Friend_thing_group { box, loot, decor, furniture, interactive, lever, sign };
 
+// The group of a thing in the world (containers and bodies are 'box').
 static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	static const std::unordered_set<int> loot{
 			159, 178, 194, 285, 295, 296, 298, 330, 340, 377, 444, 581, 583, 584, 585, 616, 627, 640, 641, 642, 644,
@@ -2891,6 +2927,7 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	return Friend_thing_group::decor;
 }
 
+// Whether the options page lets E offer 'group'.
 static bool Friend_thing_group_on(Friend_thing_group group) {
 	switch (group) {
 	case Friend_thing_group::box:
@@ -2925,6 +2962,7 @@ static Game_object_weak friend_confirm_object;
 static Friend_confirm   friend_confirm_action = Friend_confirm::none;
 static uint32           friend_confirm_until  = 0;
 
+// True on the second Space; on the first, shows 'ask' and remembers it.
 static bool Friend_confirmed(Game_object* obj, Friend_confirm action, const std::string& ask) {
 	const uint32 now = SDL_GetTicks();
 	if (friend_confirm_action == action && friend_confirm_object.lock().get() == obj && now < friend_confirm_until) {
@@ -2961,6 +2999,7 @@ static int Friend_how_many(Game_object* obj, bool shift) {
 static std::vector<Game_object*> Friend_window_candidates();
 static void Friend_mode_pick_thing(Game_object* obj, bool in_window);
 
+// After a take: the first thing left in the open windows, or none.
 static void Friend_mode_pick_next_in_window() {
 	const std::vector<Game_object*> things = Friend_window_candidates();
 	if (things.empty()) {
@@ -3215,6 +3254,7 @@ static std::vector<Game_object*> Friend_window_candidates() {
 	return things;
 }
 
+// E with no container window open: things in the world, nearest first.
 static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 	constexpr int      loose_tiles = 6;
 	Game_object_vector nearby;
@@ -3245,6 +3285,7 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 	return things;
 }
 
+// Make 'obj' the E pick, saying so near the top.
 static void Friend_mode_pick_thing(Game_object* obj, bool in_window) {
 	friend_object_target    = weak_from_obj(obj);
 	friend_object_in_window = in_window;
@@ -3288,6 +3329,7 @@ static bool Friend_mode_toggle_backpack_of(Actor* who) {
 	return true;
 }
 
+// Party member 'index': 0 the Avatar, 1 the first companion, and so on.
 static Actor* Friend_party_member(int index) {
 	if (index == 0) {
 		return gwin->get_main_actor();
@@ -3329,6 +3371,7 @@ static void Friend_mode_backpack_key(int member) {
 	gwin->set_all_dirty();
 }
 
+// E (step 1) and Shift+E (step -1): the next or previous thing.
 static void Friend_mode_cycle_object(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
@@ -4762,9 +4805,8 @@ bool Friend_mode_is_guest() {
 	return friend_session.mode() == Friend_mode_session::Mode::guest;
 }
 
-// Return to Main Menu: Exult cannot tear its game down and run the title
-// menu again in the same process, so main() starts it afresh (the same
-// arguments without the Co-Op ones, skipping the intro).
+// Keyboard play options (exult.h): WASD movement (Game Input) and the
+// Target System (its own options page).  Each machine keeps its own.
 bool                            Friend_wasd_movement  = false;
 bool                            Friend_keyboard_targeting = true;
 bool                            Friend_targeting_circle      = true;
@@ -4776,6 +4818,8 @@ bool                            Friend_targeting_interactive = false;
 bool                            Friend_targeting_levers      = true;
 bool                            Friend_targeting_signs       = true;
 
+// The Target System options, from the config (at start) and back to it
+// (the options page's OK).
 void Friend_targeting_load_settings() {
 	config->value("config/gameplay/keyboard_targeting", Friend_keyboard_targeting, true);
 	config->value("config/gameplay/targeting/range_circle", Friend_targeting_circle, true);
@@ -4803,13 +4847,24 @@ void Friend_targeting_save_settings() {
 	put("config/gameplay/targeting/signs", Friend_targeting_signs);
 	config->write_back();
 }
-static int                      friend_wasd_dx        = 0;    // The direction walked last frame.
-static int                      friend_wasd_dy        = 0;
 
-// WASD movement: one of the four keys, by where it sits on the keyboard.
+// WASD movement.  The main loop reads the four keys' state every frame and
+// walks that way (two keys diagonally), as the arrow keys do; reading the
+// state rather than key-up events means a key let go while a menu or
+// another window had the keyboard never sticks.  The key bindings don't
+// see the keys; Shift with one does what the key alone did (Shift+W the
+// watch, Shift+S Save).
+static int friend_wasd_dx = 0;    // The direction walked last frame.
+static int friend_wasd_dy = 0;
+
+// One of the four keys, by where it sits on the keyboard.
 static bool Friend_is_wasd_key(SDL_Scancode code) {
 	return code == SDL_SCANCODE_W || code == SDL_SCANCODE_A || code == SDL_SCANCODE_S || code == SDL_SCANCODE_D;
 }
+
+// Return to Main Menu: Exult cannot tear its game down and run the title
+// menu again in the same process, so main() starts it afresh (the same
+// arguments without the Co-Op ones, skipping the intro).
 static bool                     friend_return_to_menu = false;
 static bool                     arg_skip_intro        = false;
 static std::vector<std::string> friend_restart_args;    // As launched; [0] is the program.

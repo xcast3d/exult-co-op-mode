@@ -31,7 +31,10 @@ for Windows, the [Windows build plan](windows-build.md).
 For a repeatable two-player pass, use the [test checklist](test-checklist.md);
 **F9** on the host places a test kit of usable objects around the Avatar.
 The guest-action boundary is defined in the [interaction authority
-policy](interaction-policy.md).
+policy](interaction-policy.md). The Target System's item groups are in
+[targeting groups](targeting-groups.md); a gamepad plan in [controller
+support](controller-plan.md); what could go to upstream Exult in
+[upstreaming notes](upstreaming.md).
 
 ## Phase 2 checkpoint
 

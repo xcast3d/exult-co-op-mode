@@ -303,6 +303,7 @@ void InputOptions_gump::paint() {
 using TargetingOptions_button = CallbackTextButton<TargetingOptions_gump>;
 using TargetingToggle         = CallbackToggleTextButton<TargetingOptions_gump>;
 
+// The label shown left of each setting's Yes/No button.
 const char* TargetingOptions_gump::label(int setting) {
 	static const char* const labels[set_count] = {"Enable (Q, E, Space):",
 			"Show range circle:",
@@ -344,6 +345,7 @@ TargetingOptions_gump::TargetingOptions_gump() : Modal_gump(nullptr, -1) {
 	RightAlignWidgets(tcb::span(buttons.data() + id_first_setting, set_count));
 }
 
+// OK: keep the settings, in the config too.
 void TargetingOptions_gump::close() {
 	bool* const values[set_count]
 			= {&Friend_keyboard_targeting, &Friend_targeting_circle,     &Friend_targeting_party,
@@ -360,6 +362,7 @@ void TargetingOptions_gump::cancel() {
 	done = true;
 }
 
+// A Yes/No button was pressed.
 void TargetingOptions_gump::set(int setting, int state) {
 	settings[setting] = state;
 	if (setting == set_enabled) {
