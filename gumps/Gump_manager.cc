@@ -129,7 +129,8 @@ void Gump_manager::render_gump_to_layer(Gump* g, int z) {
 	if (!g) {
 		return;
 	}
-	const bool is_hud = dynamic_cast<ShortcutBar_gump*>(g) != nullptr || dynamic_cast<Face_stats*>(g) != nullptr;
+	const bool is_hud
+			= dynamic_cast<ShortcutBar_gump*>(g) != nullptr || dynamic_cast<Face_stats*>(g) != nullptr || g->is_hud();
 	const int  parts  = is_hud ? g->hud_part_count() : 1;
 	for (int part = 0; part < parts; ++part) {
 		render_gump_part_to_layer(g, z, part, is_hud);

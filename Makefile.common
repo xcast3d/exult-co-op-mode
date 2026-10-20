@@ -14,6 +14,7 @@ MAIN_OBJS:=actions.o \
 	effects.o \
 	exult.o \
 	exultmenu.o \
+	friendclass.o \
 	friendmap.o \
 	friendnet.o \
 	friendtcp.o \

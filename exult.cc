@@ -62,6 +62,7 @@
 #include "fnames.h"
 #include "font.h"
 #include "font_map.h"
+#include "friendclass.h"
 #include "friendmap.h"
 #include "friendnet.h"
 #include "game.h"
@@ -3629,6 +3630,34 @@ static void Friend_mode_check_guest_attack(Friend_guest& guest) {
 
 static bool friend_following = false;    // Guest: the host's AI drives ours.
 
+// What the Class System (friendclass.cc) needs from here.
+Friend_mode_session& Friend_mode_get_session() {
+	return friend_session;
+}
+
+void Friend_mode_class_notice(const std::string& text) {
+	if (!text.empty()) {
+		Friend_mode_top_line(text);
+	}
+}
+
+bool Friend_mode_is_hostile(const Actor* own, const Actor* foe) {
+	return Friend_is_hostile_target(own, foe);
+}
+
+int Friend_mode_player_playing(const Actor* actor) {
+	for (const auto& [player, guest] : friend_guests) {
+		if (actor && guest.actor >= 0 && guest.actor == actor->get_npc_num() && !guest.following) {
+			return player;
+		}
+	}
+	return -1;
+}
+
+bool Friend_mode_guest_following() {
+	return friend_following;
+}
+
 // Host: start or stop following for a guest, and tell it the result.
 // 'restore_wait' leaves the companion waiting for the guest again; an
 // attack or a switch sets its schedule itself.
@@ -5114,6 +5143,7 @@ static void Friend_mode_watch_next() {
 
 
 void Friend_mode_note_world_loaded() {
+	Friend_class_world_loaded();
 	if (friend_session.mode() == Friend_mode_session::Mode::host) {
 		friend_world_reloaded = true;
 	}
@@ -7262,6 +7292,7 @@ static void Init() {
 		config->value("config/gameplay/skip_splash", skip_splash);
 		config->value("config/gameplay/wasd_movement", Friend_wasd_movement);
 		Friend_targeting_load_settings();
+		Friend_class_load_settings();
 
 		// Check for mod overrides
 		bool force_skip_splash   = false;
@@ -7866,6 +7897,9 @@ static void Handle_events() {
 						continue;
 					}
 					Actor* guest_actor = guest->actor >= 0 ? gwin->get_npc(guest->actor) : nullptr;
+					if (Friend_class_host_blob(kind, request, requester)) {
+						continue;    // The Class System's.
+					}
 					if (kind == Friend_mode_session::Blob_kind::guest_lift) {
 						Friend_mode_guest_lift(request, guest_actor, guest->held);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_move) {
@@ -7999,7 +8033,9 @@ static void Handle_events() {
 			Friend_mode_session::Blob_kind blob_kind;
 			std::vector<unsigned char>     blob;
 			while (friend_session.take_blob(blob_kind, blob)) {
-				if (blob_kind == Friend_mode_session::Blob_kind::world_save) {
+				if (Friend_class_guest_blob(blob_kind, blob)) {
+					// The Class System's.
+				} else if (blob_kind == Friend_mode_session::Blob_kind::world_save) {
 					// The host loaded a save: load the same world, then wait
 					// for the host to hand our companion back.
 					gwin->set_network_dialogue_paused(false);
@@ -8533,6 +8569,7 @@ static void Handle_events() {
 		gwin->rotatecolours();
 		Friend_mode_paint_maps();
 		Friend_mode_paint_range_frame();
+		Friend_class_frame();
 		Friend_mode_paint_target_arrow();
 		Friend_mode_paint_leash_arrow();
 		Friend_mode_paint_dialogue_wait();

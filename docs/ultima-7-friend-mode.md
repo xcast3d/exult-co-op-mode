@@ -631,6 +631,27 @@ through Emscripten.
 - [ ] Hosting: browsers slow down background tabs, so a host in a hidden tab
       slows everyone. Warn the host, or keep hosting to native builds.
 
+### Companion skills
+
+Two or three skills per companion, from the class they had in Ultima IV,
+so a guest playing one as their "main" has more to do in a fight than let
+it swing: Iolo's songs (Battle Hymn, Song of Warding, Song of Peace),
+Shamino's Volley at the three nearest hostiles, Jaana's Mending Circle and
+Purify, Dupre's Challenge, Spark's sling tricks. A small skill bar for
+guests, about one skill per fight (cooldowns), and each companion's skills
+unlocked by an item of their own found in their home (Iolo's lute).
+Companions nobody plays use their skills on their own through a "Class AI"
+(healers watch health, Shamino keeps his distance), or keep U7's AI. The
+Avatar gets a spell bar instead: chosen spells cast in one press, aimed
+with the Target System's pick instead of the crosshair. Host-side engine
+code on stock Black Gate, built from U7's own flags, heals, missiles and
+effects; an option the host sets, off by default. Plan:
+[companion skills](friend-mode/companion-skills.md). Moved forward on
+2026-10-20, ahead of Phase 8, since it needs balancing and changes today's
+combat: the foundation (Game menu → Class System, the bars, definitions,
+cooldowns, effects, the Class AI's choices) is built and not yet tested;
+next, the Class AI's placing, Challenge and Song of Peace.
+
 ### Offering features to Exult
 
 Several additions don't need co-op (the Target System, moving items
@@ -693,9 +714,9 @@ Keep project planning in `docs/friend-mode/` within the source tree. Track upstr
 
 ## Next steps
 
-1. **More than one guest** (Phase 6).
-2. **Shops and trainers for guests** (Phase 7).
-3. **Lobby codes over WebRTC**, the last step before an official release
+1. **The Class System** (companion skills): test the foundation, then
+   the Class AI's placing and the last two effects.
+2. **Lobby codes over WebRTC**, the last step before an official release
    (Phase 8).
 
 ---

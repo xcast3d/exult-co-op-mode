@@ -33,7 +33,9 @@ For a repeatable two-player pass, use the [test checklist](test-checklist.md);
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md). The Target System's item groups are in
 [targeting groups](targeting-groups.md); a gamepad plan in [controller
-support](controller-plan.md); what could go to upstream Exult in
+support](controller-plan.md); class skills for companions (an idea for
+after v1) in [companion skills](companion-skills.md); what could go to
+upstream Exult in
 [upstreaming notes](upstreaming.md).
 
 ## Phase 2 checkpoint
@@ -74,6 +76,40 @@ resumes control of the same companion when the conversation ends. All four
 behaviors have been verified together over two local instances.
 
 ## Next session
+
+**Class System, foundation built 2026-10-20 (protocol version 32); not
+tested yet** (built remotely; it compiles). See "Class System" in the
+[test checklist](test-checklist.md) and the plan in
+[companion skills](companion-skills.md).
+
+- **Its own files:** `friendclass.cc` and `friendclass.h`; hooks in
+  `exult.cc` (each frame, messages, world loaded, settings), the game menu,
+  `Actor::get_effective_prop` (timed bonuses), `Gump::is_hud` (the bar
+  draws at the HUD's scale like the shortcut bar), and an `aim` argument
+  for `Spellbook_object::do_spell` (the spell bar's pick answers the
+  crosshair).
+- **Game menu → Class System:** Enable (off), Skill bar position (above the
+  status bar, four corners), Show skill ranges, Class AI, Require class
+  items (off; no items exist yet).
+- **Skill bar** for a guest's companion; **spell bar** for the Avatar
+  (Great Heal, Fire Blast, Lightning). Mouse only so far.
+- **Definitions** per companion (Iolo, Shamino, Jaana, Dupre, Spark): id,
+  name, icon (a spellbook picture), cooldown (60 s), range and whether it
+  is drawn, type, target, unlock level (1, 4, 8), effect, words.
+- **Effects built:** heal, cure, flags (protection, invisibility), hinder
+  (short paralysis or knockdown, with a roll), volley (real shots with the
+  readied weapon through the combat code), timed strength and combat
+  bonuses. Skills never run a spell's script; each has a look made of
+  U7's own pieces instead: sprites on the user and targets, a missile
+  picture, a sound. Song of Peace puts hostiles in its circle to sleep for
+  5 seconds (each rolls); Challenge (taunt) is not built.
+- **Effect preview** on the Class System page: steps through sprites,
+  missile pictures and sounds, playing each on your character with its
+  number, for choosing each skill's look.
+- **Class AI:** chooses and uses skills by type (health, status, how many
+  hostiles, a hostile on a hurt companion). Placing (keeping distance,
+  walking into range) is not built yet: that is the next step, in
+  `Combat_schedule::now_what`.
 
 **Fixes from the first internet test, built 2026-10-19 (protocol
 version 31); not tested yet.** A second person joined the host's public

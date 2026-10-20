@@ -225,8 +225,9 @@ bool Spellbook_object::can_do_spell(Actor* act, int spell) {
 
 bool Spellbook_object::do_spell(
 		Actor* act, int spell,
-		bool can_do,      // Already checked.
-		bool in_combat    // Being used in combat.
+		bool         can_do,       // Already checked.
+		bool         in_combat,    // Being used in combat.
+		Game_object* aim           // Answers the crosshair, or null.
 ) {
 	if (can_do || can_do_spell(act, spell)) {
 		int circle = spell / 8;    // Figure/subtract mana.
@@ -248,7 +249,7 @@ bool Spellbook_object::do_spell(
 				}
 			}
 		}
-		execute_spell(act, spell, in_combat);
+		execute_spell(act, spell, in_combat, aim);
 		return true;
 	}
 	return false;
@@ -260,7 +261,8 @@ bool Spellbook_object::do_spell(
 
 void Spellbook_object::execute_spell(
 		Actor* act, int spell,
-		bool in_combat    // Being used in combat.
+		bool         in_combat,    // Being used in combat.
+		Game_object* aim           // Answers the crosshair, or null.
 ) {
 	act->begin_casting(859);    // TODO: Need to de-hard-code.
 
@@ -270,7 +272,9 @@ void Spellbook_object::execute_spell(
 	Game_object* oldtarg;
 	Tile_coord*  oldtile;
 	ucmachine->save_intercept(oldtarg, oldtile);
-	if (in_combat) {    // Use caster's target if for combat.
+	if (aim) {    // Friend Mode's spell bar: the Target System's pick.
+		ucmachine->intercept_click_on_item(aim);
+	} else if (in_combat) {    // Use caster's target if for combat.
 		ucmachine->intercept_click_on_item(act->get_target());
 	} else {    // Otherwise, disable intercept for gump casting.
 		ucmachine->intercept_click_on_item(nullptr);

@@ -92,7 +92,11 @@ public:
 		resync_request  = 27,   // Guest: resend the party's packs and nearby items.
 		player_list     = 28,   // Host: every player, their name and companion.
 		notice          = 29,   // Host: a session notice (joined, left, switched).
-		guest_follow    = 30    // Guest: follow the Avatar (1) or not; host: the result.
+		guest_follow    = 30,   // Guest: follow the Avatar (1) or not; host: the result.
+		class_use       = 31,   // Guest: use a skill (Class System).
+		class_state     = 32,   // Host: the Class System's rules and a guest's cooldowns.
+		class_event     = 33,   // Host: someone used a skill (for its range circle).
+		class_refused   = 34    // Host: why a guest's skill was refused.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to = everyone, int except = -1);
 	// 'from' (optional) is the sending player; on a guest always the host.

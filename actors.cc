@@ -28,6 +28,7 @@
 #include "Astar.h"
 #include "Audio.h"
 #include "Face_stats.h"
+#include "friendclass.h"
 #include "Gump_manager.h"
 #include "Paperdoll_gump.h"
 #include "Zombie.h"
@@ -3241,6 +3242,9 @@ int Actor::get_effective_prop(int prop    // Property #.
 			val -= 3;    // Matches originals.
 		}
 		break;
+	}
+	if (prop == Actor::strength || prop == Actor::combat) {
+		val += Friend_class_bonus(this, prop);    // Friend Mode: a song's bonus.
 	}
 	return val;
 }

@@ -71,15 +71,16 @@ public:
 		return bookmark >= 0 ? can_do_spell(act, bookmark) : false;
 	}
 
-	// Do the spell.
-	bool do_spell(Actor* act, int spell, bool can_do = false, bool in_combat = false);
+	// Do the spell.  'aim' (Friend Mode's spell bar) answers the spell's
+	// crosshair, as the caster's target does in combat.
+	bool do_spell(Actor* act, int spell, bool can_do = false, bool in_combat = false, Game_object* aim = nullptr);
 
 	// Do bookmarked spell.
 	bool do_spell(Actor* act, bool in_combat = false) {
 		return bookmark >= 0 ? do_spell(act, bookmark, false, in_combat) : false;
 	}
 
-	static void execute_spell(Actor* act, int spell, bool in_combat = false);
+	static void execute_spell(Actor* act, int spell, bool in_combat = false, Game_object* aim = nullptr);
 	// Run usecode function.
 	void activate(int event = 1) override;
 	// Write out to IREG file.

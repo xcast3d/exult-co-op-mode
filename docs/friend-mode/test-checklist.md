@@ -907,6 +907,100 @@ them with two guests on companions.
       rejoins the party"; the guest gets the spectating bar, and J again
       offers that companion.
 
+## Class System (protocol 32)
+
+Built 2026-10-20 without a test run (the user was away); everything here
+is untested. Turn it on first: Game menu → Class System → Enable: Yes on
+the host. For quick rounds, set `config/friend/class/short_cooldowns` to
+`yes` in the host's cfg (5-second cooldowns; not on the options page).
+The host's log says "Friend Class: Jaana uses Mending Circle on 3 targets
+(+24 health)" for every skill used.
+
+Options page:
+
+- [ ] Game menu shows Class System under Target System. With Enable: No
+      the other lines hide; Yes shows them.
+- [ ] Skill bar: each of the five places (above the status bar, bottom
+      left and right, top left and right) moves the bar there. Above the
+      status bar it sits over the party's faces, not on them, with each
+      Status Bars setting (Game Display). Top right sits under the corner
+      minimap when that is on.
+- [ ] The bar's size follows the gumps size setting (UI options), like the
+      shortcut bar.
+- [ ] On a guest the page shows only Skill bar and Show skill ranges, with
+      "The host sets the rest."; the host turning Enable off hides the
+      guest's bar.
+- [ ] The settings survive a restart (`config/friend/class/...`).
+
+Effect preview:
+
+- [ ] Class System page → Effect preview closes the page and opens a panel
+      at the top of the view; the game keeps running.
+- [ ] Sprites: < and > play each sprite on your character with "Sprite 16
+      (17 of N, 12 frames)"; << and >> step by ten; Play repeats it.
+- [ ] Kind → Missiles: each flies from your character to the Q pick, or six
+      tiles ahead; Kind → Sounds plays each sound (or says none are
+      installed).
+- [ ] A guest's preview shows on its own screen; the host's shows on
+      guests too (sprites, missiles and sounds are sent).
+- [ ] Close removes the panel.
+
+The Avatar's spell bar (host, and single player):
+
+- [ ] Three slots: Great Heal, Fire Blast, Lightning, greyed with the
+      reason on a click ("You don't know Lightning", "not enough mana...",
+      "No spellbook") as the Avatar's book and mana allow.
+- [ ] The mouse over a slot shows its name above the bar.
+- [ ] Fire Blast with a Q pick: cast at the pick with no crosshair, mana
+      and reagents used as from the book.
+- [ ] Fire Blast with no pick: the usual crosshair.
+- [ ] Great Heal heals the Avatar, or the party member picked with Q (out
+      of combat Q offers the party).
+
+A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
+
+- [ ] The bar shows the companion's skills; locked ones say "L4" or "L8"
+      and a click says "Battle Hymn: level 4".
+- [ ] No bar while spectating or in follow mode (Y); it comes back on
+      walking.
+- [ ] Switching companions (J) changes the bar; another companion's
+      cooldowns are their own.
+- [ ] Jaana: Mending Circle with someone hurt nearby heals the party
+      within the green circle, "*calls on the earth to mend*" over her,
+      sparkles on each; the slot counts down 60 and shows the number;
+      clicking it meanwhile says "Mending Circle: 42 seconds".
+- [ ] Jaana: Mending Circle with nobody hurt says "Nobody needs healing"
+      and starts no cooldown.
+- [ ] Iolo: Song of Warding gives the party nearby protection (U7's
+      protection flag; the blue badge).
+- [ ] Iolo at level 4+: Battle Hymn; the host's log line, and the party
+      hits harder for 30 seconds (stats aren't shown on the guest yet).
+- [ ] Shamino with a bow and arrows: Volley shoots at up to three
+      hostiles, using an arrow each; without a bow: "Needs a bow, crossbow
+      or sling, and ammunition".
+- [ ] Spark: Knockdown puts the target down for about 4 seconds, or
+      "Resisted"; something that can't sleep always resists.
+- [ ] Dupre: Stand Fast gives himself protection.
+- [ ] The circle shows on every machine while the mouse is on a shown
+      skill and for 2 seconds after it is used; Knockdown and Volley show
+      none. "Show skill ranges: No" hides them on that machine.
+- [ ] Iolo at level 8: Song of Peace puts hostiles in the circle to sleep
+      for about 5 seconds (some resist), music notes on Iolo and on each;
+      the party stays awake.
+- [ ] Challenge says "is not ready yet" (not built).
+
+Class AI (companions nobody plays, host):
+
+- [ ] Single player, Class System on, Jaana in the party: two people below
+      half health nearby, and she uses Mending Circle by herself; someone
+      poisoned near her (level 4+), Purify.
+- [ ] Iolo sings Song of Warding when two or more hostiles are near in a
+      fight; Shamino volleys at two or more.
+- [ ] A guest's companion never uses skills by itself, but does in follow
+      mode.
+- [ ] Class AI: No on the page: nobody uses skills by themselves.
+- [ ] Each skill is used at most once a minute per companion.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".

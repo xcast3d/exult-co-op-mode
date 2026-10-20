@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "VideoOptions_gump.h"
 #include "Yesno_gump.h"
 #include "exult.h"
+#include "friendclass.h"
 #include "gameclk.h"
 #include "gamewin.h"
 #include "items.h"
@@ -115,6 +116,8 @@ void Gamemenu_gump::createButtons() {
 			this, &Gamemenu_gump::input_options, Strings::GameInput(), margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_targeting] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::targeting_options, "Target System", margin, yForRow(y++), preferred_button_width, 11);
+	buttons[id_class_system] = std::make_unique<Gamemenu_button>(
+			this, &Gamemenu_gump::class_options, "Class System", margin, yForRow(y++), preferred_button_width, 11);
 	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest() && !Friend_mode_hosting()) {
 		buttons[id_open_coop] = std::make_unique<Gamemenu_button>(
 				this, &Gamemenu_gump::open_coop, "Open to Co-Op", margin, yForRow(y++), preferred_button_width, 11);
@@ -216,6 +219,10 @@ void Gamemenu_gump::input_options() {
 void Gamemenu_gump::targeting_options() {
 	TargetingOptions_gump targeting_opts;
 	gumpman->do_modal_gump(&targeting_opts, Mouse::hand);
+}
+
+void Gamemenu_gump::class_options() {
+	Friend_class_options();
 }
 
 void Gamemenu_gump::paint() {

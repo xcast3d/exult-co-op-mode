@@ -281,6 +281,12 @@ public:
 		return true;
 	}
 
+	// A HUD gump (drawn at the HUD's scale and anchored to a screen edge, as
+	// the shortcut bar and face stats are).  Friend Mode's skill bar.
+	virtual bool is_hud() const {
+		return false;
+	}
+
 	virtual bool     has_point(int x, int y) const;
 	virtual TileRect get_rect() const;
 
