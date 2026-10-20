@@ -64,6 +64,7 @@
 #include "font_map.h"
 #include "friendclass.h"
 #include "friendmap.h"
+#include "spellbook.h"
 #include "friendnet.h"
 #include "game.h"
 #include "gamemap.h"
@@ -1093,6 +1094,39 @@ static void Friend_mode_spawn_test_kit() {
 		Friend_test_kit_fill(supplies, 823, 2, 1);    // Paint brush.
 	}
 	Friend_test_kit_place(837, 0, 10, 5);    // Easel, to paint on.
+	// Magic, for the Class System's spell bar: a bag with 20 of each
+	// reagent, every spell in the Avatar's spellbook (a new book in the bag
+	// if it has none), and full mana.  The book still asks for the level of
+	// each spell's circle.
+	Game_object_shared reagents;
+	if (Friend_test_kit_place(802, 0, 8, 7, &reagents)) {
+		for (int frame = 0; frame < 8; ++frame) {
+			Friend_test_kit_fill(reagents, 842, frame, 20);    // Reagents.
+		}
+		Main_actor*        avatar = gwin->get_main_actor();
+		Spellbook_object*  book   = nullptr;
+		Game_object_vector owned;
+		avatar->get_objects(owned, c_any_shapenum, c_any_qual, c_any_framenum);
+		for (Game_object* obj : owned) {
+			if (!book) {
+				book = obj->as_spellbook();
+			}
+		}
+		constexpr int book_shape = 761;
+		if (!book && ShapeID::get_info(book_shape).get_shape_class() == Shape_info::spellbook) {
+			const Game_object_shared made = Friend_test_kit_create(book_shape, 0);
+			if (Container_game_object* bag = reagents->as_container()) {
+				bag->add(made.get(), true);
+				book = made->as_spellbook();
+			}
+		}
+		if (book) {
+			for (int spell = 0; spell < 9 * 8; ++spell) {    // A full book: nine circles of eight.
+				book->add_spell(spell);
+			}
+		}
+		avatar->set_property(Actor::mana, avatar->get_property(Actor::magic));
+	}
 	// Teleporter pads west and east of the Avatar.
 	Friend_test_kit_teleporters(-11, 1, 14, 1);
 	gwin->set_all_dirty();

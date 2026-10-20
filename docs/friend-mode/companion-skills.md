@@ -567,6 +567,13 @@ conversation, too slow for a fight and one that would pause guests.
 10. **Play it** with a host and two guests, then tune cooldowns and amounts.
 11. **The other four companions.**
 
+## Backlog
+
+- **Greyed-out slots look glitchy** (seen 2026-10-20): the every-other-pixel
+  shading turns noisy once the HUD is scaled up. Use a cleaner look, for
+  example a solid dark panel with the icon dimmed through the palette, or
+  only the icon's outline.
+
 ## Open questions
 
 - Keys for both bars: cycle-and-use, Alt+numbers, or something else.

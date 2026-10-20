@@ -964,6 +964,11 @@ Effect preview:
 
 The Avatar's spell bar (host, and single player):
 
+The F9 test kit now has a bag with 20 of each reagent, puts every spell in
+the Avatar's spellbook (a new book in that bag if the Avatar has none), and
+fills the Avatar's mana. Each spell still needs the level of its circle
+(Fire Blast 2, Lightning 4, Great Heal 5), as in U7.
+
 - [ ] Three slots: Great Heal, Fire Blast, Lightning, greyed with the
       reason on a click ("You don't know Lightning", "not enough mana...",
       "No spellbook") as the Avatar's book and mana allow.
