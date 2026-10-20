@@ -144,6 +144,10 @@ public:
 	}
 
 	void resume(uint32 curtime);
+
+	bool is_paused() const {    // Friend Mode's Class System pauses its timers too.
+		return paused > 0;
+	}
 };
 
 class Time_queue_iterator {

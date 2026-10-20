@@ -959,8 +959,9 @@ The Avatar's spell bar (host, and single player):
 
 A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
 
-- [ ] The bar shows the companion's skills; locked ones say "L4" or "L8"
-      and a click says "Battle Hymn: level 4".
+- [ ] The bar shows the companion's skills; locked ones say "L3" or "L6"
+      and a click says "Battle Hymn: level 3". The mouse over a slot shows
+      its name and what it does.
 - [ ] No bar while spectating or in follow mode (Y); it comes back on
       walking.
 - [ ] Switching companions (J) changes the bar; another companion's
@@ -973,7 +974,7 @@ A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
       and starts no cooldown.
 - [ ] Iolo: Song of Warding gives the party nearby protection (U7's
       protection flag; the blue badge).
-- [ ] Iolo at level 4+: Battle Hymn; the host's log line, and the party
+- [ ] Iolo at level 3+: Battle Hymn; the host's log line, and the party
       hits harder for 30 seconds (stats aren't shown on the guest yet).
 - [ ] Shamino with a bow and arrows: Volley shoots at up to three
       hostiles, using an arrow each; without a bow: "Needs a bow, crossbow
@@ -984,44 +985,61 @@ A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
 - [ ] The circle shows on every machine while the mouse is on a shown
       skill and for 2 seconds after it is used; Stun Shot and Volley show
       none. "Show skill ranges: No" hides them on that machine.
-- [ ] Iolo at level 8: Song of Peace puts hostiles in the circle to sleep
+- [ ] Iolo at level 6: Song of Peace puts hostiles in the circle to sleep
       for about 5 seconds (some resist), music notes on Iolo and on each;
       the party stays awake.
 - [ ] Sentri: Riposte, then let a foe swing at him: misses are answered
       ("Riposte!", a sword sprite on the foe) for 10 seconds. Blade Dance
-      (level 4) strikes every foe beside him. Master's Strike (level 8) on
+      (level 3) strikes every foe beside him. Master's Strike (level 6) on
       an armoured foe does more than his normal hits.
 - [ ] Tseramed with a bow: Sleep Arrow puts the target to sleep as the
       arrow lands; Crippling Shot makes it attack less often for 10 seconds;
-      Hunter's Mark (level 8): party hits on it do more (compare "combat
+      Hunter's Mark (level 6): party hits on it do more (compare "combat
       shows hits" numbers).
 - [ ] Julia: Quick Fix on the weakest nearby (fewer hits get through for
-      30 seconds); Flashbang (4): a keg flies to the pick and hostiles near
-      it stop for 2.5 seconds; Time Bomb (8): a keg flies, sparks for 3
+      30 seconds); Flashbang (3): a keg flies to the pick and hostiles near
+      it stop for 2.5 seconds; Time Bomb (6): a keg flies, sparks for 3
       seconds, then the keg's blast hits hostiles near it, not the party.
 - [ ] Katrina: Healing Field leaves a green circle at her feet for 12
-      seconds that heals whoever stands in it; Summon Creature (4): a
+      seconds that heals whoever stands in it; Summon Creature (3): a
       sheepdog appears and fights for 30 seconds, then vanishes with a poof
-      (guests see it too); Sanctuary (8): armour for everyone in the circle.
+      (guests see it too); Sanctuary (6): armour for everyone in the circle.
 - [ ] Reactions over foes, emote-style, on every machine: *stunned*
       (Stun Shot), *asleep* (Sleep Arrow), *drowsy* (Song of Peace),
       *entangled* (Entangle), *dazed* (Flashbang), *crippled* (Crippling
       Shot), *marked* (Hunter's Mark), *enraged* (Challenge), *resisted*
       when a roll fails; *ripostes* over Sentri.
-- [ ] Dupre at level 8: Challenge turns hostiles in the circle on him;
+- [ ] Dupre at level 6: Challenge turns hostiles in the circle on him;
       for 6 seconds they keep coming back to him.
 
 Class AI (companions nobody plays, host):
 
 - [ ] Single player, Class System on, Jaana in the party: two people below
       half health nearby, and she uses Mending Circle by herself; someone
-      poisoned near her (level 4+), Purify.
+      poisoned near her (level 3+), Purify.
 - [ ] Iolo sings Song of Warding when two or more hostiles are near in a
       fight; Shamino volleys at two or more.
 - [ ] A guest's companion never uses skills by itself, but does in follow
       mode.
 - [ ] Class AI: No on the page: nobody uses skills by themselves.
-- [ ] Each skill is used at most once a minute per companion.
+- [ ] Cooldowns: Lay on Hands 15 s; Mending Circle, Purify, Healing Field
+      and single shots 30 s; the rest 60 s.
+- [ ] Open the game menu during a fight: cooldown numbers, buffs and a
+      Healing Field stop counting until it closes; the same during a
+      conversation.
+- [ ] A guest Q-picks a wolf that the companion isn't fighting, then Stun
+      Shot: the picked wolf is stunned.
+- [ ] During a host conversation the guest's bar is greyed; a click says
+      "Wait for the Avatar".
+- [ ] Save (or let the autosave run) while a foe is stunned and the
+      sheepdog is out: the dog leaves with a poof, the foe stays stunned
+      only its few seconds; load that save: no dog, nobody stuck asleep.
+- [ ] Status icons under people, on every machine: a green up arrow
+      (Battle Hymn), a blue shield (Quick Fix, Sanctuary, Riposte,
+      protection), a red down arrow (Crippling Shot, Hunter's Mark); gone
+      when it ends.
+- [ ] Battle Hymn: health goes up by 3 and back down when it ends.
+- [ ] The Class System page has no "Require class items" line.
 - [ ] Shamino or Iolo with a bow or crossbow: a foe closing to melee makes
       them step back about 4 tiles ("keeps its distance" in the host's
       log), then shoot; never more than 12 tiles from the Avatar.

@@ -41,6 +41,7 @@
 #include "game.h"
 #include "gamewin.h"
 #include "ibuf8.h"
+#include "palette.h"
 #include "items.h"
 #include "monsters.h"
 #include "mouse.h"
@@ -79,8 +80,26 @@ Game_window* Gwin() {
 	return Game_window::get_instance();
 }
 
+// The Class System's clock: real time that stops while the game is paused
+// (menus, conversations, Exult's pause), so cooldowns, buffs and fields
+// wait too.  Ticked every frame (Tick_clock); a frame that took a long time
+// means the main loop was held up by a menu or a conversation.
+uint32 clock_offset = 0;
+uint32 clock_last   = 0;
+
 uint32 Now() {
-	return static_cast<uint32>(SDL_GetTicks());
+	return static_cast<uint32>(SDL_GetTicks()) - clock_offset;
+}
+
+void Tick_clock(bool paused) {
+	const uint32 raw = static_cast<uint32>(SDL_GetTicks());
+	if (clock_last != 0) {
+		const uint32 gap = raw - clock_last;
+		if (paused || gap > 250) {
+			clock_offset += gap;
+		}
+	}
+	clock_last = raw;
 }
 
 bool Is_host() {
@@ -171,6 +190,7 @@ struct Class_skill {
 	const char*  reaction     = nullptr;    // Over each foe it lands on ("*stunned*"); null: by effect.
 	Skill_look   look;
 	const char*  words = "";    // Over the user.
+	const char*  description = "";    // For the bar.
 
 	Class_skill(int i, const char* n) : id(i), name(n) {}
 
@@ -359,6 +379,12 @@ struct Class_skill {
 		return *this;
 	}
 
+	// One line for the bar, under the name: what it does.
+	Class_skill& describe(const char* text) {
+		description = text;
+		return *this;
+	}
+
 	Class_skill& says(const char* text) {
 		words = text;
 		return *this;
@@ -421,7 +447,9 @@ constexpr int spell_flame_strike = 51;
 constexpr int spell_tremor       = 55;
 
 // Each companion's class and skills.  Levels: the first at 1, the next at
-// 4, the last at 8.
+// 3, the last at 6 (U7's levels: 1 + log2(experience / 50)).
+// Cooldowns: 15 s for a heal on one, 30 s for group heals and single
+// shots or holds, 60 s (the default) for big damage and support.
 const std::vector<Companion_class>& Classes() {
 	using T = Skill_type;
 	using G = Skill_target;
@@ -433,6 +461,7 @@ const std::vector<Companion_class>& Classes() {
 			 "Iolo's Lute",
 			 {
 					 Class_skill(11, "Song of Warding")
+							 .describe("Protection for the party in the circle")
 							 .icon_spell(spell_protect_all)
 							 .kind(T::support)
 							 .aim(G::party_area, 8, true)
@@ -441,20 +470,22 @@ const std::vector<Companion_class>& Classes() {
 							 .on_targets(sprite_music)
 							 .says("*sings a song of warding*"),
 					 Class_skill(10, "Battle Hymn")
+							 .describe("The party nearby hits harder and has more health")
 							 .icon_spell(spell_mass_might)
 							 .kind(T::support)
 							 .aim(G::party_area, 8, true)
-							 .unlock(4)
+							 .unlock(3)
 							 .bonus(3, 30000)
 							 .targets(3)
 							 .on_targets(sprite_music)
 							 .says("*plays a battle hymn*"),
 					 // Hostiles in the circle drowse for a few seconds (each rolls).
 					 Class_skill(12, "Song of Peace")
+							 .describe("Hostiles in the circle drowse a few seconds")
 							 .icon_spell(spell_dance)
 							 .kind(T::control)
 							 .aim(G::hostiles_nearest, 8, true)
-							 .unlock(8)
+							 .unlock(6)
 							 .hinder(Obj_flags::asleep, 5000)
 							 .reacts("*drowsy*")
 							 .targets(8)
@@ -469,6 +500,7 @@ const std::vector<Companion_class>& Classes() {
 			 "Shamino's Bow",
 			 {
 					 Class_skill(20, "Volley")
+							 .describe("Arrows at the three nearest hostiles")
 							 .icon_spell(spell_swordstrike)
 							 .kind(T::attack)
 							 .aim(G::hostiles_nearest, 12)
@@ -476,16 +508,18 @@ const std::vector<Companion_class>& Classes() {
 							 .targets(3)
 							 .says("*looses a volley*"),
 					 Class_skill(21, "Aimed Shot")
+							 .describe("One careful shot that hits harder")
 							 .icon_spell(spell_death_bolt)
 							 .kind(T::attack)
 							 .aim(G::pick, 14)
-							 .unlock(4)
+							 .unlock(3)
 							 .volley(6, 3000)
 							 .says("*takes careful aim*"),
 					 Class_skill(22, "Vanish")
+							 .describe("Invisible for a moment; foes lose him")
 							 .icon_spell(spell_invisibility)
 							 .kind(T::self)
-							 .unlock(8)
+							 .unlock(6)
 							 .set_flag(Obj_flags::invisible)
 							 .on_targets(sprite_poof)
 							 .says("*melts into the shadows*"),
@@ -497,6 +531,8 @@ const std::vector<Companion_class>& Classes() {
 			 "Jaana's Staff",
 			 {
 					 Class_skill(30, "Mending Circle")
+							 .describe("Heals everyone in the circle")
+							 .recharge(30)
 							 .icon_spell(spell_great_heal)
 							 .kind(T::heal)
 							 .aim(G::party_area, 8, true)
@@ -505,18 +541,22 @@ const std::vector<Companion_class>& Classes() {
 							 .on_targets(sprite_sparkles)
 							 .says("*calls on the earth to mend*"),
 					 Class_skill(31, "Purify")
+							 .describe("Cures poison, paralysis and curses nearby")
+							 .recharge(30)
 							 .icon_spell(spell_mass_cure)
 							 .kind(T::cure)
 							 .aim(G::party_area, 8, true)
-							 .unlock(4)
+							 .unlock(3)
 							 .cure()
 							 .on_targets(sprite_bubbles)
 							 .says("*purifies the air*"),
 					 Class_skill(32, "Entangle")
+							 .describe("Roots the target in place for six seconds")
+							 .recharge(30)
 							 .icon_spell(spell_paralyze)
 							 .kind(T::control)
 							 .aim(G::pick, 10)
-							 .unlock(8)
+							 .unlock(6)
 							 .hinder(Obj_flags::paralyzed, 6000)
 							 .reacts("*entangled*")
 							 .on_targets(sprite_beads)
@@ -529,24 +569,29 @@ const std::vector<Companion_class>& Classes() {
 			 "Dupre's Shield",
 			 {
 					 Class_skill(40, "Stand Fast")
+							 .describe("Protection for Dupre himself")
+							 .recharge(30)
 							 .icon_spell(spell_protection)
 							 .kind(T::self)
 							 .set_flag(Obj_flags::protection)
 							 .on_targets(sprite_barrier)
 							 .says("*stands fast*"),
 					 Class_skill(41, "Lay on Hands")
+							 .describe("A big heal on the most hurt nearby")
+							 .recharge(15)
 							 .icon_spell(spell_heal)
 							 .kind(T::heal)
 							 .aim(G::hurt_party, 3)
-							 .unlock(4)
+							 .unlock(3)
 							 .heal(25)
 							 .on_targets(sprite_sparkles)
 							 .says("*lays on hands*"),
 					 Class_skill(42, "Challenge")
+							 .describe("Hostiles in the circle turn on Dupre")
 							 .icon_spell(spell_cause_fear)
 							 .kind(T::control)
 							 .aim(G::hostiles_nearest, 6, true)
-							 .unlock(8)
+							 .unlock(6)
 							 .taunt(6000)
 							 .targets(8)
 							 .says("*issues a challenge*"),
@@ -559,6 +604,8 @@ const std::vector<Companion_class>& Classes() {
 			 {
 					 // A stone that stops the target in its tracks (decided 2026-10-20).
 					 Class_skill(50, "Stun Shot")
+							 .describe("A stone that stops the target for three seconds")
+							 .recharge(30)
 							 .icon_spell(spell_paralyze)
 							 .kind(T::control)
 							 .aim(G::pick, 10)
@@ -566,10 +613,11 @@ const std::vector<Companion_class>& Classes() {
 							 .then_hinder(Obj_flags::paralyzed, 3000)
 							 .says("*lets fly a stone*"),
 					 Class_skill(51, "Trick Shot")
+							 .describe("Stones at the two nearest hostiles")
 							 .icon_spell(spell_fireworks)
 							 .kind(T::attack)
 							 .aim(G::hostiles_nearest, 10)
-							 .unlock(4)
+							 .unlock(3)
 							 .volley()
 							 .targets(2)
 							 .says("*tries a trick shot*"),
@@ -582,6 +630,8 @@ const std::vector<Companion_class>& Classes() {
 			 "Sentri's Blade",
 			 {
 					 Class_skill(60, "Riposte")
+							 .describe("For ten seconds, answers every melee miss")
+							 .recharge(30)
 							 .icon_spell(spell_swordstrike)
 							 .kind(T::self)
 							 .stance(10000)
@@ -589,19 +639,21 @@ const std::vector<Companion_class>& Classes() {
 							 .on_targets(sprite_sword)    // On each foe answered.
 							 .says("*takes a dueling stance*"),
 					 Class_skill(61, "Blade Dance")
+							 .describe("A strike at every foe beside him")
 							 .icon_spell(spell_tremor)
 							 .kind(T::attack)
 							 .aim(G::hostiles_nearest, 1)
-							 .unlock(4)
+							 .unlock(3)
 							 .volley()
 							 .targets(8)
 							 .on_targets(sprite_sword)
 							 .says("*whirls into a blade dance*"),
 					 Class_skill(62, "Master's Strike")
+							 .describe("A precise blow that ignores some armour")
 							 .icon_spell(spell_flame_strike)
 							 .kind(T::attack)
 							 .aim(G::pick, 1)
-							 .unlock(8)
+							 .unlock(6)
 							 .volley(6, 2000)
 							 .pierce_armor(6)
 							 .on_targets(sprite_fireworks)
@@ -615,6 +667,8 @@ const std::vector<Companion_class>& Classes() {
 			 "Tseramed's Bow",
 			 {
 					 Class_skill(70, "Sleep Arrow")
+							 .describe("An arrow that puts the target to sleep")
+							 .recharge(30)
 							 .icon_spell(spell_sleep)
 							 .kind(T::control)
 							 .aim(G::pick, 14)
@@ -623,19 +677,22 @@ const std::vector<Companion_class>& Classes() {
 							 .says("*nocks a sleeping arrow*"),
 					 // U7 has no slowed walking: the target attacks less often.
 					 Class_skill(71, "Crippling Shot")
+							 .describe("An arrow that makes the target attack less")
+							 .recharge(30)
 							 .icon_spell(spell_curse)
 							 .kind(T::control)
 							 .aim(G::pick, 14)
-							 .unlock(4)
+							 .unlock(3)
 							 .volley()
 							 .then_weaken(Actor::dexterity, -10, 10000)
 							 .on_targets(sprite_burst_arrow)
 							 .says("*aims for the legs*"),
 					 Class_skill(72, "Hunter's Mark")
+							 .describe("The party's hits on the target do more")
 							 .icon_spell(spell_mass_curse)
 							 .kind(T::attack)
 							 .aim(G::pick, 14)
-							 .unlock(8)
+							 .unlock(6)
 							 .mark(4, 20000)
 							 .on_targets(sprite_purple)
 							 .says("*marks the quarry*"),
@@ -649,6 +706,8 @@ const std::vector<Companion_class>& Classes() {
 			 {
 					 // One ally, a strong boost (Sanctuary: everyone, smaller).
 					 Class_skill(80, "Quick Fix")
+							 .describe("Much more armour for the weakest ally nearby")
+							 .recharge(30)
 							 .icon_spell(spell_protect)
 							 .kind(T::support)
 							 .aim(G::ally, 4)
@@ -657,19 +716,21 @@ const std::vector<Companion_class>& Classes() {
 							 .on_targets(sprite_barrier)
 							 .says("*tightens a few straps*"),
 					 Class_skill(81, "Flashbang")
+							 .describe("Thrown; hostiles where it lands are stunned")
 							 .icon_spell(spell_explosion)
 							 .kind(T::control)
 							 .aim(G::pick, 10)
-							 .unlock(4)
+							 .unlock(3)
 							 .flash(3, Obj_flags::paralyzed, 2500)
 							 .missile(shape_powder_keg)
 							 .on_targets(sprite_fireworks)
 							 .says("*throws a flashbang*"),
 					 Class_skill(82, "Time Bomb")
+							 .describe("Thrown; a few seconds later, it explodes")
 							 .icon_spell(spell_delayed)
 							 .kind(T::attack)
 							 .aim(G::pick, 10)
-							 .unlock(8)
+							 .unlock(6)
 							 .bomb(3, 3000, 2)
 							 .missile(shape_powder_keg)
 							 .targets(2)
@@ -683,6 +744,8 @@ const std::vector<Companion_class>& Classes() {
 			 "Katrina's Crook",
 			 {
 					 Class_skill(90, "Healing Field")
+							 .describe("A field that heals whoever stands in it")
+							 .recharge(30)
 							 .icon_spell(spell_restoration)
 							 .kind(T::heal)
 							 .aim(G::party_area, 4, true)
@@ -691,18 +754,20 @@ const std::vector<Companion_class>& Classes() {
 							 .on_targets(sprite_sparkles)
 							 .says("*calls down a healing field*"),
 					 Class_skill(91, "Summon Creature")
+							 .describe("Her sheepdog fights beside you a while")
 							 .icon_spell(spell_summon)
 							 .kind(T::support)
-							 .unlock(4)
+							 .unlock(3)
 							 .summon(shape_dog, 30000)
 							 .targets(2)
 							 .on_targets(sprite_teleport)
 							 .says("*whistles for her sheepdog*"),
 					 Class_skill(92, "Sanctuary")
+							 .describe("More armour for everyone in the circle")
 							 .icon_spell(spell_protect_all)
 							 .kind(T::support)
 							 .aim(G::party_area, 6, true)
-							 .unlock(8)
+							 .unlock(6)
 							 .armor(2, 20000)
 							 .targets(2)
 							 .on_targets(sprite_barrier)
@@ -786,7 +851,7 @@ int Bonus_of(const Actor* actor, int prop) {
 	if (bonuses.empty() || !actor) {
 		return 0;
 	}
-	const uint32 now   = static_cast<uint32>(SDL_GetTicks());
+	const uint32 now   = Now();
 	int          total = 0;
 	for (const Timed_bonus& each : bonuses) {
 		if (each.prop == prop && each.until > now) {
@@ -807,8 +872,14 @@ struct Pending {
 };
 std::vector<Pending> pending;
 
+std::vector<Game_object_weak> summons;    // Host: summoned creatures still about.
+
+// The pick a guest sent with its skill (the Target System's Q), for the
+// skill being carried out now.
+Game_object_weak chosen_pick;
+
 void Later(uint32 ms, std::function<void()> run) {
-	pending.push_back({static_cast<uint32>(SDL_GetTicks()) + ms, std::move(run)});
+	pending.push_back({Now() + ms, std::move(run)});
 }
 
 struct Timed_taunt {
@@ -859,8 +930,9 @@ int Health(const Actor* actor) {
 	return actor->get_property(Actor::health);
 }
 
+// U7's maximum health is strength, so a strength bonus raises it too.
 int Max_health(const Actor* actor) {
-	return std::max(1, actor->get_property(Actor::strength));
+	return std::max(1, actor->get_property(Actor::strength) + Bonus_of(actor, Actor::strength));
 }
 
 bool Able(const Actor* actor) {
@@ -930,6 +1002,10 @@ bool May_use(const Actor* user, const Companion_class& cls, const Class_skill& s
 		why = std::string(skill.name) + " is not ready yet";
 		return false;
 	}
+	if (Is_guest() && Gwin()->network_input_blocked()) {
+		why = "Wait for the Avatar";
+		return false;
+	}
 	if (user->get_level() < skill.level) {
 		why = std::string(skill.name) + ": level " + std::to_string(skill.level);
 		return false;
@@ -987,6 +1063,13 @@ std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
 		return {};
 	}
 	case Skill_target::pick: {
+		// The guest's own pick first, then the companion's foe.
+		if (const Game_object_shared chosen = chosen_pick.lock()) {
+			Actor* foe = chosen->as_actor();
+			if (foe && Friend_mode_is_hostile(user, foe) && user->distance(foe) <= skill.range) {
+				return {foe};
+			}
+		}
 		Game_object* target = user->get_target();
 		Actor*       foe    = target ? target->as_actor() : nullptr;
 		if (foe && Friend_mode_is_hostile(user, foe) && user->distance(foe) <= skill.range) {
@@ -1278,8 +1361,10 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 		}
 		break;
 	case Skill_effect::bonus:
+		// More strength, so more health: given now, taken back when it ends.
 		for (Actor* each : targets) {
 			Add_might(each, skill.amount, skill.duration_ms);
+			each->set_property(Actor::health, std::min(Max_health(each), Health(each) + skill.amount));
 			++done;
 		}
 		break;
@@ -1404,6 +1489,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			return false;
 		}
 		Sprite_at(spot, skill.look.on_targets);
+		summons.push_back(made);
 		const Game_object_weak creature = made;
 		Later(static_cast<uint32>(skill.duration_ms), [=]() {
 			if (const Game_object_shared obj = creature.lock()) {
@@ -1882,6 +1968,19 @@ const char* Spell_name(int spell) {
 	}
 }
 
+const char* Spell_description(int spell) {
+	switch (spell) {
+	case spell_great_heal:
+		return "Heals fully: the Avatar, or the party member picked";
+	case spell_fire_blast:
+		return "A bolt of fire at the pick";
+	case spell_lightning:
+		return "Lightning at the pick";
+	default:
+		return "";
+	}
+}
+
 bool Spell_heals(int spell) {
 	return spell == spell_great_heal;
 }
@@ -1912,6 +2011,7 @@ struct Bar_slot {
 	int  level   = 0;    // Locked until this level.
 	std::string name;
 	std::string why;     // Why not usable.
+	std::string description;
 };
 
 // Which actor's bar this machine shows, if any: a guest's companion, or the
@@ -1944,6 +2044,7 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 			slot.spell = spell;
 			slot.icon  = spell;
 			slot.name  = Spell_name(spell);
+			slot.description = Spell_description(spell);
 			if (!book) {
 				slot.why = "No spellbook";
 			} else if (!book->has_spell(spell)) {
@@ -1966,6 +2067,7 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 		slot.skill   = skill.id;
 		slot.icon    = skill.icon;
 		slot.name    = skill.name;
+		slot.description = skill.description;
 		slot.seconds = static_cast<int>(Seconds_left(actor->get_npc_num(), skill.id));
 		slot.level   = actor->get_level() < skill.level ? skill.level : 0;
 		slot.usable  = May_use(actor, *cls, skill, slot.why);
@@ -2009,8 +2111,18 @@ void Use_slot(const Bar_slot& slot) {
 		return;
 	}
 	if (Is_guest()) {
+		// The skill, and the Target System's pick (kind 2: none).
 		std::vector<unsigned char> request = {static_cast<unsigned char>(skill->id & 0xff),
 											  static_cast<unsigned char>(skill->id >> 8)};
+		int    kind = 2;
+		uint32 id   = 0;
+		if (!Friend_mode_actor_net_id(gwin->get_action_target(), kind, id)) {
+			kind = 2;
+		}
+		request.push_back(static_cast<unsigned char>(kind));
+		for (int b = 0; b < 4; ++b) {
+			request.push_back(static_cast<unsigned char>(id >> (8 * b)));
+		}
 		Friend_mode_get_session().send_blob(Friend_mode_session::Blob_kind::class_use, request);
 		global_waits[actor->get_npc_num()] = Now() + global_wait_ms;
 		return;
@@ -2056,7 +2168,7 @@ public:
 
 constexpr int slot_gap    = 2;
 constexpr int slot_pad    = 2;
-constexpr int name_height = 10;    // A line for the hovered skill's name.
+constexpr int name_height = 20;    // Two lines over the bar: the hovered skill's name and what it does.
 
 // The bar: a HUD gump, drawn into its own layer at the HUD's scale (as the
 // shortcut bar and the party's face stats are).
@@ -2066,6 +2178,8 @@ class Skill_bar : public Gump {
 	TileRect                                   region{0, 0, 0, 0};
 	int                                        slot_w  = 0;
 	int                                        slot_h  = 0;
+	int                                        bar_w   = 1;    // The icons, or the widest line over them.
+	int                                        icons_x = 0;    // Where the icons start in it.
 	int                                        hovered = -1;
 
 public:
@@ -2102,8 +2216,10 @@ public:
 		return region;
 	}
 
+	// Only the icons take clicks; the lines over them don't hide the world.
 	bool has_point(int mx, int my) const override {
-		return region.has_point(mx, my);
+		const int icons_w = static_cast<int>(slots.size()) * (slot_w + slot_gap) - slot_gap;
+		return TileRect(region.x + icons_x, region.y + name_height, icons_w, slot_h).has_point(mx, my);
 	}
 
 	Gump_button* on_button(int mx, int my) override {
@@ -2168,10 +2284,20 @@ private:
 		}
 		slot_w += 2 * slot_pad;
 		slot_h += 2 * slot_pad;
+		Shape_manager* sman    = Shape_manager::get_instance();
+		const int      n       = static_cast<int>(slots.size());
+		const int      icons_w = std::max(1, n * slot_w + (n - 1) * slot_gap);
+		int            text_w  = 0;
+		for (const auto& each : slots) {
+			text_w = std::max({text_w, sman->get_text_width(0, each.name.c_str()),
+							   sman->get_text_width(0, each.description.c_str())});
+		}
+		bar_w   = std::max(icons_w, text_w + 4);
+		icons_x = (bar_w - icons_w) / 2;
 		for (size_t i = 0; i < slots.size(); ++i) {
 			ShapeID      id(33 + slots[i].icon % 8, slots[i].icon / 8, SF_GUMPS_VGA);
 			Shape_frame* frame = id.get_shape();
-			const int    sx    = static_cast<int>(i) * (slot_w + slot_gap);
+			const int    sx    = icons_x + static_cast<int>(i) * (slot_w + slot_gap);
 			const int    px    = sx + (frame ? (slot_w - frame->get_width()) / 2 + frame->get_xleft() : 0);
 			const int    py    = name_height + (frame ? (slot_h - frame->get_height()) / 2 + frame->get_yabove() : 0);
 			buttons.push_back(std::make_unique<Skill_button>(this, slots[i].icon, px, py, static_cast<int>(i)));
@@ -2182,8 +2308,7 @@ private:
 	// it moved.
 	bool place() {
 		Image_window* iwin = Gwin()->get_win();
-		const int     n    = static_cast<int>(slots.size());
-		const int     w    = std::max(1, n * slot_w + (n - 1) * slot_gap);
+		const int     w    = bar_w;
 		const int     h    = name_height + slot_h;
 		const int     left = iwin->get_start_x();
 		const int     top  = iwin->get_start_y();
@@ -2262,7 +2387,7 @@ void Skill_bar::paint() {
 	const int      line = sman->get_special_pixel(PROTECT_PIXEL);
 	for (size_t i = 0; i < slots.size(); ++i) {
 		const Bar_slot& each = slots[i];
-		int             sx   = static_cast<int>(i) * (slot_w + slot_gap);
+		int             sx   = icons_x + static_cast<int>(i) * (slot_w + slot_gap);
 		int             sy   = name_height;
 		local_to_screen(sx, sy);
 		// A dark box with an edge, blue under the mouse.
@@ -2301,6 +2426,8 @@ void Skill_bar::paint() {
 		local_to_screen(nx, ny);
 		const int tw = sman->get_text_width(0, each->name.c_str());
 		sman->paint_text(0, each->name.c_str(), nx + (region.w - tw) / 2, ny);
+		const int dw = sman->get_text_width(0, each->description.c_str());
+		sman->paint_text(0, each->description.c_str(), nx + (region.w - dw) / 2, ny + name_height / 2);
 	}
 }
 
@@ -2374,6 +2501,223 @@ struct Circle_layers {
 	int color  = -1;
 };
 std::array<Circle_layers, 4> circle_layers;
+
+/*
+ *  Status icons: small pictures under whoever a timed skill is on, drawn
+ *  like the target arrow (in a layer, from a few pixels), on every machine.
+ *  A green up arrow for a stat boost, a blue shield for armour (and
+ *  Riposte, and U7's protection), a red down arrow for a weakened or marked
+ *  foe.  Emotes would clash with chat, so these are pictures.
+ */
+
+enum Status_mark { mark_up = 1, mark_shield = 2, mark_down = 4 };
+
+// Host: what each person with a skill on them shows.
+std::vector<std::pair<Game_object_weak, int>> Host_marks() {
+	std::vector<std::pair<Game_object_weak, int>> found;
+	auto add = [&found](Game_object* obj, int mark) {
+		for (auto& each : found) {
+			if (each.first.lock().get() == obj) {
+				each.second |= mark;
+				return;
+			}
+		}
+		found.emplace_back(weak_from_obj(obj), mark);
+	};
+	const uint32 now = Now();
+	for (const Timed_bonus& each : bonuses) {
+		const Game_object_shared obj = each.actor.lock();
+		if (!obj || each.until <= now) {
+			continue;
+		}
+		if (each.prop == bonus_armor || each.prop == bonus_riposte) {
+			add(obj.get(), mark_shield);
+		} else if (each.prop == bonus_damage_taken || each.amount < 0) {
+			add(obj.get(), mark_down);
+		} else if (each.prop == Actor::strength || each.prop == Actor::combat || each.prop == Actor::dexterity) {
+			add(obj.get(), mark_up);
+		}
+	}
+	for (Actor* member : Party()) {
+		if (member->get_flag(Obj_flags::protection)) {
+			add(member, mark_shield);
+		}
+	}
+	return found;
+}
+
+struct Guest_mark {
+	int    kind;
+	uint32 id;
+	int    mark;
+};
+std::vector<Guest_mark> guest_marks;    // Guest: as the host last said.
+
+// Host: tell guests when the marks change.
+void Send_marks(const std::vector<std::pair<Game_object_weak, int>>& marks) {
+	static std::vector<unsigned char> sent;
+	Friend_mode_session&              net = Friend_mode_get_session();
+	if (!net.connected()) {
+		sent.clear();
+		return;
+	}
+	std::vector<unsigned char> data;
+	int                        count = 0;
+	data.push_back(0);
+	data.push_back(0);
+	for (const auto& [ref, mark] : marks) {
+		const Game_object_shared obj   = ref.lock();
+		Actor*                   actor = obj ? obj->as_actor() : nullptr;
+		int                      kind  = 0;
+		uint32                   id    = 0;
+		if (!actor || !Friend_mode_actor_net_id(actor, kind, id) || count == 255) {
+			continue;
+		}
+		data.push_back(static_cast<unsigned char>(kind));
+		for (int b = 0; b < 4; ++b) {
+			data.push_back(static_cast<unsigned char>(id >> (8 * b)));
+		}
+		data.push_back(static_cast<unsigned char>(mark));
+		++count;
+	}
+	data[0] = static_cast<unsigned char>(count);
+	if (data != sent) {
+		net.send_blob(Friend_mode_session::Blob_kind::class_marks, data);
+		sent = std::move(data);
+	}
+}
+
+void Take_marks(const std::vector<unsigned char>& data) {
+	guest_marks.clear();
+	const int count = data.empty() ? 0 : data[0];
+	for (int i = 0; i < count && 2 + 6 * i + 5 < static_cast<int>(data.size()); ++i) {
+		const unsigned char* at = &data[2 + 6 * i];
+		const uint32         id = at[1] | (at[2] << 8) | (at[3] << 16) | (static_cast<uint32>(at[4]) << 24);
+		guest_marks.push_back({at[0], id, at[5]});
+	}
+}
+
+constexpr int icon_size = 7;
+
+// The three pictures: B black edge, X the colour, '.' clear.
+const char* const* Icon_rows(int mark) {
+	static const char* const up[icon_size]
+			= {"...B...", "..BXB..", ".BXXXB.", "BXXXXXB", "BBXXXBB", "..BXB..", "..BBB.."};
+	static const char* const shield[icon_size]
+			= {"BBBBBBB", "BXXXXXB", "BXXXXXB", "BXXXXXB", ".BXXXB.", "..BXB..", "...B..."};
+	static const char* const down[icon_size]
+			= {"..BBB..", "..BXB..", "BBXXXBB", "BXXXXXB", ".BXXXB.", "..BXB..", "...B..."};
+	return mark == mark_up ? up : mark == mark_shield ? shield : down;
+}
+
+struct Icon_layer {
+	int layer = -1;
+	int mark  = 0;    // The picture it holds.
+};
+std::array<Icon_layer, 24> icon_layers;
+
+void Paint_marks() {
+	Game_window*  gwin = Gwin();
+	Image_window* iwin = gwin->get_win();
+	// Who shows what, on this machine.
+	std::vector<std::pair<Actor*, int>> shown;
+	if (Friend_class_active() && !gwin->is_in_exult_menu()) {
+		if (Is_guest()) {
+			for (const Guest_mark& each : guest_marks) {
+				if (Actor* actor = Friend_mode_actor_by_net_id(each.kind, each.id)) {
+					shown.emplace_back(actor, each.mark);
+				}
+			}
+		} else {
+			const auto marks = Host_marks();
+			if (Is_host()) {
+				Send_marks(marks);
+			}
+			for (const auto& [ref, mark] : marks) {
+				const Game_object_shared obj = ref.lock();
+				if (Actor* actor = obj ? obj->as_actor() : nullptr) {
+					shown.emplace_back(actor, mark);
+				}
+			}
+		}
+	}
+	size_t        used         = 0;
+	constexpr int text_layer_z = (1 << 18) + (1 << 16);
+	for (const auto& [actor, marks] : shown) {
+		if (!actor->get_chunk() || actor->is_dead()) {
+			continue;
+		}
+		int pictures[3];
+		int n = 0;
+		for (const int mark : {mark_up, mark_shield, mark_down}) {
+			if (marks & mark) {
+				pictures[n++] = mark;
+			}
+		}
+		int x;
+		int y;
+		gwin->get_shape_location(actor, x, y);
+		// A row under the feet, centred.
+		const int row_w = n * (icon_size + 1) - 1;
+		int       left  = x - c_tilesize / 2 - row_w / 2;
+		for (int i = 0; i < n && used < icon_layers.size(); ++i, ++used) {
+			Icon_layer& slot = icon_layers[used];
+			if (slot.layer < 0) {
+				slot.layer = gwin->create_layer("Skill status icon", icon_size, icon_size, 255, 0, text_layer_z - 7);
+				slot.mark  = 0;
+				if (slot.layer < 0) {
+					return;
+				}
+			}
+			if (slot.mark != pictures[i]) {
+				Image_buffer8* buf = gwin->get_layer_ibuf(slot.layer);
+				if (!buf) {
+					return;
+				}
+				Shape_manager*      sman  = Shape_manager::get_instance();
+				const unsigned char color = pictures[i] == mark_up
+													? static_cast<unsigned char>(gwin->get_pal()->find_color(15, 58, 15))
+											: pictures[i] == mark_shield ? sman->get_special_pixel(PROTECT_PIXEL)
+																		 : sman->get_special_pixel(HIT_PIXEL);
+				const char* const* rows = Icon_rows(pictures[i]);
+				buf->fill8(255);
+				for (int py = 0; py < icon_size; ++py) {
+					for (int px = 0; px < icon_size; ++px) {
+						const char c = rows[py][px];
+						if (c == 'B') {
+							buf->put_pixel8(0, px, py);
+						} else if (c == 'X') {
+							buf->put_pixel8(color, px, py);
+						}
+					}
+				}
+				gwin->layer_set_dirty(slot.layer);
+				slot.mark = pictures[i];
+			}
+			int sx0;
+			int sy0;
+			int sx1;
+			int sy1;
+			iwin->game_to_screen(left, y + 1, false, sx0, sy0);
+			iwin->game_to_screen(left + icon_size, y + 1 + icon_size, false, sx1, sy1);
+			gwin->layer_set_dest(slot.layer, sx0, sy0, sx1 - sx0, sy1 - sy0);
+			if (!iwin->layer_is_visible(slot.layer)) {
+				gwin->layer_set_visible(slot.layer, true);
+			}
+			left += icon_size + 1;
+		}
+	}
+	bool hid = false;
+	for (size_t i = used; i < icon_layers.size(); ++i) {
+		if (icon_layers[i].layer >= 0 && iwin->layer_is_visible(icon_layers[i].layer)) {
+			gwin->layer_set_visible(icon_layers[i].layer, false);
+			hid = true;
+		}
+	}
+	if (used > 0 || hid) {
+		gwin->set_painted();
+	}
+}
 
 void Paint_circles() {
 	Game_window*  gwin = Gwin();
@@ -2756,7 +3100,9 @@ void Update_preview() {
  */
 
 class Class_options_gump : public Modal_gump {
-	enum setting_ids { set_enabled, set_bar, set_ranges, set_ai, set_items, set_count };
+	// "Require class items" is kept in the config but off the page until
+	// there are items (a story question, decided later).
+	enum setting_ids { set_enabled, set_bar, set_ranges, set_ai, set_count };
 
 	enum button_ids { id_ok, id_cancel, id_preview, id_first_setting, id_count = id_first_setting + set_count };
 
@@ -2765,13 +3111,13 @@ class Class_options_gump : public Modal_gump {
 
 	static const char* label(int setting) {
 		static const char* const labels[set_count]
-				= {"Enable:", "Skill bar:", "Show skill ranges:", "Class AI:", "Require class items:"};
+				= {"Enable:", "Skill bar:", "Show skill ranges:", "Class AI:"};
 		return labels[setting];
 	}
 
 	// Guests: the game rules are the host's.
 	static bool host_only(int setting) {
-		return setting == set_enabled || setting == set_ai || setting == set_items;
+		return setting == set_enabled || setting == set_ai;
 	}
 
 	bool shown(int id) const {
@@ -2800,7 +3146,7 @@ public:
 	Class_options_gump() : Modal_gump(nullptr, -1) {
 		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 3)), -1);
 		settings = {Friend_class_enabled ? 1 : 0, Friend_class_bar_position, Friend_class_show_ranges ? 1 : 0,
-					Friend_class_ai ? 1 : 0, Friend_class_require_items ? 1 : 0};
+					Friend_class_ai ? 1 : 0};
 		buttons[id_ok]     = std::make_unique<Button>(this, &Class_options_gump::close, GumpStrings::OK(), 25,
                                                   yForRow(set_count + 2), 50);
 		buttons[id_cancel] = std::make_unique<Button>(this, &Class_options_gump::cancel, GumpStrings::CANCEL(), 75,
@@ -2812,7 +3158,7 @@ public:
 				= {"Above status bar", "Bottom left", "Bottom right", "Top left", "Top right"};
 		using Callback          = void (Class_options_gump::*)(int);
 		Callback toggles[set_count] = {&Class_options_gump::toggle<0>, &Class_options_gump::toggle<1>,
-				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>, &Class_options_gump::toggle<4>};
+				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>};
 		for (int i = 0; i < set_count; ++i) {
 			buttons[id_first_setting + i] = std::make_unique<Toggle>(this, std::move(toggles[i]),
 					i == set_bar ? places : yesNo, settings[i], get_button_pos_for_label(label(i)), yForRow(i),
@@ -2827,7 +3173,6 @@ public:
 		if (!Is_guest()) {
 			Friend_class_enabled       = settings[set_enabled] != 0;
 			Friend_class_ai            = settings[set_ai] != 0;
-			Friend_class_require_items = settings[set_items] != 0;
 		}
 		Friend_class_bar_position = settings[set_bar];
 		Friend_class_show_ranges  = settings[set_ranges] != 0;
@@ -2921,9 +3266,12 @@ void Friend_class_options() {
 }
 
 void Friend_class_frame() {
-	if (!Gwin()->get_main_actor()) {
+	Game_window* gwin = Gwin();
+	if (!gwin->get_main_actor()) {
 		return;
 	}
+	Tick_clock(gwin->get_tqueue()->is_paused()
+			   || (Is_guest() && (gwin->is_network_host_paused() || gwin->is_network_dialogue_paused())));
 	if (!Is_guest()) {
 		Expire();
 		if (Friend_class_active()) {
@@ -2936,6 +3284,7 @@ void Friend_class_frame() {
 	Update_bar();
 	Update_preview();
 	Paint_circles();
+	Paint_marks();
 }
 
 void Friend_class_world_loaded() {
@@ -2945,8 +3294,39 @@ void Friend_class_world_loaded() {
 	bonuses.clear();
 	taunts.clear();
 	pending.clear();
+	summons.clear();
 	circles.clear();
 	sent_states.clear();
+	guest_marks.clear();
+}
+
+void Friend_class_saving(bool before) {
+	if (before) {
+		// Dismissed: a saved game would keep them for good.
+		for (const Game_object_weak& each : summons) {
+			if (const Game_object_shared obj = each.lock()) {
+				if (obj->get_chunk()) {
+					Sprite_at(obj->get_tile(), sprite_poof);
+					obj->remove_this();
+				}
+			}
+		}
+		summons.clear();
+	}
+	// U7's own timers for sleep and paralysis are long: lift ours for the
+	// save, and put them back after it.
+	for (const Timed_flag& each : timed_flags) {
+		const Game_object_shared obj   = each.actor.lock();
+		Actor*                   actor = obj ? obj->as_actor() : nullptr;
+		if (!actor || actor->is_dead()) {
+			continue;
+		}
+		if (before) {
+			actor->clear_flag(each.flag);
+		} else if (each.until > Now()) {
+			actor->set_flag(each.flag);
+		}
+	}
 }
 
 bool Friend_class_host_blob(Friend_mode_session::Blob_kind kind, const std::vector<unsigned char>& data, int player) {
@@ -2966,7 +3346,18 @@ bool Friend_class_host_blob(Friend_mode_session::Blob_kind kind, const std::vect
 	const Companion_class* cls   = Class_of(actor);
 	const Class_skill*     skill = Skill_by_id(cls, id);
 	std::string            why   = "That skill isn't yours";
-	if (skill && Perform(actor, *cls, *skill, why)) {
+	if (data.size() >= 7 && data[2] < 2) {
+		const uint32 pick = data[3] | (data[4] << 8) | (data[5] << 16) | (static_cast<uint32>(data[6]) << 24);
+		chosen_pick       = weak_from_obj(Friend_mode_actor_by_net_id(data[2], pick));
+	}
+	// Not while the Avatar talks or the host is in a menu.
+	const bool waiting = Gwin()->get_usecode()->in_usecode() || Gwin()->get_tqueue()->is_paused();
+	if (waiting) {
+		why = "Wait for the Avatar";
+	}
+	const bool done = !waiting && skill && Perform(actor, *cls, *skill, why);
+	chosen_pick.reset();
+	if (done) {
 		return true;
 	}
 	cout << "Friend Class: refused a guest's skill (" << why << ')' << endl;
@@ -2979,6 +3370,9 @@ bool Friend_class_guest_blob(Friend_mode_session::Blob_kind kind, const std::vec
 	switch (kind) {
 	case Friend_mode_session::Blob_kind::class_state:
 		Take_state(data);
+		return true;
+	case Friend_mode_session::Blob_kind::class_marks:
+		Take_marks(data);
 		return true;
 	case Friend_mode_session::Blob_kind::class_event:
 		Take_event(data);

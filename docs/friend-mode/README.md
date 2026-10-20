@@ -77,8 +77,8 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
-**Class System, foundation built 2026-10-20 (protocol version 32); not
-tested yet** (built remotely; it compiles). See "Class System" in the
+**Class System, built 2026-10-20 (protocol version 33); not tested
+yet** (built remotely; it compiles). See "Class System" in the
 [test checklist](test-checklist.md) and the plan in
 [companion skills](companion-skills.md).
 
@@ -112,6 +112,13 @@ tested yet** (built remotely; it compiles). See "Class System" in the
   boosts and piercing, marks, a riposte stance, thrown flash and bomb, a
   healing field, a summoned creature; hooks in `Actor::apply_damage` and
   `Combat_schedule::attack_target`. Spark's Knockdown became Stun Shot.
+- **After the review** (protocol 33): guests' picks go with their skills;
+  no skills during host conversations or pauses; levels 1, 3, 6;
+  cooldowns 15/30/60 by kind; a clock that stops while the game is paused;
+  saves dismiss summons and lift short stuns; status icons under people
+  (green up arrow, blue shield, red down arrow), sent to guests; a line on
+  what each skill does; Battle Hymn's strength raises health; "Require
+  class items" off the page.
 - **Effect preview** on the Class System page: steps through sprites,
   missile pictures and sounds, playing each on your character with its
   number, for choosing each skill's look.

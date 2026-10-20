@@ -1883,6 +1883,7 @@ static void Friend_return_held_item(Friend_held_item& friend_guest_held) {
 // the guest's hand again afterwards.  Otherwise a save made mid-drag (an
 // autosave, or a joining guest's world) loses the item.
 void Friend_mode_saving(bool before) {
+	Friend_class_saving(before);
 	// Targeting's manual attack mode is for this fight only: saves keep the
 	// Avatar's own.
 	static bool swapped = false;
@@ -3656,6 +3657,29 @@ int Friend_mode_player_playing(const Actor* actor) {
 
 bool Friend_mode_guest_following() {
 	return friend_following;
+}
+
+// Someone's network identity: 0 and an NPC number, or 1 and a creature's
+// number from the host.  False if guests don't know it.
+bool Friend_mode_actor_net_id(const Actor* actor, int& kind, uint32& id) {
+	if (!actor) {
+		return false;
+	}
+	if (actor->get_npc_num() >= 0) {
+		kind = 0;
+		id   = static_cast<uint32>(actor->get_npc_num());
+		return true;
+	}
+	kind = 1;
+	id   = Friend_creature_id(actor);
+	return id != 0;
+}
+
+Actor* Friend_mode_actor_by_net_id(int kind, uint32 id) {
+	if (kind == 0) {
+		return gwin->get_npc(static_cast<int>(id));
+	}
+	return kind == 1 ? Friend_creature_by_id(id) : nullptr;
 }
 
 // Host: start or stop following for a guest, and tell it the result.

@@ -48,6 +48,10 @@ void Friend_class_frame();
 
 // A new world (load, a guest's download): cooldowns and bonuses start over.
 void Friend_class_world_loaded();
+// Around a save: short sleeps and stuns are lifted for the save (and put
+// back after), and summoned creatures are dismissed, so nothing of ours
+// outlasts its time in a saved game.
+void Friend_class_saving(bool before);
 
 // Messages.  True if the blob was the Class System's.
 bool Friend_class_host_blob(Friend_mode_session::Blob_kind kind, const std::vector<unsigned char>& data, int player);
@@ -79,5 +83,8 @@ bool Friend_mode_is_hostile(const Actor* own, const Actor* foe);
 int Friend_mode_player_playing(const Actor* actor);
 // Guest: its companion is in follow mode (the host's AI drives it).
 bool Friend_mode_guest_following();
+// Network identities for actors: (0, NPC number) or (1, creature number).
+bool   Friend_mode_actor_net_id(const Actor* actor, int& kind, uint32& id);
+Actor* Friend_mode_actor_by_net_id(int kind, uint32 id);
 
 #endif

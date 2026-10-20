@@ -11,7 +11,7 @@
 #include <iostream>
 
 namespace {
-constexpr unsigned short protocol_version = 32;
+constexpr unsigned short protocol_version = 33;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;

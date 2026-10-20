@@ -53,7 +53,6 @@ stays as separate from Exult as it can.
 | Skill bar | Above status bar, Bottom left, Bottom right, Top left, Top right | Above status bar | Each machine |
 | Show skill ranges | Yes / No | Yes | Each machine |
 | Class AI | Yes / No | Yes | The host |
-| Require class items | Yes / No | No | The host |
 
 With Enable off the rest hides, as on the Target System page. Off means U7
 as it was: no bars, no skills, U7's AI.
@@ -63,7 +62,7 @@ face stats (the gumps size setting), at the position chosen. Icons are the
 spellbook's own spell pictures, so nothing new is drawn. Each icon shows
 how many seconds are left while it recharges and is greyed when it can't be
 used; a click uses it and the reason shows near the top when it can't
-("Mending Circle: 23 seconds", "Needs a hostile", "Not yet: level 4").
+("Mending Circle: 23 seconds", "Needs a hostile", "Not yet: level 3").
 
 - A guest's bar holds its companion's skills.
 - The host's bar holds the Avatar's spells: Great Heal, Fire Blast and
@@ -107,13 +106,51 @@ Class_skill(30, "Mending Circle")
 		.says("*calls on the earth to mend*"),
 ```
 
-Levels: a companion may start with one skill and gain the next at level 4
-and another at 8, or have all from level 1; each skill says.
+Levels (2026-10-20): the first skill at level 1, the second at 3, the
+third at 6. U7's level is 1 + log2(experience / 50), so level 8 would be
+near the end of Black Gate; 6 is reachable.
 
-**Cooldowns.** 60 seconds for every skill to start with, shortened later if
-it is too long. Kept on the host per companion and skill, sent to the
-guest who plays it; not saved. A short global wait (1.5 seconds) after any
-skill stops two landing in the same instant.
+**Cooldowns** (2026-10-20): 15 seconds for a heal on one (Lay on Hands);
+30 for group heals and cures (Mending Circle, Purify, Healing Field) and
+single shots or holds (Stun Shot, Sleep Arrow, Crippling Shot, Entangle,
+Quick Fix, Riposte, Stand Fast); 60 for big damage and support (the rest).
+Kept on the host per companion and skill, sent to the guest who plays it;
+not saved. A short global wait (1.5 seconds) after any skill stops two
+landing in the same instant.
+
+**Paused with the game.** Every timer (cooldowns, buffs, stuns, fields,
+fuses, summons) runs on the Class System's own clock, which stops while
+Exult's world is paused: menus, conversations, Exult's pause, and on a
+guest while the host is paused or talking.
+
+**Guests' picks.** A guest's skill carries the guest's Target System pick
+(Q), so Stun Shot or Hunter's Mark land on what the guest chose; with no
+pick, the companion's foe, then the nearest hostile.
+
+**Not while the Avatar talks.** Guests' skills are greyed and refused
+("Wait for the Avatar") during a host conversation or pause.
+
+**Saves.** Before any save (autosaves too) summoned creatures are
+dismissed, and our short sleeps and stuns are lifted for the save and put
+back after, so U7's longer timers never take them over in a saved game.
+
+**Status icons** (2026-10-20; emotes would clash with chat): a small green
+up arrow under whoever has a stat boost (Battle Hymn), a blue shield for
+armour (Quick Fix, Sanctuary), Riposte or protection, a red down arrow for
+a weakened or marked foe (Crippling Shot, Hunter's Mark). Drawn like the
+target arrow, from a few pixels, on every machine. Area skills show their
+circle and sparkles instead.
+
+**Descriptions.** The mouse over a slot shows its name and a line on what
+it does ("Heals everyone in the circle").
+
+**Strength is health.** U7's maximum health is strength, so Battle Hymn's
++3 strength gives +3 health too, taken back when it ends.
+
+**Boosts reach everyone.** Every fight is worked out on the host, guests'
+companions included, so a boost on anyone counts wherever they are played;
+guests' stats windows show U7's own numbers (decided: fine, the boosts are
+short).
 
 **Range system.** Like targeting's range, in tiles, measured the way Exult
 measures distance. Two kinds:
@@ -239,11 +276,11 @@ later, once the first set has been played.
 | Shamino | Ranger | **Volley**: three arrows at the three nearest hostiles, one each, using three arrows from his quiver. **Aimed Shot**: one shot at the pick that hits harder. **Vanish**: invisible for a few seconds, so foes lose him. |
 | Jaana | Druid | **Mending Circle**: heals everyone in the party within the circle. **Purify**: cures poison, paralysis and curses within the circle. **Entangle**: the pick is paralyzed for a few seconds. |
 | Dupre | Paladin | **Challenge**: hostiles within the circle turn on Dupre. **Lay on Hands**: a big heal on one party member. **Stand Fast**: protection on himself. |
-| Spark | (boy) | With his sling. **Stun Shot** (1): a stone that stops the target moving for 3 seconds (U7's paralysis). **Trick Shot** (4): stones at the two nearest hostiles. |
-| Sentri | Swordmaster (agile duelist) | **Riposte** (1): for 10 seconds, each melee strike that misses him is answered. **Blade Dance** (4): a strike at every foe beside him. **Master's Strike** (8): one precise blow, harder, that ignores 6 points of armour. |
-| Tseramed | Huntsman (disabling archer, beside Shamino's attacking one) | **Sleep Arrow** (1): a shot that puts the target to sleep for 5 seconds. **Crippling Shot** (4): a shot that takes 10 dexterity for 10 seconds (U7 has no slowed walking, so the target attacks less often). **Hunter's Mark** (8): the target takes 4 more damage from every party hit for 20 seconds. |
-| Julia | Tinker (combat engineer) | **Quick Fix** (1): one ally gets 5 more armour for 30 seconds. **Flashbang** (4): thrown at the pick; hostiles within 3 tiles are stopped for 2.5 seconds. **Time Bomb** (8): thrown at the pick; 3 seconds later hostiles within 3 tiles take a powder keg's blast, twice. |
-| Katrina | Shepherd (gentle support) | **Healing Field** (1): a circle at her feet heals the party in it 2 health a second for 12 seconds. **Summon Creature** (4): her sheepdog fights beside the party for 30 seconds. **Sanctuary** (8): everyone in the circle gets 2 more armour for 20 seconds. |
+| Spark | (boy) | With his sling. **Stun Shot** (1): a stone that stops the target moving for 3 seconds (U7's paralysis). **Trick Shot** (3): stones at the two nearest hostiles. |
+| Sentri | Swordmaster (agile duelist) | **Riposte** (1): for 10 seconds, each melee strike that misses him is answered. **Blade Dance** (3): a strike at every foe beside him. **Master's Strike** (6): one precise blow, harder, that ignores 6 points of armour. |
+| Tseramed | Huntsman (disabling archer, beside Shamino's attacking one) | **Sleep Arrow** (1): a shot that puts the target to sleep for 5 seconds. **Crippling Shot** (3): a shot that takes 10 dexterity for 10 seconds (U7 has no slowed walking, so the target attacks less often). **Hunter's Mark** (6): the target takes 4 more damage from every party hit for 20 seconds. |
+| Julia | Tinker (combat engineer) | **Quick Fix** (1): one ally gets 5 more armour for 30 seconds. **Flashbang** (3): thrown at the pick; hostiles within 3 tiles are stopped for 2.5 seconds. **Time Bomb** (6): thrown at the pick; 3 seconds later hostiles within 3 tiles take a powder keg's blast, twice. |
+| Katrina | Shepherd (gentle support) | **Healing Field** (1): a circle at her feet heals the party in it 2 health a second for 12 seconds. **Summon Creature** (3): her sheepdog fights beside the party for 30 seconds. **Sanctuary** (6): everyone in the circle gets 2 more armour for 20 seconds. |
 
 Decided 2026-10-20 (the user's design for the last four): some overlap is
 fine, since nobody can take every companion along; several heal and several
