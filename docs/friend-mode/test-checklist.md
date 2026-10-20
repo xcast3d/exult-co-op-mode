@@ -964,7 +964,8 @@ Effect preview:
 
 The Avatar's spell bar (host, and single player):
 
-The F9 test kit now has a bag with 20 of each reagent, puts every spell in
+The F9 test kit now puts a bag with 20 of each reagent in the Avatar's
+inventory (U7 only counts what the caster carries), puts every spell in
 the Avatar's spellbook (a new book in that bag if the Avatar has none), and
 fills the Avatar's mana. Each spell still needs the level of its circle
 (Fire Blast 2, Lightning 4, Great Heal 5), as in U7.

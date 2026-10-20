@@ -1094,12 +1094,13 @@ static void Friend_mode_spawn_test_kit() {
 		Friend_test_kit_fill(supplies, 823, 2, 1);    // Paint brush.
 	}
 	Friend_test_kit_place(837, 0, 10, 5);    // Easel, to paint on.
-	// Magic, for the Class System's spell bar: a bag with 20 of each
+	// Magic, for the Class System's spell bar, carried by the Avatar (U7
+	// only counts a book and reagents one carries): a bag with 20 of each
 	// reagent, every spell in the Avatar's spellbook (a new book in the bag
 	// if it has none), and full mana.  The book still asks for the level of
 	// each spell's circle.
-	Game_object_shared reagents;
-	if (Friend_test_kit_place(802, 0, 8, 7, &reagents)) {
+	const Game_object_shared reagents = Friend_test_kit_create(802, 0);
+	if (reagents && gwin->get_main_actor()->add(reagents.get(), true)) {
 		for (int frame = 0; frame < 8; ++frame) {
 			Friend_test_kit_fill(reagents, 842, frame, 20);    // Reagents.
 		}
