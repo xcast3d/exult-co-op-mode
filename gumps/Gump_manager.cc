@@ -471,8 +471,9 @@ void Gump_manager::add_gump(Gump* gump) {
 	if (!gump->is_persistent()) {    // Count 'gump mode' gumps.
 		// And pause the game, if we want it
 		non_persistent_count++;
-		if (!dont_pause_game) {
+		if (!gumps_dont_pause_game()) {
 			gwin->get_tqueue()->pause(Game::get_ticks());
+			g->paused = true;
 		}
 	}
 }
@@ -502,9 +503,11 @@ bool Gump_manager::remove_gump(Gump* gump) {
 	if (gump == kbd_focus) {
 		set_kbd_focus(nullptr);
 	}
+	bool was_paused = false;    // Resume only what this one paused.
 	if (open_gumps) {
 		if (open_gumps->gump == gump) {
 			Gump_list* p = open_gumps->next;
+			was_paused   = open_gumps->paused;
 			delete open_gumps;
 			open_gumps = p;
 		} else {
@@ -515,6 +518,7 @@ bool Gump_manager::remove_gump(Gump* gump) {
 
 			if (p->next) {
 				Gump_list* g = p->next->next;
+				was_paused   = p->next->paused;
 				delete p->next;
 				p->next = g;
 			} else {
@@ -527,7 +531,7 @@ bool Gump_manager::remove_gump(Gump* gump) {
 			if (non_persistent_count > 0) {
 				non_persistent_count--;
 			}
-			if (!dont_pause_game) {
+			if (was_paused) {
 				gwin->get_tqueue()->resume(Game::get_ticks());
 			}
 		}
@@ -1058,7 +1062,9 @@ bool Gump_manager::do_modal_gump(
 		Mouse::Mouse_shapes shape,    // Mouse shape to use.
 		Paintable*          paint     // Paint this over everything else.
 ) {
-	modal_gump_count++;
+	if (modal_gump_count++ == 0) {
+		Friend_mode_modal_menu(true);    // A guest's companion follows meanwhile.
+	}
 
 	//  Game_window *gwin = Game_window::get_instance();
 
@@ -1128,7 +1134,9 @@ bool Gump_manager::do_modal_gump(
 	// Resume the game
 	gwin->get_tqueue()->resume(SDL_GetTicks());
 
-	modal_gump_count--;
+	if (--modal_gump_count == 0) {
+		Friend_mode_modal_menu(false);
+	}
 	if (touchui != nullptr) {
 		if (!gwin->is_in_exult_menu()) {
 			touchui->showButtonControls();
@@ -1198,18 +1206,20 @@ void Gump_manager::set_gumps_dont_pause_game(bool p) {
 	dont_pause_game = p;
 
 	// If pausing enabled, we need to go through and pause each gump
-	if (!dont_pause_game) {
+	if (!gumps_dont_pause_game()) {
 		for (Gump_list* gump = open_gumps; gump; gump = gump->next) {
-			if (!gump->gump->is_persistent()) {
+			if (!gump->gump->is_persistent() && !gump->paused) {
 				gwin->get_tqueue()->pause(Game::get_ticks());
+				gump->paused = true;
 			}
 		}
 	}
 	// Otherwise we need to go through and resume each gump :-)
 	else {
 		for (Gump_list* gump = open_gumps; gump; gump = gump->next) {
-			if (!gump->gump->is_persistent()) {
+			if (!gump->gump->is_persistent() && gump->paused) {
 				gwin->get_tqueue()->resume(Game::get_ticks());
+				gump->paused = false;
 			}
 		}
 	}

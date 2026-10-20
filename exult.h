@@ -88,6 +88,10 @@ void Friend_mode_request_main_menu();
 // This instance joined a Friend Mode host: the host owns the world, so
 // monster and weather eggs (among others) do nothing here.
 bool Friend_mode_is_guest();
+// Hosting or joined: a co-op session is on.
+bool Friend_mode_in_session();
+// Gump_manager: the first of Exult's menus opened, or the last closed.
+void Friend_mode_modal_menu(bool open);
 // Host: a saved game was loaded, so guests need the new world.
 void Friend_mode_note_world_loaded();
 // Host: a save is about to be written ('before') or was written.

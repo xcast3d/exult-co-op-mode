@@ -77,6 +77,16 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Pauses in co-op, built 2026-10-20 (no protocol change; untested).**
+Only the host pauses the game. In co-op, windows (backpacks, paperdolls)
+never pause the world on any machine (`Gump_manager::gumps_dont_pause_game`
+says so while `Friend_mode_in_session`; each window remembers whether it
+paused, so turning co-op on or off with windows open can't unbalance the
+queue). A guest's combat pause does nothing. While a guest has one of
+Exult's menus open (they stop its main loop), the host's AI drives its
+companion quietly (guest_follow 2 and 3: no bar, no notice), and hands it
+back when the menu closes. The host's menus still pause everyone.
+
 **Class System, built 2026-10-20 (protocol version 33); not tested
 yet** (built remotely; it compiles). See "Class System" in the
 [test checklist](test-checklist.md) and the plan in

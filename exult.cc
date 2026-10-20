@@ -308,6 +308,7 @@ struct Friend_guest {
 	int              attacker = -1;    // Companion fighting for it.
 	Game_object_weak attack_foe;
 	bool             following = false;    // The party's AI drives its companion.
+	bool             menu_following = false;    // ...only while the guest is in a menu.
 	uint32           move_seq  = 0;        // Number of its last step handled.
 };
 static std::map<int, Friend_guest> friend_guests;
@@ -3659,6 +3660,10 @@ bool Friend_mode_guest_following() {
 	return friend_following;
 }
 
+bool Friend_mode_in_session() {
+	return friend_session.mode() != Friend_mode_session::Mode::off;
+}
+
 // Someone's network identity: 0 and an NPC number, or 1 and a creature's
 // number from the host.  False if guests don't know it.
 bool Friend_mode_actor_net_id(const Actor* actor, int& kind, uint32& id) {
@@ -3685,7 +3690,8 @@ Actor* Friend_mode_actor_by_net_id(int kind, uint32 id) {
 // Host: start or stop following for a guest, and tell it the result.
 // 'restore_wait' leaves the companion waiting for the guest again; an
 // attack or a switch sets its schedule itself.
-static void Friend_mode_set_follow(int player, Friend_guest& guest, bool on, bool restore_wait = true) {
+static void Friend_mode_set_follow(
+		int player, Friend_guest& guest, bool on, bool restore_wait = true, bool reply = true) {
 	Actor* actor = guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr;
 	on           = on && actor && !actor->is_dead();
 	if (on != guest.following) {
@@ -3700,7 +3706,33 @@ static void Friend_mode_set_follow(int player, Friend_guest& guest, bool on, boo
 		}
 		cout << "Friend Mode: " << guest.name << (on ? " follows the Avatar" : " takes over again") << endl;
 	}
-	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {static_cast<unsigned char>(on)}, player);
+	if (reply) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {static_cast<unsigned char>(on)}, player);
+	}
+}
+
+// Guest: while one of Exult's menus is open (they stop the main loop), the
+// host's AI drives our companion, so it isn't left standing in a fight; it
+// is ours again when the menu closes.  Quiet: no bar, no notice.
+constexpr unsigned char friend_follow_menu_open  = 2;
+constexpr unsigned char friend_follow_menu_close = 3;
+static bool             friend_menu_following    = false;
+
+void Friend_mode_modal_menu(bool open) {
+	if (friend_session.mode() != Friend_mode_session::Mode::guest || !friend_session.connected()) {
+		friend_menu_following = false;
+		return;
+	}
+	if (open && !friend_menu_following && !friend_following && gwin->has_network_friend_control()
+		&& !gwin->is_network_spectating()) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {friend_follow_menu_open});
+		friend_menu_following = true;
+		friend_session.poll();
+	} else if (!open && friend_menu_following) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {friend_follow_menu_close});
+		friend_menu_following = false;
+		friend_session.poll();
+	}
 }
 
 // Guest: the host started or stopped following for us.
@@ -7940,7 +7972,21 @@ static void Handle_events() {
 						}
 						Friend_mode_attack_for_guest(request, *guest);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_follow) {
-						Friend_mode_set_follow(requester, *guest, !request.empty() && request[0] != 0);
+						const int what = request.empty() ? 0 : request[0];
+						if (what == friend_follow_menu_open) {
+							if (!guest->following) {    // Not if it follows already (Y).
+								Friend_mode_set_follow(requester, *guest, true, true, false);
+								guest->menu_following = true;
+							}
+						} else if (what == friend_follow_menu_close) {
+							if (guest->menu_following) {
+								guest->menu_following = false;
+								Friend_mode_set_follow(requester, *guest, false, true, false);
+							}
+						} else {
+							guest->menu_following = false;
+							Friend_mode_set_follow(requester, *guest, what != 0);
+						}
 					} else if (kind == Friend_mode_session::Blob_kind::journal_edit) {
 						Friend_mode_journal_edit_from_guest(request, requester);
 					} else if (kind == Friend_mode_session::Blob_kind::journal_lock) {

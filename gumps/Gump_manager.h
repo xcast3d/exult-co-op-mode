@@ -49,10 +49,13 @@ class Game_window;
 class Modal_gump;
 class Paintable;
 
+bool Friend_mode_in_session();    // exult.cc: hosting or joined.
+
 class Gump_manager : public Game_singletons {
 	struct Gump_list {
-		Gump*      gump = nullptr;
-		Gump_list* next = nullptr;
+		Gump*      gump   = nullptr;
+		Gump_list* next   = nullptr;
+		bool       paused = false;    // It paused the game when added.
 
 		Gump_list() = default;
 
@@ -118,8 +121,15 @@ public:
 		right_click_close = r;
 	}
 
+	// Friend Mode: in co-op, windows never pause the world (the host's
+	// world goes on for everyone; a guest's copy isn't the real one).
 	inline bool gumps_dont_pause_game() {
-		return dont_pause_game;
+		return dont_pause_game || Friend_mode_in_session();
+	}
+
+	// The player's own setting, whatever co-op says (the options page).
+	inline bool gumps_pause_setting() const {
+		return !dont_pause_game;
 	}
 
 	void set_gumps_dont_pause_game(bool p);

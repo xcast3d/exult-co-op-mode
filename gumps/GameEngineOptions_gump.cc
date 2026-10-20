@@ -205,7 +205,9 @@ void GameEngineOptions_gump::build_buttons() {
 
 	buttons[id_gumps_pause] = std::make_unique<GameEngineTextToggle>(
 			this, &GameEngineOptions_gump::toggle_gumps_pause, yesNo, gumps_pause,
-			get_button_pos_for_label(Strings::Gumpspausegame_()), yForRow(++y_index), small_size);
+			get_button_pos_for_label(Friend_mode_in_session() ? "Gumps pause game (not in co-op):"
+																: Strings::Gumpspausegame_()),
+			yForRow(++y_index), small_size);
 
 	buttons[id_alternate_drop] = std::make_unique<GameEngineTextToggle>(
 			this, &GameEngineOptions_gump::toggle_alternate_drop, yesNo, alternate_drop,
@@ -299,7 +301,7 @@ void GameEngineOptions_gump::load_settings() {
 	alternate_drop        = gwin->get_alternate_drop();
 	allow_autonotes       = gwin->get_allow_autonotes();
 	enhancements          = gwin->get_allow_enhancements();
-	gumps_pause           = !gumpman->gumps_dont_pause_game();
+	gumps_pause           = gumpman->gumps_pause_setting();
 	frames                = -1;
 	size_t num_framerates = num_default_rates;
 	frametext.clear();
@@ -379,7 +381,10 @@ void GameEngineOptions_gump::paint() {
 	Image_window8* iwin    = gwin->get_win();
 	int            y_index = 0;
 	font->paint_text(iwin->get_ib8(), Strings::Takeautomaticnotes_(), x + label_margin, y + yForRow(y_index) + 1);
-	font->paint_text(iwin->get_ib8(), Strings::Gumpspausegame_(), x + label_margin, y + yForRow(++y_index) + 1);
+	// Friend Mode: windows never pause the world in co-op.
+	font->paint_text(iwin->get_ib8(),
+					 Friend_mode_in_session() ? "Gumps pause game (not in co-op):" : Strings::Gumpspausegame_(),
+					 x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::Alternativedraganddrop_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::Speed_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatShowHits_(), x + label_margin, y + yForRow(++y_index) + 1);

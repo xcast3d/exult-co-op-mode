@@ -907,6 +907,21 @@ them with two guests on companions.
       rejoins the party"; the guest gets the spectating bar, and J again
       offers that companion.
 
+## Pauses in co-op
+
+Built 2026-10-20, untested. Only the host pauses the game.
+
+- [ ] Host and guest: open a backpack or paperdoll during a fight: the
+      world keeps going on both screens (with "Gumps pause game" on or
+      off). Game Engine options shows that line as "Gumps pause game (not
+      in co-op):"; in single player it works as before.
+- [ ] Guest presses Escape during a fight: its companion follows the
+      Avatar and fights (the host's log: "follows the Avatar"); closing
+      the menu hands it back where it stands ("takes over again"), with no
+      "Following" bar. A guest already following (Y) stays following.
+- [ ] Guest's combat pause does nothing.
+- [ ] The host's Escape menu still pauses everyone, with the bar on guests.
+
 ## Class System (protocol 32)
 
 Built 2026-10-20 without a test run (the user was away); everything here
