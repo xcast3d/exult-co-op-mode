@@ -61,6 +61,14 @@ leaves or after 12 hours.
 
 ## Deploying (the host's one-time step)
 
+**Credentials stay out of the repo** (decided 2026-10-20). `wrangler login`
+keeps its token in your home folder (`~/Library/Preferences/.wrangler`),
+not here; `tools/lobby/.gitignore` ignores `.wrangler/` and
+`node_modules/`; TURN keys are Worker secrets (`wrangler secret put`), never
+in `wrangler.toml`. If an API token is used instead of the login (for a
+script or CI), put it in the `CLOUDFLARE_API_TOKEN` environment variable,
+never in a file in the repo.
+
 On the Mac, in the repo:
 
 ```bash
