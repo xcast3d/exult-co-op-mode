@@ -269,7 +269,7 @@ guest types in.
 - [x] A small lobby service that hands out codes and passes WebRTC connection
       details between host and guest. It never sees game traffic. Built
       2026-10-20 in `tools/lobby/` (Cloudflare Worker, tested locally), for
-      `u7-multiplayer-lobby.xcast3d.com`; not deployed yet. See
+      `u7-multiplayer-lobby.xcast3d.com`; deployed the same day. See
       [the lobby](friend-mode/lobby.md).
 - [ ] Native WebRTC data channels (for example libdatachannel), reliable and
       ordered, which matches today's TCP stream. Send the world download in

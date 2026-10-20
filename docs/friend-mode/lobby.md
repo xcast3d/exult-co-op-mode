@@ -1,8 +1,10 @@
 # The lobby (Phase 8)
 
-Status: the lobby is built and tested on one Mac (2026-10-20, `npm test`
-against `wrangler dev`: 15 checks pass). Not deployed yet; the Exult side
-(WebRTC through libdatachannel) is the next step.
+Status: **deployed 2026-10-20** at `wss://u7-multiplayer-lobby.xcast3d.com`
+(Cloudflare Worker `u7-multiplayer-lobby` on the xcast3d.com account). The
+smoke test passes against it (15 checks), and the WebRTC spike connects
+through it (channel open in about 1.2 s, everything intact). TURN is not
+set up. The Exult side (WebRTC through libdatachannel) is next.
 
 ## What it is, in plain words
 
@@ -182,8 +184,13 @@ and, with the code it prints:
 /tmp/rtc-spike/rtc_spike join ws://127.0.0.1:8787 CODE
 ```
 
-Not proven yet: two machines on different networks (needs the deployed
-lobby), TURN, and Windows (the same script under the Windows workflow, or
+**Certificates for wss://** (found on the live lobby): Mbed TLS has no list
+of trusted certificate authorities of its own, so the lobby connection
+needs one or it fails ("No CA Chain is set"). The spike uses `RTC_CA_FILE`
+or macOS's `/etc/ssl/cert.pem`; Exult will do the same on the Mac and ship
+a CA bundle (Mozilla's, as curl publishes it) for Windows.
+
+Not proven yet: two machines on different networks, TURN, and Windows (the same script under the Windows workflow, or
 its CMake steps in Visual Studio's).
 
 ## Next: the Exult side

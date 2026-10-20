@@ -19,6 +19,8 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstdlib>
+#include <sstream>
 #include <iostream>
 #include <map>
 #include <memory>
@@ -68,6 +70,20 @@ rtc::Configuration Config_from(const json& ice) {
 	return config;
 }
 
+// The lobby connection.  Mbed TLS has no list of trusted certificate
+// authorities of its own, so wss:// needs one: RTC_CA_FILE, or macOS's
+// /etc/ssl/cert.pem (Windows will need one shipped with the game).
+std::shared_ptr<rtc::WebSocket> Lobby_socket() {
+	rtc::WebSocketConfiguration config;
+	const char*                 file = std::getenv("RTC_CA_FILE");
+	std::string                 path = file ? file : "/etc/ssl/cert.pem";
+	if (FILE* f = std::fopen(path.c_str(), "r")) {
+		std::fclose(f);
+		config.caCertificatePemFile = path;
+	}
+	return std::make_shared<rtc::WebSocket>(config);
+}
+
 void Send(const std::shared_ptr<rtc::WebSocket>& ws, const json& message) {
 	if (ws->isOpen()) {
 		ws->send(message.dump());
@@ -105,7 +121,7 @@ void Take_signal(const std::shared_ptr<rtc::PeerConnection>& pc, const json& dat
 }
 
 int Host(const std::string& lobby) {
-	auto ws = std::make_shared<rtc::WebSocket>();
+	auto ws  = Lobby_socket();
 	json ice = json::array();
 	std::mutex lock;
 	std::map<int, std::shared_ptr<rtc::PeerConnection>> peers;
@@ -181,7 +197,7 @@ int Host(const std::string& lobby) {
 }
 
 int Join(const std::string& lobby, const std::string& code) {
-	auto                                 ws = std::make_shared<rtc::WebSocket>();
+	auto                                 ws = Lobby_socket();
 	std::shared_ptr<rtc::PeerConnection> pc;
 	std::shared_ptr<rtc::DataChannel>    dc;
 	std::atomic<int>                     answers{0};
