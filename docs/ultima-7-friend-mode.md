@@ -274,6 +274,9 @@ guest types in.
 - [ ] Native WebRTC data channels (for example libdatachannel), reliable and
       ordered, which matches today's TCP stream. Send the world download in
       pieces.
+      Spike passed 2026-10-20: libdatachannel builds on the Mac, and two
+      programs met through the lobby and passed ordered messages and 256 KB
+      intact (see [the lobby](friend-mode/lobby.md)).
 - [ ] A relay (TURN) fallback for the networks where a direct connection fails.
 - [ ] Keep direct address entry for LAN play and debugging.
 - [ ] Optional session password; WebRTC also encrypts the connection.

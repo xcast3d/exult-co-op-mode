@@ -131,6 +131,49 @@ and in another terminal:
 cd tools/lobby && npm test
 ```
 
+## Spike: libdatachannel through the lobby (passed, 2026-10-20)
+
+`tools/friend-mode/rtc-spike/` is a small program that plays host or guest:
+it meets the other through the lobby and opens a WebRTC data channel the way
+Exult would. On this Mac, against `wrangler dev`, with both on one machine:
+
+- libdatachannel 0.23.2 builds (static, without media; OpenSSL for the
+  encryption WebRTC requires), in a minute or so.
+- Host and guest met with a code (`BRITAIN-75`); the channel opened about
+  1 second after the guest joined.
+- 50 small messages came back in order, and a 256 KB message (like a piece
+  of the world download) arrived intact.
+- The program is 2.3 MB; it needs OpenSSL's two libraries (Homebrew's here).
+
+To run it (the lobby running with `npm run dev`):
+
+```bash
+tools/friend-mode/rtc-spike/build/rtc_spike host ws://127.0.0.1:8787
+```
+
+and, with the code it prints:
+
+```bash
+tools/friend-mode/rtc-spike/build/rtc_spike join ws://127.0.0.1:8787 CODE
+```
+
+Build: `cmake -B build -DLIBDATACHANNEL_DIR=<checkout> -DOPENSSL_ROOT_DIR=/opt/homebrew/opt/openssl@4`
+then `cmake --build build`, with a checkout of
+`https://github.com/paullouisageneau/libdatachannel` (tag v0.23.2, with
+`--recurse-submodules`).
+
+Not proven yet: two machines on different networks (needs the deployed
+lobby; the STUN server is used but not needed on one machine), and TURN.
+
+To decide before the Exult side:
+
+- **How the library comes in:** a git submodule at a fixed tag, built with
+  CMake before Exult (Exult itself uses autotools on the Mac and Visual
+  Studio on Windows), or prebuilt libraries in the Windows workflow.
+- **The encryption library:** OpenSSL (as now; the Mac app then carries its
+  two dylibs, and Windows its DLLs) or Mbed TLS (smaller, built in
+  statically); libdatachannel supports both.
+
 ## Next: the Exult side
 
 1. Build libdatachannel (MPL-2.0) on the Mac, and on Windows through GitHub
