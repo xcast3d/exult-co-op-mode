@@ -2831,6 +2831,9 @@ int Actor::apply_damage(
 		}
 	}
 
+	// Friend Mode's skills: armour boosts, armour piercing, marked foes.
+	Friend_class_adjust_damage(this, attacker, damage, armor);
+
 	// Some attacks ignore armor (unless the armor gives immunity).
 	if (wpoints == 127 || type == Weapon_data::lightning_damage || type == Weapon_data::ethereal_damage
 		|| type == Weapon_data::sonic_damage || armor < 0) {    // Armor should never help the attacker.
@@ -3243,8 +3246,8 @@ int Actor::get_effective_prop(int prop    // Property #.
 		}
 		break;
 	}
-	if (prop == Actor::strength || prop == Actor::combat) {
-		val += Friend_class_bonus(this, prop);    // Friend Mode: a song's bonus.
+	if (prop == Actor::strength || prop == Actor::combat || prop == Actor::dexterity) {
+		val += Friend_class_bonus(this, prop);    // Friend Mode: a skill's bonus or penalty.
 	}
 	return val;
 }

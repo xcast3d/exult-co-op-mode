@@ -17,6 +17,7 @@
 #include <vector>
 
 class Actor;
+class Game_object;
 
 // The Class System options page (Game menu -> Class System).
 extern bool Friend_class_enabled;          // The host's game rule (off).
@@ -59,8 +60,15 @@ void Friend_class_guest_joined(int player);
 // back to the party.  True if it started a walk instead.
 bool Friend_class_place(Actor* npc);
 
-// Timed stat bonuses (Battle Hymn), added to Actor::get_effective_prop.
+// Timed stat bonuses and penalties (Battle Hymn, Crippling Shot), added to
+// Actor::get_effective_prop (strength, combat, dexterity).
 int Friend_class_bonus(const Actor* actor, int prop);
+// Actor::apply_damage: armour boosts (Quick Fix, Sanctuary), armour the
+// attacker ignores (Master's Strike), extra damage on a marked foe from the
+// party (Hunter's Mark).
+void Friend_class_adjust_damage(const Actor* target, Game_object* attacker, int& damage, int& armor);
+// A melee strike missed 'target' (Combat_schedule::attack_target): Riposte.
+void Friend_class_note_miss(Game_object* attacker, Game_object* target);
 
 // What friendclass.cc needs from exult.cc.
 Friend_mode_session& Friend_mode_get_session();

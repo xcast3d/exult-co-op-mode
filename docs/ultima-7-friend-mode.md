@@ -714,8 +714,8 @@ Keep project planning in `docs/friend-mode/` within the source tree. Track upstr
 
 ## Next steps
 
-1. **The Class System** (companion skills): test it, then keys for the
-   bars and the other four companions.
+1. **The Class System** (companion skills, all nine companions): test it
+   and tune it; keys for the bars come last.
 2. **Lobby codes over WebRTC**, the last step before an official release
    (Phase 8).
 

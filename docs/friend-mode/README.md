@@ -104,6 +104,14 @@ tested yet** (built remotely; it compiles). See "Class System" in the
   picture, a sound. Song of Peace puts hostiles in its circle to sleep for
   5 seconds (each rolls); Dupre's Challenge turns hostiles in range on
   him for 6 seconds.
+- **The last four companions** (the user's design, 2026-10-20): Sentri
+  the Swordmaster (Riposte, Blade Dance, Master's Strike), Tseramed the
+  Huntsman (Sleep Arrow, Crippling Shot, Hunter's Mark), Julia the Tinker
+  (Quick Fix, Flashbang, Time Bomb), Katrina the Shepherd (Healing Field,
+  Summon Creature, Sanctuary). New effects for them: shot riders, armour
+  boosts and piercing, marks, a riposte stance, thrown flash and bomb, a
+  healing field, a summoned creature; hooks in `Actor::apply_damage` and
+  `Combat_schedule::attack_target`. Spark's Knockdown became Stun Shot.
 - **Effect preview** on the Class System page: steps through sprites,
   missile pictures and sounds, playing each on your character with its
   number, for choosing each skill's look.

@@ -42,6 +42,7 @@
 #include "gamewin.h"
 #include "ibuf8.h"
 #include "items.h"
+#include "monsters.h"
 #include "mouse.h"
 #include "party.h"
 #include "shapeid.h"
@@ -59,6 +60,7 @@
 #include <array>
 #include <cstdio>
 #include <iostream>
+#include <functional>
 #include <map>
 #include <memory>
 
@@ -102,6 +104,7 @@ enum class Skill_target {
 	hurt_party,        // The most hurt party member within range.
 	pick,              // The user's foe (its combat target), or the nearest hostile.
 	hostiles_nearest,  // The 'count' nearest hostiles within range.
+	ally,              // The party member in range with the least health left (the user too).
 };
 
 enum class Skill_effect {
@@ -111,6 +114,13 @@ enum class Skill_effect {
 	hinder,    // Paralyzes or knocks out for 'duration_ms', after a roll.
 	volley,    // A real shot with the readied weapon at each target.
 	bonus,     // +'amount' strength and combat for 'duration_ms'.
+	armor,     // +'amount' armour for 'duration_ms' (Quick Fix, Sanctuary).
+	mark,      // The target takes +'amount' damage from the party for 'duration_ms'.
+	stance,    // Riposte: for 'duration_ms', a melee strike that misses the user is answered.
+	bomb,      // Thrown at the pick; after 'fuse_ms', hostiles within 'blast' are hit 'hits' times.
+	flash,     // Thrown at the pick; hostiles within 'blast' are hindered ('flag', 'duration_ms').
+	field,     // At the user's feet: the party within 'range' heals 'amount' every second for 'duration_ms'.
+	summon,    // A friendly 'summon_shape' fights beside the party for 'duration_ms'.
 	taunt,     // Hostiles turn on the user (not built yet).
 	calm,      // Hostiles stop fighting (not built yet).
 };
@@ -147,7 +157,17 @@ struct Class_skill {
 	int          amount      = 0;     // Health, or a stat bonus.
 	int          flag        = -1;    // For 'flag' and 'hinder'.
 	int          count       = 1;     // Targets ('hostiles_nearest'), or the AI's minimum.
-	int          duration_ms = 0;     // For 'hinder', 'bonus', 'taunt' and 'calm'.
+	int          duration_ms = 0;     // How long it lasts, for the timed effects.
+	int          rider_flag  = -1;    // Volley: then hinder each target hit ('then_hinder').
+	int          rider_ms    = 0;
+	int          weaken_prop = -1;    // Volley: then lower a stat ('then_weaken').
+	int          weaken_by   = 0;
+	int          weaken_ms   = 0;
+	int          pierce      = 0;     // Armour the user's strikes ignore meanwhile ('pierce_armor').
+	int          blast       = 0;     // 'bomb' and 'flash': radius around the pick, in tiles.
+	int          fuse_ms     = 0;     // 'bomb': time from landing to the blast.
+	int          hits        = 1;     // 'bomb': how many blasts each hostile takes.
+	int          summon_shape = -1;   // 'summon': the creature's shape.
 	Skill_look   look;
 	const char*  words = "";    // Over the user.
 
@@ -234,6 +254,76 @@ struct Class_skill {
 		return *this;
 	}
 
+	// Volley riders, applied as the shot lands (each target rolls for
+	// 'then_hinder').
+	Class_skill& then_hinder(int f, int ms) {
+		rider_flag = f;
+		rider_ms   = ms;
+		return *this;
+	}
+
+	Class_skill& then_weaken(int prop, int by, int ms) {
+		weaken_prop = prop;
+		weaken_by   = by;
+		weaken_ms   = ms;
+		return *this;
+	}
+
+	Class_skill& pierce_armor(int points) {
+		pierce = points;
+		return *this;
+	}
+
+	Class_skill& armor(int points, int ms) {
+		effect      = Skill_effect::armor;
+		amount      = points;
+		duration_ms = ms;
+		return *this;
+	}
+
+	Class_skill& mark(int extra, int ms) {
+		effect      = Skill_effect::mark;
+		amount      = extra;
+		duration_ms = ms;
+		return *this;
+	}
+
+	Class_skill& stance(int ms) {
+		effect      = Skill_effect::stance;
+		duration_ms = ms;
+		return *this;
+	}
+
+	Class_skill& bomb(int radius, int fuse, int blasts) {
+		effect  = Skill_effect::bomb;
+		blast   = radius;
+		fuse_ms = fuse;
+		hits    = blasts;
+		return *this;
+	}
+
+	Class_skill& flash(int radius, int f, int ms) {
+		effect      = Skill_effect::flash;
+		blast       = radius;
+		flag        = f;
+		duration_ms = ms;
+		return *this;
+	}
+
+	Class_skill& field(int health_per_second, int ms) {
+		effect      = Skill_effect::field;
+		amount      = health_per_second;
+		duration_ms = ms;
+		return *this;
+	}
+
+	Class_skill& summon(int shape, int ms) {
+		effect       = Skill_effect::summon;
+		summon_shape = shape;
+		duration_ms  = ms;
+		return *this;
+	}
+
 	Class_skill& calm(int ms) {
 		effect      = Skill_effect::calm;
 		duration_ms = ms;
@@ -277,12 +367,22 @@ struct Companion_class {
 };
 
 // Sprites (sprites.vga), as Black Gate's scripts use them.
+constexpr int sprite_small_blast = 5;
+constexpr int sprite_teleport    = 7;
+constexpr int sprite_fireworks   = 12;
+constexpr int sprite_burst_arrow = 19;
+constexpr int sprite_purple      = 21;
+constexpr int sprite_sword       = 23;
 constexpr int sprite_poof     = 9;
 constexpr int sprite_bubbles  = 13;
 constexpr int sprite_barrier  = 15;
 constexpr int sprite_sparkles = 16;
 constexpr int sprite_beads    = 18;
 constexpr int sprite_music    = 24;
+
+// Shapes (shapes.vga).
+constexpr int shape_dog        = 496;    // Katrina's summoned sheepdog.
+constexpr int shape_powder_keg = 704;    // Julia's Time Bomb: flies, and its blast.
 
 // Spell numbers (circle * 8 + place in the circle): the spellbook's
 // pictures, used as icons.  Skills never run a spell's script.
@@ -302,6 +402,15 @@ constexpr int spell_cause_fear   = 48;
 constexpr int spell_death_bolt   = 57;
 constexpr int spell_mass_might   = 62;
 constexpr int spell_swordstrike  = 69;
+constexpr int spell_curse        = 24;
+constexpr int spell_mass_curse   = 34;
+constexpr int spell_explosion    = 43;
+constexpr int spell_delayed      = 58;
+constexpr int spell_restoration  = 63;
+constexpr int spell_summon       = 68;
+constexpr int spell_protect      = 21;
+constexpr int spell_flame_strike = 51;
+constexpr int spell_tremor       = 55;
 
 // Each companion's class and skills.  Levels: the first at 1, the next at
 // 4, the last at 8.
@@ -438,11 +547,13 @@ const std::vector<Companion_class>& Classes() {
 			 -1,
 			 "Spark's Sling",
 			 {
-					 Class_skill(50, "Knockdown")
-							 .icon_spell(spell_sleep)
+					 // A stone that stops the target in its tracks (decided 2026-10-20).
+					 Class_skill(50, "Stun Shot")
+							 .icon_spell(spell_paralyze)
 							 .kind(T::control)
 							 .aim(G::pick, 10)
-							 .hinder(Obj_flags::asleep, 4000)
+							 .volley()
+							 .then_hinder(Obj_flags::paralyzed, 3000)
 							 .says("*lets fly a stone*"),
 					 Class_skill(51, "Trick Shot")
 							 .icon_spell(spell_fireworks)
@@ -452,6 +563,140 @@ const std::vector<Companion_class>& Classes() {
 							 .volley()
 							 .targets(2)
 							 .says("*tries a trick shot*"),
+			 }},
+			// Agile melee duelist: counterattacks, speed, precision.
+			{"Sentri",
+			 "Swordmaster",
+			 Placement::front,
+			 -1,
+			 "Sentri's Blade",
+			 {
+					 Class_skill(60, "Riposte")
+							 .icon_spell(spell_swordstrike)
+							 .kind(T::self)
+							 .stance(10000)
+							 .on_user(sprite_barrier)
+							 .on_targets(sprite_sword)    // On each foe answered.
+							 .says("*takes a dueling stance*"),
+					 Class_skill(61, "Blade Dance")
+							 .icon_spell(spell_tremor)
+							 .kind(T::attack)
+							 .aim(G::hostiles_nearest, 1)
+							 .unlock(4)
+							 .volley()
+							 .targets(8)
+							 .on_targets(sprite_sword)
+							 .says("*whirls into a blade dance*"),
+					 Class_skill(62, "Master's Strike")
+							 .icon_spell(spell_flame_strike)
+							 .kind(T::attack)
+							 .aim(G::pick, 1)
+							 .unlock(8)
+							 .volley(6, 2000)
+							 .pierce_armor(6)
+							 .on_targets(sprite_fireworks)
+							 .says("*strikes with perfect precision*"),
+			 }},
+			// Tactical archer: disabling foes and weakening priority targets.
+			{"Tseramed",
+			 "Huntsman",
+			 Placement::ranged,
+			 -1,
+			 "Tseramed's Bow",
+			 {
+					 Class_skill(70, "Sleep Arrow")
+							 .icon_spell(spell_sleep)
+							 .kind(T::control)
+							 .aim(G::pick, 14)
+							 .volley()
+							 .then_hinder(Obj_flags::asleep, 5000)
+							 .says("*nocks a sleeping arrow*"),
+					 // U7 has no slowed walking: the target attacks less often.
+					 Class_skill(71, "Crippling Shot")
+							 .icon_spell(spell_curse)
+							 .kind(T::control)
+							 .aim(G::pick, 14)
+							 .unlock(4)
+							 .volley()
+							 .then_weaken(Actor::dexterity, -10, 10000)
+							 .on_targets(sprite_burst_arrow)
+							 .says("*aims for the legs*"),
+					 Class_skill(72, "Hunter's Mark")
+							 .icon_spell(spell_mass_curse)
+							 .kind(T::attack)
+							 .aim(G::pick, 14)
+							 .unlock(8)
+							 .mark(4, 20000)
+							 .on_targets(sprite_purple)
+							 .says("*marks the quarry*"),
+			 }},
+			// Combat engineer: gadgets and explosives.
+			{"Julia",
+			 "Tinker",
+			 Placement::ranged,
+			 -1,
+			 "Julia's Hammer",
+			 {
+					 // One ally, a strong boost (Sanctuary: everyone, smaller).
+					 Class_skill(80, "Quick Fix")
+							 .icon_spell(spell_protect)
+							 .kind(T::support)
+							 .aim(G::ally, 4)
+							 .armor(5, 30000)
+							 .targets(1)
+							 .on_targets(sprite_barrier)
+							 .says("*tightens a few straps*"),
+					 Class_skill(81, "Flashbang")
+							 .icon_spell(spell_explosion)
+							 .kind(T::control)
+							 .aim(G::pick, 10)
+							 .unlock(4)
+							 .flash(3, Obj_flags::paralyzed, 2500)
+							 .missile(shape_powder_keg)
+							 .on_targets(sprite_fireworks)
+							 .says("*throws a flashbang*"),
+					 Class_skill(82, "Time Bomb")
+							 .icon_spell(spell_delayed)
+							 .kind(T::attack)
+							 .aim(G::pick, 10)
+							 .unlock(8)
+							 .bomb(3, 3000, 2)
+							 .missile(shape_powder_keg)
+							 .targets(2)
+							 .says("*lights a fuse*"),
+			 }},
+			// Gentle support: healing over time, a summoned friend, protection.
+			{"Katrina",
+			 "Shepherd",
+			 Placement::support,
+			 -1,
+			 "Katrina's Crook",
+			 {
+					 Class_skill(90, "Healing Field")
+							 .icon_spell(spell_restoration)
+							 .kind(T::heal)
+							 .aim(G::party_area, 4, true)
+							 .field(2, 12000)
+							 .targets(2)
+							 .on_targets(sprite_sparkles)
+							 .says("*calls down a healing field*"),
+					 Class_skill(91, "Summon Creature")
+							 .icon_spell(spell_summon)
+							 .kind(T::support)
+							 .unlock(4)
+							 .summon(shape_dog, 30000)
+							 .targets(2)
+							 .on_targets(sprite_teleport)
+							 .says("*whistles for her sheepdog*"),
+					 Class_skill(92, "Sanctuary")
+							 .icon_spell(spell_protect_all)
+							 .kind(T::support)
+							 .aim(G::party_area, 6, true)
+							 .unlock(8)
+							 .armor(2, 20000)
+							 .targets(2)
+							 .on_targets(sprite_barrier)
+							 .says("*prays for sanctuary*"),
 			 }},
 	};
 	return classes;
@@ -510,12 +755,51 @@ struct Timed_flag {
 };
 std::vector<Timed_flag> timed_flags;    // Host: short paralysis and knockdowns.
 
+// Timed bonuses (and penalties): U7 stats, and a few of our own.
+enum Bonus_kind {
+	bonus_armor        = 1001,    // Added to armour (Quick Fix, Sanctuary).
+	bonus_damage_taken = 1002,    // Extra damage from the party (Hunter's Mark).
+	bonus_pierce       = 1003,    // Armour its strikes ignore (Master's Strike).
+	bonus_riposte      = 1004,    // Answers melee strikes that miss (Riposte).
+};
+
 struct Timed_bonus {
 	Game_object_weak actor;
+	int              prop;    // Actor::strength, combat, dexterity, or a Bonus_kind.
 	int              amount;
 	uint32           until;
+	int              skill = -1;    // The skill that gave it (for Riposte's look).
 };
-std::vector<Timed_bonus> bonuses;    // Host: strength and combat bonuses.
+std::vector<Timed_bonus> bonuses;    // Host.
+
+int Bonus_of(const Actor* actor, int prop) {
+	if (bonuses.empty() || !actor) {
+		return 0;
+	}
+	const uint32 now   = static_cast<uint32>(SDL_GetTicks());
+	int          total = 0;
+	for (const Timed_bonus& each : bonuses) {
+		if (each.prop == prop && each.until > now) {
+			const Game_object_shared obj = each.actor.lock();
+			if (obj.get() == actor) {
+				total += each.amount;
+			}
+		}
+	}
+	return total;
+}
+
+// Things to do a moment later: a shot landing, a fuse, a field's tick, a
+// summoned creature leaving.  Host only; cleared with the world.
+struct Pending {
+	uint32                at;
+	std::function<void()> run;
+};
+std::vector<Pending> pending;
+
+void Later(uint32 ms, std::function<void()> run) {
+	pending.push_back({static_cast<uint32>(SDL_GetTicks()) + ms, std::move(run)});
+}
 
 struct Timed_taunt {
 	Game_object_weak foe;
@@ -525,10 +809,11 @@ struct Timed_taunt {
 std::vector<Timed_taunt> taunts;    // Host: Challenge.
 
 struct Range_circle {
-	int    npc;
-	int    radius;    // Tiles.
-	int    color;     // Palette index.
-	uint32 until;
+	int        npc;
+	int        radius;    // Tiles.
+	int        color;     // Palette index.
+	uint32     until;
+	Tile_coord at{-1, -1, -1};    // A field's spot; else around the NPC.
 };
 std::vector<Range_circle> circles;    // Every machine: circles to show.
 
@@ -679,6 +964,18 @@ std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
 		}
 		return {};
 	}
+	case Skill_target::ally: {
+		Actor* weakest = nullptr;
+		for (Actor* member : Party_in_range(user, skill.range)) {
+			if (!weakest || Health(member) * Max_health(weakest) < Health(weakest) * Max_health(member)) {
+				weakest = member;
+			}
+		}
+		if (weakest) {
+			return {weakest};
+		}
+		return {};
+	}
 	case Skill_target::pick: {
 		Game_object* target = user->get_target();
 		Actor*       foe    = target ? target->as_actor() : nullptr;
@@ -741,10 +1038,17 @@ void Show_circle(int npc, const Class_skill& skill, uint32 ms) {
 	}
 	circles.erase(std::remove_if(circles.begin(), circles.end(),
 						  [npc](const Range_circle& c) {
-							  return c.npc == npc;
+							  return c.npc == npc && c.at.tx < 0;    // Fields stay.
 						  }),
 				  circles.end());
 	circles.push_back({npc, skill.range, Circle_color(skill), Now() + ms});
+}
+
+// A field's circle stays on its spot for as long as it lasts.
+void Show_field(int npc, const Class_skill& skill, const Tile_coord& spot) {
+	Range_circle circle{npc, skill.range, Circle_color(skill), Now() + static_cast<uint32>(skill.duration_ms)};
+	circle.at = spot;
+	circles.push_back(circle);
 }
 
 /*
@@ -781,8 +1085,14 @@ void Sound_at(Actor* actor, int sfx) {
 	}
 }
 
-void Add_bonus(Actor* actor, int amount, int ms) {
-	bonuses.push_back({weak_from_obj(actor), amount, Now() + static_cast<uint32>(ms)});
+void Add_bonus(Actor* actor, int prop, int amount, int ms, int skill = -1) {
+	bonuses.push_back({weak_from_obj(actor), prop, amount, Now() + static_cast<uint32>(ms), skill});
+}
+
+// +'amount' strength and combat (Battle Hymn, Aimed Shot).
+void Add_might(Actor* actor, int amount, int ms) {
+	Add_bonus(actor, Actor::strength, amount, ms);
+	Add_bonus(actor, Actor::combat, amount, ms);
 }
 
 // A shot with the user's readied weapon, through the combat code (range,
@@ -795,8 +1105,53 @@ bool Shoot(Actor* user, Actor* target) {
 	if (!winf || weapon < 0) {
 		return false;
 	}
-	user->change_frame(user->get_dir_framenum(user->get_direction(target), Actor::ready_frame));
+	// A swing beside the foe, else the ready pose of a shot.
+	const int pose = user->distance(target) <= 1 ? Actor::strike1_frame : Actor::ready_frame;
+	user->change_frame(user->get_dir_framenum(user->get_direction(target), pose));
 	return Combat_schedule::attack_target(user, target, target->get_tile(), weapon);
+}
+
+// Paralyze or put to sleep for 'ms', after a roll as hits with powers make
+// (Actor::figure_hit_points).  Some creatures can't be: no flag.
+bool Try_hinder(Actor* user, Actor* each, int flag, int ms) {
+	if (!each || each->is_dead()) {
+		return false;
+	}
+	const bool had = each->get_flag(flag);
+	if (!had && Actor::roll_to_win(user->get_effective_prop(Actor::combat), each->get_effective_prop(Actor::strength))) {
+		each->set_flag(flag);
+	}
+	if (!had && each->get_flag(flag)) {
+		timed_flags.push_back({weak_from_obj(each), flag, Now() + static_cast<uint32>(ms)});
+		return true;
+	}
+	Gwin()->get_effects()->add_text("Resisted", each);
+	Friend_mode_note_speech(each, "Resisted");
+	return false;
+}
+
+// Hostiles to 'user' within 'radius' tiles of 'spot'.
+std::vector<Actor*> Hostiles_near(const Actor* user, const Tile_coord& spot, int radius) {
+	Actor_vector near;
+	Game_object::find_nearby_actors(near, spot, c_any_shapenum, radius);
+	std::vector<Actor*> found;
+	for (Actor* each : near) {
+		if (Friend_mode_is_hostile(user, each) && each->distance(spot) <= radius) {
+			found.push_back(each);
+		}
+	}
+	return found;
+}
+
+// Roughly when a thrown thing or a shot lands.
+uint32 Flight_ms(const Actor* user, const Tile_coord& spot) {
+	return 300 + 60 * static_cast<uint32>(user->distance(spot));
+}
+
+void Sprite_at(const Tile_coord& spot, int sprite) {
+	if (sprite >= 0) {
+		Gwin()->get_effects()->add_effect(std::make_unique<Sprites_effect>(sprite, spot, 0, 0, 0, 0, -1));
+	}
 }
 
 // Carry the skill out.  'why' says why not.
@@ -848,39 +1203,58 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 		break;
 	case Skill_effect::hinder:
 		for (Actor* each : targets) {
-			// As hits with powers roll (Actor::figure_hit_points).
-			// Some creatures can't be put to sleep or paralyzed: no flag.
-			const bool had = each->get_flag(skill.flag);
-			if (!had
-				&& Actor::roll_to_win(user->get_effective_prop(Actor::combat), each->get_effective_prop(Actor::strength))) {
-				each->set_flag(skill.flag);
-			}
-			if (!had && each->get_flag(skill.flag)) {
-				timed_flags.push_back({weak_from_obj(each), skill.flag, Now() + static_cast<uint32>(skill.duration_ms)});
+			if (Try_hinder(user, each, skill.flag, skill.duration_ms)) {
 				++done;
-			} else {
-				Gwin()->get_effects()->add_text("Resisted", each);
-				Friend_mode_note_speech(each, "Resisted");
 			}
 		}
 		break;
 	case Skill_effect::volley:
 		if (skill.amount > 0) {
-			Add_bonus(user, skill.amount, skill.duration_ms);    // Aimed Shot: while it flies.
+			Add_might(user, skill.amount, skill.duration_ms);    // Aimed Shot: while it flies.
+		}
+		if (skill.pierce > 0) {
+			Add_bonus(user, bonus_pierce, skill.pierce, std::max(skill.duration_ms, 1000));
 		}
 		for (Actor* each : targets) {
-			if (Shoot(user, each)) {
-				++done;
+			if (!Shoot(user, each)) {
+				continue;
 			}
+			++done;
+			if (skill.rider_flag < 0 && skill.weaken_prop < 0) {
+				continue;
+			}
+			// What rides on the shot, as it lands.
+			const Game_object_weak foe_ref  = weak_from_obj(each);
+			const Game_object_weak user_ref = weak_from_obj(user);
+			const int              flag     = skill.rider_flag;
+			const int              flag_ms  = skill.rider_ms;
+			const int              prop     = skill.weaken_prop;
+			const int              by       = skill.weaken_by;
+			const int              by_ms    = skill.weaken_ms;
+			Later(Flight_ms(user, each->get_tile()), [=]() {
+				const Game_object_shared foe_obj  = foe_ref.lock();
+				const Game_object_shared user_obj = user_ref.lock();
+				Actor* foe   = foe_obj ? foe_obj->as_actor() : nullptr;
+				Actor* owner = user_obj ? user_obj->as_actor() : nullptr;
+				if (!foe || !owner || foe->is_dead()) {
+					return;
+				}
+				if (flag >= 0) {
+					Try_hinder(owner, foe, flag, flag_ms);
+				}
+				if (prop >= 0) {
+					Add_bonus(foe, prop, by, by_ms);
+				}
+			});
 		}
 		if (done == 0) {
-			why = "Needs a bow, crossbow or sling, and ammunition";
+			why = skill.range <= 1 ? "Needs a weapon in hand" : "Needs a bow, crossbow or sling, and ammunition";
 			return false;
 		}
 		break;
 	case Skill_effect::bonus:
 		for (Actor* each : targets) {
-			Add_bonus(each, skill.amount, skill.duration_ms);
+			Add_might(each, skill.amount, skill.duration_ms);
 			++done;
 		}
 		break;
@@ -892,6 +1266,127 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			++done;
 		}
 		break;
+	case Skill_effect::armor:
+		for (Actor* each : targets) {
+			Add_bonus(each, bonus_armor, skill.amount, skill.duration_ms);
+			++done;
+		}
+		break;
+	case Skill_effect::mark:
+		for (Actor* each : targets) {
+			Add_bonus(each, bonus_damage_taken, skill.amount, skill.duration_ms);
+			++done;
+		}
+		break;
+	case Skill_effect::stance:
+		Add_bonus(user, bonus_riposte, 1, skill.duration_ms, skill.id);
+		done = 1;
+		break;
+	case Skill_effect::flash:
+	case Skill_effect::bomb: {
+		// Thrown at the pick's spot; what it does happens where it lands.
+		const Tile_coord       spot     = targets.front()->get_tile();
+		const Game_object_weak user_ref = weak_from_obj(user);
+		const Class_skill*     what     = &skill;    // The table lives for the game.
+		const uint32           land     = Flight_ms(user, spot);
+		if (skill.effect == Skill_effect::flash) {
+			Later(land, [=]() {
+				const Game_object_shared user_obj = user_ref.lock();
+				Actor*                   owner    = user_obj ? user_obj->as_actor() : nullptr;
+				if (!owner) {
+					return;
+				}
+				Sprite_at(spot, what->look.on_targets);
+				Sound_at(owner, what->look.sound);
+				int dazed = 0;
+				for (Actor* foe : Hostiles_near(owner, spot, what->blast)) {
+					dazed += Try_hinder(owner, foe, what->flag, what->duration_ms) ? 1 : 0;
+				}
+				cout << "Friend Class: " << what->name << " dazed " << dazed << endl;
+			});
+		} else {
+			// A few sparks while the fuse burns, then the blast.
+			for (uint32 t = 1000; t < static_cast<uint32>(skill.fuse_ms); t += 1000) {
+				Later(land + t, [=]() {
+					Sprite_at(spot, sprite_small_blast);
+				});
+			}
+			Later(land + static_cast<uint32>(skill.fuse_ms), [=]() {
+				const Game_object_shared user_obj = user_ref.lock();
+				Actor*                   owner    = user_obj ? user_obj->as_actor() : nullptr;
+				// The keg's own blast picture and sound.
+				const Shape_info& keg = ShapeID::get_info(shape_powder_keg);
+				Sprite_at(spot, keg.get_explosion_sprite());
+				const int boom = keg.get_explosion_sfx();
+				Audio::get_ptr()->play_sound_effect(boom, spot, AUDIO_MAX_VOLUME);
+				Friend_mode_note_sound(boom, nullptr, &spot);
+				if (!owner) {
+					return;
+				}
+				// Only hostiles: the party is spared.  The keg's own damage
+				// (U7's numbers), through Actor::attacked.
+				int hit = 0;
+				for (Actor* foe : Hostiles_near(owner, spot, what->blast)) {
+					for (int i = 0; i < what->hits && !foe->is_dead(); ++i) {
+						foe->attacked(owner, shape_powder_keg, -1, true);
+					}
+					++hit;
+				}
+				cout << "Friend Class: " << what->name << " hit " << hit << endl;
+			});
+		}
+		done = 1;
+		break;
+	}
+	case Skill_effect::field: {
+		// At the user's feet, ticking each second.
+		const Tile_coord   spot = user->get_tile();
+		const Class_skill* what = &skill;
+		const int          map  = user->get_map_num();
+		for (uint32 t = 1000; t <= static_cast<uint32>(skill.duration_ms); t += 1000) {
+			const bool show = (t / 1000) % 2 == 0;    // Sparkles every other tick.
+			Later(t, [=]() {
+				for (Actor* member : Party()) {
+					if (member->get_map_num() == map && member->distance(spot) <= what->range
+						&& Health(member) < Max_health(member)) {
+						member->set_property(Actor::health, std::min(Max_health(member), Health(member) + what->amount));
+						if (show) {
+							Sprite_on(member, what->look.on_targets);
+						}
+					}
+				}
+			});
+		}
+		Show_field(user->get_npc_num(), skill, spot);
+		done = static_cast<int>(targets.size());
+		break;
+	}
+	case Skill_effect::summon: {
+		const Tile_coord spot = Map_chunk::find_spot(user->get_tile(), 3, skill.summon_shape, 0, 1);
+		if (spot.tx < 0) {
+			why = "No room";
+			return false;
+		}
+		const Game_object_shared made
+				= Monster_actor::create(skill.summon_shape, spot, Schedule::combat, Actor::good);
+		if (!made) {
+			why = "Nothing came";
+			return false;
+		}
+		Sprite_at(spot, skill.look.on_targets);
+		const Game_object_weak creature = made;
+		Later(static_cast<uint32>(skill.duration_ms), [=]() {
+			if (const Game_object_shared obj = creature.lock()) {
+				Actor* actor = obj->as_actor();
+				if (actor && !actor->is_dead() && obj->get_chunk()) {
+					Sprite_at(obj->get_tile(), sprite_poof);
+					obj->remove_this();
+				}
+			}
+		});
+		done = 1;
+		break;
+	}
 	case Skill_effect::calm:
 		why = std::string(skill.name) + " is not ready yet";
 		return false;
@@ -907,13 +1402,20 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 	}
 	Sprite_on(user, skill.look.on_user);
 	Sound_at(user, skill.look.sound);
+	const bool own_look = skill.effect == Skill_effect::flash || skill.effect == Skill_effect::bomb
+						  || skill.effect == Skill_effect::field || skill.effect == Skill_effect::summon
+						  || skill.effect == Skill_effect::stance;
 	for (Actor* each : targets) {
-		Sprite_on(each, skill.look.on_targets);
+		if (!own_look) {
+			Sprite_on(each, skill.look.on_targets);
+		}
 		if (each != user) {
 			Missile_to(user, each, skill.look.missile);
 		}
 	}
-	Show_circle(user->get_npc_num(), skill, 2000);
+	if (skill.effect != Skill_effect::field) {    // A field has shown its own.
+		Show_circle(user->get_npc_num(), skill, 2000);
+	}
 	if (Friend_mode_get_session().connected()) {
 		std::vector<unsigned char> event;
 		const int                  npc = user->get_npc_num();
@@ -934,9 +1436,24 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 	return true;
 }
 
-// Host: end short paralysis and knockdowns, and old bonuses.
+// Host: end short paralysis and knockdowns, and old bonuses; run what
+// was put off.
 void Expire() {
 	const uint32 now = Now();
+	if (!pending.empty()) {
+		std::vector<Pending> due;
+		for (auto it = pending.begin(); it != pending.end();) {
+			if (it->at <= now) {
+				due.push_back(std::move(*it));
+				it = pending.erase(it);
+			} else {
+				++it;
+			}
+		}
+		for (auto& each : due) {
+			each.run();    // May add more.
+		}
+	}
 	timed_flags.erase(std::remove_if(timed_flags.begin(), timed_flags.end(),
 							  [now](const Timed_flag& each) {
 								  if (each.until > now) {
@@ -994,6 +1511,16 @@ void Expire() {
 
 bool Ai_wants(Actor* user, const Class_skill& skill) {
 	const bool fighting = Gwin()->in_combat() || user->get_schedule_type() == Schedule::combat;
+	// Thrown things: worth it with enough hostiles where it lands.
+	if (skill.effect == Skill_effect::bomb || skill.effect == Skill_effect::flash) {
+		const std::vector<Actor*> picks = Targets(user, skill);
+		return fighting && !picks.empty()
+			   && static_cast<int>(Hostiles_near(user, picks.front()->get_tile(), skill.blast).size()) >= 2;
+	}
+	// Riposte: when something is at its throat.
+	if (skill.effect == Skill_effect::stance) {
+		return fighting && !Hostiles(user, 1).empty();
+	}
 	switch (skill.type) {
 	case Skill_type::heal: {
 		// Below half, as many as the skill asks (Mending Circle: two).
@@ -1295,7 +1822,9 @@ void Take_event(const std::vector<unsigned char>& data) {
 	const int    id    = data[2] | (data[3] << 8);
 	Actor*       actor = Gwin()->get_npc(npc);
 	const auto*  skill = Skill_by_id(Class_of(actor), id);
-	if (skill) {
+	if (skill && actor && skill->effect == Skill_effect::field) {
+		Show_field(npc, *skill, actor->get_tile());
+	} else if (skill) {
 		Show_circle(npc, *skill, 2000);
 		if (npc == guest_state_npc) {
 			global_waits[npc] = Now() + global_wait_ms;
@@ -1828,8 +2357,9 @@ void Paint_circles() {
 	size_t used = 0;
 	if (Friend_class_show_ranges && Friend_class_active() && !gwin->is_in_exult_menu()) {
 		for (const Range_circle& each : circles) {
-			Actor* actor = gwin->get_npc(each.npc);
-			if (used >= circle_layers.size() || !actor || !actor->get_chunk()) {
+			Actor*     actor = gwin->get_npc(each.npc);
+			const bool fixed = each.at.tx >= 0;    // A field, on its spot.
+			if (used >= circle_layers.size() || (!fixed && (!actor || !actor->get_chunk()))) {
 				continue;
 			}
 			Circle_layers& layers = circle_layers[used++];
@@ -1877,7 +2407,11 @@ void Paint_circles() {
 			}
 			int x;
 			int y;
-			gwin->get_shape_location(actor, x, y);
+			if (fixed) {
+				gwin->get_shape_location(each.at, x, y);
+			} else {
+				gwin->get_shape_location(actor, x, y);
+			}
 			const int cx = x - c_tilesize / 2;
 			const int cy = y - c_tilesize / 2;
 			int       sx0;
@@ -2380,6 +2914,7 @@ void Friend_class_world_loaded() {
 	timed_flags.clear();
 	bonuses.clear();
 	taunts.clear();
+	pending.clear();
 	circles.clear();
 	sent_states.clear();
 }
@@ -2448,18 +2983,54 @@ bool Friend_class_place(Actor* npc) {
 }
 
 int Friend_class_bonus(const Actor* actor, int prop) {
-	if (bonuses.empty() || (prop != Actor::strength && prop != Actor::combat)) {
+	if (prop != Actor::strength && prop != Actor::combat && prop != Actor::dexterity) {
 		return 0;
 	}
-	const uint32 now   = Now();
-	int          total = 0;
+	return Bonus_of(actor, prop);
+}
+
+void Friend_class_adjust_damage(const Actor* target, Game_object* attacker, int& damage, int& armor) {
+	if (bonuses.empty()) {
+		return;
+	}
+	Actor*     by    = attacker ? attacker->as_actor() : nullptr;
+	const bool party = by && (by->is_in_party() || by == Gwin()->get_main_actor());
+	armor += Bonus_of(target, bonus_armor);
+	if (by) {
+		armor = std::max(0, armor - Bonus_of(by, bonus_pierce));
+	}
+	if (party) {
+		damage += Bonus_of(target, bonus_damage_taken);
+	}
+}
+
+void Friend_class_note_miss(Game_object* attacker, Game_object* target) {
+	static bool answering = false;    // A riposte never answers a riposte.
+	Actor*      user      = target ? target->as_actor() : nullptr;
+	Actor*      foe       = attacker ? attacker->as_actor() : nullptr;
+	if (answering || !user || !foe || foe->is_dead() || !Able(user) || user->distance(foe) > 1
+		|| Bonus_of(user, bonus_riposte) <= 0) {
+		return;
+	}
+	int                points = 0;
+	int                weapon = -1;
+	Game_object*       obj    = nullptr;
+	const Weapon_info* winf   = user->get_weapon(points, weapon, obj);
+	if (!winf || weapon < 0) {
+		return;
+	}
+	answering = true;
+	user->change_frame(user->get_dir_framenum(user->get_direction(foe), Actor::strike1_frame));
+	Combat_schedule::attack_target(user, foe, foe->get_tile(), weapon);
+	answering = false;
+	Gwin()->get_effects()->add_text("Riposte!", user);
+	Friend_mode_note_speech(user, "Riposte!");
 	for (const Timed_bonus& each : bonuses) {
-		if (each.until > now) {
-			const Game_object_shared obj = each.actor.lock();
-			if (obj.get() == actor) {
-				total += each.amount;
+		if (each.prop == bonus_riposte && each.actor.lock().get() == user) {
+			if (const Class_skill* skill = Skill_by_id(Class_of(user), each.skill)) {
+				Sprite_on(foe, skill->look.on_targets);
 			}
+			break;
 		}
 	}
-	return total;
 }

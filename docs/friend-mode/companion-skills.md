@@ -85,7 +85,7 @@ has a number of its own (stable, used on the wire and in the config):
 | icon | A spellbook picture (spell number) |
 | cooldown | Seconds; 60 for all at first |
 | range | Tiles: for an area, its radius; for a target, how far it reaches |
-| range shown | Drawn (a circle, for songs and heals) or silent (Knockdown) |
+| range shown | Drawn (a circle, for songs and heals) or silent (Stun Shot) |
 | type | heal, cure, support (buff), attack, control (paralyze, sleep, taunt), self |
 | target | self, party in range, most hurt in range, the pick, nearest hostiles |
 | level | Character level that unlocks it (1 for the first; 4, 8 for later ones) |
@@ -121,7 +121,7 @@ measures distance. Two kinds:
 - **Shown:** a faint circle around the user while the mouse is on its icon
   and for 2 seconds after it is used, on every machine (Iolo's songs,
   Mending Circle, Purify). "Show skill ranges" turns it off.
-- **Silent:** checked, never drawn (Knockdown, Aimed Shot, Entangle): too
+- **Silent:** checked, never drawn (Stun Shot, Aimed Shot, Entangle): too
   far gives "Too far".
 
 **Effects the code knows** (each skill is one of these, with numbers):
@@ -131,7 +131,15 @@ measures distance. Two kinds:
 | heal | health up, capped at strength | Mending Circle, Lay on Hands, Second Wind |
 | cure | clears poison, paralysis, curse | Purify |
 | flag | sets a U7 flag on whoever it targets: protection, invisible | Song of Warding, Stand Fast, Vanish |
-| hinder | paralyze or knock out each target for a few seconds, with a roll each | Entangle, Knockdown, Song of Peace (sleep) |
+| hinder | paralyze or knock out each target for a few seconds, with a roll each | Entangle, Song of Peace (sleep) |
+| volley riders | a shot that, as it lands, also hinders (`then_hinder`) or lowers a stat (`then_weaken`); `pierce_armor` makes the user's strikes ignore some armour | Stun Shot, Sleep Arrow, Crippling Shot, Master's Strike |
+| armor | timed extra armour: strong on one ally, or smaller on everyone in the circle | Quick Fix, Sanctuary |
+| mark | the target takes extra damage from the party for a while | Hunter's Mark |
+| stance | for a while, a melee strike that misses the user is answered with one of its own | Riposte |
+| flash | thrown at the pick; hostiles where it lands are paralyzed briefly (each rolls) | Flashbang |
+| bomb | thrown at the pick; after a fuse (sparks meanwhile), hostiles where it lands take the powder keg's blast, with its picture and sound; the party is spared | Time Bomb |
+| field | at the user's feet, a circle that heals the party standing in it every second | Healing Field |
+| summon | a friendly creature (good alignment, combat schedule) fights beside the party, then leaves with a poof | Summon Creature |
 | volley | a real shot (the readied bow, sling or crossbow and its ammunition, U7's hit and damage) at each target | Volley, Trick Shot |
 | bonus | timed +N strength and combat | Battle Hymn, Hunter's Mark |
 | taunt | hostiles in range turn on the user and are kept on it for the duration | Challenge |
@@ -226,11 +234,19 @@ later, once the first set has been played.
 | Shamino | Ranger | **Volley**: three arrows at the three nearest hostiles, one each, using three arrows from his quiver. **Aimed Shot**: one shot at the pick that hits harder. **Vanish**: invisible for a few seconds, so foes lose him. |
 | Jaana | Druid | **Mending Circle**: heals everyone in the party within the circle. **Purify**: cures poison, paralysis and curses within the circle. **Entangle**: the pick is paralyzed for a few seconds. |
 | Dupre | Paladin | **Challenge**: hostiles within the circle turn on Dupre. **Lay on Hands**: a big heal on one party member. **Stand Fast**: protection on himself. |
-| Spark | (boy) | With his sling. **Trick Shot**: a stone that bounces from the pick to a second foe nearby. **Knockdown**: a stone that knocks the pick over (knocked out a moment, as U7's sleep). |
-| Sentri | Fighter | **Cleave**: one swing hits every foe beside him. **Second Wind**: heals himself once in a fight. |
-| Tseramed | Ranger | **Hunter's Mark**: the party hits the pick harder. **Snare**: the pick can't move for a few seconds. |
-| Julia | Tinker | **Firebomb**: a small explosion at the pick, like a powder keg. **Patch Up**: a small heal on one party member. |
-| Katrina | Shepherd | **Calm Beasts**: animals within the circle stop fighting. **Comfort**: a slow heal on the party within the circle. |
+| Spark | (boy) | With his sling. **Stun Shot** (1): a stone that stops the target moving for 3 seconds (U7's paralysis). **Trick Shot** (4): stones at the two nearest hostiles. |
+| Sentri | Swordmaster (agile duelist) | **Riposte** (1): for 10 seconds, each melee strike that misses him is answered. **Blade Dance** (4): a strike at every foe beside him. **Master's Strike** (8): one precise blow, harder, that ignores 6 points of armour. |
+| Tseramed | Huntsman (disabling archer, beside Shamino's attacking one) | **Sleep Arrow** (1): a shot that puts the target to sleep for 5 seconds. **Crippling Shot** (4): a shot that takes 10 dexterity for 10 seconds (U7 has no slowed walking, so the target attacks less often). **Hunter's Mark** (8): the target takes 4 more damage from every party hit for 20 seconds. |
+| Julia | Tinker (combat engineer) | **Quick Fix** (1): one ally gets 5 more armour for 30 seconds. **Flashbang** (4): thrown at the pick; hostiles within 3 tiles are stopped for 2.5 seconds. **Time Bomb** (8): thrown at the pick; 3 seconds later hostiles within 3 tiles take a powder keg's blast, twice. |
+| Katrina | Shepherd (gentle support) | **Healing Field** (1): a circle at her feet heals the party in it 2 health a second for 12 seconds. **Summon Creature** (4): her sheepdog fights beside the party for 30 seconds. **Sanctuary** (8): everyone in the circle gets 2 more armour for 20 seconds. |
+
+Decided 2026-10-20 (the user's design for the last four): some overlap is
+fine, since nobody can take every companion along; several heal and several
+support. Defence boosts differ by spread: one ally strongly (Quick Fix) or
+everyone in a circle a little (Sanctuary, Song of Warding). No new art: each
+skill's look is U7's own sprites, missile pictures and sounds (the keg flies
+for Flashbang and Time Bomb; any shape can, a cannonball or a clock, chosen
+with the effect preview).
 
 The Avatar gets no class skills: it has the spellbook, and a spell bar
 for it (below).
@@ -375,7 +391,11 @@ companion stands**.
 | Shamino | Always fights from a distance: steps away from a foe that comes beside him, then shoots; Volley when three hostiles are in range, Aimed Shot at the strongest. Falls back to his sword with no arrows. |
 | Jaana | Watches health: stays near the middle of the party, out of the front line; Mending Circle when two or more are badly hurt, Purify when someone is poisoned or paralyzed; fights only when nobody needs her. |
 | Dupre | Front line: Challenge when a foe is on a hurt party member, Lay on Hands on the most hurt when someone is near death, Stand Fast when he is hurt. |
-| Spark | Hangs back with his sling; Knockdown on a foe beside a hurt party member. |
+| Spark | Hangs back with his sling; Stun Shot on a foe beside a hurt party member. |
+| Sentri | Front line; Riposte when a foe is beside him, Blade Dance with two or more beside him. |
+| Tseramed | Keeps his distance; Sleep Arrow or Crippling Shot on a foe beside a hurt party member, Hunter's Mark on his foe. |
+| Julia | Keeps her distance; Quick Fix on the weakest when hostiles gather, Flashbang and Time Bomb where two or more hostiles stand. |
+| Katrina | Stays mid-party; Healing Field when two are hurt, her sheepdog and Sanctuary when hostiles gather. |
 
 **How.** Exult's combat schedule decides each step in
 `Combat_schedule::now_what` and picks foes in `find_foe` by the actor's
@@ -427,7 +447,7 @@ own verbs, so hit chance, damage, armour and saves stay U7's:
 - Vanish: set `invisible` with a short timer.
 - Entangle, Snare: set `paralyzed` with a short timer, with a roll against
   the target's strength, as hits with powers do (`roll_to_win`).
-- Knockdown: set `asleep` for a moment, with the same kind of roll.
+- Stun Shot: a real shot, then `paralyzed` for a moment, with the same kind of roll.
 - Purify: clear `poisoned`, `paralyzed`, `cursed` (like the Cure spell).
 - Mending Circle, Lay on Hands, Patch Up, Second Wind: raise health, capped
   at strength (as the Heal spells do).

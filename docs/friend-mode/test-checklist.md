@@ -978,15 +978,31 @@ A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
 - [ ] Shamino with a bow and arrows: Volley shoots at up to three
       hostiles, using an arrow each; without a bow: "Needs a bow, crossbow
       or sling, and ammunition".
-- [ ] Spark: Knockdown puts the target down for about 4 seconds, or
-      "Resisted"; something that can't sleep always resists.
+- [ ] Spark: Stun Shot fires a stone; the target stops for about 3
+      seconds, or "Resisted".
 - [ ] Dupre: Stand Fast gives himself protection.
 - [ ] The circle shows on every machine while the mouse is on a shown
-      skill and for 2 seconds after it is used; Knockdown and Volley show
+      skill and for 2 seconds after it is used; Stun Shot and Volley show
       none. "Show skill ranges: No" hides them on that machine.
 - [ ] Iolo at level 8: Song of Peace puts hostiles in the circle to sleep
       for about 5 seconds (some resist), music notes on Iolo and on each;
       the party stays awake.
+- [ ] Sentri: Riposte, then let a foe swing at him: misses are answered
+      ("Riposte!", a sword sprite on the foe) for 10 seconds. Blade Dance
+      (level 4) strikes every foe beside him. Master's Strike (level 8) on
+      an armoured foe does more than his normal hits.
+- [ ] Tseramed with a bow: Sleep Arrow puts the target to sleep as the
+      arrow lands; Crippling Shot makes it attack less often for 10 seconds;
+      Hunter's Mark (level 8): party hits on it do more (compare "combat
+      shows hits" numbers).
+- [ ] Julia: Quick Fix on the weakest nearby (fewer hits get through for
+      30 seconds); Flashbang (4): a keg flies to the pick and hostiles near
+      it stop for 2.5 seconds; Time Bomb (8): a keg flies, sparks for 3
+      seconds, then the keg's blast hits hostiles near it, not the party.
+- [ ] Katrina: Healing Field leaves a green circle at her feet for 12
+      seconds that heals whoever stands in it; Summon Creature (4): a
+      sheepdog appears and fights for 30 seconds, then vanishes with a poof
+      (guests see it too); Sanctuary (8): armour for everyone in the circle.
 - [ ] Dupre at level 8: Challenge turns hostiles in the circle on him;
       for 6 seconds they keep coming back to him.
 

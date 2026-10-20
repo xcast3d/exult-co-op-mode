@@ -1377,6 +1377,7 @@ bool Combat_schedule::attack_target(
 			autohit = trg_party ? false : (att_party ? true : autohit);
 		}
 		if (!autohit && !target->try_to_hit(attacker, attval)) {
+			Friend_class_note_miss(attacker, target);    // Friend Mode: Riposte.
 			return false;    // Missed.
 		}
 		// Avatar/Party was hit, in case the background music is CSDanger, play
