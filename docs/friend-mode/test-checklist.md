@@ -919,7 +919,9 @@ Built 2026-10-20, untested. Only the host pauses the game.
       Avatar and fights (the host's log: "follows the Avatar"); closing
       the menu hands it back where it stands ("takes over again"), with no
       "Following" bar. A guest already following (Y) stays following.
-- [ ] Guest's combat pause does nothing.
+- [ ] Combat pause does nothing in co-op, on the host too (the key, and
+      Space while the Avatar attacks its pick); in single player it works
+      as before. Opening to co-op while combat is paused resumes it.
 - [ ] The host's Escape menu still pauses everyone, with the bar on guests.
 
 ## Class System (protocol 32)

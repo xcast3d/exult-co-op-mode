@@ -3150,7 +3150,8 @@ static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 // A person out of combat is talked to (a guest gets its usual answer, a
 // merchant or "The Avatar must do this").  In combat mode the pick is
 // attacked, peaceful or not (after walking stopped an attack, again);
-// while the Avatar is already attacking it, Space pauses combat as before.
+// while the Avatar is already attacking it, Space pauses combat as before
+// (in single player only: there is no pausing in co-op).
 //
 // A thing (E): on the map, a container or body opens, and a door, lamp,
 // lever or piece of furniture is used (Shift: picked up, if it can be).  A loose thing, or one in someone else's open container, goes
@@ -8639,6 +8640,9 @@ static void Handle_events() {
 		gwin->rotatecolours();
 		Friend_mode_paint_maps();
 		Friend_mode_paint_range_frame();
+		if (Combat::is_paused() && Friend_mode_in_session()) {
+			Combat::resume();    // Paused before co-op began: no pausing in co-op.
+		}
 		Friend_class_frame();
 		Friend_mode_paint_target_arrow();
 		Friend_mode_paint_leash_arrow();

@@ -1909,8 +1909,8 @@ void Duel_schedule::now_what() {
  */
 
 void Combat::toggle_pause() {
-	if (!gwin->in_combat() || Friend_mode_is_guest()) {
-		return;    // Not in combat; a guest's pause would stop only its copy.
+	if (!gwin->in_combat() || Friend_mode_in_session()) {
+		return;    // Not in combat; no pausing in co-op (only the host's menus).
 	}
 	if (!paused && mode == original) {
 		return;    // Not doing that sort of thing.
