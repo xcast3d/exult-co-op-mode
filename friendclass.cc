@@ -418,30 +418,32 @@ constexpr int sprite_music    = 24;
 constexpr int shape_dog        = 496;    // Katrina's summoned sheepdog.
 constexpr int shape_powder_keg = 704;    // Julia's Time Bomb: flies, and its blast.
 
-// Spell numbers (circle * 8 + place in the circle): the spellbook's
-// pictures, used as icons.  Skills never run a spell's script.
-constexpr int spell_fireworks    = 2;
+// Spell numbers (circle * 8 + place in the circle), checked against Black
+// Gate's own spell scripts (0x640 + number, by their words of power; the
+// Keyring mod's lists are in another order): the spellbook's pictures, used
+// as icons, and the Avatar's spell bar.  Skills never run a spell's script.
+constexpr int spell_fireworks    = 3;
 constexpr int spell_fire_blast   = 18;
 constexpr int spell_mass_cure    = 20;
 constexpr int spell_protection   = 21;
 constexpr int spell_heal         = 25;
-constexpr int spell_paralyze     = 26;
-constexpr int spell_protect_all  = 29;
-constexpr int spell_sleep        = 30;
+constexpr int spell_paralyze     = 28;
+constexpr int spell_protect_all  = 27;
+constexpr int spell_sleep        = 31;
 constexpr int spell_lightning    = 33;
 constexpr int spell_dance        = 41;
-constexpr int spell_great_heal   = 45;
-constexpr int spell_invisibility = 46;
+constexpr int spell_great_heal   = 44;
+constexpr int spell_invisibility = 45;
 constexpr int spell_cause_fear   = 48;
 constexpr int spell_death_bolt   = 57;
 constexpr int spell_mass_might   = 62;
-constexpr int spell_swordstrike  = 69;
+constexpr int spell_swordstrike  = 70;
 constexpr int spell_curse        = 24;
-constexpr int spell_mass_curse   = 34;
+constexpr int spell_mass_curse   = 35;
 constexpr int spell_explosion    = 43;
 constexpr int spell_delayed      = 58;
 constexpr int spell_restoration  = 63;
-constexpr int spell_summon       = 68;
+constexpr int spell_summon       = 69;
 constexpr int spell_protect      = 21;
 constexpr int spell_flame_strike = 51;
 constexpr int spell_tremor       = 55;
@@ -2079,6 +2081,7 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 void Use_slot(const Bar_slot& slot) {
 	Game_window* gwin  = Gwin();
 	Actor*       actor = Bar_actor();
+	cout << "Friend Class: bar click on " << slot.name << (slot.usable ? "" : " (not usable: " + slot.why + ")") << endl;
 	if (!actor) {
 		return;
 	}
@@ -2157,9 +2160,8 @@ public:
 
 	void paint() override {}
 
-	bool is_draggable() const override {
-		return false;
-	}
+	// "Draggable" stays on: Exult's click handling (Dragging_info) only
+	// carries a button's press through to its release when it is.
 
 	int get_index() const {
 		return index;
@@ -3230,6 +3232,42 @@ public:
 
 bool Friend_class_active() {
 	return Friend_class_enabled && GAME_BG;
+}
+
+// The top, in game-view coordinates, of the HUD along the bottom of the
+// screen: the party's faces (Exult's status bars) and the skill bar, each
+// where its layer really is (they scale with the HUD, not the game view).
+int Friend_hud_bottom_y() {
+	Game_window*  gwin  = Gwin();
+	Image_window* iwin  = gwin->get_win();
+	int           top   = gwin->get_height();
+	auto          check = [&](Gump* gump) {
+        const int layer = gump ? gump->get_render_layer() : -1;
+        if (layer < 0 || !iwin->layer_is_visible(layer)) {
+            return;
+        }
+        const TileRect rect = gump->get_rect();
+        if (rect.w <= 0 || rect.w < rect.h) {
+            return;    // Not a row (Exult's vertical face stats).
+        }
+        int sx;
+        int sy;
+        if (!iwin->layer_to_screen(layer, rect.x - gump->layer_bounds.x, rect.y - gump->layer_bounds.y, sx, sy)) {
+            return;
+        }
+        int gx;
+        int gy;
+        iwin->screen_to_game(sx, sy, false, gx, gy);
+        if (gy > gwin->get_height() / 2) {    // Along the bottom.
+            top = std::min(top, gy);
+        }
+	};
+	for (auto it = gwin->get_gump_man()->begin(); it != gwin->get_gump_man()->end(); ++it) {
+		if (dynamic_cast<Face_stats*>(*it) || *it == the_bar) {
+			check(*it);
+		}
+	}
+	return top;
 }
 
 void Friend_class_load_settings() {

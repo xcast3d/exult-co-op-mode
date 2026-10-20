@@ -5457,6 +5457,15 @@ bool Friend_mode_download_world() {
 	}
 }
 
+// Friend Mode's own lines along the bottom stack up from the HUD row (the
+// party's faces and the skill bar, when they are along the bottom): the chat
+// line first, then the status bar, then the chat log.
+static int Friend_mode_chat_line_top() {
+	auto      font = fontManager.get_font("MENU_FONT");
+	const int h    = (font ? font->get_text_height() : 8) + 8;
+	return std::min(gwin->get_height() - h - 8, Friend_hud_bottom_y() - h - 4);
+}
+
 // The chat line, bottom of the view: its own layer at the world's scale,
 // above a conversation (whose layer would cover it in the game view).
 static void Friend_mode_paint_chat_input() {
@@ -5474,7 +5483,7 @@ static void Friend_mode_paint_chat_input() {
 	}
 	const int   x     = 8;
 	const int   h     = font->get_text_height() + 8;
-	const int   y     = gwin->get_height() - h - 8;
+	const int   y     = Friend_mode_chat_line_top();
 	const int   w     = std::max(120, gwin->get_width() - 16);
 	std::string shown = "Say: " + friend_chat_text + "_";
 	while (shown.size() > 6 && font->get_text_width(shown.c_str()) > w - 10) {
@@ -5566,9 +5575,11 @@ static void Friend_mode_paint_dialogue_wait() {
 	const int w      = std::min(max_w, text_w + 16);
 	const int h      = static_cast<int>(lines.size()) * line_h + 6;
 	const int x      = (gwin->get_width() - w) / 2;
-	int       y      = gwin->get_height() - h - 8;
+	// Above the party's faces and the skill bar, when they are along the
+	// bottom, and above the chat line.
+	int y = std::min(gwin->get_height() - h - 8, Friend_hud_bottom_y() - h - 4);
 	if (friend_chat_active) {    // Sit above the chat line.
-		y -= font->get_text_height() + 8 + 4;
+		y = Friend_mode_chat_line_top() - h - 4;
 	}
 	Image_buffer8* buffer = gwin->get_win()->get_ib8();
 	buffer->draw_box(x, y, w, h, 1, 0, 15);
@@ -5777,12 +5788,12 @@ static void Friend_mode_paint_chat_log() {
 	// following, paused) when those show.
 	int bottom = gwin->get_height() - 20;
 	if (friend_chat_active) {
-		auto font = fontManager.get_font("MENU_FONT");
-		bottom    = std::min(bottom, gwin->get_height() - 8 - (font ? font->get_text_height() : 8) - 8 - 3);
+		bottom = std::min(bottom, Friend_mode_chat_line_top() - 3);
 	}
 	if (friend_status_bar_top >= 0) {
 		bottom = std::min(bottom, friend_status_bar_top - 3);
 	}
+	bottom = std::min(bottom, Friend_hud_bottom_y() - 4);    // Above the faces and the skill bar.
 	Friend_mode_paint_pinned(log, friend_chat_log, friend_chat_log_changed, on && !friend_chat_log_hidden, 6, bottom, false);
 	Friend_mode_paint_pinned(notices, friend_notices, friend_notices_changed, true, gwin->get_width() / 2, 4, true);
 	// The hint just under the notices as they are on screen.

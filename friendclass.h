@@ -42,6 +42,10 @@ void Friend_class_options();          // Show the options page.
 // On, and a game it knows (Black Gate).
 bool Friend_class_active();
 
+// The top (game-view y) of the HUD rows along the bottom: the party's faces
+// and the skill bar.  Friend Mode's bars and chat log sit above it.
+int Friend_hud_bottom_y();
+
 // Every frame, on every machine: the bar, the range circles, and on the
 // host (or in single player) the cooldowns and the Class AI.
 void Friend_class_frame();
