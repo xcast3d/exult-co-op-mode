@@ -1003,6 +1003,11 @@ A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
       seconds that heals whoever stands in it; Summon Creature (4): a
       sheepdog appears and fights for 30 seconds, then vanishes with a poof
       (guests see it too); Sanctuary (8): armour for everyone in the circle.
+- [ ] Reactions over foes, emote-style, on every machine: *stunned*
+      (Stun Shot), *asleep* (Sleep Arrow), *drowsy* (Song of Peace),
+      *entangled* (Entangle), *dazed* (Flashbang), *crippled* (Crippling
+      Shot), *marked* (Hunter's Mark), *enraged* (Challenge), *resisted*
+      when a roll fails; *ripostes* over Sentri.
 - [ ] Dupre at level 8: Challenge turns hostiles in the circle on him;
       for 6 seconds they keep coming back to him.
 

@@ -168,6 +168,7 @@ struct Class_skill {
 	int          fuse_ms     = 0;     // 'bomb': time from landing to the blast.
 	int          hits        = 1;     // 'bomb': how many blasts each hostile takes.
 	int          summon_shape = -1;   // 'summon': the creature's shape.
+	const char*  reaction     = nullptr;    // Over each foe it lands on ("*stunned*"); null: by effect.
 	Skill_look   look;
 	const char*  words = "";    // Over the user.
 
@@ -351,6 +352,13 @@ struct Class_skill {
 		return *this;
 	}
 
+	// The emote over each foe it lands on, instead of the effect's own
+	// ("*stunned*", "*asleep*", "*crippled*"...).
+	Class_skill& reacts(const char* text) {
+		reaction = text;
+		return *this;
+	}
+
 	Class_skill& says(const char* text) {
 		words = text;
 		return *this;
@@ -448,6 +456,7 @@ const std::vector<Companion_class>& Classes() {
 							 .aim(G::hostiles_nearest, 8, true)
 							 .unlock(8)
 							 .hinder(Obj_flags::asleep, 5000)
+							 .reacts("*drowsy*")
 							 .targets(8)
 							 .on_user(sprite_music)
 							 .on_targets(sprite_music)
@@ -509,6 +518,7 @@ const std::vector<Companion_class>& Classes() {
 							 .aim(G::pick, 10)
 							 .unlock(8)
 							 .hinder(Obj_flags::paralyzed, 6000)
+							 .reacts("*entangled*")
 							 .on_targets(sprite_beads)
 							 .says("*calls up grasping roots*"),
 			 }},
@@ -1113,7 +1123,20 @@ bool Shoot(Actor* user, Actor* target) {
 
 // Paralyze or put to sleep for 'ms', after a roll as hits with powers make
 // (Actor::figure_hit_points).  Some creatures can't be: no flag.
-bool Try_hinder(Actor* user, Actor* each, int flag, int ms) {
+// An emote-style line over someone a skill landed on (or didn't), on every
+// machine, as emotes show over companions.
+void React(Actor* actor, const char* text) {
+	if (actor && text && text[0]) {
+		Gwin()->get_effects()->add_text(text, actor);
+		Friend_mode_note_speech(actor, text);
+	}
+}
+
+const char* Hinder_reaction(int flag) {
+	return flag == Obj_flags::asleep ? "*asleep*" : "*stunned*";
+}
+
+bool Try_hinder(Actor* user, Actor* each, int flag, int ms, const char* reaction = nullptr) {
 	if (!each || each->is_dead()) {
 		return false;
 	}
@@ -1123,10 +1146,10 @@ bool Try_hinder(Actor* user, Actor* each, int flag, int ms) {
 	}
 	if (!had && each->get_flag(flag)) {
 		timed_flags.push_back({weak_from_obj(each), flag, Now() + static_cast<uint32>(ms)});
+		React(each, reaction ? reaction : Hinder_reaction(flag));
 		return true;
 	}
-	Gwin()->get_effects()->add_text("Resisted", each);
-	Friend_mode_note_speech(each, "Resisted");
+	React(each, "*resisted*");
 	return false;
 }
 
@@ -1203,7 +1226,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 		break;
 	case Skill_effect::hinder:
 		for (Actor* each : targets) {
-			if (Try_hinder(user, each, skill.flag, skill.duration_ms)) {
+			if (Try_hinder(user, each, skill.flag, skill.duration_ms, skill.reaction)) {
 				++done;
 			}
 		}
@@ -1231,6 +1254,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			const int              prop     = skill.weaken_prop;
 			const int              by       = skill.weaken_by;
 			const int              by_ms    = skill.weaken_ms;
+			const char*            reaction = skill.reaction;
 			Later(Flight_ms(user, each->get_tile()), [=]() {
 				const Game_object_shared foe_obj  = foe_ref.lock();
 				const Game_object_shared user_obj = user_ref.lock();
@@ -1240,10 +1264,11 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 					return;
 				}
 				if (flag >= 0) {
-					Try_hinder(owner, foe, flag, flag_ms);
+					Try_hinder(owner, foe, flag, flag_ms, reaction);
 				}
 				if (prop >= 0) {
 					Add_bonus(foe, prop, by, by_ms);
+					React(foe, reaction ? reaction : (by < 0 ? "*crippled*" : "*emboldened*"));
 				}
 			});
 		}
@@ -1262,6 +1287,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 		// Each hostile turns on the user, and is kept on it a while.
 		for (Actor* each : targets) {
 			each->set_target(user, true);
+			React(each, skill.reaction ? skill.reaction : "*enraged*");
 			taunts.push_back({weak_from_obj(each), weak_from_obj(user), Now() + static_cast<uint32>(skill.duration_ms)});
 			++done;
 		}
@@ -1275,6 +1301,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 	case Skill_effect::mark:
 		for (Actor* each : targets) {
 			Add_bonus(each, bonus_damage_taken, skill.amount, skill.duration_ms);
+			React(each, skill.reaction ? skill.reaction : "*marked*");
 			++done;
 		}
 		break;
@@ -1300,7 +1327,10 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 				Sound_at(owner, what->look.sound);
 				int dazed = 0;
 				for (Actor* foe : Hostiles_near(owner, spot, what->blast)) {
-					dazed += Try_hinder(owner, foe, what->flag, what->duration_ms) ? 1 : 0;
+					dazed += Try_hinder(owner, foe, what->flag, what->duration_ms,
+									 what->reaction ? what->reaction : "*dazed*")
+									 ? 1
+									 : 0;
 				}
 				cout << "Friend Class: " << what->name << " dazed " << dazed << endl;
 			});
@@ -3023,8 +3053,7 @@ void Friend_class_note_miss(Game_object* attacker, Game_object* target) {
 	user->change_frame(user->get_dir_framenum(user->get_direction(foe), Actor::strike1_frame));
 	Combat_schedule::attack_target(user, foe, foe->get_tile(), weapon);
 	answering = false;
-	Gwin()->get_effects()->add_text("Riposte!", user);
-	Friend_mode_note_speech(user, "Riposte!");
+	React(user, "*ripostes*");
 	for (const Timed_bonus& each : bonuses) {
 		if (each.prop == bonus_riposte && each.actor.lock().get() == user) {
 			if (const Class_skill* skill = Skill_by_id(Class_of(user), each.skill)) {
