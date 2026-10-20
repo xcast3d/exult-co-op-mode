@@ -650,7 +650,7 @@ effects; an option the host sets, off by default. Plan:
 2026-10-20, ahead of Phase 8, since it needs balancing and changes today's
 combat: the foundation (Game menu → Class System, the bars, definitions,
 cooldowns, effects, the Class AI's choices) is built and not yet tested;
-next, the Class AI's placing, Challenge and Song of Peace.
+Class AI placing and Challenge followed the same day (untested).
 
 ### Offering features to Exult
 
@@ -714,8 +714,8 @@ Keep project planning in `docs/friend-mode/` within the source tree. Track upstr
 
 ## Next steps
 
-1. **The Class System** (companion skills): test the foundation, then
-   the Class AI's placing and the last two effects.
+1. **The Class System** (companion skills): test it, then keys for the
+   bars and the other four companions.
 2. **Lobby codes over WebRTC**, the last step before an official release
    (Phase 8).
 

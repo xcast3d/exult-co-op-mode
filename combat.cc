@@ -35,6 +35,7 @@
 #include "combat_opts.h"
 #include "effects.h"
 #include "exult.h"
+#include "friendclass.h"
 #include "game.h"
 #include "gameclk.h"
 #include "gamemap.h"
@@ -1602,6 +1603,9 @@ void Combat_schedule::now_what() {
 	Game_object* opponent = npc->get_target();
 	switch (state) {    // Note:  state's action has finished.
 	case approach:
+		if (Friend_class_place(npc)) {
+			break;    // Friend Mode's Class AI: placing itself first.
+		}
 		if (!opponent) {
 			approach_foe();
 		} else if (dex_points >= dex_to_attack) {

@@ -987,7 +987,8 @@ A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
 - [ ] Iolo at level 8: Song of Peace puts hostiles in the circle to sleep
       for about 5 seconds (some resist), music notes on Iolo and on each;
       the party stays awake.
-- [ ] Challenge says "is not ready yet" (not built).
+- [ ] Dupre at level 8: Challenge turns hostiles in the circle on him;
+      for 6 seconds they keep coming back to him.
 
 Class AI (companions nobody plays, host):
 
@@ -1000,6 +1001,14 @@ Class AI (companions nobody plays, host):
       mode.
 - [ ] Class AI: No on the page: nobody uses skills by themselves.
 - [ ] Each skill is used at most once a minute per companion.
+- [ ] Shamino or Iolo with a bow or crossbow: a foe closing to melee makes
+      them step back about 4 tiles ("keeps its distance" in the host's
+      log), then shoot; never more than 12 tiles from the Avatar.
+- [ ] Jaana: two companions below half, the worst far off: she walks into
+      range ("moves to heal") and uses Mending Circle; a foe beside her
+      sends her back to the party ("falls back").
+- [ ] Dupre and the others close in as before.
+- [ ] A guest's companion is never moved by this; in follow mode it is.
 
 ## Leaving
 

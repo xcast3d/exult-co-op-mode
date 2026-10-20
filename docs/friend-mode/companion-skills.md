@@ -134,7 +134,8 @@ measures distance. Two kinds:
 | hinder | paralyze or knock out each target for a few seconds, with a roll each | Entangle, Knockdown, Song of Peace (sleep) |
 | volley | a real shot (the readied bow, sling or crossbow and its ammunition, U7's hit and damage) at each target | Volley, Trick Shot |
 | bonus | timed +N strength and combat | Battle Hymn, Hunter's Mark |
-| taunt, calm | hostiles turn on the user, or stop fighting (later) | Challenge |
+| taunt | hostiles in range turn on the user and are kept on it for the duration | Challenge |
+| calm | hostiles stop fighting (not built; Song of Peace uses sleep) | |
 
 **U7's looks, not its scripts** (decided 2026-10-20). Skills never run a
 spell's script, so they can't fight the game's own scripts or their
@@ -183,9 +184,22 @@ this order:
    the cooldown; the same code a player's click runs.
 5. Otherwise fight as U7 does (its combat schedule, its target).
 
-Placing happens in the combat schedule (`Combat_schedule::now_what`), so it
-waits for the first steps; skills alone come first. "Normal AI" is U7's,
-untouched.
+Placing is built (2026-10-20): `Friend_class_place`, called by the combat
+schedule (`Combat_schedule::now_what`) before it closes in on a foe. When it
+starts a walk the schedule waits for it, then goes on as U7 does:
+
+- **ranged** (Iolo, Shamino, Spark): with a ranged weapon readied and a
+  hostile within 2 tiles, step 4 tiles away from it, then shoot as usual;
+- **support** (Jaana): when as many companions are below half as her heal
+  waits for (two), and the worst is out of its range, walk to within range
+  less 2 tiles; with a hostile within 2 tiles, fall back to the middle of the
+  party;
+- **front** (Dupre, Sentri): U7's own closing in;
+- never further than 12 tiles from the Avatar, and at most one placing walk
+  every 1.5 seconds, so they shoot and heal in between;
+- only for companions nobody plays, with Class AI on, on the host.
+
+"Normal AI" is U7's, untouched.
 
 **Network** (protocol 32): a guest's "use skill" (skill id); the host's
 class state (enabled, require items, Class AI, and for each guest's

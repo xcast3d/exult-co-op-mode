@@ -37,6 +37,7 @@
 #include "exult.h"
 #include "font.h"
 #include "friendmap.h"
+#include "chunks.h"
 #include "game.h"
 #include "gamewin.h"
 #include "ibuf8.h"
@@ -481,7 +482,7 @@ const Class_skill* Skill_by_id(const Companion_class* cls, int id) {
 }
 
 bool Effect_built(const Class_skill& skill) {
-	return skill.effect != Skill_effect::taunt && skill.effect != Skill_effect::calm;
+	return skill.effect != Skill_effect::calm;
 }
 
 /*
@@ -515,6 +516,13 @@ struct Timed_bonus {
 	uint32           until;
 };
 std::vector<Timed_bonus> bonuses;    // Host: strength and combat bonuses.
+
+struct Timed_taunt {
+	Game_object_weak foe;
+	Game_object_weak user;    // Who the foe must fight.
+	uint32           until;
+};
+std::vector<Timed_taunt> taunts;    // Host: Challenge.
 
 struct Range_circle {
 	int    npc;
@@ -877,6 +885,13 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 		}
 		break;
 	case Skill_effect::taunt:
+		// Each hostile turns on the user, and is kept on it a while.
+		for (Actor* each : targets) {
+			each->set_target(user, true);
+			taunts.push_back({weak_from_obj(each), weak_from_obj(user), Now() + static_cast<uint32>(skill.duration_ms)});
+			++done;
+		}
+		break;
 	case Skill_effect::calm:
 		why = std::string(skill.name) + " is not ready yet";
 		return false;
@@ -936,6 +951,22 @@ void Expire() {
 								  return true;
 							  }),
 					  timed_flags.end());
+	// Challenged foes stay on the challenger while it stands.
+	taunts.erase(std::remove_if(taunts.begin(), taunts.end(),
+						 [now](const Timed_taunt& each) {
+							 const Game_object_shared foe_obj  = each.foe.lock();
+							 const Game_object_shared user_obj = each.user.lock();
+							 Actor* foe  = foe_obj ? foe_obj->as_actor() : nullptr;
+							 Actor* user = user_obj ? user_obj->as_actor() : nullptr;
+							 if (each.until <= now || !foe || !user || foe->is_dead() || user->is_dead()) {
+								 return true;
+							 }
+							 if (foe->get_target() != user) {
+								 foe->set_target(user, true);
+							 }
+							 return false;
+						 }),
+				 taunts.end());
 	const size_t before = bonuses.size();
 	bonuses.erase(std::remove_if(bonuses.begin(), bonuses.end(),
 						  [now](const Timed_bonus& each) {
@@ -1034,6 +1065,135 @@ void Class_ai() {
 			}
 		}
 	}
+}
+
+/*
+ *  Class AI placing (host): where a companion nobody plays stands in a
+ *  fight.  Called from the combat schedule before it closes in on a foe;
+ *  true means a walk was started instead.
+ */
+
+constexpr int    keep_away_tiles  = 2;       // A foe this close: step away.
+constexpr int    step_away_tiles  = 4;       // How far.
+constexpr int    max_from_avatar  = 12;      // Never wander further than this.
+constexpr uint32 place_period_ms  = 1500;    // Between placing walks, to shoot meanwhile.
+std::map<int, uint32> next_place;            // By NPC.
+
+// A ranged weapon readied, with what it needs.
+bool Has_ranged_weapon(Actor* npc) {
+	int                points = 0;
+	int                weapon = -1;
+	Game_object*       obj    = nullptr;
+	const Weapon_info* winf   = npc->get_weapon(points, weapon, obj);
+	return winf && winf->get_range() > 3;
+}
+
+// The middle of the party (the Avatar and the members on this map).
+Tile_coord Party_middle(const Actor* npc) {
+	int                 sx = 0;
+	int                 sy = 0;
+	int                 n  = 0;
+	for (Actor* member : Party()) {
+		if (member != npc && member->get_map() == npc->get_map()) {
+			const Tile_coord t = member->get_tile();
+			sx += t.tx;
+			sy += t.ty;
+			++n;
+		}
+	}
+	const Tile_coord at = npc->get_tile();
+	return n ? Tile_coord(sx / n, sy / n, at.tz) : at;
+}
+
+// Walk toward 'dest' (to within 'within' tiles), staying near the Avatar.
+bool Walk_to(Actor* npc, Tile_coord dest, int within) {
+	Actor* avatar = Gwin()->get_main_actor();
+	if (avatar && avatar->get_map() == npc->get_map()) {
+		const Tile_coord a = avatar->get_tile();
+		dest.tx            = std::clamp<int>(dest.tx, a.tx - max_from_avatar, a.tx + max_from_avatar);
+		dest.ty            = std::clamp<int>(dest.ty, a.ty - max_from_avatar, a.ty + max_from_avatar);
+	}
+	const Tile_coord spot = Map_chunk::find_spot(dest, 2, npc);
+	if (spot.tx < 0 || spot == npc->get_tile()) {
+		return false;
+	}
+	return npc->walk_path_to_tile(spot, Gwin()->get_std_delay(), 0, within) != 0;
+}
+
+// Step away from 'foe', toward the party's side.
+bool Step_away(Actor* npc, const Actor* foe) {
+	const Tile_coord at   = npc->get_tile();
+	const Tile_coord from = foe->get_tile();
+	int              dx   = at.tx - from.tx;
+	int              dy   = at.ty - from.ty;
+	if (dx == 0 && dy == 0) {
+		dx = 1;
+	}
+	const int len = std::max(std::abs(dx), std::abs(dy));
+	Tile_coord dest(at.tx + dx * step_away_tiles / len, at.ty + dy * step_away_tiles / len, at.tz);
+	return Walk_to(npc, dest, 0);
+}
+
+bool Place(Actor* npc) {
+	const Companion_class* cls = Class_of(npc);
+	if (!cls || cls->placement == Placement::front) {
+		return false;    // The front line fights as U7 does.
+	}
+	const uint32 now  = Now();
+	auto&        next = next_place[npc->get_npc_num()];
+	if (now < next) {
+		return false;
+	}
+	const std::vector<Actor*> near = Hostiles(npc, 12);
+	if (cls->placement == Placement::ranged) {
+		// Keep a distance: a foe beside it means step away, then shoot.
+		if (!near.empty() && npc->distance(near.front()) <= keep_away_tiles && Has_ranged_weapon(npc)
+			&& Step_away(npc, near.front())) {
+			next = now + place_period_ms;
+			cout << "Friend Class: " << npc->get_npc_name() << " keeps its distance" << endl;
+			return true;
+		}
+		return false;
+	}
+	// Support: walk into range of whoever needs healing most; otherwise
+	// keep out of the front, near the middle of the party.
+	const Class_skill* heal_skill = nullptr;
+	for (const auto& skill : cls->skills) {
+		if (skill.type == Skill_type::heal && npc->get_level() >= skill.level && !Seconds_left(npc->get_npc_num(), skill.id)) {
+			heal_skill = &skill;
+			break;
+		}
+	}
+	if (heal_skill) {
+		// As many hurt as the heal waits for (Mending Circle: two), so it
+		// is used on arrival.
+		Actor* worst = nullptr;
+		int    hurt  = 0;
+		for (Actor* member : Party()) {
+			if (member->get_map() == npc->get_map() && Health(member) * 2 < Max_health(member)) {
+				++hurt;
+				if (member != npc
+					&& (!worst || Health(member) * Max_health(worst) < Health(worst) * Max_health(member))) {
+					worst = member;
+				}
+			}
+		}
+		if (worst && hurt >= std::max(1, heal_skill->count) && npc->distance(worst) > heal_skill->range
+			&& Walk_to(npc, worst->get_tile(), std::max(1, heal_skill->range - 2))) {
+			next = now + place_period_ms;
+			cout << "Friend Class: " << npc->get_npc_name() << " moves to heal " << worst->get_npc_name() << endl;
+			return true;
+		}
+	}
+	if (!near.empty() && npc->distance(near.front()) <= keep_away_tiles) {
+		const Tile_coord middle = Party_middle(npc);
+		if (npc->distance(middle) > 2 && Walk_to(npc, middle, 1)) {
+			next = now + place_period_ms;
+			cout << "Friend Class: " << npc->get_npc_name() << " falls back to the party" << endl;
+			return true;
+		}
+	}
+	return false;
 }
 
 /*
@@ -2219,6 +2379,7 @@ void Friend_class_world_loaded() {
 	global_waits.clear();
 	timed_flags.clear();
 	bonuses.clear();
+	taunts.clear();
 	circles.clear();
 	sent_states.clear();
 }
@@ -2274,6 +2435,16 @@ bool Friend_class_guest_blob(Friend_mode_session::Blob_kind kind, const std::vec
 
 void Friend_class_guest_joined(int player) {
 	sent_states.erase(player);
+}
+
+bool Friend_class_place(Actor* npc) {
+	Game_window* gwin = Gwin();
+	if (!Friend_class_active() || !Friend_class_ai || Is_guest() || !npc || npc == gwin->get_main_actor()
+		|| npc == gwin->get_controlled_actor() || !npc->is_in_party() || Friend_mode_player_playing(npc) >= 0
+		|| !Able(npc)) {
+		return false;
+	}
+	return Place(npc);
 }
 
 int Friend_class_bonus(const Actor* actor, int prop) {

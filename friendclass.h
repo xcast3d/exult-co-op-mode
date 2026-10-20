@@ -54,6 +54,11 @@ bool Friend_class_guest_blob(Friend_mode_session::Blob_kind kind, const std::vec
 // Host: a guest joined; send it the rules.
 void Friend_class_guest_joined(int player);
 
+// Class AI placing, from the combat schedule before it closes in on a foe:
+// a ranged companion keeps its distance, a healer walks into range or falls
+// back to the party.  True if it started a walk instead.
+bool Friend_class_place(Actor* npc);
+
 // Timed stat bonuses (Battle Hymn), added to Actor::get_effective_prop.
 int Friend_class_bonus(const Actor* actor, int prop);
 

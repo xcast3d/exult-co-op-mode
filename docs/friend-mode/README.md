@@ -102,14 +102,16 @@ tested yet** (built remotely; it compiles). See "Class System" in the
   bonuses. Skills never run a spell's script; each has a look made of
   U7's own pieces instead: sprites on the user and targets, a missile
   picture, a sound. Song of Peace puts hostiles in its circle to sleep for
-  5 seconds (each rolls); Challenge (taunt) is not built.
+  5 seconds (each rolls); Dupre's Challenge turns hostiles in range on
+  him for 6 seconds.
 - **Effect preview** on the Class System page: steps through sprites,
   missile pictures and sounds, playing each on your character with its
   number, for choosing each skill's look.
 - **Class AI:** chooses and uses skills by type (health, status, how many
-  hostiles, a hostile on a hurt companion). Placing (keeping distance,
-  walking into range) is not built yet: that is the next step, in
-  `Combat_schedule::now_what`.
+  hostiles, a hostile on a hurt companion), and places companions in a
+  fight (`Friend_class_place`, from `Combat_schedule::now_what`): ranged
+  ones step away from a foe beside them, Jaana walks into heal range or
+  falls back to the party, the front line closes in as U7 does.
 
 **Fixes from the first internet test, built 2026-10-19 (protocol
 version 31); not tested yet.** A second person joined the host's public
