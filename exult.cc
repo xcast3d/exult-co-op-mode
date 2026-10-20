@@ -1414,9 +1414,11 @@ static void Friend_delete_item(Game_object* obj) {
 	}
 	if (Container_game_object* container = obj->as_container()) {
 		std::vector<Game_object*> contents;
-		Object_iterator           next(container->get_objects());
-		while (Game_object* child = next.get_next()) {
-			contents.push_back(child);
+		{    // The iterator ends before anything is deleted.
+			Object_iterator next(container->get_objects());
+			while (Game_object* child = next.get_next()) {
+				contents.push_back(child);
+			}
 		}
 		for (Game_object* child : contents) {
 			Friend_delete_item(child);
@@ -1442,10 +1444,12 @@ static bool Friend_same_object(Game_object* obj, const Friend_item& item, bool t
 // create what is missing.  Open windows on kept containers stay open.
 static void Friend_reconcile_contents(Container_game_object* container, const std::vector<Friend_item>& wanted, int depth) {
 	std::vector<std::pair<Game_object*, std::vector<unsigned char>>> current;
-	Object_iterator                                                  next(container->get_objects());
-	while (Game_object* child = next.get_next()) {
-		current.emplace_back(child, std::vector<unsigned char>());
-		Friend_put_item(current.back().second, child, false, depth);
+	{    // The iterator ends before the container changes.
+		Object_iterator next(container->get_objects());
+		while (Game_object* child = next.get_next()) {
+			current.emplace_back(child, std::vector<unsigned char>());
+			Friend_put_item(current.back().second, child, false, depth);
+		}
 	}
 	std::vector<bool> kept(current.size(), false);
 	std::vector<bool> done(wanted.size(), false);
@@ -1505,11 +1509,13 @@ static void Friend_mode_apply_chunk(const std::vector<unsigned char>& data) {
 	Map_chunk* chunk = map->get_chunk(cx, cy);
 	// Current objects with their serialized form.
 	std::vector<std::pair<Game_object*, std::vector<unsigned char>>> current;
-	Object_iterator                                                  next(chunk->get_objects());
-	while (Game_object* obj = next.get_next()) {
-		if (Friend_item_synced(obj)) {
-			current.emplace_back(obj, std::vector<unsigned char>());
-			Friend_put_item(current.back().second, obj, true, 0);
+	{    // The iterator ends before the chunk changes.
+		Object_iterator next(chunk->get_objects());
+		while (Game_object* obj = next.get_next()) {
+			if (Friend_item_synced(obj)) {
+				current.emplace_back(obj, std::vector<unsigned char>());
+				Friend_put_item(current.back().second, obj, true, 0);
+			}
 		}
 	}
 	std::vector<bool> kept(current.size(), false);
@@ -1639,12 +1645,14 @@ static void Friend_mode_apply_inventory(const std::vector<unsigned char>& data) 
 		wanted_bytes.emplace_back(data.begin() + start, data.begin() + pos);
 	}
 	std::vector<std::pair<Game_object*, std::vector<unsigned char>>> current;
-	Object_iterator                                                  next(actor->get_objects());
-	while (Game_object* obj = next.get_next()) {
-		current.emplace_back(obj, std::vector<unsigned char>());
-		const int spot = actor->find_readied(obj);
-		Friend_put8(current.back().second, spot < 0 ? 255 : spot);
-		Friend_put_item(current.back().second, obj, false, 0);
+	{    // The iterator ends before the inventory changes.
+		Object_iterator next(actor->get_objects());
+		while (Game_object* obj = next.get_next()) {
+			current.emplace_back(obj, std::vector<unsigned char>());
+			const int spot = actor->find_readied(obj);
+			Friend_put8(current.back().second, spot < 0 ? 255 : spot);
+			Friend_put_item(current.back().second, obj, false, 0);
+		}
 	}
 	std::vector<bool> kept(current.size(), false);
 	std::vector<std::size_t> missing;
@@ -3273,11 +3281,13 @@ static bool Friend_mode_space(bool shift) {
 	if (shift && window && obj->get_quantity() <= 1 && !readable) {
 		Container_game_object* from = obj->get_owner();
 		std::vector<Game_object_shared> all;
-		Object_iterator                 next(from->get_objects());
 		bool                            theirs = false;    // Some of it isn't okay to take.
-		while (Game_object* each = next.get_next()) {
-			all.push_back(each->shared_from_this());
-			theirs = theirs || !each->get_flag(Obj_flags::okay_to_take);
+		{    // The iterator ends before anything moves.
+			Object_iterator next(from->get_objects());
+			while (Game_object* each = next.get_next()) {
+				all.push_back(each->shared_from_this());
+				theirs = theirs || !each->get_flag(Obj_flags::okay_to_take);
+			}
 		}
 		if (theirs && !gwin->is_in_dungeon() && !from->get_outermost()->get_flag(Obj_flags::in_party)
 			&& !Friend_confirmed(obj, Friend_confirm::take, "Not all yours: Shift+Space again to take all")) {
