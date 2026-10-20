@@ -330,6 +330,12 @@ idea with more slots and a target.
 
 ## Keys
 
+Decided 2026-10-20: **the mouse is enough for now; keys are the last phase
+of this feature.** The reason for keys was a game controller one day, and a
+controller would get its own scheme anyway (a radial menu for skills and
+spells, see the [controller plan](controller-plan.md)), so keyboard keys
+needn't be bent to fit it. Notes for that phase:
+
 The mouse comes first; keys are still to think through. Most letters are
 taken (Q, E, Space, C, Y, J, L, X, Tab, WASD), and the numbers are already
 crowded: 1-8 paperdolls, Shift+1-8 backpacks, so Alt+1-8 would be a third
@@ -494,7 +500,8 @@ conversation, too slow for a fight and one that would pause guests.
 8. **The Avatar's spell bar:** choosing spells, casting from the bar, the
    pick answering the crosshair. Independent of the rest; could come first,
    since it helps single player too.
-9. **Keys** for both bars.
+9. **Keys** for both bars: the last phase (the mouse is enough until then);
+   a controller gets its own radial scheme.
 10. **Play it** with a host and two guests, then tune cooldowns and amounts.
 11. **The other four companions.**
 

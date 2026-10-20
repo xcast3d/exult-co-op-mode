@@ -117,3 +117,11 @@ Then a guest doing the same with the host on the keyboard.
 Nothing here depends on Co-Op Mode. Steps 1 to 6 would suit Exult itself
 (see [upstreaming notes](upstreaming.md)); the Co-Op parts (guests'
 suggestions, chat phrases) stay ours.
+
+## Skills and spells (Class System)
+
+Decided 2026-10-20: the Class System's skill bar (a guest's companion) and
+the Avatar's spell bar are used with the mouse; a controller gets its own
+way in, such as a radial menu on a held button listing the skills or
+spells, rather than keyboard keys mapped to buttons. See
+[companion skills](companion-skills.md).
