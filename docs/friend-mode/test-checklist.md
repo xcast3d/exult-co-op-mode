@@ -1062,6 +1062,19 @@ Class AI (companions nobody plays, host):
       when it ends.
 - [ ] Battle Hymn: health goes up by 3 and back down when it ends.
 - [ ] The Class System page has no "Require class items" line.
+- [ ] After the first test (2026-10-20): the bar's slots are square buttons
+      with names; Left side and Right side make a column; corners are
+      flush. Hovering a slot shows its description in the notice line.
+- [ ] Fire Blast with a hostile pick out of combat: combat mode comes on
+      and it casts; on a peaceful pick out of combat: "Fire Blast on Deer?
+      Click again", a second click casts; in combat mode it casts at once.
+      A guest's offensive skill on a peaceful pick: "The Avatar must do
+      this".
+- [ ] The companion picker shows no status icons or circles.
+- [ ] The chat line is at the very bottom; the "Following" bar and the chat
+      log sit above the faces and the bar.
+- [ ] No targeting range circle; Q (or E) with nothing in range says "No
+      target in range".
 - [ ] Shamino or Iolo with a bow or crossbow: a foe closing to melee makes
       them step back about 4 tiles ("keeps its distance" in the host's
       log), then shoot; never more than 12 tiles from the Avatar.

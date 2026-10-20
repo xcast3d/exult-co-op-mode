@@ -50,7 +50,7 @@ stays as separate from Exult as it can.
 | Option | Values | Default | Who decides |
 | --- | --- | --- | --- |
 | Enable | Yes / No | No | The host, for everyone (a game rule); guests follow it |
-| Skill bar | Above status bar, Bottom left, Bottom right, Top left, Top right | Above status bar | Each machine |
+| Skill bar | Above status bar, Bottom left, Bottom right, Top left, Top right, Left side, Right side (columns, centred) | Above status bar | Each machine |
 | Show skill ranges | Yes / No | Yes | Each machine |
 | Class AI | Yes / No | Yes | The host |
 
@@ -141,8 +141,22 @@ a weakened or marked foe (Crippling Shot, Hunter's Mark). Drawn like the
 target arrow, from a few pixels, on every machine. Area skills show their
 circle and sparkles instead.
 
-**Descriptions.** The mouse over a slot shows its name and a line on what
-it does ("Heals everyone in the circle").
+**The bar's look** (after the first test, 2026-10-20): square slots in
+Exult's own button style (as on the options pages) with the skill's name,
+the seconds left in the corner, darker while unusable; flush with the edge
+it is on; a row, or a column at the left or right side. The mouse over a
+slot puts its name and what it does in the notice line ("Mending Circle:
+Heals everyone in the circle"). Pictures for skills may come later.
+
+**Fighting by the bar** (2026-10-20): an offensive skill or spell (an
+attack or hold on the pick) on a hostile turns combat mode on; in combat
+mode the Avatar's spells go through on anyone; in peace mode on someone
+peaceful they ask first ("Fire Blast on Deer? Click again", within 4
+seconds). Guests never attack peaceful people: "The Avatar must do this".
+
+**Ranges** (2026-10-20): area skills got about half again as much range:
+songs, Mending Circle and Purify 12 tiles, Challenge and Sanctuary 9,
+Healing Field 6, Flashbang and Time Bomb 5 around where they land.
 
 **Strength is health.** U7's maximum health is strength, so Battle Hymn's
 +3 strength gives +3 health too, taken back when it ends.

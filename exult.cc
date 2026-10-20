@@ -2429,7 +2429,7 @@ bool Friend_mode_guest_attack(Game_object* obj) {
 //   is "manual" until combat mode ends; a knocked-out pick stays attacked
 //   until dead, then the nearest hostile is next.
 // - On screens bigger than the range, a faint circle shows it
-//   (Friend_mode_paint_range_frame).
+//   (since removed: it cluttered the view; Q says "No target in range").
 //
 // Nothing here needs the network; the Friend_mode_is_guest() branches send
 // a guest's requests to the host.  See docs/friend-mode/upstreaming.md.
@@ -2464,7 +2464,7 @@ static void Friend_mode_target_notice(const std::string& text, bool hint = false
 	friend_notices.erase(std::remove_if(friend_notices.begin(), friend_notices.end(),
 								 [](const Friend_log_line& line) {
 									 return line.text.rfind("Targeting ", 0) == 0
-											|| line.text.rfind("Attacking ", 0) == 0 || line.text == "No target";
+											|| line.text.rfind("Attacking ", 0) == 0 || line.text.rfind("No target", 0) == 0;
 								 }),
 						 friend_notices.end());
 	Friend_mode_top_line(text);
@@ -2567,7 +2567,10 @@ static void Friend_mode_cycle_target(int step) {
 	const bool          fighting = gwin->in_combat();
 	std::vector<Actor*> foes     = Friend_target_candidates(own);
 	if (foes.empty()) {
+		// Nothing on screen and within the range (40 tiles): say so, since
+		// on a big screen something at the far edge may be out of it.
 		Friend_mode_clear_target();
+		Friend_mode_target_notice("No target in range");
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
@@ -2783,100 +2786,6 @@ static void Friend_mode_paint_target_arrow() {
 	gwin->set_painted();
 }
 
-// The targeting range, on screens bigger than it: a faint circle with a
-// border around one's character, in combat mode and for a moment after Q
-// or E.  On smaller screens the screen's edge is the range, so nothing.
-// The circle is a picture of the range, not the range itself (a square
-// of 40 tiles each way): it shrinks to stay wholly in view, so it shows
-// why something at the far edge of a big screen can't be picked.
-
-static void Friend_mode_paint_range_frame() {
-	static int    fill_layer   = -1;
-	static int    border_layer = -1;
-	static int    drawn_radius = -1;
-	Image_window* iwin         = gwin->get_win();
-	Actor*        own          = gwin->get_controlled_actor();
-	const int     range        = friend_attack_max_tiles;
-	const TileRect view        = gwin->get_win_tile_rect();
-	const bool    bigger       = view.w > 2 * range + 1 || view.h > 2 * range + 1;
-	const bool    wanted       = gwin->in_combat() || SDL_GetTicks() < friend_range_shown_until;
-	const bool    visible      = Friend_keyboard_targeting && Friend_targeting_circle && bigger && wanted && own && own->get_chunk()
-						 && !gwin->is_in_exult_menu() && !gwin->network_input_blocked();
-	if (!visible) {
-		for (const int layer : {fill_layer, border_layer}) {
-			if (layer >= 0 && iwin->layer_is_visible(layer)) {
-				gwin->layer_set_visible(layer, false);
-				gwin->set_painted();
-			}
-		}
-		return;
-	}
-	const int size = (2 * range + 1) * c_tilesize;    // In game pixels.
-	if (fill_layer < 0) {
-		// Under the target arrow and text.  The fill is one color, made faint
-		// by the layer's alpha; the border is its own, stronger layer.
-		constexpr int text_layer_z = (1 << 18) + (1 << 16);
-		fill_layer                 = gwin->create_layer("Target range fill", size, size, 255, 0, text_layer_z - 4);
-		border_layer               = gwin->create_layer("Target range border", size, size, 255, 0, text_layer_z - 3);
-		if (fill_layer < 0 || border_layer < 0) {
-			return;
-		}
-		gwin->layer_set_alpha(fill_layer, 20);
-		gwin->layer_set_alpha(border_layer, 140);
-		drawn_radius = -1;
-	}
-	// Centred on the tile the character stands on (its shape's anchor is
-	// that tile's bottom right corner); as big as the range, or as fits
-	// in view with a few pixels to spare, in steps of 4 pixels.
-	int x;
-	int y;
-	gwin->get_shape_location(own, x, y);
-	const int cx     = x - c_tilesize / 2;
-	const int cy     = y - c_tilesize / 2;
-	constexpr int margin = 4;
-	int       radius = std::min({size / 2 - 1, cx - margin, gwin->get_width() - cx - margin, cy - margin,
-				  gwin->get_height() - cy - margin});
-	radius           = std::max(radius, 4 * c_tilesize) / 4 * 4;
-	if (radius != drawn_radius) {
-		Image_buffer8* fill = gwin->get_layer_ibuf(fill_layer);
-		Image_buffer8* line = gwin->get_layer_ibuf(border_layer);
-		if (!fill || !line) {
-			return;
-		}
-		const unsigned char color = Shape_manager::get_instance()->get_special_pixel(PROTECT_PIXEL);
-		fill->fill8(255);
-		line->fill8(255);
-		const int inner = radius - 2;    // The border is 2 pixels wide.
-		for (int py = 0; py < size; ++py) {
-			const int dy = 2 * py + 1 - size;    // Doubled, from the centre.
-			for (int px = 0; px < size; ++px) {
-				const int dx = 2 * px + 1 - size;
-				const int d2 = dx * dx + dy * dy;
-				if (d2 <= 4 * inner * inner) {
-					fill->put_pixel8(color, px, py);
-				} else if (d2 <= 4 * radius * radius) {
-					line->put_pixel8(color, px, py);
-				}
-			}
-		}
-		gwin->layer_set_dirty(fill_layer);
-		gwin->layer_set_dirty(border_layer);
-		drawn_radius = radius;
-	}
-	const int left = cx - size / 2;
-	const int top  = cy - size / 2;
-	int       sx0;
-	int       sy0;
-	int       sx1;
-	int       sy1;
-	iwin->game_to_screen(left, top, false, sx0, sy0);
-	iwin->game_to_screen(left + size, top + size, false, sx1, sy1);
-	for (const int layer : {fill_layer, border_layer}) {
-		gwin->layer_set_dest(layer, sx0, sy0, sx1 - sx0, sy1 - sy0);
-		gwin->layer_set_visible(layer, true);
-	}
-	gwin->set_painted();
-}
 
 // Walking in combat with a target picked stops the attack (the target stays
 // picked; Space takes it up again).  A guest's walking already ends the
@@ -3583,7 +3492,7 @@ static void Friend_mode_cycle_object(int step) {
 	}
 	if (things.empty() || index < 0 || index >= count) {
 		friend_object_target.reset();
-		Friend_mode_target_notice("No target");
+		Friend_mode_target_notice(things.empty() ? "No target in range" : "No target");
 		if (things.empty()) {
 			Mouse::mouse()->flash_shape(Mouse::redx);
 		}
@@ -5467,13 +5376,14 @@ bool Friend_mode_download_world() {
 	}
 }
 
-// Friend Mode's own lines along the bottom stack up from the HUD row (the
-// party's faces and the skill bar, when they are along the bottom): the chat
-// line first, then the status bar, then the chat log.
+// The chat line is always at the very bottom of the view (decided
+// 2026-10-20), over the HUD if need be; the status bar and the chat log
+// stack above both it and the HUD row (the party's faces and the skill bar,
+// when they are along the bottom).
 static int Friend_mode_chat_line_top() {
 	auto      font = fontManager.get_font("MENU_FONT");
 	const int h    = (font ? font->get_text_height() : 8) + 8;
-	return std::min(gwin->get_height() - h - 8, Friend_hud_bottom_y() - h - 4);
+	return gwin->get_height() - h - 8;
 }
 
 // The chat line, bottom of the view: its own layer at the world's scale,
@@ -5588,8 +5498,8 @@ static void Friend_mode_paint_dialogue_wait() {
 	// Above the party's faces and the skill bar, when they are along the
 	// bottom, and above the chat line.
 	int y = std::min(gwin->get_height() - h - 8, Friend_hud_bottom_y() - h - 4);
-	if (friend_chat_active) {    // Sit above the chat line.
-		y = Friend_mode_chat_line_top() - h - 4;
+	if (friend_chat_active) {    // And above the chat line.
+		y = std::min(y, Friend_mode_chat_line_top() - h - 4);
 	}
 	Image_buffer8* buffer = gwin->get_win()->get_ib8();
 	buffer->draw_box(x, y, w, h, 1, 0, 15);
@@ -6440,6 +6350,7 @@ static int Select_friend_actor(const std::vector<uint32>& roster, bool offer_wat
 	if (choices.empty()) {
 		return -1;
 	}
+	Friend_class_hide_overlays();    // Its icons and circles stay off the picker.
 
 	auto font = fontManager.get_font("MENU_FONT");
 	auto hot_font = fontManager.get_font("HOT_FONT");
@@ -8694,7 +8605,8 @@ static void Handle_events() {
 		Mouse::mouse()->show();    // Re-display mouse.
 		gwin->rotatecolours();
 		Friend_mode_paint_maps();
-		Friend_mode_paint_range_frame();
+		// The targeting range circle was taken out after testing (2026-10-20):
+		// it cluttered the view; Q says "No target in range" instead.
 		if (Combat::is_paused() && Friend_mode_in_session()) {
 			Combat::resume();    // Paused before co-op began: no pausing in co-op.
 		}

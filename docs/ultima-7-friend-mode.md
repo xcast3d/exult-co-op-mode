@@ -399,8 +399,8 @@ upstream.
   - **Range:** anything on screen, at most 40 tiles off each way (a
     square, as Exult measures distance, and how far around a guest's
     companion the host keeps creatures awake). Screens bigger than that
-    show the limit as a faint circle with a border, in combat mode and for
-    2 seconds after Q or E; smaller screens show nothing. The circle is a
+    showed the limit as a faint circle (taken out 2026-10-20: it cluttered
+    the view; Q and E now say "No target in range" when nothing is). The circle is a
     picture of the range, not exact: it shrinks to stay wholly in view, so
     it shows why something at the far edge of a big screen can't be
     picked. (A square frame was tried first and read as a box, not a

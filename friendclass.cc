@@ -466,7 +466,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("Protection for the party in the circle")
 							 .icon_spell(spell_protect_all)
 							 .kind(T::support)
-							 .aim(G::party_area, 8, true)
+							 .aim(G::party_area, 12, true)
 							 .set_flag(Obj_flags::protection)
 							 .targets(2)
 							 .on_targets(sprite_music)
@@ -475,7 +475,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("The party nearby hits harder and has more health")
 							 .icon_spell(spell_mass_might)
 							 .kind(T::support)
-							 .aim(G::party_area, 8, true)
+							 .aim(G::party_area, 12, true)
 							 .unlock(3)
 							 .bonus(3, 30000)
 							 .targets(3)
@@ -486,7 +486,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("Hostiles in the circle drowse a few seconds")
 							 .icon_spell(spell_dance)
 							 .kind(T::control)
-							 .aim(G::hostiles_nearest, 8, true)
+							 .aim(G::hostiles_nearest, 12, true)
 							 .unlock(6)
 							 .hinder(Obj_flags::asleep, 5000)
 							 .reacts("*drowsy*")
@@ -537,7 +537,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_great_heal)
 							 .kind(T::heal)
-							 .aim(G::party_area, 8, true)
+							 .aim(G::party_area, 12, true)
 							 .heal(10)
 							 .targets(2)
 							 .on_targets(sprite_sparkles)
@@ -547,7 +547,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_mass_cure)
 							 .kind(T::cure)
-							 .aim(G::party_area, 8, true)
+							 .aim(G::party_area, 12, true)
 							 .unlock(3)
 							 .cure()
 							 .on_targets(sprite_bubbles)
@@ -592,7 +592,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("Hostiles in the circle turn on Dupre")
 							 .icon_spell(spell_cause_fear)
 							 .kind(T::control)
-							 .aim(G::hostiles_nearest, 6, true)
+							 .aim(G::hostiles_nearest, 9, true)
 							 .unlock(6)
 							 .taunt(6000)
 							 .targets(8)
@@ -723,7 +723,7 @@ const std::vector<Companion_class>& Classes() {
 							 .kind(T::control)
 							 .aim(G::pick, 10)
 							 .unlock(3)
-							 .flash(3, Obj_flags::paralyzed, 2500)
+							 .flash(5, Obj_flags::paralyzed, 2500)
 							 .missile(shape_powder_keg)
 							 .on_targets(sprite_fireworks)
 							 .says("*throws a flashbang*"),
@@ -733,7 +733,7 @@ const std::vector<Companion_class>& Classes() {
 							 .kind(T::attack)
 							 .aim(G::pick, 10)
 							 .unlock(6)
-							 .bomb(3, 3000, 2)
+							 .bomb(5, 3000, 2)
 							 .missile(shape_powder_keg)
 							 .targets(2)
 							 .says("*lights a fuse*"),
@@ -750,7 +750,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_restoration)
 							 .kind(T::heal)
-							 .aim(G::party_area, 4, true)
+							 .aim(G::party_area, 6, true)
 							 .field(2, 12000)
 							 .targets(2)
 							 .on_targets(sprite_sparkles)
@@ -768,7 +768,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("More armour for everyone in the circle")
 							 .icon_spell(spell_protect_all)
 							 .kind(T::support)
-							 .aim(G::party_area, 6, true)
+							 .aim(G::party_area, 9, true)
 							 .unlock(6)
 							 .armor(2, 20000)
 							 .targets(2)
@@ -2078,7 +2078,51 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 	return slots;
 }
 
-void Use_slot(const Bar_slot& slot) {
+// Something aimed at a foe: an attack or a hold on the pick or nearby hostiles.
+bool Offensive(const Class_skill& skill) {
+	return (skill.type == Skill_type::attack || skill.type == Skill_type::control)
+		   && skill.target != Skill_target::self && skill.target != Skill_target::party_area
+		   && skill.target != Skill_target::hurt_party && skill.target != Skill_target::ally;
+}
+
+// Fighting by the bar, as targeting does (decided 2026-10-20): an offensive
+// skill or spell on a hostile turns combat mode on; in combat mode it goes
+// through on anyone; in peace mode on someone peaceful it asks first (the
+// slot clicked again within a few seconds).  Guests never attack peaceful
+// people ("The Avatar must do this").
+int              confirm_slot = -1;
+Game_object_weak confirm_pick;
+uint32           confirm_until = 0;
+
+// True to go ahead (combat mode is on by then).
+bool Ready_to_fight(Actor* user, Actor* pick, const std::string& what, int index) {
+	Game_window* gwin = Gwin();
+	if (!pick) {
+		return true;    // The nearest hostile, or the crosshair.
+	}
+	const bool hostile = Friend_mode_is_hostile(user, pick);
+	if (!hostile && Is_guest()) {
+		Friend_mode_class_notice("The Avatar must do this");
+		return false;
+	}
+	if (!hostile && !gwin->in_combat()) {
+		const bool confirmed = confirm_slot == index && confirm_pick.lock().get() == pick && Now() < confirm_until;
+		if (!confirmed) {
+			confirm_slot  = index;
+			confirm_pick  = weak_from_obj(pick);
+			confirm_until = Now() + 4000;
+			Friend_mode_class_notice(what + " on " + pick->get_name() + "? Click again");
+			return false;
+		}
+	}
+	confirm_slot = -1;
+	if (!gwin->in_combat()) {
+		gwin->toggle_combat();
+	}
+	return true;
+}
+
+void Use_slot(const Bar_slot& slot, int index) {
 	Game_window* gwin  = Gwin();
 	Actor*       actor = Bar_actor();
 	cout << "Friend Class: bar click on " << slot.name << (slot.usable ? "" : " (not usable: " + slot.why + ")") << endl;
@@ -2098,6 +2142,9 @@ void Use_slot(const Bar_slot& slot) {
 		if (Spell_heals(slot.spell)) {
 			aim = pick && (pick->is_in_party() || pick == actor) ? pick : actor;
 		} else if (pick && !pick->is_in_party()) {
+			if (!Ready_to_fight(actor, pick, slot.name, index)) {
+				return;
+			}
 			aim = pick;
 		}
 		book->do_spell(actor, slot.spell, false, false, aim);
@@ -2112,6 +2159,15 @@ void Use_slot(const Bar_slot& slot) {
 	if (!May_use(actor, *cls, *skill, why)) {
 		Friend_mode_class_notice(why);
 		return;
+	}
+	if (Offensive(*skill)) {
+		Actor* pick = gwin->get_action_target();
+		if (pick && (pick->is_in_party() || pick == gwin->get_main_actor())) {
+			pick = nullptr;
+		}
+		if (!Ready_to_fight(actor, pick, skill->name, index)) {
+			return;
+		}
 	}
 	if (Is_guest()) {
 		// The skill, and the Target System's pick (kind 2: none).
@@ -2138,27 +2194,45 @@ void Use_slot(const Bar_slot& slot) {
 class Skill_bar;
 Skill_bar* the_bar = nullptr;
 
-// A slot's button: the gump paints it; this only takes the click.
-class Skill_button : public Gump_button {
-	int index;
+constexpr int slot_w   = 48;    // A slot: a square-ish button with the skill's name.
+constexpr int slot_h   = 32;
+constexpr int slot_gap = 2;
+
+// Words of 'text' in lines no wider than 'width' (font 'font').
+std::vector<std::string> Wrap(const std::shared_ptr<Font>& font, const std::string& text, int width) {
+	std::vector<std::string> lines;
+	std::string              line;
+	size_t                   at = 0;
+	while (at < text.size()) {
+		const size_t      space = text.find(' ', at);
+		const std::string word  = text.substr(at, space == std::string::npos ? std::string::npos : space - at);
+		at                      = space == std::string::npos ? text.size() : space + 1;
+		const std::string tried = line.empty() ? word : line + " " + word;
+		if (!line.empty() && font->get_text_width(tried.c_str()) > width) {
+			lines.push_back(line);
+			line = word;
+		} else {
+			line = tried;
+		}
+	}
+	if (!line.empty()) {
+		lines.push_back(line);
+	}
+	return lines;
+}
+
+// A slot: Exult's own procedural button (as on the options pages), with the
+// skill's name, the seconds left while it recharges, and darker while it
+// can't be used.
+class Skill_button : public Basic_button {
+	int                   index;
+	std::shared_ptr<Font> font;
 
 public:
-	Skill_button(Gump* par, int icon, int px, int py, int i)
-			: Gump_button(par, 33 + icon % 8, px, py, SF_GUMPS_VGA), index(i) {
-		set_frame(icon / 8);
-	}
+	Skill_button(Gump* par, int px, int py, int i)
+			: Basic_button(par, px, py, slot_w, slot_h), index(i), font(fontManager.get_font("SMALL_BLACK_FONT")) {}
 
 	bool activate(MouseButton button) override;
-
-	bool push(MouseButton button) override {
-		return button == MouseButton::Left;
-	}
-
-	void unpush(MouseButton button) override {
-		ignore_unused_variable_warning(button);
-	}
-
-	void paint() override {}
 
 	// "Draggable" stays on: Exult's click handling (Dragging_info) only
 	// carries a button's press through to its release when it is.
@@ -2166,23 +2240,19 @@ public:
 	int get_index() const {
 		return index;
 	}
+
+	void paint() override;
 };
 
-constexpr int slot_gap    = 2;
-constexpr int slot_pad    = 2;
-constexpr int name_height = 20;    // Two lines over the bar: the hovered skill's name and what it does.
-
 // The bar: a HUD gump, drawn into its own layer at the HUD's scale (as the
-// shortcut bar and the party's face stats are).
+// shortcut bar and the party's face stats are).  A row, or a column at the
+// left or right edge.
 class Skill_bar : public Gump {
 	std::vector<Bar_slot>                      slots;
 	std::vector<std::unique_ptr<Skill_button>> buttons;
 	TileRect                                   region{0, 0, 0, 0};
-	int                                        slot_w  = 0;
-	int                                        slot_h  = 0;
-	int                                        bar_w   = 1;    // The icons, or the widest line over them.
-	int                                        icons_x = 0;    // Where the icons start in it.
-	int                                        hovered = -1;
+	int                                        hovered  = -1;
+	bool                                       vertical = false;
 
 public:
 	Skill_bar() : Gump(nullptr, 0, 0, 0, SF_GUMPS_VGA) {}
@@ -2218,10 +2288,8 @@ public:
 		return region;
 	}
 
-	// Only the icons take clicks; the lines over them don't hide the world.
 	bool has_point(int mx, int my) const override {
-		const int icons_w = static_cast<int>(slots.size()) * (slot_w + slot_gap) - slot_gap;
-		return TileRect(region.x + icons_x, region.y + name_height, icons_w, slot_h).has_point(mx, my);
+		return region.has_point(mx, my);
 	}
 
 	Gump_button* on_button(int mx, int my) override {
@@ -2250,8 +2318,10 @@ public:
 
 	// New slots (another companion, a level, a cooldown tick) and place.
 	void update(std::vector<Bar_slot> fresh) {
+		const bool now_vertical = Friend_class_bar_position == friend_bar_left_center
+								  || Friend_class_bar_position == friend_bar_right_center;
 		const bool same_skills
-				= fresh.size() == slots.size()
+				= fresh.size() == slots.size() && now_vertical == vertical
 				  && std::equal(fresh.begin(), fresh.end(), slots.begin(), [](const Bar_slot& a, const Bar_slot& b) {
 						 return a.skill == b.skill && a.spell == b.spell;
 					 });
@@ -2260,7 +2330,8 @@ public:
 									 [](const Bar_slot& a, const Bar_slot& b) {
 										 return a.usable == b.usable && a.seconds == b.seconds && a.level == b.level;
 									 });
-		slots = std::move(fresh);
+		slots    = std::move(fresh);
+		vertical = now_vertical;
 		if (!same_skills) {
 			make_buttons();
 		}
@@ -2269,54 +2340,33 @@ public:
 		}
 	}
 
-	void paint() override;
+	void paint() override {
+		for (auto& button : buttons) {
+			button->paint();
+		}
+	}
 
 private:
 	void make_buttons() {
 		buttons.clear();
-		slot_w = 0;
-		slot_h = 0;
-		for (const auto& each : slots) {
-			ShapeID      id(33 + each.icon % 8, each.icon / 8, SF_GUMPS_VGA);
-			Shape_frame* frame = id.get_shape();
-			if (frame) {
-				slot_w = std::max(slot_w, frame->get_width());
-				slot_h = std::max(slot_h, frame->get_height());
-			}
-		}
-		slot_w += 2 * slot_pad;
-		slot_h += 2 * slot_pad;
-		Shape_manager* sman    = Shape_manager::get_instance();
-		const int      n       = static_cast<int>(slots.size());
-		const int      icons_w = std::max(1, n * slot_w + (n - 1) * slot_gap);
-		int            text_w  = 0;
-		for (const auto& each : slots) {
-			text_w = std::max({text_w, sman->get_text_width(0, each.name.c_str()),
-							   sman->get_text_width(0, each.description.c_str())});
-		}
-		bar_w   = std::max(icons_w, text_w + 4);
-		icons_x = (bar_w - icons_w) / 2;
 		for (size_t i = 0; i < slots.size(); ++i) {
-			ShapeID      id(33 + slots[i].icon % 8, slots[i].icon / 8, SF_GUMPS_VGA);
-			Shape_frame* frame = id.get_shape();
-			const int    sx    = icons_x + static_cast<int>(i) * (slot_w + slot_gap);
-			const int    px    = sx + (frame ? (slot_w - frame->get_width()) / 2 + frame->get_xleft() : 0);
-			const int    py    = name_height + (frame ? (slot_h - frame->get_height()) / 2 + frame->get_yabove() : 0);
-			buttons.push_back(std::make_unique<Skill_button>(this, slots[i].icon, px, py, static_cast<int>(i)));
+			const int step = static_cast<int>(i) * ((vertical ? slot_h : slot_w) + slot_gap);
+			buttons.push_back(std::make_unique<Skill_button>(this, vertical ? 0 : step, vertical ? step : 0,
+															 static_cast<int>(i)));
 		}
 	}
 
-	// Where the chosen position puts the bar, in game coordinates.  True if
-	// it moved.
+	// Where the chosen position puts the bar, in game coordinates, flush
+	// with the edge.  True if it moved.
 	bool place() {
-		Image_window* iwin = Gwin()->get_win();
-		const int     w    = bar_w;
-		const int     h    = name_height + slot_h;
-		const int     left = iwin->get_start_x();
-		const int     top  = iwin->get_start_y();
+		Image_window* iwin   = Gwin()->get_win();
+		const int     n      = static_cast<int>(slots.size());
+		const int     w      = vertical ? slot_w : std::max(1, n * slot_w + (n - 1) * slot_gap);
+		const int     h      = vertical ? std::max(1, n * slot_h + (n - 1) * slot_gap) : slot_h;
+		const int     left   = iwin->get_start_x();
+		const int     top    = iwin->get_start_y();
 		const int     right  = iwin->get_end_x();
 		const int     bottom = iwin->get_end_y();
-		constexpr int edge   = 4;
 		// The party's faces along the bottom (Exult's status bars).
 		TileRect faces(0, 0, 0, 0);
 		for (auto it = Gwin()->get_gump_man()->begin(); it != Gwin()->get_gump_man()->end(); ++it) {
@@ -2329,24 +2379,32 @@ private:
 		int        by              = 0;
 		switch (Friend_class_bar_position) {
 		case friend_bar_bottom_left:
-			bx = left + edge;
-			by = bottom - h - edge;
+			bx = left;
+			by = bottom - h;
 			break;
 		case friend_bar_bottom_right:
-			bx = right - w - edge;
-			by = bottom - h - edge;
+			bx = right - w;
+			by = bottom - h;
 			break;
 		case friend_bar_top_left:
-			bx = left + edge;
-			by = top + edge;
+			bx = left;
+			by = top;
 			break;
 		case friend_bar_top_right:
-			bx = right - w - edge;
-			by = top + edge + (Friend_minimap_enabled ? 58 : 0);    // Under the minimap.
+			bx = right - w;
+			by = top + (Friend_minimap_enabled ? 56 : 0);    // Under the minimap.
+			break;
+		case friend_bar_left_center:
+			bx = left;
+			by = top + (bottom - top - h) / 2;
+			break;
+		case friend_bar_right_center:
+			bx = right - w;
+			by = top + (bottom - top - h) / 2;
 			break;
 		default:    // Above the status bar, bottom centre.
 			bx = left + (right - left - w) / 2;
-			by = bottom - h - edge;
+			by = bottom - h;
 			break;
 		}
 		// Never on the faces: above them.
@@ -2362,6 +2420,8 @@ private:
 		y      = by;
 		return true;
 	}
+
+	friend class Skill_button;
 };
 
 bool Skill_button::activate(MouseButton button) {
@@ -2369,67 +2429,40 @@ bool Skill_button::activate(MouseButton button) {
 		return false;
 	}
 	if (const Bar_slot* slot = the_bar->slot(index)) {
-		Use_slot(*slot);
+		Use_slot(*slot, index);
 	}
 	return true;
 }
 
-// Every other pixel of a rectangle in black: greyed out.
-void Shade(Image_buffer8* buf, int x0, int y0, int w, int h) {
-	for (int yy = 0; yy < h; ++yy) {
-		for (int xx = (yy & 1); xx < w; xx += 2) {
-			buf->put_pixel8(0, x0 + xx, y0 + yy);
-		}
+void Skill_button::paint() {
+	const Bar_slot* each = the_bar ? the_bar->slot(index) : nullptr;
+	if (!each) {
+		return;
 	}
-}
-
-void Skill_bar::paint() {
-	Shape_manager* sman = Shape_manager::get_instance();
-	Image_buffer8* buf  = Gwin()->get_win()->get_ib8();
-	const int      line = sman->get_special_pixel(PROTECT_PIXEL);
-	for (size_t i = 0; i < slots.size(); ++i) {
-		const Bar_slot& each = slots[i];
-		int             sx   = icons_x + static_cast<int>(i) * (slot_w + slot_gap);
-		int             sy   = name_height;
-		local_to_screen(sx, sy);
-		// A dark box with an edge, blue under the mouse.
-		buf->fill8(0, slot_w, slot_h, sx, sy);
-		if (static_cast<int>(i) == hovered) {
-			buf->fill8(line, slot_w, 1, sx, sy);
-			buf->fill8(line, slot_w, 1, sx, sy + slot_h - 1);
-			buf->fill8(line, 1, slot_h, sx, sy);
-			buf->fill8(line, 1, slot_h, sx + slot_w - 1, sy);
-		}
-		ShapeID      id(33 + each.icon % 8, each.icon / 8, SF_GUMPS_VGA);
-		Shape_frame* frame = id.get_shape();
-		if (frame) {
-			const int ix = sx + (slot_w - frame->get_width()) / 2 + frame->get_xleft();
-			const int iy = sy + (slot_h - frame->get_height()) / 2 + frame->get_yabove();
-			sman->paint_shape(ix, iy, frame);
-		}
-		if (!each.usable) {
-			Shade(buf, sx + 1, sy + 1, slot_w - 2, slot_h - 2);
-		}
-		char text[8] = "";
-		if (each.level > 0) {
-			std::snprintf(text, sizeof(text), "L%d", each.level);
-		} else if (each.seconds > 0) {
-			std::snprintf(text, sizeof(text), "%d", each.seconds);
-		}
-		if (text[0]) {
-			const int tw = sman->get_text_width(0, text);
-			const int th = sman->get_text_height(0);
-			sman->paint_text(0, text, sx + (slot_w - tw) / 2, sy + (slot_h - th) / 2);
-		}
+	// Darker while it can't be used; lighter under the mouse.
+	Recolor(!each->usable ? 143 : (the_bar->get_hovered() == index ? 138 : 140));
+	Basic_button::paint();
+	int px = 0;
+	int py = 0;
+	local_to_screen(px, py);
+	Image_buffer8* buf   = Gwin()->get_win()->get_ib8();
+	const auto     lines = Wrap(font, each->name, slot_w - 6);
+	const int      lh    = font->get_text_height();
+	int            ty    = py + (slot_h - static_cast<int>(lines.size()) * lh) / 2;
+	for (const std::string& line : lines) {
+		font->paint_text(buf, line.c_str(), px + (slot_w - font->get_text_width(line.c_str())) / 2, ty);
+		ty += lh;
 	}
-	if (const Bar_slot* each = slot(hovered)) {
-		int nx = 0;
-		int ny = 0;
-		local_to_screen(nx, ny);
-		const int tw = sman->get_text_width(0, each->name.c_str());
-		sman->paint_text(0, each->name.c_str(), nx + (region.w - tw) / 2, ny);
-		const int dw = sman->get_text_width(0, each->description.c_str());
-		sman->paint_text(0, each->description.c_str(), nx + (region.w - dw) / 2, ny + name_height / 2);
+	// Seconds left, or the level it opens at, in the corner.
+	char text[8] = "";
+	if (each->level > 0) {
+		std::snprintf(text, sizeof(text), "L%d", each->level);
+	} else if (each->seconds > 0) {
+		std::snprintf(text, sizeof(text), "%d", each->seconds);
+	}
+	if (text[0]) {
+		Shape_manager* sman = Shape_manager::get_instance();
+		sman->paint_text(0, text, px + slot_w - sman->get_text_width(0, text) - 3, py + slot_h - sman->get_text_height(0) - 2);
 	}
 }
 
@@ -2481,6 +2514,13 @@ void Update_bar() {
 			if (auto* button = dynamic_cast<Skill_button*>(the_bar->on_button(lx, ly))) {
 				hovered = button->get_index();
 			}
+		}
+	}
+	static int described = -1;    // The slot whose description shows.
+	if (hovered != described) {
+		described = hovered;
+		if (const Bar_slot* slot = the_bar->slot(hovered)) {
+			Friend_mode_class_notice(slot->description.empty() ? slot->name : slot->name + ": " + slot->description);
 		}
 	}
 	the_bar->set_hovered(hovered);
@@ -3157,7 +3197,7 @@ public:
 				this, &Class_options_gump::preview, "Effect preview", 25, yForRow(set_count + 1), 100);
 		const std::vector<std::string> yesNo = {GumpStrings::No(), GumpStrings::Yes()};
 		const std::vector<std::string> places
-				= {"Above status bar", "Bottom left", "Bottom right", "Top left", "Top right"};
+				= {"Above status bar", "Bottom left", "Bottom right", "Top left", "Top right", "Left side", "Right side"};
 		using Callback          = void (Class_options_gump::*)(int);
 		Callback toggles[set_count] = {&Class_options_gump::toggle<0>, &Class_options_gump::toggle<1>,
 				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>};
@@ -3323,6 +3363,23 @@ void Friend_class_frame() {
 	Update_preview();
 	Paint_circles();
 	Paint_marks();
+}
+
+void Friend_class_hide_overlays() {
+	Game_window* gwin = Gwin();
+	for (const Icon_layer& each : icon_layers) {
+		if (each.layer >= 0) {
+			gwin->layer_set_visible(each.layer, false);
+		}
+	}
+	for (const Circle_layers& each : circle_layers) {
+		for (const int layer : {each.fill, each.border}) {
+			if (layer >= 0) {
+				gwin->layer_set_visible(layer, false);
+			}
+		}
+	}
+	gwin->set_painted();
 }
 
 void Friend_class_world_loaded() {

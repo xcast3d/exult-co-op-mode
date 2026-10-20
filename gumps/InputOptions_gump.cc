@@ -308,7 +308,6 @@ const char* TargetingOptions_gump::label(int setting) {
 	static const char* const labels[set_count] = {"Enable (Q, E, Space):",
 			"Smart pickup placement:",
 			"Sort container (Shift+C):",
-			"Show range circle:",
 			"Q: party out of combat:",
 			"E: loot (gold, gems, equipment):",
 			"E: decor (dishes, papers):",
@@ -322,7 +321,7 @@ const char* TargetingOptions_gump::label(int setting) {
 TargetingOptions_gump::TargetingOptions_gump() : Modal_gump(nullptr, -1) {
 	SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 2)), -1);
 	const bool* const values[set_count]
-			= {&Friend_keyboard_targeting, &Gump::smart_placement, &Friend_sort_key, &Friend_targeting_circle,     &Friend_targeting_party,
+			= {&Friend_keyboard_targeting, &Gump::smart_placement, &Friend_sort_key, &Friend_targeting_party,
 			   &Friend_targeting_loot,     &Friend_targeting_decor,      &Friend_targeting_furniture,
 			   &Friend_targeting_interactive, &Friend_targeting_levers, &Friend_targeting_signs};
 	for (int i = 0; i < set_count; ++i) {
@@ -337,7 +336,7 @@ TargetingOptions_gump::TargetingOptions_gump() : Modal_gump(nullptr, -1) {
 	Toggle toggles[set_count] = {&TargetingOptions_gump::toggle<0>, &TargetingOptions_gump::toggle<1>,
 			&TargetingOptions_gump::toggle<2>, &TargetingOptions_gump::toggle<3>, &TargetingOptions_gump::toggle<4>,
 			&TargetingOptions_gump::toggle<5>, &TargetingOptions_gump::toggle<6>, &TargetingOptions_gump::toggle<7>,
-			&TargetingOptions_gump::toggle<8>, &TargetingOptions_gump::toggle<9>, &TargetingOptions_gump::toggle<10>};
+			&TargetingOptions_gump::toggle<8>, &TargetingOptions_gump::toggle<9>};
 	for (int i = 0; i < set_count; ++i) {
 		buttons[id_first_setting + i] = std::make_unique<TargetingToggle>(
 				this, std::move(toggles[i]), yesNo, settings[i], get_button_pos_for_label(label(i)), yForRow(i), 44);
@@ -350,7 +349,7 @@ TargetingOptions_gump::TargetingOptions_gump() : Modal_gump(nullptr, -1) {
 // OK: keep the settings, in the config too.
 void TargetingOptions_gump::close() {
 	bool* const values[set_count]
-			= {&Friend_keyboard_targeting, &Gump::smart_placement, &Friend_sort_key, &Friend_targeting_circle,     &Friend_targeting_party,
+			= {&Friend_keyboard_targeting, &Gump::smart_placement, &Friend_sort_key, &Friend_targeting_party,
 			   &Friend_targeting_loot,     &Friend_targeting_decor,      &Friend_targeting_furniture,
 			   &Friend_targeting_interactive, &Friend_targeting_levers, &Friend_targeting_signs};
 	for (int i = 0; i < set_count; ++i) {

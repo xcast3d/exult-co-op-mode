@@ -32,6 +32,8 @@ enum Friend_class_bar_place {
 	friend_bar_bottom_right,
 	friend_bar_top_left,
 	friend_bar_top_right,
+	friend_bar_left_center,     // A column at the left edge, centred.
+	friend_bar_right_center,    // A column at the right edge, centred.
 	friend_bar_place_count
 };
 
@@ -52,6 +54,10 @@ void Friend_class_frame();
 
 // A new world (load, a guest's download): cooldowns and bonuses start over.
 void Friend_class_world_loaded();
+
+// Hide the status icons and range circles now (a full-screen menu, such as
+// the companion picker, is about to show; the next frame puts them back).
+void Friend_class_hide_overlays();
 // Around a save: short sleeps and stuns are lifted for the save (and put
 // back after), and summoned creatures are dismissed, so nothing of ours
 // outlasts its time in a saved game.

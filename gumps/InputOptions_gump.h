@@ -128,7 +128,6 @@ private:
 		set_enabled,
 		set_smart,    // These two show even with targeting off.
 		set_sort,
-		set_circle,
 		set_party,
 		set_loot,
 		set_decor,
