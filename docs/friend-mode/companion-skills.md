@@ -142,7 +142,9 @@ target arrow, from a few pixels, on every machine. Area skills show their
 circle and sparkles instead.
 
 **The bar's look** (after the first test, 2026-10-20): square slots in
-Exult's own button style (as on the options pages) with the skill's name,
+Exult's own button style (as on the options pages) with the skill's name in
+the tiny font, a tooltip pinned to the hovered slot (black, white letters:
+name, what it does, why not), gone as the mouse leaves,
 the seconds left in the corner, darker while unusable; flush with the edge
 it is on; a row, or a column at the left or right side. The mouse over a
 slot puts its name and what it does in the notice line ("Mending Circle:
@@ -582,6 +584,17 @@ conversation, too slow for a fight and one that would pause guests.
 11. **The other four companions.**
 
 ## Backlog
+
+- **Skill icons (the user may draw them).** One `.shp` file, for example
+  `data/friend_icons.shp`, one frame per skill, 8-bit in Ultima VII's
+  palette (index 255 transparent), about 24 x 24 or 32 x 32 game pixels
+  (the HUD scales them). Made with Aseprite and Exult's plug-in
+  (`tools/aseprite_plugin`: Sprite → Convert to U7 Palette, File → Export
+  to U7 SHP), or as PNGs in the U7 palette packed with Exult's `ipack`
+  (`tools/ipack.txt`). In the code: each skill gets an icon frame number;
+  the bar loads the file from `<DATA>` and falls back to the name when there
+  is no file or no frame. The Avatar's spells can keep the spellbook's own
+  pictures or get their own.
 
 - **Greyed-out slots look glitchy** (seen 2026-10-20): the every-other-pixel
   shading turns noisy once the HUD is scaled up. Use a cleaner look, for

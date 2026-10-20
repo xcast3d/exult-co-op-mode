@@ -1065,7 +1065,10 @@ Class AI (companions nobody plays, host):
 - [ ] The Class System page has no "Require class items" line.
 - [ ] After the first test (2026-10-20): the bar's slots are square buttons
       with names; Left side and Right side make a column; corners are
-      flush. Hovering a slot shows its description in the notice line.
+      flush. Hovering a slot shows a black tooltip next to it (name, what
+      it does, why not), gone as soon as the mouse leaves.
+- [ ] A guest's skill on a rabbit or deer works (after "Click again" in
+      peace mode); on a townsperson: "The Avatar must do this".
 - [ ] Fire Blast with a hostile pick out of combat: combat mode comes on
       and it casts; on a peaceful pick out of combat: "Fire Blast on Deer?
       Click again", a second click casts; in combat mode it casts at once.

@@ -3602,6 +3602,10 @@ bool Friend_mode_is_hostile(const Actor* own, const Actor* foe) {
 	return Friend_is_hostile_target(own, foe);
 }
 
+bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe) {
+	return Friend_is_attack_target(own, foe) && Friend_guest_may_attack(foe);
+}
+
 int Friend_mode_player_playing(const Actor* actor) {
 	for (const auto& [player, guest] : friend_guests) {
 		if (actor && guest.actor >= 0 && guest.actor == actor->get_npc_num() && !guest.following) {

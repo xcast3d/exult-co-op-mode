@@ -1065,10 +1065,12 @@ std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
 		return {};
 	}
 	case Skill_target::pick: {
-		// The guest's own pick first, then the companion's foe.
+		// The guest's own pick first (a hostile, or a creature such as a
+		// rabbit), then the companion's foe.
 		if (const Game_object_shared chosen = chosen_pick.lock()) {
 			Actor* foe = chosen->as_actor();
-			if (foe && Friend_mode_is_hostile(user, foe) && user->distance(foe) <= skill.range) {
+			if (foe && (Friend_mode_is_hostile(user, foe) || Friend_mode_guest_may_attack(user, foe))
+				&& user->distance(foe) <= skill.range) {
 				return {foe};
 			}
 		}
@@ -2101,8 +2103,8 @@ bool Ready_to_fight(Actor* user, Actor* pick, const std::string& what, int index
 		return true;    // The nearest hostile, or the crosshair.
 	}
 	const bool hostile = Friend_mode_is_hostile(user, pick);
-	if (!hostile && Is_guest()) {
-		Friend_mode_class_notice("The Avatar must do this");
+	if (!hostile && Is_guest() && !Friend_mode_guest_may_attack(user, pick)) {
+		Friend_mode_class_notice("The Avatar must do this");    // Townsfolk.
 		return false;
 	}
 	if (!hostile && !gwin->in_combat()) {
@@ -2230,7 +2232,11 @@ class Skill_button : public Basic_button {
 
 public:
 	Skill_button(Gump* par, int px, int py, int i)
-			: Basic_button(par, px, py, slot_w, slot_h), index(i), font(fontManager.get_font("SMALL_BLACK_FONT")) {}
+			: Basic_button(par, px, py, slot_w, slot_h), index(i), font(fontManager.get_font("TINY_BLACK_FONT")) {
+		if (!font) {
+			font = fontManager.get_font("SMALL_BLACK_FONT");
+		}
+	}
 
 	bool activate(MouseButton button) override;
 
@@ -2253,6 +2259,15 @@ class Skill_bar : public Gump {
 	TileRect                                   region{0, 0, 0, 0};
 	int                                        hovered  = -1;
 	bool                                       vertical = false;
+	// The tooltip: a band beside the slots (above them at the bottom, below
+	// at the top, inward in a column), only drawn while a slot is hovered.
+	enum class Tip_side { above, below, right, left };
+	Tip_side              tip_side = Tip_side::above;
+	int                   tip_w    = 0;    // The band's size.
+	int                   tip_h    = 0;
+	int                   slots_x  = 0;    // Where the slots start in the gump.
+	int                   slots_y  = 0;
+	std::shared_ptr<Font> tip_font;
 
 public:
 	Skill_bar() : Gump(nullptr, 0, 0, 0, SF_GUMPS_VGA) {}
@@ -2288,8 +2303,9 @@ public:
 		return region;
 	}
 
+	// Only the slots take clicks; the tooltip's band doesn't hide the world.
 	bool has_point(int mx, int my) const override {
-		return region.has_point(mx, my);
+		return TileRect(region.x + slots_x, region.y + slots_y, slots_w(), slots_h()).has_point(mx, my);
 	}
 
 	Gump_button* on_button(int mx, int my) override {
@@ -2330,9 +2346,11 @@ public:
 									 [](const Bar_slot& a, const Bar_slot& b) {
 										 return a.usable == b.usable && a.seconds == b.seconds && a.level == b.level;
 									 });
-		slots    = std::move(fresh);
-		vertical = now_vertical;
-		if (!same_skills) {
+		const Tip_side side = Tip_for(Friend_class_bar_position);
+		slots               = std::move(fresh);
+		vertical            = now_vertical;
+		if (!same_skills || side != tip_side) {
+			tip_side = side;
 			make_buttons();
 		}
 		if (place() || changed) {
@@ -2340,19 +2358,73 @@ public:
 		}
 	}
 
-	void paint() override {
-		for (auto& button : buttons) {
-			button->paint();
+	void paint() override;
+
+private:
+	static Tip_side Tip_for(int position) {
+		switch (position) {
+		case friend_bar_top_left:
+		case friend_bar_top_right:
+			return Tip_side::below;
+		case friend_bar_left_center:
+			return Tip_side::right;
+		case friend_bar_right_center:
+			return Tip_side::left;
+		default:
+			return Tip_side::above;
 		}
 	}
 
-private:
+	int slots_w() const {
+		const int n = static_cast<int>(slots.size());
+		return vertical ? slot_w : std::max(1, n * slot_w + (n - 1) * slot_gap);
+	}
+
+	int slots_h() const {
+		const int n = static_cast<int>(slots.size());
+		return vertical ? std::max(1, n * slot_h + (n - 1) * slot_gap) : slot_h;
+	}
+
+	// A tooltip's lines: the name, what it does, and why not when it can't.
+	std::vector<std::string> tip_lines(const Bar_slot& slot) const {
+		std::vector<std::string> lines = {slot.name};
+		if (!slot.description.empty()) {
+			lines.push_back(slot.description);
+		}
+		if (!slot.usable && !slot.why.empty() && slot.level == 0 && slot.seconds == 0) {
+			lines.push_back(slot.why);
+		}
+		return lines;
+	}
+
 	void make_buttons() {
+		tip_font = fontManager.get_font("MENU_FONT");
+		// The band: as big as the biggest tooltip.
+		tip_w = 0;
+		tip_h = 0;
+		if (tip_font) {
+			const int lh = tip_font->get_text_height() + 2;
+			for (const auto& each : slots) {
+				const auto lines = tip_lines(each);
+				for (const std::string& line : lines) {
+					tip_w = std::max(tip_w, tip_font->get_text_width(line.c_str()) + 8);
+				}
+				tip_h = std::max(tip_h, static_cast<int>(lines.size()) * lh + 6);
+			}
+		}
+		const bool row = tip_side == Tip_side::above || tip_side == Tip_side::below;
+		if (row) {
+			tip_w = std::max(tip_w, slots_w());
+		} else {
+			tip_h = std::max(tip_h, slots_h());
+		}
+		slots_x = tip_side == Tip_side::left ? tip_w + 2 : (row ? (tip_w - slots_w()) / 2 : 0);
+		slots_y = tip_side == Tip_side::above ? tip_h + 2 : (row ? 0 : (tip_h - slots_h()) / 2);
 		buttons.clear();
 		for (size_t i = 0; i < slots.size(); ++i) {
 			const int step = static_cast<int>(i) * ((vertical ? slot_h : slot_w) + slot_gap);
-			buttons.push_back(std::make_unique<Skill_button>(this, vertical ? 0 : step, vertical ? step : 0,
-															 static_cast<int>(i)));
+			buttons.push_back(std::make_unique<Skill_button>(
+					this, slots_x + (vertical ? 0 : step), slots_y + (vertical ? step : 0), static_cast<int>(i)));
 		}
 	}
 
@@ -2360,9 +2432,10 @@ private:
 	// with the edge.  True if it moved.
 	bool place() {
 		Image_window* iwin   = Gwin()->get_win();
-		const int     n      = static_cast<int>(slots.size());
-		const int     w      = vertical ? slot_w : std::max(1, n * slot_w + (n - 1) * slot_gap);
-		const int     h      = vertical ? std::max(1, n * slot_h + (n - 1) * slot_gap) : slot_h;
+		const bool    row    = tip_side == Tip_side::above || tip_side == Tip_side::below;
+		// The whole gump: the slots and the tooltip's band.
+		const int     w      = row ? tip_w : slots_w() + 2 + tip_w;
+		const int     h      = row ? slots_h() + 2 + tip_h : tip_h;
 		const int     left   = iwin->get_start_x();
 		const int     top    = iwin->get_start_y();
 		const int     right  = iwin->get_end_x();
@@ -2407,8 +2480,9 @@ private:
 			by = bottom - h;
 			break;
 		}
-		// Never on the faces: above them.
-		if (faces_at_bottom && by + h > faces.y && bx < faces.x + faces.w && bx + w > faces.x) {
+		// Never on the faces: above them (the slots' part of it).
+		if (faces_at_bottom && by + h > faces.y && bx + slots_x < faces.x + faces.w
+			&& bx + slots_x + slots_w() > faces.x) {
 			by = faces.y - h - 2;
 		}
 		const TileRect fresh(bx, by, w, h);
@@ -2466,6 +2540,49 @@ void Skill_button::paint() {
 	}
 }
 
+void Skill_bar::paint() {
+	for (auto& button : buttons) {
+		button->paint();
+	}
+	const Bar_slot* each = slot(hovered);
+	if (!each || !tip_font) {
+		return;
+	}
+	// The tooltip, pinned to the hovered slot: black, white letters.
+	const auto lines = tip_lines(*each);
+	const int  lh    = tip_font->get_text_height() + 2;
+	int        bw    = 0;
+	for (const std::string& line : lines) {
+		bw = std::max(bw, tip_font->get_text_width(line.c_str()) + 8);
+	}
+	const int bh   = static_cast<int>(lines.size()) * lh + 6;
+	const int step = hovered * ((vertical ? slot_h : slot_w) + slot_gap);
+	int       tx   = 0;
+	int       ty   = 0;
+	switch (tip_side) {
+	case Tip_side::above:
+	case Tip_side::below:
+		tx = std::clamp(slots_x + step + slot_w / 2 - bw / 2, 0, std::max(0, tip_w - bw));
+		ty = tip_side == Tip_side::above ? tip_h - bh : slots_h() + 2;
+		break;
+	case Tip_side::right:
+	case Tip_side::left:
+		tx = tip_side == Tip_side::right ? slots_w() + 2 : tip_w - bw;
+		ty = std::clamp(slots_y + step + slot_h / 2 - bh / 2, 0, std::max(0, tip_h - bh));
+		break;
+	}
+	int sx = tx;
+	int sy = ty;
+	local_to_screen(sx, sy);
+	Image_buffer8* buf = Gwin()->get_win()->get_ib8();
+	buf->draw_box(sx, sy, bw, bh, 1, 0, 15);
+	int ly = sy + 3;
+	for (const std::string& line : lines) {
+		tip_font->draw_text(buf, sx + 4, ly, line.c_str());
+		ly += lh;
+	}
+}
+
 // Show, refresh or hide this machine's bar.
 void Update_bar() {
 	Game_window*  gwin  = Gwin();
@@ -2514,13 +2631,6 @@ void Update_bar() {
 			if (auto* button = dynamic_cast<Skill_button*>(the_bar->on_button(lx, ly))) {
 				hovered = button->get_index();
 			}
-		}
-	}
-	static int described = -1;    // The slot whose description shows.
-	if (hovered != described) {
-		described = hovered;
-		if (const Bar_slot* slot = the_bar->slot(hovered)) {
-			Friend_mode_class_notice(slot->description.empty() ? slot->name : slot->name + ": " + slot->description);
 		}
 	}
 	the_bar->set_hovered(hovered);
