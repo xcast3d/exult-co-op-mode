@@ -1,0 +1,25 @@
+# Friend Mode lobby (Cloudflare Worker).  See docs/friend-mode/lobby.md.
+name = "u7-multiplayer-lobby"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+# The lobby's address: a subdomain of the project's own domain, so the
+# Worker can move without breaking builds already handed out.
+routes = [
+	{ pattern = "u7-multiplayer-lobby.xcast3d.com", custom_domain = true },
+]
+
+[[durable_objects.bindings]]
+name = "LOBBY"
+class_name = "Lobby"
+
+# SQLite-backed Durable Objects work on Workers' free plan.
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Lobby"]
+
+# Optional TURN relay (Cloudflare Calls TURN), as secrets, never in the
+# repo or the game:
+#   npx wrangler secret put TURN_KEY_ID
+#   npx wrangler secret put TURN_KEY_API_TOKEN
+# Without them the lobby hands out STUN only.

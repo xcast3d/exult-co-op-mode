@@ -266,8 +266,11 @@ Joining today means typing the host's address and, over the internet, setting
 up port forwarding. Replace that with a short code the host reads out and the
 guest types in.
 
-- [ ] A small lobby service that hands out codes and passes WebRTC connection
-      details between host and guest. It never sees game traffic.
+- [x] A small lobby service that hands out codes and passes WebRTC connection
+      details between host and guest. It never sees game traffic. Built
+      2026-10-20 in `tools/lobby/` (Cloudflare Worker, tested locally), for
+      `u7-multiplayer-lobby.xcast3d.com`; not deployed yet. See
+      [the lobby](friend-mode/lobby.md).
 - [ ] Native WebRTC data channels (for example libdatachannel), reliable and
       ordered, which matches today's TCP stream. Send the world download in
       pieces.
