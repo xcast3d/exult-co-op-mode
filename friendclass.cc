@@ -513,7 +513,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("One careful shot that hits harder")
 							 .icon_spell(spell_death_bolt)
 							 .kind(T::attack)
-							 .aim(G::pick, 14)
+							 .aim(G::pick, 16)
 							 .unlock(3)
 							 .volley(6, 3000)
 							 .says("*takes careful aim*"),
@@ -557,7 +557,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_paralyze)
 							 .kind(T::control)
-							 .aim(G::pick, 10)
+							 .aim(G::pick, 12)
 							 .unlock(6)
 							 .hinder(Obj_flags::paralyzed, 6000)
 							 .reacts("*entangled*")
@@ -610,7 +610,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_paralyze)
 							 .kind(T::control)
-							 .aim(G::pick, 10)
+							 .aim(G::pick, 16)
 							 .volley()
 							 .then_hinder(Obj_flags::paralyzed, 3000)
 							 .says("*lets fly a stone*"),
@@ -618,7 +618,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("Stones at the two nearest hostiles")
 							 .icon_spell(spell_fireworks)
 							 .kind(T::attack)
-							 .aim(G::hostiles_nearest, 10)
+							 .aim(G::hostiles_nearest, 14)
 							 .unlock(3)
 							 .volley()
 							 .targets(2)
@@ -673,7 +673,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_sleep)
 							 .kind(T::control)
-							 .aim(G::pick, 14)
+							 .aim(G::pick, 16)
 							 .volley()
 							 .then_hinder(Obj_flags::asleep, 5000)
 							 .says("*nocks a sleeping arrow*"),
@@ -683,7 +683,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_curse)
 							 .kind(T::control)
-							 .aim(G::pick, 14)
+							 .aim(G::pick, 16)
 							 .unlock(3)
 							 .volley()
 							 .then_weaken(Actor::dexterity, -10, 10000)
@@ -693,7 +693,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("The party's hits on the target do more")
 							 .icon_spell(spell_mass_curse)
 							 .kind(T::attack)
-							 .aim(G::pick, 14)
+							 .aim(G::pick, 16)
 							 .unlock(6)
 							 .mark(4, 20000)
 							 .on_targets(sprite_purple)
@@ -721,7 +721,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("Thrown; hostiles where it lands are stunned")
 							 .icon_spell(spell_explosion)
 							 .kind(T::control)
-							 .aim(G::pick, 10)
+							 .aim(G::pick, 12)
 							 .unlock(3)
 							 .flash(5, Obj_flags::paralyzed, 2500)
 							 .missile(shape_powder_keg)
@@ -731,7 +731,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("Thrown; a few seconds later, it explodes")
 							 .icon_spell(spell_delayed)
 							 .kind(T::attack)
-							 .aim(G::pick, 10)
+							 .aim(G::pick, 12)
 							 .unlock(6)
 							 .bomb(5, 3000, 2)
 							 .missile(shape_powder_keg)
@@ -1372,7 +1372,17 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			});
 		}
 		if (done == 0) {
-			why = skill.range <= 1 ? "Needs a weapon in hand" : "Needs a bow, crossbow or sling, and ammunition";
+			// The weapon's own reach may be shorter than the skill's.
+			int                points = 0;
+			int                weapon = -1;
+			Game_object*       obj    = nullptr;
+			const Weapon_info* winf   = user->get_weapon(points, weapon, obj);
+			Actor*             foe    = targets.front();
+			if (winf && foe && user->distance(foe) > user->get_effective_range(winf, winf->get_range())) {
+				why = foe->get_name() + " is out of reach of " + user->get_npc_name() + "'s weapon";
+			} else {
+				why = skill.range <= 1 ? "Needs a weapon in hand" : "Needs a bow, crossbow or sling, and ammunition";
+			}
 			return false;
 		}
 		break;
@@ -2208,8 +2218,8 @@ void Use_slot(const Bar_slot& slot, int index) {
 class Skill_bar;
 Skill_bar* the_bar = nullptr;
 
-constexpr int slot_w   = 48;    // A slot: a square-ish button with the skill's name.
-constexpr int slot_h   = 32;
+constexpr int slot_w   = 56;    // A slot: a button with the skill's name (two lines at most).
+constexpr int slot_h   = 30;
 constexpr int slot_gap = 2;
 
 // Words of 'text' in lines no wider than 'width' (font 'font').
@@ -2244,11 +2254,7 @@ class Skill_button : public Basic_button {
 
 public:
 	Skill_button(Gump* par, int px, int py, int i)
-			: Basic_button(par, px, py, slot_w, slot_h), index(i), font(fontManager.get_font("TINY_BLACK_FONT")) {
-		if (!font) {
-			font = fontManager.get_font("SMALL_BLACK_FONT");
-		}
-	}
+			: Basic_button(par, px, py, slot_w, slot_h), index(i), font(fontManager.get_font("SMALL_BLACK_FONT")) {}
 
 	bool activate(MouseButton button) override;
 
@@ -2397,16 +2403,10 @@ private:
 		return vertical ? std::max(1, n * slot_h + (n - 1) * slot_gap) : slot_h;
 	}
 
-	// A tooltip's lines: the name, what it does, and why not when it can't.
+	// A tooltip's lines: the name only (decided 2026-10-20; the rest made it
+	// too big; clicking an unusable slot still says why).
 	std::vector<std::string> tip_lines(const Bar_slot& slot) const {
-		std::vector<std::string> lines = {slot.name};
-		if (!slot.description.empty()) {
-			lines.push_back(slot.description);
-		}
-		if (!slot.usable && !slot.why.empty() && slot.level == 0 && slot.seconds == 0) {
-			lines.push_back(slot.why);
-		}
-		return lines;
+		return {slot.name};
 	}
 
 	void make_buttons() {
