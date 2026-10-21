@@ -53,6 +53,7 @@
 #include "Flex.h"
 #include "spellbook.h"
 #include "ucmachine.h"
+#include "utils.h"
 #include "weaponinf.h"
 
 #include <SDL3/SDL.h>
@@ -71,6 +72,7 @@ using std::endl;
 bool Friend_class_enabled       = false;
 int  Friend_class_bar_position  = friend_bar_above_status;
 bool Friend_class_show_ranges   = true;
+int  Friend_class_icon_style    = friend_icons_parchment;
 bool Friend_class_ai            = true;
 bool Friend_class_require_items = false;
 
@@ -2307,8 +2309,9 @@ struct Bar_slot {
 	std::string description;
 };
 
-// Which actor's bar this machine shows, if any: a guest's companion, or the
-// Avatar on the host and in single player.
+// Which actor's bar this machine shows, if any: a guest's companion; on the
+// host and in single player the companion one leads (Shift+Tab), else the
+// Avatar.
 Actor* Bar_actor() {
 	Game_window* gwin = Gwin();
 	if (!Friend_class_active() || gwin->is_in_exult_menu() || !gwin->get_main_actor()) {
@@ -2321,6 +2324,9 @@ Actor* Bar_actor() {
 			return nullptr;
 		}
 		return own;
+	}
+	if (Actor* led = Friend_mode_led_companion(); led && Class_of(led)) {
+		return led;
 	}
 	return gwin->get_main_actor();
 }
@@ -2485,7 +2491,14 @@ void Use_slot(const Bar_slot& slot, int index) {
 		}
 		return;
 	}
-	if (!Perform(actor, *cls, *skill, why)) {
+	// The Target System's pick, as a guest's skill carries it (a peaceful
+	// one only once confirmed above).
+	chosen_pick     = weak_from_obj(engage);
+	chosen_peaceful = engage && !Friend_mode_is_hostile(actor, engage);
+	const bool done = Perform(actor, *cls, *skill, why);
+	chosen_pick.reset();
+	chosen_peaceful = false;
+	if (!done) {
 		Friend_mode_class_notice(why);
 	} else if (engage) {
 		Friend_mode_attack_target(engage, true);
@@ -2495,9 +2508,59 @@ void Use_slot(const Bar_slot& slot, int index) {
 class Skill_bar;
 Skill_bar* the_bar = nullptr;
 
-constexpr int slot_w   = 56;    // A slot: a button with the skill's name (two lines at most).
-constexpr int slot_h   = 30;
-constexpr int slot_gap = 2;
+constexpr int name_slot_w     = 56;    // A slot with the skill's name (two lines at most).
+constexpr int name_slot_h     = 30;
+constexpr int skill_icon_size = 40;    // A skill's picture.
+constexpr int slot_gap        = 2;
+
+// The skill pictures (data/friend/skills/): one 40x40 frame per skill, in
+// the order of Classes() (each companion's skills in bar order).  Colour
+// ones have a transparent ground; parchment ones carry their own tile.
+// Neither sits on a button.  Loaded once; a missing file means names.
+Shape_file* Skill_icons(int style) {
+	static std::array<std::unique_ptr<Shape_file>, friend_icons_count> loaded;
+	static std::array<bool, friend_icons_count>                         tried{};
+	static const char* const files[friend_icons_count]
+			= {nullptr, "<DATA>/friend/skills/skill_icons_colour.shp", "<DATA>/friend/skills/skill_icons_parchment.shp"};
+	if (style <= friend_icons_names || style >= friend_icons_count) {
+		return nullptr;
+	}
+	if (!tried[style]) {
+		tried[style] = true;
+		if (U7exists(files[style])) {
+			loaded[style] = std::make_unique<Shape_file>(files[style]);
+		} else {
+			cout << "Friend Class: no " << files[style] << "; the bar shows names" << endl;
+		}
+	}
+	return loaded[style].get();
+}
+
+Shape_file* Bar_icons() {
+	return Skill_icons(Friend_class_icon_style);
+}
+
+// The skill's frame in the icon files, or -1.
+int Icon_frame(int skill_id) {
+	int frame = 0;
+	for (const auto& cls : Classes()) {
+		for (const auto& skill : cls.skills) {
+			if (skill.id == skill_id) {
+				return frame;
+			}
+			++frame;
+		}
+	}
+	return -1;
+}
+
+int Slot_w() {
+	return Bar_icons() ? skill_icon_size : name_slot_w;
+}
+
+int Slot_h() {
+	return Bar_icons() ? Slot_w() : name_slot_h;
+}
 
 // Words of 'text' in lines no wider than 'width' (font 'font').
 std::vector<std::string> Wrap(const std::shared_ptr<Font>& font, const std::string& text, int width) {
@@ -2531,7 +2594,7 @@ class Skill_button : public Basic_button {
 
 public:
 	Skill_button(Gump* par, int px, int py, int i)
-			: Basic_button(par, px, py, slot_w, slot_h), index(i), font(fontManager.get_font("SMALL_BLACK_FONT")) {}
+			: Basic_button(par, px, py, Slot_w(), Slot_h()), index(i), font(fontManager.get_font("SMALL_BLACK_FONT")) {}
 
 	bool activate(MouseButton button) override;
 
@@ -2562,6 +2625,7 @@ class Skill_bar : public Gump {
 	int                   tip_h    = 0;
 	int                   slots_x  = 0;    // Where the slots start in the gump.
 	int                   slots_y  = 0;
+	int                   style    = -1;    // The icon style the buttons were made for.
 	std::shared_ptr<Font> tip_font;
 
 public:
@@ -2644,8 +2708,9 @@ public:
 		const Tip_side side = Tip_for(Friend_class_bar_position);
 		slots               = std::move(fresh);
 		vertical            = now_vertical;
-		if (!same_skills || side != tip_side) {
+		if (!same_skills || side != tip_side || style != Friend_class_icon_style) {
 			tip_side = side;
+			style    = Friend_class_icon_style;
 			make_buttons();
 		}
 		if (place() || changed) {
@@ -2672,12 +2737,12 @@ private:
 
 	int slots_w() const {
 		const int n = static_cast<int>(slots.size());
-		return vertical ? slot_w : std::max(1, n * slot_w + (n - 1) * slot_gap);
+		return vertical ? Slot_w() : std::max(1, n * Slot_w() + (n - 1) * slot_gap);
 	}
 
 	int slots_h() const {
 		const int n = static_cast<int>(slots.size());
-		return vertical ? std::max(1, n * slot_h + (n - 1) * slot_gap) : slot_h;
+		return vertical ? std::max(1, n * Slot_h() + (n - 1) * slot_gap) : Slot_h();
 	}
 
 	// A tooltip's lines: the name only (decided 2026-10-20; the rest made it
@@ -2711,7 +2776,7 @@ private:
 		slots_y = tip_side == Tip_side::above ? tip_h + 2 : (row ? 0 : (tip_h - slots_h()) / 2);
 		buttons.clear();
 		for (size_t i = 0; i < slots.size(); ++i) {
-			const int step = static_cast<int>(i) * ((vertical ? slot_h : slot_w) + slot_gap);
+			const int step = static_cast<int>(i) * ((vertical ? Slot_h() : Slot_w()) + slot_gap);
 			buttons.push_back(std::make_unique<Skill_button>(
 					this, slots_x + (vertical ? 0 : step), slots_y + (vertical ? step : 0), static_cast<int>(i)));
 		}
@@ -2804,19 +2869,40 @@ void Skill_button::paint() {
 	if (!each) {
 		return;
 	}
-	// Darker while it can't be used; lighter under the mouse.
-	Recolor(!each->usable ? 143 : (the_bar->get_hovered() == index ? 138 : 140));
-	Basic_button::paint();
+	const int      slot_w  = Slot_w();
+	const int      slot_h  = Slot_h();
+	const bool     hovered = the_bar->get_hovered() == index;
+	Shape_file*    icons   = Bar_icons();
+	Shape_frame*   picture = nullptr;
+	if (icons && each->skill >= 0) {
+		const int frame = Icon_frame(each->skill);
+		picture         = frame >= 0 && frame < icons->get_num_frames() ? icons->get_frame(frame) : nullptr;
+	}
 	int px = 0;
 	int py = 0;
 	local_to_screen(px, py);
-	Image_buffer8* buf   = Gwin()->get_win()->get_ib8();
-	const auto     lines = Wrap(font, each->name, slot_w - 6);
-	const int      lh    = font->get_text_height();
-	int            ty    = py + (slot_h - static_cast<int>(lines.size()) * lh) / 2;
-	for (const std::string& line : lines) {
-		font->paint_text(buf, line.c_str(), px + (slot_w - font->get_text_width(line.c_str())) / 2, ty);
-		ty += lh;
+	Image_buffer8* buf = Gwin()->get_win()->get_ib8();
+	if (picture) {
+		// The picture alone, its top left at the slot's; dimmed (only its
+		// own pixels, as Exult greys the screen) while it can't be used.
+		const int fx = px + picture->get_xleft();
+		const int fy = py + picture->get_yabove();
+		picture->paint_rle(buf, fx, fy);
+		if (!each->usable) {
+			picture->paint_rle_transformed(buf, fx, fy, Shape_manager::get_instance()->get_xform(8));
+		}
+	} else {
+		// Exult's button: darker while it can't be used; lighter under the mouse.
+		Recolor(!each->usable ? 143 : (hovered ? 138 : 140));
+		Basic_button::paint();
+		// No picture (the Avatar's spells, or names chosen): the name.
+		const auto lines = Wrap(font, each->name, slot_w - 6);
+		const int  lh    = font->get_text_height();
+		int        ty    = py + (slot_h - static_cast<int>(lines.size()) * lh) / 2;
+		for (const std::string& line : lines) {
+			font->paint_text(buf, line.c_str(), px + (slot_w - font->get_text_width(line.c_str())) / 2, ty);
+			ty += lh;
+		}
 	}
 	// Seconds left, or the level it opens at, in the corner.
 	char text[8] = "";
@@ -2847,19 +2933,19 @@ void Skill_bar::paint() {
 		bw = std::max(bw, tip_font->get_text_width(line.c_str()) + 8);
 	}
 	const int bh   = static_cast<int>(lines.size()) * lh + 6;
-	const int step = hovered * ((vertical ? slot_h : slot_w) + slot_gap);
+	const int step = hovered * ((vertical ? Slot_h() : Slot_w()) + slot_gap);
 	int       tx   = 0;
 	int       ty   = 0;
 	switch (tip_side) {
 	case Tip_side::above:
 	case Tip_side::below:
-		tx = std::clamp(slots_x + step + slot_w / 2 - bw / 2, 0, std::max(0, tip_w - bw));
+		tx = std::clamp(slots_x + step + Slot_w() / 2 - bw / 2, 0, std::max(0, tip_w - bw));
 		ty = tip_side == Tip_side::above ? tip_h - bh : slots_h() + 2;
 		break;
 	case Tip_side::right:
 	case Tip_side::left:
 		tx = tip_side == Tip_side::right ? slots_w() + 2 : tip_w - bw;
-		ty = std::clamp(slots_y + step + slot_h / 2 - bh / 2, 0, std::max(0, tip_h - bh));
+		ty = std::clamp(slots_y + step + Slot_h() / 2 - bh / 2, 0, std::max(0, tip_h - bh));
 		break;
 	}
 	int sx = tx;
@@ -3557,7 +3643,7 @@ void Update_preview() {
 class Class_options_gump : public Modal_gump {
 	// "Require class items" is kept in the config but off the page until
 	// there are items (a story question, decided later).
-	enum setting_ids { set_enabled, set_bar, set_ranges, set_ai, set_count };
+	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_ai, set_count };
 
 	enum button_ids { id_ok, id_cancel, id_preview, id_first_setting, id_count = id_first_setting + set_count };
 
@@ -3566,7 +3652,7 @@ class Class_options_gump : public Modal_gump {
 
 	static const char* label(int setting) {
 		static const char* const labels[set_count]
-				= {"Enable:", "Skill bar:", "Show skill ranges:", "Class AI:"};
+				= {"Enable:", "Skill bar:", "Skill icons:", "Show skill ranges:", "Class AI:"};
 		return labels[setting];
 	}
 
@@ -3600,8 +3686,8 @@ class Class_options_gump : public Modal_gump {
 public:
 	Class_options_gump() : Modal_gump(nullptr, -1) {
 		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 3)), -1);
-		settings = {Friend_class_enabled ? 1 : 0, Friend_class_bar_position, Friend_class_show_ranges ? 1 : 0,
-					Friend_class_ai ? 1 : 0};
+		settings = {Friend_class_enabled ? 1 : 0, Friend_class_bar_position, Friend_class_icon_style - friend_icons_colour,
+					Friend_class_show_ranges ? 1 : 0, Friend_class_ai ? 1 : 0};
 		buttons[id_ok]     = std::make_unique<Button>(this, &Class_options_gump::close, GumpStrings::OK(), 25,
                                                   yForRow(set_count + 2), 50);
 		buttons[id_cancel] = std::make_unique<Button>(this, &Class_options_gump::cancel, GumpStrings::CANCEL(), 75,
@@ -3611,13 +3697,16 @@ public:
 		const std::vector<std::string> yesNo = {GumpStrings::No(), GumpStrings::Yes()};
 		const std::vector<std::string> places
 				= {"Above status bar", "Bottom left", "Bottom right", "Top left", "Top right", "Left side", "Right side"};
+		// While both styles are being compared (2026-10-21); one may go.
+		// The page's choice is the style less one (names aren't offered).
+		const std::vector<std::string> styles = {"Colour", "Parchment"};
 		using Callback          = void (Class_options_gump::*)(int);
 		Callback toggles[set_count] = {&Class_options_gump::toggle<0>, &Class_options_gump::toggle<1>,
-				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>};
+				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>, &Class_options_gump::toggle<4>};
 		for (int i = 0; i < set_count; ++i) {
 			buttons[id_first_setting + i] = std::make_unique<Toggle>(this, std::move(toggles[i]),
-					i == set_bar ? places : yesNo, settings[i], get_button_pos_for_label(label(i)), yForRow(i),
-					i == set_bar ? 85 : 44);
+					i == set_bar ? places : (i == set_icons ? styles : yesNo), settings[i],
+					get_button_pos_for_label(label(i)), yForRow(i), i == set_bar || i == set_icons ? 85 : 44);
 		}
 		ResizeWidthToFitWidgets(tcb::span(buttons.data(), id_count));
 		HorizontalArrangeWidgets(tcb::span(buttons.data() + id_ok, 2));
@@ -3630,6 +3719,7 @@ public:
 			Friend_class_ai            = settings[set_ai] != 0;
 		}
 		Friend_class_bar_position = settings[set_bar];
+		Friend_class_icon_style   = settings[set_icons] + friend_icons_colour;
 		Friend_class_show_ranges  = settings[set_ranges] != 0;
 		Friend_class_save_settings();
 		done = true;
@@ -3733,6 +3823,10 @@ void Friend_class_load_settings() {
 	if (Friend_class_bar_position < 0 || Friend_class_bar_position >= friend_bar_place_count) {
 		Friend_class_bar_position = friend_bar_above_status;
 	}
+	config->value("config/friend/class/icon_style", Friend_class_icon_style, friend_icons_parchment);
+	if (Friend_class_icon_style < friend_icons_colour || Friend_class_icon_style >= friend_icons_count) {
+		Friend_class_icon_style = friend_icons_parchment;
+	}
 }
 
 void Friend_class_save_settings() {
@@ -3746,6 +3840,7 @@ void Friend_class_save_settings() {
 		put("config/friend/class/require_items", Friend_class_require_items);
 	}
 	config->set("config/friend/class/bar_position", Friend_class_bar_position, false);
+	config->set("config/friend/class/icon_style", Friend_class_icon_style, false);
 	put("config/friend/class/show_ranges", Friend_class_show_ranges);
 	config->write_back();
 	rules_changed = true;

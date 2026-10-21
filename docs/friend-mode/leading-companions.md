@@ -1,6 +1,7 @@
 # Leading a companion
 
-Status: **planned** (2026-10-21). Not built.
+Status: **step 1 built** (2026-10-21), not tested yet; steps 2 to 4
+planned.
 
 The Class System gives every companion skills, but only guests can use them
 by hand: the host and a single player play the Avatar, whose bar holds
@@ -124,6 +125,15 @@ guest does, use its skill bar, and have the party follow it.
    possession, with the skill bar following; the guests' interaction rules
    for the companion you lead. Nobody follows yet (the party stands, as
    Phase 1 left it). Enough to use caltrops or Volley from the host.
+   Built 2026-10-21 (`Friend_mode_lead_next`, `Friend_mode_led_companion`
+   in exult.cc; the rules in `Game_window::double_clicked_object`):
+   targeting and double-clicks in combat attack with the led companion
+   (on the combat schedule, as the host fights for a guest's companion;
+   walking, clearing the target or combat ending stand it again); its
+   skills take the Q pick; a companion left in combat mode goes back into
+   the fight. Brought forward from later steps: the leash (no one follows
+   yet, so it was needed now) and guests' pickers leaving out the led
+   companion. Ctrl+F still takes the first companion and back.
 2. **The party follows the leader.** The leader setting, the formation
    driven by the led companion's steps, the Avatar on a follow schedule.
    The risky step; test it through doors, stairs, teleporters and fights.

@@ -1239,7 +1239,7 @@ bool Game_window::take_friend_mode_control(int npc_num, bool network_guest) {
 	controlled_actor = companion;
 	network_friend_control = network_guest;
 	set_camera_actor(companion);
-	cout << "Friend Mode: controlling " << companion->get_name() << endl;
+	cout << "Friend Mode: controlling " << companion->get_npc_name() << endl;
 	return true;
 }
 
@@ -1343,8 +1343,14 @@ bool Game_window::release_friend_mode_control() {
 	}
 
 	current->stop();
+	current->set_target(nullptr);
 	if (controlled_actor_previous_schedule >= 0) {
-		current->set_schedule_type(controlled_actor_previous_schedule);
+		int sched = controlled_actor_previous_schedule;
+		// A companion led by the host goes back into the fight in combat mode.
+		if (!network_friend_control && combat && sched == Schedule::follow_avatar) {
+			sched = Schedule::combat;
+		}
+		current->set_schedule_type(sched);
 	}
 	controlled_actor = main_actor;
 	controlled_actor_previous_schedule = -1;
@@ -2855,6 +2861,12 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 				(cls == Shape_info::container && !info.is_container_locked())) {
 				obj->activate();
 				return;
+			} else if (controlled_actor && controlled_actor != main_actor) {
+				// Leading a companion (Shift+Tab): it fights, not the Avatar.
+				if (npc) {
+					Friend_mode_attack_target(npc, true);
+				}
+				return;
 			} else {
 				// In combat mode.
 				// Want everyone to be in combat.
@@ -2939,13 +2951,44 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 		}
 		return;
 	}
+	if (controlled && controlled != main_actor) {
+		// Leading a companion (Shift+Tab, the host or a single player): the
+		// guests' rules (docs/friend-mode/interaction-policy.md), carried out
+		// here, where the world is.  People, merchants included, and story
+		// objects are the Avatar's.
+		const int shape = obj->get_shapenum();
+		if (!clicked_actor && !obj->get_owner() && (obj->get_info().is_door() || Friend_mode_guest_usable_shape(shape))) {
+			if (obj->get_info().is_door() && obj->get_framenum() % 4 >= 2) {
+				effects->add_text("Locked", obj);
+			} else {
+				effects->remove_text_effects();
+				Friend_mode_lead_use_object(obj, controlled);
+			}
+			return;
+		}
+		if (!clicked_actor && obj->get_info().is_container_locked()) {
+			effects->add_text("Locked", obj);    // A key or lockpick opens it.
+			return;
+		}
+		if (!clicked_actor
+			&& (Friend_mode_guest_item_use(shape) != Friend_item_use::none || Friend_mode_guest_local_shape(shape))) {
+			// Food, potions, keys and lockpicks; signs, books and the like.
+			effects->remove_text_effects();
+			usecode->init_conversation();
+			obj->activate();
+			return;
+		}
+		if (clicked_actor || usecode->function_exists(obj->get_usecode())) {
+			effects->add_text("The Avatar must do this", obj);
+		} else {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		}
+		return;
+	}
 	effects->remove_text_effects();    // Remove text msgs. from screen.
 #ifdef DEBUG
 	cout << "Object name is " << obj->get_name() << endl;
 #endif
-	// Deliberate interactions remain Avatar-owned. If a companion was being
-	// controlled, hand back before Usecode or dialogue can begin.
-	release_friend_mode_control();
 	usecode->init_conversation();
 	// Check if CTRL is pressed to open basic properties instead
 	const bool ctrl_pressed = (SDL_GetModState() & SDL_KMOD_CTRL) != 0;

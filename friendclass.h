@@ -23,6 +23,7 @@ class Game_object;
 extern bool Friend_class_enabled;          // The host's game rule (off).
 extern int  Friend_class_bar_position;     // Friend_class_bar_place (above the status bar).
 extern bool Friend_class_show_ranges;      // Circles for shown ranges (on).
+extern int  Friend_class_icon_style;       // Friend_class_icons (parchment).
 extern bool Friend_class_ai;               // Companions nobody plays use skills (on).
 extern bool Friend_class_require_items;    // Skills need the class item (off).
 
@@ -36,6 +37,11 @@ enum Friend_class_bar_place {
 	friend_bar_right_center,    // A column at the right edge, centred.
 	friend_bar_place_count
 };
+
+// The skill bar's pictures (data/friend/skills/), each machine's choice.
+// Colour and parchment are both kept while they are compared; names show
+// only when the file is missing.
+enum Friend_class_icons { friend_icons_names = 0, friend_icons_colour, friend_icons_parchment, friend_icons_count };
 
 void Friend_class_load_settings();
 void Friend_class_save_settings();    // And tell guests, on the host.

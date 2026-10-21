@@ -81,6 +81,21 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Leading a companion, step 1, built 2026-10-21 (no protocol change;
+untested).** The host and a single player press Shift+Tab to lead the next
+companion (one no guest plays), with its skill bar and the Q pick; combat
+through targeting and double-clicks uses it; it follows the guests' rules
+("The Avatar must do this" for people, merchants included); the guests'
+leash applies. The party doesn't follow it yet. See [leading a
+companion](leading-companions.md) and the [test checklist](test-checklist.md).
+
+**Skill icons, built 2026-10-21 (untested in a long session).** 40x40 pictures per skill in `data/friend/skills/`, colour
+(transparent) and parchment, chosen on the Class System page ("Skill
+icons", each machine); the name shows in the tooltip, unusable ones are
+dimmed. Built from `scratch/class-skill-icons/` (not in the repo) with
+`build.py`. Credits for the game-icons.net motifs (CC BY 3.0) are in
+`data/friend/skills/CREDITS.txt`.
+
 **Pauses in co-op, built 2026-10-20 (no protocol change; untested).**
 Only the host pauses the game. In co-op, windows (backpacks, paperdolls)
 never pause the world on any machine (`Gump_manager::gumps_dont_pause_game`

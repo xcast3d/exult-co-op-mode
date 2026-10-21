@@ -1,0 +1,37 @@
+Friend Mode skill icons (data/friend/skills/)
+
+skill_icons_colour.shp and skill_icons_parchment.shp: one 40x40 frame per
+companion skill, in the order of Classes() in friendclass.cc.
+
+The pictures were made for Friend Mode after icons from game-icons.net
+(https://game-icons.net/), used under the Creative Commons Attribution 3.0
+licence (https://creativecommons.org/licenses/by/3.0/). The reference icon
+for each skill, with its author:
+
+ 0  Iolo: Song of Warding - Bell shield by Lorc, https://game-icons.net/1x1/lorc/bell-shield.html
+ 1  Iolo: Song of Peace - Night sleep by Delapouite, https://game-icons.net/1x1/delapouite/night-sleep.html
+ 2  Iolo: Battle Hymn - Anthem by Lorc, https://game-icons.net/1x1/lorc/anthem.html
+ 3  Shamino: Vanish - Hooded figure by DarkZaitzev, https://game-icons.net/1x1/darkzaitzev/hooded-figure.html
+ 4  Shamino: Aimed Shot - Target shot by Lorc, https://game-icons.net/1x1/lorc/target-shot.html
+ 5  Shamino: Volley - Striking arrows by Lorc, https://game-icons.net/1x1/lorc/striking-arrows.html
+ 6  Jaana: Greater Heal - Health normal by Sbed, https://game-icons.net/1x1/sbed/health-normal.html
+ 7  Jaana: Purify - Sunbeams by Lorc, https://game-icons.net/1x1/lorc/sunbeams.html
+ 8  Jaana: Mending Circle - Health increase by Sbed, https://game-icons.net/1x1/sbed/health-increase.html
+ 9  Dupre: Lay on Hands - Magic palm by Lorc, https://game-icons.net/1x1/lorc/magic-palm.html
+10  Dupre: Shield Ally - Checked shield by Lorc, https://game-icons.net/1x1/lorc/checked-shield.html
+11  Dupre: Challenge - Knight banner by Delapouite, https://game-icons.net/1x1/delapouite/knight-banner.html
+12  Spark: Stun Shot - Sling by Delapouite, https://game-icons.net/1x1/delapouite/sling.html
+13  Spark: Trick Shot - Slingshot by Delapouite, https://game-icons.net/1x1/delapouite/slingshot.html
+14  Spark: Dirty Trick - Gooey impact by Lorc, https://game-icons.net/1x1/lorc/gooey-impact.html
+15  Sentri: Riposte - Riposte by Andy Meneely, https://game-icons.net/1x1/andymeneely/riposte.html
+16  Sentri: Master's Strike - Sword brandish by Delapouite, https://game-icons.net/1x1/delapouite/sword-brandish.html
+17  Sentri: Blade Dance - Sword spin by Lorc, https://game-icons.net/1x1/lorc/sword-spin.html
+18  Tseramed: Sleep Arrow - Arrowhead by Lorc, https://game-icons.net/1x1/lorc/arrowhead.html
+19  Tseramed: Crippling Shot - Thorned arrow by Lorc, https://game-icons.net/1x1/lorc/thorned-arrow.html
+20  Tseramed: Hunter's Mark - Crosshair by Delapouite, https://game-icons.net/1x1/delapouite/crosshair.html
+21  Julia: Set Trap - Caltrops by Delapouite, https://game-icons.net/1x1/delapouite/caltrops.html
+22  Julia: Quick Fix - Spanner by Lorc, https://game-icons.net/1x1/lorc/spanner.html
+23  Julia: Flashbang - Flash grenade by Lorc, https://game-icons.net/1x1/lorc/flash-grenade.html
+24  Katrina: Summon Dogs - Sitting dog by Delapouite, https://game-icons.net/1x1/delapouite/sitting-dog.html
+25  Katrina: Summon Wolf - Wolf head by Lorc, https://game-icons.net/1x1/lorc/wolf-head.html
+26  Katrina: Summon Bee - Bee by Lorc, https://game-icons.net/1x1/lorc/bee.html

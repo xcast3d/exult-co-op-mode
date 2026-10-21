@@ -708,7 +708,8 @@ static Friend_leash_zone friend_leash_zone = Friend_leash_zone::near;
 static void Friend_mode_paint_arrow(const Tile_coord& from, const Tile_coord& to);
 
 static void Friend_mode_paint_leash_arrow() {
-	if (friend_session.mode() != Friend_mode_session::Mode::guest || friend_leash_zone == Friend_leash_zone::near) {
+	if ((friend_session.mode() != Friend_mode_session::Mode::guest && !Friend_mode_led_companion())
+		|| friend_leash_zone == Friend_leash_zone::near) {
 		return;
 	}
 	Actor*      actor  = gwin->get_controlled_actor();
@@ -906,6 +907,65 @@ static Actor* friend_usecode_walker = nullptr;
 
 Actor* Friend_mode_usecode_walker() {
 	return friend_usecode_walker;
+}
+
+Actor* Friend_mode_led_companion() {
+	Actor* own = gwin->get_controlled_actor();
+	if (Friend_mode_is_guest() || !own || own == gwin->get_main_actor() || gwin->has_network_friend_control()) {
+		return nullptr;
+	}
+	return own;
+}
+
+// Shift+Tab, on the host and in single player: lead the next companion in
+// the party (one no guest plays, awake and able), or the Avatar after the
+// last.  The companion left goes back to the party (fighting, in combat
+// mode).  Step 1 of docs/friend-mode/leading-companions.md: nobody follows
+// the one led yet.
+static void Friend_mode_lead_next() {
+	Main_actor*    avatar  = gwin->get_main_actor();
+	Actor*         current = gwin->get_controlled_actor();
+	Party_manager* party   = gwin->get_party_man();
+	std::vector<Actor*> order;
+	for (int i = 0; i < party->get_count(); ++i) {
+		Actor* npc = gwin->get_npc(party->get_member(i));
+		if (npc && npc->is_in_party() && !npc->is_dead() && !npc->get_flag(Obj_flags::asleep)
+			&& !npc->get_flag(Obj_flags::paralyzed) && !gwin->is_remote_friend(npc)) {
+			order.push_back(npc);
+		}
+	}
+	const auto at   = std::find(order.begin(), order.end(), current);
+	const auto next = at == order.end() ? order.begin() : at + 1;
+	Actor*     left = current != avatar ? current : nullptr;
+	if (left) {
+		left->set_target(nullptr);
+	}
+	if (next != order.end() && gwin->take_friend_mode_control((*next)->get_npc_num())) {
+		Friend_mode_notice("Leading " + (*next)->get_npc_name());
+	} else {
+		if (current != avatar) {
+			gwin->release_friend_mode_control();
+		}
+		Friend_mode_notice(order.empty() ? "No companion to lead" : "Leading the Avatar");
+	}
+	if (left && left != gwin->get_controlled_actor() && gwin->in_combat()
+		&& left->get_schedule_type() == Schedule::follow_avatar) {
+		left->set_schedule_type(Schedule::combat);    // Back into the fight.
+	}
+	gwin->set_all_dirty();
+}
+
+void Friend_mode_lead_use_object(Game_object* obj, Actor* actor) {
+	friend_usecode_walker = actor;
+	if (obj->get_info().is_door()) {
+		const int savequal = obj->get_quality();
+		obj->set_quality(0);
+		obj->activate();
+		obj->set_quality(savequal);
+	} else {
+		obj->activate();
+	}
+	friend_usecode_walker = nullptr;
 }
 
 // Host: use a door or other guest-usable object for a guest.  Doors are
@@ -2612,6 +2672,16 @@ static std::string Friend_target_name(const Actor* actor) {
 	return name.empty() ? std::string("someone") : name;
 }
 
+// The companion one leads stops fighting and waits for input again (it is
+// on the wait schedule while led; an attack put it on the combat one).
+static void Friend_mode_lead_stands(Actor* led) {
+	led->set_target(nullptr);
+	if (led->get_schedule_type() != Schedule::wait) {
+		led->stop();
+		led->set_schedule_type(Schedule::wait);
+	}
+}
+
 // Combat mode on, the pick not (or no longer) attacked: the Avatar stands,
 // or the host stops fighting for a guest's companion.
 static void Friend_mode_stop_attack() {
@@ -2623,6 +2693,8 @@ static void Friend_mode_stop_attack() {
 		if (friend_session.connected()) {
 			friend_session.send_blob(Friend_mode_session::Blob_kind::guest_attack, {friend_attack_stop, 0, 0, 0, 0});
 		}
+	} else if (Actor* led = Friend_mode_led_companion()) {
+		Friend_mode_lead_stands(led);
 	} else {
 		Friend_mode_take_manual();
 		gwin->get_main_actor()->set_target(nullptr);
@@ -2767,6 +2839,9 @@ static void Friend_mode_take_manual() {
 // back, and nothing is being attacked through targeting.
 void Friend_mode_combat_ended() {
 	friend_attacking_pick = false;
+	if (Actor* led = Friend_mode_led_companion()) {
+		Friend_mode_lead_stands(led);
+	}
 	Main_actor* avatar = gwin->get_main_actor();
 	if (avatar && friend_saved_attack_mode >= 0 && avatar->get_attack_mode() == Actor::manual) {
 		avatar->set_attack_mode(static_cast<Actor::Attack_mode>(friend_saved_attack_mode), avatar->did_user_set_attack());
@@ -2785,6 +2860,19 @@ bool Friend_mode_attack_target(Actor* foe, bool confirmed) {
 		if (!Friend_mode_guest_request_attack(foe, confirmed)) {    // The host fights for our companion.
 			return false;
 		}
+	} else if (Actor* led = Friend_mode_led_companion()) {
+		// The companion one leads fights it, as the host fights for a
+		// guest's companion; walking or clearing the target ends it.
+		if (!led->can_act_charmed()) {
+			return false;
+		}
+		if (led->get_attack_mode() == Actor::flee) {
+			led->set_attack_mode(Actor::nearest);
+		}
+		if (led->get_schedule_type() != Schedule::combat) {
+			led->set_schedule_type(Schedule::combat);
+		}
+		led->set_target(foe);
 	} else {
 		Main_actor* avatar = gwin->get_main_actor();
 		if (!avatar->can_act_charmed()) {
@@ -2927,6 +3015,13 @@ static void Friend_mode_walking_stops_attack() {
 	}
 	Main_actor* avatar = gwin->get_main_actor();
 	friend_attacking_pick = false;
+	if (Actor* led = Friend_mode_led_companion()) {
+		if (led->get_target() || led->get_schedule_type() == Schedule::combat) {
+			Friend_mode_lead_stands(led);
+			Friend_mode_target_notice("Targeting " + Friend_target_name(gwin->get_action_target()), true);
+		}
+		return;
+	}
 	if (avatar->get_target()) {
 		Friend_mode_take_manual();
 		avatar->set_target(nullptr);
@@ -2975,11 +3070,12 @@ static void Friend_mode_check_target() {
 			Friend_mode_target_next_hostile();
 		}
 	} else if (friend_attacking_pick && gwin->in_combat() && !Friend_mode_is_guest()) {
-		// Knocked out: Exult stops everyone attacking it, but the Avatar
-		// keeps at its pick until it is dead.
-		Main_actor* avatar = gwin->get_main_actor();
-		if (!avatar->get_target() && target->get_flag(Obj_flags::asleep)) {
-			avatar->set_target(target);
+		// Knocked out: Exult stops everyone attacking it, but the Avatar (or
+		// the companion one leads) keeps at its pick until it is dead.
+		Actor* led     = Friend_mode_led_companion();
+		Actor* fighter = led ? led : gwin->get_main_actor();
+		if (!fighter->get_target() && target->get_flag(Obj_flags::asleep)) {
+			fighter->set_target(target);
 		}
 	}
 }
@@ -6272,6 +6368,9 @@ static bool Friend_actor_is_eligible(uint32 npc_num, bool keeping) {
 
 // Is this companion free for 'player' (nobody else controls it)?
 static bool Friend_actor_is_free(uint32 npc_num, int player) {
+	if (const Actor* led = Friend_mode_led_companion(); led && led->get_npc_num() == static_cast<int>(npc_num)) {
+		return false;    // The host leads it (Shift+Tab).
+	}
 	for (const auto& [other, guest] : friend_guests) {
 		if (other != player && guest.actor == static_cast<int>(npc_num)) {
 			return false;
@@ -8748,6 +8847,17 @@ static void Handle_events() {
 			Combat::resume();    // Paused before co-op began: no pausing in co-op.
 		}
 		Friend_class_frame();
+		if (!Friend_mode_is_guest()) {
+			// Leading a companion: the guests' leash (none while the Avatar is played).
+			Actor* led = Friend_mode_led_companion();
+			Friend_mode_update_leash_zone(led);
+			static uint32 lead_leash_notice_at = 0;
+			const uint32  now                  = SDL_GetTicks();
+			if (gwin->take_friend_leash_blocked() && led && now - lead_leash_notice_at > 3000) {
+				lead_leash_notice_at = now;
+				gwin->get_effects()->add_chat_text("You must return to the Avatar", led);
+			}
+		}
 		Friend_mode_paint_target_arrow();
 		Friend_mode_paint_leash_arrow();
 		Friend_mode_paint_dialogue_wait();
@@ -9040,6 +9150,12 @@ static void Handle_event(SDL_Event& event) {
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
 		friend_chat_log_hidden = !friend_chat_log_hidden;    // L: hide or show the chat log.
 		Friend_mode_notice(friend_chat_log_hidden ? "Chat Log Disabled" : "Chat Log Enabled");
+		return;
+	}
+	if (!Friend_mode_is_guest() && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN
+		&& event.key.key == SDLK_TAB && (event.key.mod & SDL_KMOD_SHIFT) && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
+		Friend_mode_lead_next();    // Shift+Tab: lead the next companion.
 		return;
 	}
 	if (friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active

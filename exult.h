@@ -112,6 +112,14 @@ bool Friend_mode_guest_usable_shape(int shape);
 // Host: while using an object for a guest, the guest's companion (not the
 // Avatar) walks to it for scripts that path the Avatar there first.
 Actor* Friend_mode_usecode_walker();
+// The host or a single player leading a companion (Shift+Tab, see
+// docs/friend-mode/leading-companions.md): that companion, or null while
+// the Avatar is played.
+Actor* Friend_mode_led_companion();
+// Use a door or other guest-usable object with the companion one leads:
+// it walks for scripts that path someone there, and doors toggle as for a
+// guest (their own toggle only).
+void Friend_mode_lead_use_object(Game_object* object, Actor* actor);
 // Guest: ask the host to use a door or other guest-usable object.
 void Friend_mode_request_object_use(Game_object* object);
 // Items guests may use: food and potions on their own companion, keys and

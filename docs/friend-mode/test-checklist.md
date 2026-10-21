@@ -1110,6 +1110,39 @@ Class AI (companions nobody plays, host):
 - [ ] Dupre and the others close in as before.
 - [ ] A guest's companion is never moved by this; in follow mode it is.
 
+## Leading a companion, step 1 (host and single player)
+
+Built 2026-10-21, not tested yet. See [leading a
+companion](leading-companions.md). The party doesn't follow the companion
+you lead yet (step 2); it stands where it was.
+
+- [ ] Shift+Tab leads the first companion in the party: the camera follows
+      it, "Leading Shamino" near the top, WASD or the mouse walk it. Again:
+      the next one, then "Leading the Avatar" after the last.
+- [ ] Skipped by Shift+Tab: a guest's companion, and anyone asleep,
+      paralyzed or dead.
+- [ ] With the Class System on, the skill bar is the led companion's
+      (icons), and its skills work from the host: Julia's Set Trap,
+      Shamino's Volley at the Q pick. Back on the Avatar, the spell bar.
+- [ ] The led companion never uses skills by itself (the Class AI leaves
+      it alone); the others still do.
+- [ ] Combat mode, Q a wolf: the led companion attacks it (not the
+      Avatar); walking stops the attack, Space takes it up again; clearing
+      the target stops it; the Avatar and the others fight as U7 does.
+- [ ] Double-click in combat mode on a foe: the led companion attacks it.
+- [ ] Doors, shutters, lamps, levers (the companion walks to the lever, not
+      the Avatar), food, potions, keys, lockpicks, books and signs work as
+      for a guest; a locked door or chest says "Locked"; people, merchants
+      included, and story objects say "The Avatar must do this".
+- [ ] The leash: past 20 tiles from the Avatar "Straying from the Avatar"
+      and an arrow back to it; at 32 it won't go further ("You must return
+      to the Avatar"); walking back is always allowed.
+- [ ] Shift+Tab during combat mode: the companion left goes back into the
+      fight.
+- [ ] Saving while leading hands control back to the Avatar first (Phase
+      1); the save loads with everyone following.
+- [ ] Co-op: a guest's picker doesn't offer the companion the host leads.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".
