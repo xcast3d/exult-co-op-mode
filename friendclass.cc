@@ -1067,12 +1067,14 @@ std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
 	case Skill_target::pick: {
 		// The guest's own pick first (a hostile, or a creature such as a
 		// rabbit), then the companion's foe.
+		// A pick the guest chose is final: never the nearest hostile instead.
 		if (const Game_object_shared chosen = chosen_pick.lock()) {
 			Actor* foe = chosen->as_actor();
 			if (foe && (Friend_mode_is_hostile(user, foe) || Friend_mode_guest_may_attack(user, foe))
 				&& user->distance(foe) <= skill.range) {
 				return {foe};
 			}
+			return {};
 		}
 		Game_object* target = user->get_target();
 		Actor*       foe    = target ? target->as_actor() : nullptr;
@@ -1279,9 +1281,19 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			why = "Nobody needs curing";
 			break;
 		case Skill_type::attack:
-		case Skill_type::control:
-			why = "No hostile in range";
+		case Skill_type::control: {
+			// Say why: the chosen pick too far, or nobody near.
+			const Game_object_shared chosen = chosen_pick.lock();
+			Actor*                   foe    = chosen ? chosen->as_actor() : nullptr;
+			if (foe && skill.target == Skill_target::pick && user->distance(foe) > skill.range) {
+				why = foe->get_name() + " is out of range (" + std::to_string(skill.range) + " tiles)";
+			} else if (foe && skill.target == Skill_target::pick) {
+				why = "The Avatar must do this";
+			} else {
+				why = "No hostile in range";
+			}
 			break;
+		}
 		default:
 			why = "Nobody in range";
 			break;
