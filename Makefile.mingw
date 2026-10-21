@@ -604,6 +604,8 @@ install: $(EXEC)
 	cp data/exult.flx $(U7PATH)/data
 	cp data/exult_bg.flx $(U7PATH)/data
 	cp data/exult_si.flx $(U7PATH)/data
+	mkdir -p $(U7PATH)/data/friend/skills
+	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
 
 debug: $(EXEC)
 	mkdir -p $(U7PATH)
@@ -613,6 +615,8 @@ debug: $(EXEC)
 	cp data/exult.flx $(U7PATH)/data
 	cp data/exult_bg.flx $(U7PATH)/data
 	cp data/exult_si.flx $(U7PATH)/data
+	mkdir -p $(U7PATH)/data/friend/skills
+	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
 
 mods: tools
 	for mod in $(MODS); do \

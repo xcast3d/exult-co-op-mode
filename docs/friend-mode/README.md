@@ -88,9 +88,12 @@ through targeting and double-clicks uses it; it follows the guests' rules
 ("The Avatar must do this" for people, merchants included); the guests'
 leash applies. Tested: Shift+Tab cycling. Step 2, built the same day
 (tested: formation, roofs): the party, the Avatar included, follows the
-companion one leads (`Game_window::get_party_leader`). Step 3 (untested):
-Y on the host and in single player holds the party; held companions strike
-hostiles in reach without moving. See [leading a
+companion one leads (`Game_window::get_party_leader`). Step 3 (tested): Y
+on the host and in single player holds the party; held companions strike
+hostiles in reach without moving; Shift+click on a face leads that one.
+Step 4 (untested): saves keep the lead, the Avatar takes over when spoken
+to and the companion is led again after, notices when the one led falls,
+and guests see the host on the companion it leads. See [leading a
 companion](leading-companions.md) and the [test checklist](test-checklist.md).
 
 **Skill icons, built 2026-10-21 (untested in a long session).** 40x40 pictures per skill in `data/friend/skills/`, colour
@@ -98,7 +101,10 @@ companion](leading-companions.md) and the [test checklist](test-checklist.md).
 icons", each machine); the name shows in the tooltip, unusable ones are
 dimmed. Built from `scratch/class-skill-icons/` (not in the repo) with
 `build.py`. Credits for the game-icons.net motifs (CC BY 3.0) are in
-`data/friend/skills/CREDITS.txt`.
+`data/friend/skills/CREDITS.txt`. Installed with the game: `Makefile.mingw`
+(`install`, `debug`, and so the GitHub Windows build), the macOS bundle
+(`macosx/macosx.am`) and `make install` (`data/Makefile.am`) copy the
+folder to `data/friend/skills/`.
 
 **Pauses in co-op, built 2026-10-20 (no protocol change; untested).**
 Only the host pauses the game. In co-op, windows (backpacks, paperdolls)
