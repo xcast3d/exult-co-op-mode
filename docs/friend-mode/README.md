@@ -87,8 +87,10 @@ companion (one no guest plays), with its skill bar and the Q pick; combat
 through targeting and double-clicks uses it; it follows the guests' rules
 ("The Avatar must do this" for people, merchants included); the guests'
 leash applies. Tested: Shift+Tab cycling. Step 2, built the same day
-(untested): the party, the Avatar included, follows the companion one
-leads (`Game_window::get_party_leader`). See [leading a
+(tested: formation, roofs): the party, the Avatar included, follows the
+companion one leads (`Game_window::get_party_leader`). Step 3 (untested):
+Y on the host and in single player holds the party; held companions strike
+hostiles in reach without moving. See [leading a
 companion](leading-companions.md) and the [test checklist](test-checklist.md).
 
 **Skill icons, built 2026-10-21 (untested in a long session).** 40x40 pictures per skill in `data/friend/skills/`, colour

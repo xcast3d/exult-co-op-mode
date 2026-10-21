@@ -3190,7 +3190,9 @@ void Paint_marks() {
 		}
 	}
 	size_t        used         = 0;
-	constexpr int text_layer_z = (1 << 18) + (1 << 16);
+	// In the world: under every window (gumps start at 1 << 18, see
+	// Gump_manager), so a backpack covers them.
+	constexpr int world_mark_z = 1 << 18;
 	for (const auto& [actor, marks] : shown) {
 		if (!actor->get_chunk() || actor->is_dead()) {
 			continue;
@@ -3211,7 +3213,7 @@ void Paint_marks() {
 		for (int i = 0; i < n && used < icon_layers.size(); ++i, ++used) {
 			Icon_layer& slot = icon_layers[used];
 			if (slot.layer < 0) {
-				slot.layer = gwin->create_layer("Skill status icon", icon_size, icon_size, 255, 0, text_layer_z - 7);
+				slot.layer = gwin->create_layer("Skill status icon", icon_size, icon_size, 255, 0, world_mark_z - 7);
 				slot.mark  = 0;
 				if (slot.layer < 0) {
 					return;
@@ -3294,9 +3296,10 @@ void Paint_circles() {
 						*layer = -1;
 					}
 				}
-				constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As effects.cc's text.
-				layers.fill   = gwin->create_layer("Skill range fill", size, size, 255, 0, text_layer_z - 6);
-				layers.border = gwin->create_layer("Skill range border", size, size, 255, 0, text_layer_z - 5);
+				// Under every window, as the status icons (gumps start at 1 << 18).
+				constexpr int world_mark_z = 1 << 18;
+				layers.fill   = gwin->create_layer("Skill range fill", size, size, 255, 0, world_mark_z - 6);
+				layers.border = gwin->create_layer("Skill range border", size, size, 255, 0, world_mark_z - 5);
 				if (layers.fill < 0 || layers.border < 0) {
 					return;
 				}

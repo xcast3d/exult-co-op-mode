@@ -1,7 +1,8 @@
 # Leading a companion
 
-Status: **steps 1 and 2 built** (2026-10-21): step 1 tried and working
-(Shift+Tab cycling), step 2 not tested yet; steps 3 and 4 planned.
+Status: **steps 1 to 3 built** (2026-10-21): steps 1 and 2 tried and
+working (Shift+Tab, the party following in formation, roofs), step 3 not
+tested yet; step 4 planned.
 
 The Class System gives every companion skills, but only guests can use them
 by hand: the host and a single player play the Avatar, whose bar holds
@@ -49,6 +50,9 @@ guest does, use its skill bar, and have the party follow it.
   then each companion in the party that no guest is playing, then back to
   the Avatar. The notice near the top says "Leading Shamino" (and
   "Leading the Avatar").
+- **Shift+click on a face** in Exult's status bars leads that one directly,
+  the Avatar's face too (2026-10-21). A guest's companion says "Iolo is
+  another player's"; one asleep or paralyzed, "can't be led now".
 - The camera, roofs, night lighting, the Target System (Q, E, Space) and
   the minimap follow whoever you lead; most of them already follow the
   controlled actor.
@@ -157,6 +161,19 @@ guest does, use its skill bar, and have the party follow it.
    schedule while led).
 3. **Y holds.** The wait schedule for everyone else, the leash, saves, and
    the end of a hold on a map change.
+   Built 2026-10-21 (`Friend_mode_set_hold` and the rest in exult.cc): Y
+   holds everyone but the one played, the Avatar too while a companion
+   is led, and a guest's companion in follow mode; Y again, or the leader
+   reaching another map, and they follow ("The party holds", "The party
+   follows"). Combat mode leaves the held alone (U7 skips the wait
+   schedule; the Avatar is kept out of `toggle_combat`'s change too), so
+   they stand their ground by a check of our own: every 2 seconds each
+   strikes the nearest hostile within its weapon's reach without moving
+   (a bow reaches far), at once one attacking it, any once combat mode is
+   on. Shift+Tab during a hold: the one now led leaves the hold, the one
+   left joins it. Saves write the held as following. `teleport_party`
+   takes them along. The leash (from step 1) measures from the Avatar,
+   held or not.
 4. **Co-op and the edges.** Pickers, the player list, back to the Avatar on
    conversations and on losing the companion, and the test checklist.
 

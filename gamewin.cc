@@ -813,7 +813,7 @@ void Game_window::toggle_combat() {
 	if (!main_actor_can_act_charmed()) {
 		newsched = Schedule::combat;
 	}
-	if (main_actor->get_schedule_type() != newsched) {
+	if (main_actor->get_schedule_type() != newsched && !Friend_mode_is_held(main_actor)) {    // Held: Friend Mode's Y.
 		main_actor->set_schedule_type(newsched);
 	}
 	if (combat) {    // Get rid of flee modes.
@@ -2384,7 +2384,8 @@ void Game_window::teleport_party(
 		// A Friend Mode guest's companion waits on the host but still travels,
 		// as does the companion the host leads.
 		if (person && !person->is_dead()
-			&& (person->get_schedule_type() != Schedule::wait || is_remote_friend(person) || person == controlled_actor)
+			&& (person->get_schedule_type() != Schedule::wait || is_remote_friend(person) || person == controlled_actor
+				|| Friend_mode_is_held(person))
 			&& (person->can_act() || no_status_check)) {
 			person->set_action(nullptr);
 			const Tile_coord t1 = Map_chunk::find_spot(t, 8, person->get_shapenum(), person->get_framenum(), 1);

@@ -116,6 +116,9 @@ Actor* Friend_mode_usecode_walker();
 // docs/friend-mode/leading-companions.md): that companion, or null while
 // the Avatar is played.
 Actor* Friend_mode_led_companion();
+// Lead that companion, or the Avatar (Shift+click on a face in the status
+// bars).  The host and a single player only; false on a guest.
+bool Friend_mode_lead_actor(Actor* target);
 // Use a door or other guest-usable object with the companion one leads:
 // it walks for scripts that path someone there, and doors toggle as for a
 // guest (their own toggle only).
@@ -124,6 +127,9 @@ void Friend_mode_lead_use_object(Game_object* object, Actor* actor);
 // does (on the real world; story flags are put back).  False if 'npc' is
 // none, or nobody is led.
 bool Friend_mode_lead_talk_to_merchant(Actor* npc);
+// Y on the host and in single player holds the party: this one is held
+// (waiting where it stands).
+bool Friend_mode_is_held(const Actor* actor);
 // Guest: ask the host to use a door or other guest-usable object.
 void Friend_mode_request_object_use(Game_object* object);
 // Items guests may use: food and potions on their own companion, keys and

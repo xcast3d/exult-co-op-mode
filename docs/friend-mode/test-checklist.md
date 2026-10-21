@@ -1122,6 +1122,10 @@ you lead yet (step 2); it stands where it was.
       the next one, then "Leading the Avatar" after the last.
 - [ ] Skipped by Shift+Tab: a guest's companion, and anyone asleep,
       paralyzed or dead.
+- [ ] Shift+click on a face in the status bars leads that one (the
+      Avatar's face: back to the Avatar); a plain click still shows the
+      name, a double-click the paperdoll. A guest's companion: "Iolo is
+      another player's".
 - [ ] With the Class System on, the skill bar is the led companion's
       (icons), and its skills work from the host: Julia's Set Trap,
       Shamino's Volley at the Q pick. Back on the Avatar, the spell bar.
@@ -1171,6 +1175,28 @@ Step 2, the party follows (built 2026-10-21, not tested yet):
 - [ ] Eggs: a scripted scene in a room plays when the Avatar arrives, not
       when Shamino does.
 - [ ] Co-op: a guest in follow mode (Y) follows Shamino too.
+
+Step 3, Y holds the party (built 2026-10-21, not tested yet):
+
+- [ ] Leading Shamino, Y: "The party holds"; the Avatar and the rest stay
+      where they are while he walks off (to the leash's 32 tiles from the
+      Avatar). Y again: "The party follows", and they come.
+- [ ] On the Avatar, Y: the companions hold while the Avatar walks.
+- [ ] Held, a wolf attacks one of them: it strikes back without moving;
+      combat mode on: the held strike any hostile in reach (Shamino with
+      his bow from where he stands), and none walks off to chase.
+- [ ] Shift+Tab during a hold: the one now led walks; the one left stays.
+      Y after: everyone follows the one led, nobody stays stuck.
+- [ ] Save during a hold, load: everyone follows (not stuck waiting).
+- [ ] Take stairs or a teleporter to another map during a hold: the hold
+      ends and the party comes along.
+- [ ] Co-op: a guest playing a companion isn't held; one in follow mode is.
+
+Status marks and windows (2026-10-21): the skill status icons, the range
+circles and the target arrow are drawn under backpacks and paperdolls.
+
+- [ ] Open a backpack over Iolo after Song of Warding: the blue shields
+      and the arrow don't show through the backpack.
 
 ## Leaving
 

@@ -47,6 +47,7 @@
 #include "barge.h"
 #include "cheat.h"
 #include "chunks.h"
+#include "combat.h"
 #include "combat_opts.h"
 #include "contain.h"
 #include "crc.h"
@@ -917,35 +918,40 @@ Actor* Friend_mode_led_companion() {
 	return own;
 }
 
-// Shift+Tab, on the host and in single player: lead the next companion in
-// the party (one no guest plays, awake and able), or the Avatar after the
-// last.  The companion left goes back to the party (fighting, in combat
-// mode).  The party, the Avatar included, follows the one led
+static void Friend_mode_hold_swap(Actor* left, Actor* taken);
+static void Friend_mode_hold_saving(bool before);
+
+// A companion the host or a single player may lead: in the party, awake,
+// able, and no guest's.
+static bool Friend_mode_can_lead(const Actor* npc) {
+	return npc && npc->is_in_party() && !npc->is_dead() && !npc->get_flag(Obj_flags::asleep)
+		   && !npc->get_flag(Obj_flags::paralyzed) && !gwin->is_remote_friend(npc);
+}
+
+// Lead 'target' (a companion; the Avatar, or null, to play the Avatar).
+// The companion left goes back to the party (fighting, in combat mode).
+// The party, the Avatar included, follows the one led
 // (Game_window::get_party_leader); see docs/friend-mode/leading-companions.md.
-static void Friend_mode_lead_next() {
-	Main_actor*    avatar  = gwin->get_main_actor();
-	Actor*         current = gwin->get_controlled_actor();
-	Party_manager* party   = gwin->get_party_man();
-	std::vector<Actor*> order;
-	for (int i = 0; i < party->get_count(); ++i) {
-		Actor* npc = gwin->get_npc(party->get_member(i));
-		if (npc && npc->is_in_party() && !npc->is_dead() && !npc->get_flag(Obj_flags::asleep)
-			&& !npc->get_flag(Obj_flags::paralyzed) && !gwin->is_remote_friend(npc)) {
-			order.push_back(npc);
-		}
+static void Friend_mode_lead(Actor* target) {
+	Main_actor* avatar  = gwin->get_main_actor();
+	Actor*      current = gwin->get_controlled_actor();
+	if (target == avatar) {
+		target = nullptr;
 	}
-	const auto at   = std::find(order.begin(), order.end(), current);
-	const auto next = at == order.end() ? order.begin() : at + 1;
-	Actor*     left = current != avatar ? current : nullptr;
+	if (target == current || (!target && current == avatar)) {
+		return;    // Already.
+	}
+	Actor* left = current != avatar ? current : nullptr;
 	if (left) {
 		left->set_target(nullptr);
 	}
-	if (next != order.end() && gwin->take_friend_mode_control((*next)->get_npc_num())) {
-		Friend_mode_notice("Leading " + (*next)->get_npc_name());
+	if (target && gwin->take_friend_mode_control(target->get_npc_num())) {
+		Friend_mode_notice("Leading " + target->get_npc_name());
 		// The Avatar follows the one led, as the party does (in combat it
 		// fights as U7's party does, and follows again after).
 		const int sched = avatar->get_schedule_type();
-		if (sched != Schedule::combat && sched != Schedule::follow_avatar && !avatar->get_flag(Obj_flags::asleep)) {
+		if (sched != Schedule::combat && sched != Schedule::follow_avatar && !avatar->get_flag(Obj_flags::asleep)
+			&& !Friend_mode_is_held(avatar)) {
 			avatar->set_schedule_type(Schedule::follow_avatar);
 		}
 		gwin->get_leader_followers();
@@ -953,13 +959,69 @@ static void Friend_mode_lead_next() {
 		if (current != avatar) {
 			gwin->release_friend_mode_control();
 		}
-		Friend_mode_notice(order.empty() ? "No companion to lead" : "Leading the Avatar");
+		Friend_mode_notice("Leading the Avatar");
 	}
 	if (left && left != gwin->get_controlled_actor() && gwin->in_combat()
 		&& left->get_schedule_type() == Schedule::follow_avatar) {
 		left->set_schedule_type(Schedule::combat);    // Back into the fight.
 	}
+	Actor* now_played = gwin->get_controlled_actor();
+	Friend_mode_hold_swap(left ? left : (now_played != avatar ? static_cast<Actor*>(avatar) : nullptr), now_played);
+	// Taken while the party held, it was given back 'wait': it follows.
+	if (left && left != now_played && !Friend_mode_is_held(left) && !gwin->is_remote_friend(left)
+		&& left->get_schedule_type() == Schedule::wait) {
+		left->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
+	}
 	gwin->set_all_dirty();
+}
+
+// Shift+Tab, on the host and in single player: lead the next companion in
+// the party that may be led, or the Avatar after the last.
+static void Friend_mode_lead_next() {
+	Party_manager*      party = gwin->get_party_man();
+	std::vector<Actor*> order;
+	for (int i = 0; i < party->get_count(); ++i) {
+		Actor* npc = gwin->get_npc(party->get_member(i));
+		if (Friend_mode_can_lead(npc)) {
+			order.push_back(npc);
+		}
+	}
+	if (order.empty()) {
+		Friend_mode_notice("No companion to lead");
+		return;
+	}
+	const auto at   = std::find(order.begin(), order.end(), gwin->get_controlled_actor());
+	const auto next = at == order.end() ? order.begin() : at + 1;
+	Friend_mode_lead(next == order.end() ? nullptr : *next);
+}
+
+// Shift+click at (x, y), game coordinates: on a face in Exult's status bars
+// (Face_stats), lead that one.  True if it was a face.
+static bool Friend_mode_shift_click_face(int x, int y) {
+	Gump_manager* gumps = gwin->get_gump_man();
+	Gump*         gump  = gumps->find_gump(x, y);
+	if (Friend_mode_is_guest() || !dynamic_cast<Face_stats*>(gump)) {
+		return false;
+	}
+	int gx = x;
+	int gy = y;
+	gumps->map_game_to_gump(gump, x, y, gx, gy);
+	Container_game_object* found = gump->find_actor(gx, gy);
+	Actor*                 actor = found ? found->as_actor() : nullptr;
+	return actor && Friend_mode_lead_actor(actor);
+}
+
+bool Friend_mode_lead_actor(Actor* target) {
+	if (Friend_mode_is_guest() || !target) {
+		return false;
+	}
+	if (target != gwin->get_main_actor() && !Friend_mode_can_lead(target)) {
+		Friend_mode_notice(target->get_npc_name()
+						   + (gwin->is_remote_friend(target) ? " is another player's" : " can't be led now"));
+		return true;
+	}
+	Friend_mode_lead(target);
+	return true;
 }
 
 void Friend_mode_lead_use_object(Game_object* obj, Actor* actor) {
@@ -2108,6 +2170,7 @@ static void Friend_return_held_item(Friend_held_item& friend_guest_held) {
 // autosave, or a joining guest's world) loses the item.
 void Friend_mode_saving(bool before) {
 	Friend_class_saving(before);
+	Friend_mode_hold_saving(before);
 	// Targeting's manual attack mode is for this fight only: saves keep the
 	// Avatar's own.
 	static bool swapped = false;
@@ -2960,8 +3023,9 @@ static void Friend_mode_paint_target_arrow() {
 	constexpr int         ah         = 6;
 	constexpr const char* arrow[ah] = {"BBBBBBBBB", "BRRRRRRRB", ".BRRRRRB.", "..BRRRB..", "...BRB...", "....B...."};
 	if (layer < 0) {
-		constexpr int text_layer_z = (1 << 18) + (1 << 16);
-		layer                      = gwin->create_layer("Target arrow", aw, ah, 255, 0, text_layer_z - 1);
+		// Under every window (gumps start at 1 << 18), over the world.
+		constexpr int world_mark_z = 1 << 18;
+		layer                      = gwin->create_layer("Target arrow", aw, ah, 255, 0, world_mark_z - 1);
 		painted                    = -1;
 		if (layer < 0) {
 			return;
@@ -4772,6 +4836,153 @@ bool Friend_mode_lead_talk_to_merchant(Actor* npc) {
 	}
 	cout << "Friend Mode: " << own->get_npc_name() << " talked to " << npc->get_npc_name() << endl;
 	return true;
+}
+
+// Y on the host and in single player: the party holds (step 3 of
+// docs/friend-mode/leading-companions.md).  Everyone but the one played
+// waits where it stands (the Avatar too, while a companion is led; a
+// guest's companion in follow mode too); Y again, or a change of map, and
+// they follow.  Held, they strike whatever hostile is within their weapon's
+// reach without moving: at once one attacking them, anything in reach once
+// combat mode is on.
+static bool             friend_holding  = false;
+static std::vector<int> friend_held;           // NPC numbers (0 is the Avatar).
+static int              friend_hold_map = -1;
+
+bool Friend_mode_is_held(const Actor* actor) {
+	return friend_holding && actor
+		   && std::find(friend_held.begin(), friend_held.end(), actor->get_npc_num()) != friend_held.end();
+}
+
+// A guest plays this companion now (not following): it isn't the party's to hold.
+static bool Friend_mode_guest_plays(const Actor* npc) {
+	for (const auto& [player, guest] : friend_guests) {
+		if (guest.actor == npc->get_npc_num()) {
+			return !guest.following;
+		}
+	}
+	return false;
+}
+
+static void Friend_mode_hold_one(Actor* npc) {
+	if (!npc || npc->is_dead() || npc == gwin->get_controlled_actor() || Friend_mode_guest_plays(npc)
+		|| std::find(friend_held.begin(), friend_held.end(), npc->get_npc_num()) != friend_held.end()) {
+		return;
+	}
+	npc->stop();
+	npc->set_target(nullptr);
+	npc->set_schedule_type(Schedule::wait);
+	friend_held.push_back(npc->get_npc_num());
+}
+
+static void Friend_mode_release_one(int num) {
+	friend_held.erase(std::remove(friend_held.begin(), friend_held.end(), num), friend_held.end());
+	Actor* npc = gwin->get_npc(num);
+	if (!npc || npc->is_dead() || npc == gwin->get_controlled_actor() || Friend_mode_guest_plays(npc)
+		|| npc->get_schedule_type() != Schedule::wait) {
+		return;
+	}
+	npc->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
+}
+
+static void Friend_mode_set_hold(bool hold) {
+	if (hold == friend_holding) {
+		return;
+	}
+	if (hold) {
+		friend_holding = true;
+		Party_manager* party = gwin->get_party_man();
+		for (int i = 0; i < party->get_count(); ++i) {
+			Friend_mode_hold_one(gwin->get_npc(party->get_member(i)));
+		}
+		Friend_mode_hold_one(gwin->get_main_actor());
+		friend_hold_map = gwin->get_party_leader()->get_map_num();
+		Friend_mode_notice("The party holds");
+		return;
+	}
+	const std::vector<int> held = friend_held;
+	for (const int num : held) {
+		Friend_mode_release_one(num);
+	}
+	friend_held.clear();
+	friend_holding = false;
+	Friend_mode_notice("The party follows");
+	gwin->get_leader_followers();
+}
+
+// Shift+Tab while holding: the one led now isn't held; the one left is.
+static void Friend_mode_hold_swap(Actor* left, Actor* taken) {
+	if (!friend_holding) {
+		return;
+	}
+	if (taken) {
+		friend_held.erase(std::remove(friend_held.begin(), friend_held.end(), taken->get_npc_num()), friend_held.end());
+		if (taken == gwin->get_main_actor()) {
+			// Walking the Avatar from 'wait' sets everyone following
+			// (Game_window::start_actor); from 'follow' it doesn't.
+			taken->set_schedule_type(Schedule::follow_avatar);
+		}
+	}
+	Friend_mode_hold_one(left);
+}
+
+// Every frame, on the host and in single player.
+static void Friend_mode_hold_frame() {
+	if (!friend_holding) {
+		return;
+	}
+	if (gwin->get_party_leader()->get_map_num() != friend_hold_map) {
+		Friend_mode_set_hold(false);    // Another map: nobody is left behind.
+		return;
+	}
+	static uint32 next = 0;
+	const uint32  now  = SDL_GetTicks();
+	if (now < next || gwin->get_usecode()->in_usecode() || gwin->get_tqueue()->is_paused()) {
+		return;
+	}
+	next = now + 250;
+	static std::map<int, uint32> next_strike;    // By NPC.
+	for (const int num : friend_held) {
+		Actor* npc = gwin->get_npc(num);
+		if (!npc || npc->is_dead() || !npc->can_act() || now < next_strike[num]) {
+			continue;
+		}
+		int                points = 0;
+		int                weapon = -1;
+		Game_object*       obj    = nullptr;
+		const Weapon_info* winf   = npc->get_weapon(points, weapon, obj);
+		if (!winf || weapon < 0) {
+			continue;
+		}
+		const int    reach = npc->get_effective_range(winf, winf->get_range());
+		Actor_vector near;
+		npc->find_nearby_actors(near, c_any_shapenum, reach);
+		Actor* foe = nullptr;
+		for (Actor* each : near) {
+			if (Friend_is_hostile_target(npc, each) && npc->distance(each) <= reach
+				&& (gwin->in_combat() || each->get_target() == npc)
+				&& (!foe || npc->distance(each) < npc->distance(foe))) {
+				foe = each;
+			}
+		}
+		if (!foe) {
+			continue;
+		}
+		const int pose = npc->distance(foe) <= 1 ? Actor::strike1_frame : Actor::ready_frame;
+		npc->change_frame(npc->get_dir_framenum(npc->get_direction(foe), pose));
+		Combat_schedule::attack_target(npc, foe, foe->get_tile(), weapon);
+		next_strike[num] = now + 2000;
+	}
+}
+
+// Around a save: held companions are written as following.
+static void Friend_mode_hold_saving(bool before) {
+	for (const int num : friend_held) {
+		Actor* npc = gwin->get_npc(num);
+		if (npc && !npc->is_dead()) {
+			npc->set_schedule_type(before ? Schedule::follow_avatar : Schedule::wait);
+		}
+	}
 }
 
 // Host: the story flags, as bits, when they change.
@@ -8902,6 +9113,7 @@ static void Handle_events() {
 		}
 		Friend_class_frame();
 		if (!Friend_mode_is_guest()) {
+			Friend_mode_hold_frame();
 			// Leading a companion: the guests' leash (none while the Avatar is played).
 			Actor* led = Friend_mode_led_companion();
 			Friend_mode_update_leash_zone(led);
@@ -9241,6 +9453,12 @@ static void Handle_event(SDL_Event& event) {
 			friend_session.take_roster_update();    // Wait for the fresh list.
 			friend_session.send_blob(Friend_mode_session::Blob_kind::roster_request, {1});
 		}
+		return;
+	}
+	if (!Friend_mode_is_guest() && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN
+		&& event.key.key == SDLK_Y && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
+		Friend_mode_set_hold(!friend_holding);    // Y: the party holds, or follows again.
 		return;
 	}
 	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active
@@ -9594,6 +9812,11 @@ static void Handle_event(SDL_Event& event) {
 				}
 			}
 
+			if (!click_handled && avatar_can_act && left_down_x - 1 <= x && x <= left_down_x + 1 && left_down_y - 1 <= y
+				&& y <= left_down_y + 1 && (SDL_GetModState() & SDL_KMOD_SHIFT) && Friend_mode_shift_click_face(x, y)) {
+				dragging = dragged = false;    // Shift+click on a face: lead that one.
+				break;
+			}
 			if (!click_handled && avatar_can_act && left_down_x - 1 <= x && x <= left_down_x + 1 && left_down_y - 1 <= y
 				&& y <= left_down_y + 1) {
 				show_items_x = x;
