@@ -2790,6 +2790,10 @@ int Actor::apply_damage(
 	if (exp) {
 		*exp = 0;
 	}
+	// Friend Mode's Shield Ally: the guardian takes this melee blow instead.
+	if (Actor* guardian = Friend_class_guardian(this, attacker)) {
+		return guardian->apply_damage(attacker, str, wpoints, type, bias, exp);
+	}
 	int damage = bias;
 	str /= 3;
 

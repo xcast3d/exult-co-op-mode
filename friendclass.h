@@ -83,6 +83,13 @@ int Friend_class_bonus(const Actor* actor, int prop);
 void Friend_class_adjust_damage(const Actor* target, Game_object* attacker, int& damage, int& armor);
 // A melee strike missed 'target' (Combat_schedule::attack_target): Riposte.
 void Friend_class_note_miss(Game_object* attacker, Game_object* target);
+// Combat_schedule::attack_target: this strike always hits (a Riposte's answer).
+bool Friend_class_sure_hit(const Game_object* attacker);
+// Combat_schedule::now_what: confused by Dirty Trick, so not attacking.
+bool Friend_class_calmed(const Actor* npc);
+// Actor::apply_damage: whoever shields 'target' from this melee blow (Shield
+// Ally) takes it instead, or null.
+Actor* Friend_class_guardian(const Actor* target, Game_object* attacker);
 
 // What friendclass.cc needs from exult.cc.
 Friend_mode_session& Friend_mode_get_session();

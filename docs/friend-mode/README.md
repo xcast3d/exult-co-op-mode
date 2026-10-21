@@ -93,6 +93,24 @@ Exult's menus open (they stop its main loop), the host's AI drives its
 companion quietly (guest_follow 2 and 3: no bar, no notice), and hands it
 back when the menu closes. The host's menus still pause everyone.
 
+**Skills changed after testing, built 2026-10-20 (protocol version 35);
+not tested yet.** From the user's sheet after playing with testers; the
+table is in [companion skills](companion-skills.md), the checks in "Class
+System" in the [test checklist](test-checklist.md).
+
+- Every bar runs level 1, 3, 6; cooldowns 30, 60, 90 by level (a few
+  exceptions). Iolo, Shamino, Jaana, Dupre, Sentri reordered.
+- **New skills:** Jaana's Greater Heal (full heal on the most hurt),
+  Dupre's Shield Ally (melee blows on an ally land on him for 15 s, shield
+  needed; the Class AI keeps him near his ward, `Friend_class_guardian` in
+  `Actor::apply_damage`), Spark's Dirty Trick (hostiles within 12 don't
+  attack for 3 s, `Friend_class_calmed` in `Combat_schedule::now_what`),
+  Julia's Set Trap (caltrops at her feet hurt hostiles 5 s), Katrina's
+  Summon Dogs (two), Summon Wolf and Summon Bee. Gone: Entangle, Stand
+  Fast, Time Bomb, Healing Field, Sanctuary.
+- Riposte's answer always hits (`Friend_class_sure_hit`); Blade Dance
+  reaches 6 tiles by darting Sentri beside each foe in turn.
+
 **Class System, built 2026-10-20 (protocol version 33); not tested
 yet** (built remotely; it compiles). See "Class System" in the
 [test checklist](test-checklist.md) and the plan in

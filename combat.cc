@@ -1371,7 +1371,7 @@ bool Combat_schedule::attack_target(
 		return true;
 	} else if (target) {
 		// Do nothing when attacking tiles in melee.
-		bool autohit = winf->autohits() || ainf->autohits();
+		bool autohit = winf->autohits() || ainf->autohits() || Friend_class_sure_hit(attacker);
 		// godmode effects:
 		if (cheat.in_god_mode()) {
 			autohit = trg_party ? false : (att_party ? true : autohit);
@@ -1580,6 +1580,10 @@ void Combat_schedule::now_what() {
 	}
 	if (npc->get_flag(Obj_flags::asleep)) {
 		npc->start(200, 1000);    // Check again in a second.
+		return;
+	}
+	if (Friend_class_calmed(npc)) {    // Friend Mode: Dirty Trick.
+		npc->start(200, 500);
 		return;
 	}
 	// Running away?

@@ -124,6 +124,7 @@ enum class Skill_target {
 	pick,              // The user's foe (its combat target), or the nearest hostile.
 	hostiles_nearest,  // The 'count' nearest hostiles within range.
 	ally,              // The party member in range with the least health left (the user too).
+	ward,              // Another party member in range: one a hostile is on in melee, else the most hurt.
 };
 
 enum class Skill_effect {
@@ -133,15 +134,17 @@ enum class Skill_effect {
 	hinder,    // Paralyzes or knocks out for 'duration_ms', after a roll.
 	volley,    // A real shot with the readied weapon at each target.
 	bonus,     // +'amount' strength and combat for 'duration_ms'.
-	armor,     // +'amount' armour for 'duration_ms' (Quick Fix, Sanctuary).
+	armor,     // +'amount' armour for 'duration_ms' (Quick Fix).
 	mark,      // The target takes +'amount' damage from the party for 'duration_ms'.
 	stance,    // Riposte: for 'duration_ms', a melee strike that misses the user is answered.
 	bomb,      // Thrown at the pick; after 'fuse_ms', hostiles within 'blast' are hit 'hits' times.
 	flash,     // Thrown at the pick; hostiles within 'blast' are hindered ('flag', 'duration_ms').
 	field,     // At the user's feet: the party within 'range' heals 'amount' every second for 'duration_ms'.
-	summon,    // A friendly 'summon_shape' fights beside the party for 'duration_ms'.
-	taunt,     // Hostiles turn on the user (not built yet).
-	calm,      // Hostiles stop fighting (not built yet).
+	summon,    // 'hits' friendly 'summon_shape's fight beside the party for 'duration_ms'.
+	taunt,     // Hostiles turn on the user, kept on it for 'duration_ms'.
+	calm,      // Hostiles don't attack for 'duration_ms', after a roll (Dirty Trick).
+	guard,     // For 'duration_ms', melee blows on the target land on the user (needs a shield).
+	trap,      // At the user's feet: hostiles within 'range' take 'amount' every second for 'duration_ms'.
 };
 
 // Where a class likes to stand in a fight (Class AI; placing is not built
@@ -185,8 +188,9 @@ struct Class_skill {
 	int          pierce      = 0;     // Armour the user's strikes ignore meanwhile ('pierce_armor').
 	int          blast       = 0;     // 'bomb' and 'flash': radius around the pick, in tiles.
 	int          fuse_ms     = 0;     // 'bomb': time from landing to the blast.
-	int          hits        = 1;     // 'bomb': how many blasts each hostile takes.
+	int          hits        = 1;     // 'bomb': how many blasts each hostile takes; 'summon': how many come.
 	int          summon_shape = -1;   // 'summon': the creature's shape.
+	bool         dash         = false;    // Volley: dart beside each target before striking it.
 	const char*  reaction     = nullptr;    // Over each foe it lands on ("*stunned*"); null: by effect.
 	Skill_look   look;
 	const char*  words = "";    // Over the user.
@@ -290,6 +294,13 @@ struct Class_skill {
 		return *this;
 	}
 
+	// Melee volleys (Blade Dance): the user darts beside each target in
+	// turn, so it reaches foes beyond its weapon.
+	Class_skill& dashing() {
+		dash = true;
+		return *this;
+	}
+
 	Class_skill& pierce_armor(int points) {
 		pierce = points;
 		return *this;
@@ -338,10 +349,24 @@ struct Class_skill {
 		return *this;
 	}
 
-	Class_skill& summon(int shape, int ms) {
+	Class_skill& summon(int shape, int ms, int how_many = 1) {
 		effect       = Skill_effect::summon;
 		summon_shape = shape;
 		duration_ms  = ms;
+		hits         = how_many;
+		return *this;
+	}
+
+	Class_skill& guard(int ms) {
+		effect      = Skill_effect::guard;
+		duration_ms = ms;
+		return *this;
+	}
+
+	Class_skill& trap(int damage_per_second, int ms) {
+		effect      = Skill_effect::trap;
+		amount      = damage_per_second;
+		duration_ms = ms;
 		return *this;
 	}
 
@@ -411,12 +436,13 @@ constexpr int sprite_poof     = 9;
 constexpr int sprite_bubbles  = 13;
 constexpr int sprite_barrier  = 15;
 constexpr int sprite_sparkles = 16;
-constexpr int sprite_beads    = 18;
 constexpr int sprite_music    = 24;
 
 // Shapes (shapes.vga).
-constexpr int shape_dog        = 496;    // Katrina's summoned sheepdog.
-constexpr int shape_powder_keg = 704;    // Julia's Time Bomb: flies, and its blast.
+constexpr int shape_bee        = 494;    // Katrina's summons: a giant bee,
+constexpr int shape_dog        = 496;    //   her sheepdogs,
+constexpr int shape_wolf       = 537;    //   a wolf.
+constexpr int shape_powder_keg = 704;    // Julia's Flashbang flies as one (and Time Bomb's blast).
 
 // Spell numbers (circle * 8 + place in the circle), checked against Black
 // Gate's own spell scripts (0x640 + number, by their words of power; the
@@ -441,17 +467,17 @@ constexpr int spell_swordstrike  = 70;
 constexpr int spell_curse        = 24;
 constexpr int spell_mass_curse   = 35;
 constexpr int spell_explosion    = 43;
-constexpr int spell_delayed      = 58;
 constexpr int spell_restoration  = 63;
 constexpr int spell_summon       = 69;
 constexpr int spell_protect      = 21;
 constexpr int spell_flame_strike = 51;
 constexpr int spell_tremor       = 55;
 
-// Each companion's class and skills.  Levels: the first at 1, the next at
-// 3, the last at 6 (U7's levels: 1 + log2(experience / 50)).
-// Cooldowns: 15 s for a heal on one, 30 s for group heals and single
-// shots or holds, 60 s (the default) for big damage and support.
+// Each companion's class and skills, in bar order.  Levels: the first at 1,
+// the next at 3, the last at 6 (U7's levels: 1 + log2(experience / 50)).
+// Cooldowns (after testing, 2026-10-20): 30 s for the first skill, 60 s for
+// the second, 90 s for the third, with a few exceptions (Crippling Shot 30,
+// Flashbang 60, Katrina's first two summons 60).
 const std::vector<Companion_class>& Classes() {
 	using T = Skill_type;
 	using G = Skill_target;
@@ -471,29 +497,30 @@ const std::vector<Companion_class>& Classes() {
 							 .targets(2)
 							 .on_targets(sprite_music)
 							 .says("*sings a song of warding*"),
-					 Class_skill(10, "Battle Hymn")
-							 .describe("The party nearby hits harder and has more health")
-							 .icon_spell(spell_mass_might)
-							 .kind(T::support)
-							 .aim(G::party_area, 12, true)
-							 .unlock(3)
-							 .bonus(3, 30000)
-							 .targets(3)
-							 .on_targets(sprite_music)
-							 .says("*plays a battle hymn*"),
 					 // Hostiles in the circle drowse for a few seconds (each rolls).
 					 Class_skill(12, "Song of Peace")
 							 .describe("Hostiles in the circle drowse a few seconds")
 							 .icon_spell(spell_dance)
 							 .kind(T::control)
 							 .aim(G::hostiles_nearest, 12, true)
-							 .unlock(6)
+							 .unlock(3)
 							 .hinder(Obj_flags::asleep, 5000)
 							 .reacts("*drowsy*")
 							 .targets(8)
 							 .on_user(sprite_music)
 							 .on_targets(sprite_music)
 							 .says("*plays a song of peace*"),
+					 Class_skill(10, "Battle Hymn")
+							 .describe("The party nearby hits harder and has more health")
+							 .recharge(90)
+							 .icon_spell(spell_mass_might)
+							 .kind(T::support)
+							 .aim(G::party_area, 12, true)
+							 .unlock(6)
+							 .bonus(3, 30000)
+							 .targets(3)
+							 .on_targets(sprite_music)
+							 .says("*plays a battle hymn*"),
 			 }},
 			{"Shamino",
 			 "Ranger",
@@ -501,14 +528,14 @@ const std::vector<Companion_class>& Classes() {
 			 -1,
 			 "Shamino's Bow",
 			 {
-					 Class_skill(20, "Volley")
-							 .describe("Arrows at the three nearest hostiles")
-							 .icon_spell(spell_swordstrike)
-							 .kind(T::attack)
-							 .aim(G::hostiles_nearest, 12)
-							 .volley()
-							 .targets(3)
-							 .says("*looses a volley*"),
+					 Class_skill(22, "Vanish")
+							 .describe("Invisible for a moment; foes lose him")
+							 .recharge(30)
+							 .icon_spell(spell_invisibility)
+							 .kind(T::self)
+							 .set_flag(Obj_flags::invisible)
+							 .on_targets(sprite_poof)
+							 .says("*melts into the shadows*"),
 					 Class_skill(21, "Aimed Shot")
 							 .describe("One careful shot that hits harder")
 							 .icon_spell(spell_death_bolt)
@@ -517,14 +544,16 @@ const std::vector<Companion_class>& Classes() {
 							 .unlock(3)
 							 .volley(6, 3000)
 							 .says("*takes careful aim*"),
-					 Class_skill(22, "Vanish")
-							 .describe("Invisible for a moment; foes lose him")
-							 .icon_spell(spell_invisibility)
-							 .kind(T::self)
+					 Class_skill(20, "Volley")
+							 .describe("Arrows at the three nearest hostiles")
+							 .recharge(90)
+							 .icon_spell(spell_swordstrike)
+							 .kind(T::attack)
+							 .aim(G::hostiles_nearest, 12)
 							 .unlock(6)
-							 .set_flag(Obj_flags::invisible)
-							 .on_targets(sprite_poof)
-							 .says("*melts into the shadows*"),
+							 .volley()
+							 .targets(3)
+							 .says("*looses a volley*"),
 			 }},
 			{"Jaana",
 			 "Druid",
@@ -532,19 +561,18 @@ const std::vector<Companion_class>& Classes() {
 			 -1,
 			 "Jaana's Staff",
 			 {
-					 Class_skill(30, "Mending Circle")
-							 .describe("Heals everyone in the circle")
+					 // A full heal on one: the most hurt in range.
+					 Class_skill(33, "Greater Heal")
+							 .describe("Heals the most hurt nearby fully")
 							 .recharge(30)
 							 .icon_spell(spell_great_heal)
 							 .kind(T::heal)
-							 .aim(G::party_area, 12, true)
-							 .heal(10)
-							 .targets(2)
+							 .aim(G::hurt_party, 12)
+							 .heal(255)    // Capped at strength: a full heal.
 							 .on_targets(sprite_sparkles)
-							 .says("*calls on the earth to mend*"),
+							 .says("*calls on the earth to heal*"),
 					 Class_skill(31, "Purify")
 							 .describe("Cures poison, paralysis and curses nearby")
-							 .recharge(30)
 							 .icon_spell(spell_mass_cure)
 							 .kind(T::cure)
 							 .aim(G::party_area, 12, true)
@@ -552,17 +580,17 @@ const std::vector<Companion_class>& Classes() {
 							 .cure()
 							 .on_targets(sprite_bubbles)
 							 .says("*purifies the air*"),
-					 Class_skill(32, "Entangle")
-							 .describe("Roots the target in place for six seconds")
-							 .recharge(30)
-							 .icon_spell(spell_paralyze)
-							 .kind(T::control)
-							 .aim(G::pick, 12)
+					 Class_skill(30, "Mending Circle")
+							 .describe("Heals everyone in the circle")
+							 .recharge(90)
+							 .icon_spell(spell_restoration)
+							 .kind(T::heal)
+							 .aim(G::party_area, 12, true)
 							 .unlock(6)
-							 .hinder(Obj_flags::paralyzed, 6000)
-							 .reacts("*entangled*")
-							 .on_targets(sprite_beads)
-							 .says("*calls up grasping roots*"),
+							 .heal(20)
+							 .targets(2)
+							 .on_targets(sprite_sparkles)
+							 .says("*calls on the earth to mend*"),
 			 }},
 			{"Dupre",
 			 "Paladin",
@@ -570,26 +598,29 @@ const std::vector<Companion_class>& Classes() {
 			 -1,
 			 "Dupre's Shield",
 			 {
-					 Class_skill(40, "Stand Fast")
-							 .describe("Protection for Dupre himself")
-							 .recharge(30)
-							 .icon_spell(spell_protection)
-							 .kind(T::self)
-							 .set_flag(Obj_flags::protection)
-							 .on_targets(sprite_barrier)
-							 .says("*stands fast*"),
 					 Class_skill(41, "Lay on Hands")
 							 .describe("A big heal on the most hurt nearby")
-							 .recharge(15)
+							 .recharge(30)
 							 .icon_spell(spell_heal)
 							 .kind(T::heal)
 							 .aim(G::hurt_party, 3)
-							 .unlock(3)
 							 .heal(25)
 							 .on_targets(sprite_sparkles)
 							 .says("*lays on hands*"),
+					 // Blows on the ward land on Dupre while he stays in range
+					 // (the Class AI keeps him there) with a shield readied.
+					 Class_skill(43, "Shield Ally")
+							 .describe("Takes the melee blows meant for an ally")
+							 .icon_spell(spell_protection)
+							 .kind(T::support)
+							 .aim(G::ward, 6, true)
+							 .unlock(3)
+							 .guard(15000)
+							 .on_targets(sprite_barrier)
+							 .says("*raises his shield*"),
 					 Class_skill(42, "Challenge")
 							 .describe("Hostiles in the circle turn on Dupre")
+							 .recharge(90)
 							 .icon_spell(spell_cause_fear)
 							 .kind(T::control)
 							 .aim(G::hostiles_nearest, 9, true)
@@ -623,6 +654,19 @@ const std::vector<Companion_class>& Classes() {
 							 .volley()
 							 .targets(2)
 							 .says("*tries a trick shot*"),
+					 // Mud in the eyes: hostiles in the circle don't attack for a
+					 // moment (each rolls).  No mud picture in U7 yet: the words.
+					 Class_skill(52, "Dirty Trick")
+							 .describe("Mud in their eyes: hostiles nearby stop attacking")
+							 .recharge(90)
+							 .icon_spell(spell_mass_curse)
+							 .kind(T::control)
+							 .aim(G::hostiles_nearest, 12, true)
+							 .unlock(6)
+							 .calm(3000)
+							 .reacts("*confused*")
+							 .targets(8)
+							 .says("*throws mud*"),
 			 }},
 			// Agile melee duelist: counterattacks, speed, precision.
 			{"Sentri",
@@ -640,26 +684,29 @@ const std::vector<Companion_class>& Classes() {
 							 .on_user(sprite_barrier)
 							 .on_targets(sprite_sword)    // On each foe answered.
 							 .says("*takes a dueling stance*"),
-					 Class_skill(61, "Blade Dance")
-							 .describe("A strike at every foe beside him")
-							 .icon_spell(spell_tremor)
-							 .kind(T::attack)
-							 .aim(G::hostiles_nearest, 1)
-							 .unlock(3)
-							 .volley()
-							 .targets(8)
-							 .on_targets(sprite_sword)
-							 .says("*whirls into a blade dance*"),
 					 Class_skill(62, "Master's Strike")
 							 .describe("A precise blow that ignores some armour")
 							 .icon_spell(spell_flame_strike)
 							 .kind(T::attack)
 							 .aim(G::pick, 1)
-							 .unlock(6)
+							 .unlock(3)
 							 .volley(6, 2000)
 							 .pierce_armor(6)
 							 .on_targets(sprite_fireworks)
 							 .says("*strikes with perfect precision*"),
+					 // He darts to each foe in turn, striking as he passes.
+					 Class_skill(61, "Blade Dance")
+							 .describe("Darts to every foe nearby, striking each")
+							 .recharge(90)
+							 .icon_spell(spell_tremor)
+							 .kind(T::attack)
+							 .aim(G::hostiles_nearest, 6)
+							 .unlock(6)
+							 .volley()
+							 .dashing()
+							 .targets(8)
+							 .on_targets(sprite_sword)
+							 .says("*whirls into a blade dance*"),
 			 }},
 			// Tactical archer: disabling foes and weakening priority targets.
 			{"Tseramed",
@@ -691,6 +738,7 @@ const std::vector<Companion_class>& Classes() {
 							 .says("*aims for the legs*"),
 					 Class_skill(72, "Hunter's Mark")
 							 .describe("The party's hits on the target do more")
+							 .recharge(90)
 							 .icon_spell(spell_mass_curse)
 							 .kind(T::attack)
 							 .aim(G::pick, 16)
@@ -699,20 +747,29 @@ const std::vector<Companion_class>& Classes() {
 							 .on_targets(sprite_purple)
 							 .says("*marks the quarry*"),
 			 }},
-			// Combat engineer: gadgets and explosives.
+			// Combat engineer: gadgets and traps.
 			{"Julia",
 			 "Tinker",
 			 Placement::ranged,
 			 -1,
 			 "Julia's Hammer",
 			 {
-					 // One ally, a strong boost (Sanctuary: everyone, smaller).
+					 // Caltrops at her feet, for whoever chases her; the party is spared.
+					 Class_skill(83, "Set Trap")
+							 .describe("Caltrops at her feet hurt hostiles who come")
+							 .recharge(30)
+							 .icon_spell(spell_tremor)
+							 .kind(T::attack)
+							 .aim(G::self, 2, true)
+							 .trap(3, 5000)
+							 .says("*scatters caltrops*"),
+					 // One ally, a strong boost.
 					 Class_skill(80, "Quick Fix")
 							 .describe("Much more armour for the weakest ally nearby")
-							 .recharge(30)
 							 .icon_spell(spell_protect)
 							 .kind(T::support)
 							 .aim(G::ally, 4)
+							 .unlock(3)
 							 .armor(5, 30000)
 							 .targets(1)
 							 .on_targets(sprite_barrier)
@@ -722,58 +779,46 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_explosion)
 							 .kind(T::control)
 							 .aim(G::pick, 12)
-							 .unlock(3)
+							 .unlock(6)
 							 .flash(5, Obj_flags::paralyzed, 2500)
 							 .missile(shape_powder_keg)
 							 .on_targets(sprite_fireworks)
 							 .says("*throws a flashbang*"),
-					 Class_skill(82, "Time Bomb")
-							 .describe("Thrown; a few seconds later, it explodes")
-							 .icon_spell(spell_delayed)
-							 .kind(T::attack)
-							 .aim(G::pick, 12)
-							 .unlock(6)
-							 .bomb(5, 3000, 2)
-							 .missile(shape_powder_keg)
-							 .targets(2)
-							 .says("*lights a fuse*"),
 			 }},
-			// Gentle support: healing over time, a summoned friend, protection.
+			// Gentle support: friends of the field who fight for her.
 			{"Katrina",
 			 "Shepherd",
 			 Placement::support,
 			 -1,
 			 "Katrina's Crook",
 			 {
-					 Class_skill(90, "Healing Field")
-							 .describe("A field that heals whoever stands in it")
-							 .recharge(30)
-							 .icon_spell(spell_restoration)
-							 .kind(T::heal)
-							 .aim(G::party_area, 6, true)
-							 .field(2, 12000)
+					 Class_skill(91, "Summon Dogs")
+							 .describe("Her sheepdogs fight beside you a while")
+							 .icon_spell(spell_summon)
+							 .kind(T::support)
+							 .summon(shape_dog, 30000, 2)
 							 .targets(2)
-							 .on_targets(sprite_sparkles)
-							 .says("*calls down a healing field*"),
-					 Class_skill(91, "Summon Creature")
-							 .describe("Her sheepdog fights beside you a while")
+							 .on_targets(sprite_teleport)
+							 .says("*whistles for her dogs*"),
+					 Class_skill(93, "Summon Wolf")
+							 .describe("A wolf fights beside you a while")
 							 .icon_spell(spell_summon)
 							 .kind(T::support)
 							 .unlock(3)
-							 .summon(shape_dog, 30000)
+							 .summon(shape_wolf, 30000)
 							 .targets(2)
 							 .on_targets(sprite_teleport)
-							 .says("*whistles for her sheepdog*"),
-					 Class_skill(92, "Sanctuary")
-							 .describe("More armour for everyone in the circle")
-							 .icon_spell(spell_protect_all)
+							 .says("*calls a wolf from the wild*"),
+					 Class_skill(94, "Summon Bee")
+							 .describe("A giant bee fights beside you a while")
+							 .recharge(90)
+							 .icon_spell(spell_summon)
 							 .kind(T::support)
-							 .aim(G::party_area, 9, true)
 							 .unlock(6)
-							 .armor(2, 20000)
+							 .summon(shape_bee, 30000)
 							 .targets(2)
-							 .on_targets(sprite_barrier)
-							 .says("*prays for sanctuary*"),
+							 .on_targets(sprite_teleport)
+							 .says("*hums for a giant bee*"),
 			 }},
 	};
 	return classes;
@@ -803,10 +848,6 @@ const Class_skill* Skill_by_id(const Companion_class* cls, int id) {
 	return nullptr;
 }
 
-bool Effect_built(const Class_skill& skill) {
-	return skill.effect != Skill_effect::calm;
-}
-
 /*
  *  State.  Cooldowns are the host's (a guest keeps a copy from the host's
  *  messages); none of it is saved.
@@ -834,7 +875,7 @@ std::vector<Timed_flag> timed_flags;    // Host: short paralysis and knockdowns.
 
 // Timed bonuses (and penalties): U7 stats, and a few of our own.
 enum Bonus_kind {
-	bonus_armor        = 1001,    // Added to armour (Quick Fix, Sanctuary).
+	bonus_armor        = 1001,    // Added to armour (Quick Fix).
 	bonus_damage_taken = 1002,    // Extra damage from the party (Hunter's Mark).
 	bonus_pierce       = 1003,    // Armour its strikes ignore (Master's Strike).
 	bonus_riposte      = 1004,    // Answers melee strikes that miss (Riposte).
@@ -891,6 +932,27 @@ struct Timed_taunt {
 	uint32           until;
 };
 std::vector<Timed_taunt> taunts;    // Host: Challenge.
+
+struct Timed_calm {
+	Game_object_weak foe;
+	uint32           until;
+};
+std::vector<Timed_calm> calms;    // Host: Dirty Trick (they don't attack).
+
+struct Timed_guard {
+	Game_object_weak ward;        // Whose melee blows land on...
+	Game_object_weak guardian;    // ...the one shielding it, while within 'range'.
+	int              range;
+	uint32           until;
+};
+std::vector<Timed_guard> guards;    // Host: Shield Ally.
+
+// Host: a Riposte's answer being struck now (it always hits).
+bool               riposte_striking = false;
+const Game_object* riposte_striker  = nullptr;
+
+// Host: who summoned each creature still about (the Class AI calls one at a time).
+std::vector<std::pair<Game_object_weak, int>> summoned_by;
 
 struct Range_circle {
 	int        npc;
@@ -994,15 +1056,18 @@ bool Has_class_item(const Actor* user, const Companion_class& cls) {
 	return const_cast<Actor*>(user)->find_item(cls.item_shape, c_any_qual, c_any_framenum) != nullptr;
 }
 
+// A shield in the off hand (rhand): anything with armour there (as
+// Actor::ready_best_shield counts it).
+bool Has_shield(const Actor* user) {
+	const Game_object* off = user->get_readied(rhand);
+	return off && off->get_info().get_armor() > 0;
+}
+
 // Whether 'skill' may be used by 'user' at all now (not who it would
 // touch).  'why' says why not.
 bool May_use(const Actor* user, const Companion_class& cls, const Class_skill& skill, std::string& why) {
 	if (!Friend_class_active()) {
 		why = "The Class System is off";
-		return false;
-	}
-	if (!Effect_built(skill)) {
-		why = std::string(skill.name) + " is not ready yet";
 		return false;
 	}
 	if (Is_guest() && Gwin()->network_input_blocked()) {
@@ -1062,6 +1127,33 @@ std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
 		}
 		if (weakest) {
 			return {weakest};
+		}
+		return {};
+	}
+	case Skill_target::ward: {
+		// Someone else in range: one a hostile is on in melee first (the most
+		// hurt of those), else the most hurt.
+		Actor* best         = nullptr;
+		bool   best_pressed = false;
+		for (Actor* member : Party_in_range(user, skill.range)) {
+			if (member == user) {
+				continue;
+			}
+			bool pressed = false;
+			for (Actor* foe : Hostiles(member, 1)) {
+				if (foe->get_target() == member) {
+					pressed = true;
+					break;
+				}
+			}
+			const bool hurter = best && Health(member) * Max_health(best) < Health(best) * Max_health(member);
+			if (!best || (pressed && !best_pressed) || (pressed == best_pressed && hurter)) {
+				best         = member;
+				best_pressed = pressed;
+			}
+		}
+		if (best) {
+			return {best};
 		}
 		return {};
 	}
@@ -1338,6 +1430,46 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 		if (skill.pierce > 0) {
 			Add_bonus(user, bonus_pierce, skill.pierce, std::max(skill.duration_ms, 1000));
 		}
+		if (skill.dash) {
+			// Blade Dance: beside each foe in turn, a strike as he passes.
+			int                points = 0;
+			int                weapon = -1;
+			Game_object*       obj    = nullptr;
+			const Weapon_info* winf   = user->get_weapon(points, weapon, obj);
+			if (!winf || weapon < 0) {
+				why = "Needs a weapon in hand";
+				return false;
+			}
+			const Game_object_weak user_ref = weak_from_obj(user);
+			const int              look     = skill.look.on_targets;
+			uint32                 at       = 0;
+			for (Actor* each : targets) {
+				const Game_object_weak foe_ref = weak_from_obj(each);
+				Later(at, [=]() {
+					const Game_object_shared foe_obj  = foe_ref.lock();
+					const Game_object_shared user_obj = user_ref.lock();
+					Actor* foe   = foe_obj ? foe_obj->as_actor() : nullptr;
+					Actor* owner = user_obj ? user_obj->as_actor() : nullptr;
+					if (!foe || !owner || foe->is_dead() || !Able(owner) || owner->get_map() != foe->get_map()) {
+						return;
+					}
+					if (owner->distance(foe) > 1) {
+						const Tile_coord spot = Map_chunk::find_spot(foe->get_tile(), 1, owner);
+						if (spot.tx < 0) {
+							return;
+						}
+						Sprite_at(owner->get_tile(), sprite_poof);
+						owner->move(spot.tx, spot.ty, spot.tz);
+					}
+					if (Shoot(owner, foe)) {
+						Sprite_on(foe, look);
+					}
+				});
+				at += 350;
+				++done;
+			}
+			break;
+		}
 		for (Actor* each : targets) {
 			if (!Shoot(user, each)) {
 				continue;
@@ -1508,35 +1640,93 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 		break;
 	}
 	case Skill_effect::summon: {
-		const Tile_coord spot = Map_chunk::find_spot(user->get_tile(), 3, skill.summon_shape, 0, 1);
-		if (spot.tx < 0) {
+		for (int i = 0; i < skill.hits; ++i) {
+			const Tile_coord spot = Map_chunk::find_spot(user->get_tile(), 3, skill.summon_shape, 0, 1);
+			if (spot.tx < 0) {
+				break;
+			}
+			const Game_object_shared made
+					= Monster_actor::create(skill.summon_shape, spot, Schedule::combat, Actor::good);
+			if (!made) {
+				break;
+			}
+			Sprite_at(spot, skill.look.on_targets);
+			summons.push_back(made);
+			summoned_by.emplace_back(weak_from_obj(made.get()), user->get_npc_num());
+			const Game_object_weak creature = made;
+			Later(static_cast<uint32>(skill.duration_ms), [=]() {
+				if (const Game_object_shared obj = creature.lock()) {
+					Actor* actor = obj->as_actor();
+					if (actor && !actor->is_dead() && obj->get_chunk()) {
+						Sprite_at(obj->get_tile(), sprite_poof);
+						obj->remove_this();
+					}
+				}
+			});
+			++done;
+		}
+		if (done == 0) {
 			why = "No room";
 			return false;
 		}
-		const Game_object_shared made
-				= Monster_actor::create(skill.summon_shape, spot, Schedule::combat, Actor::good);
-		if (!made) {
-			why = "Nothing came";
-			return false;
-		}
-		Sprite_at(spot, skill.look.on_targets);
-		summons.push_back(made);
-		const Game_object_weak creature = made;
-		Later(static_cast<uint32>(skill.duration_ms), [=]() {
-			if (const Game_object_shared obj = creature.lock()) {
-				Actor* actor = obj->as_actor();
-				if (actor && !actor->is_dead() && obj->get_chunk()) {
-					Sprite_at(obj->get_tile(), sprite_poof);
-					obj->remove_this();
-				}
-			}
-		});
-		done = 1;
 		break;
 	}
 	case Skill_effect::calm:
-		why = std::string(skill.name) + " is not ready yet";
-		return false;
+		// Each hostile rolls; those who lose don't attack for a while.
+		for (Actor* each : targets) {
+			if (Actor::roll_to_win(user->get_effective_prop(Actor::combat), each->get_effective_prop(Actor::intelligence))) {
+				calms.push_back({weak_from_obj(each), Now() + static_cast<uint32>(skill.duration_ms)});
+				React(each, skill.reaction ? skill.reaction : "*confused*");
+				++done;
+			} else {
+				React(each, "*resisted*");
+			}
+		}
+		break;
+	case Skill_effect::guard:
+		if (!Has_shield(user)) {
+			why = std::string(user->get_npc_name()) + " needs a shield readied";
+			return false;
+		}
+		// One ward at a time: a new one replaces the last.
+		guards.erase(std::remove_if(guards.begin(), guards.end(),
+							 [user](const Timed_guard& each) {
+								 return each.guardian.lock().get() == user;
+							 }),
+					 guards.end());
+		guards.push_back({weak_from_obj(targets.front()), weak_from_obj(user), skill.range,
+						  Now() + static_cast<uint32>(skill.duration_ms)});
+		done = 1;
+		break;
+	case Skill_effect::trap: {
+		// Caltrops at the user's feet, ticking each second; only hostiles.
+		const Tile_coord       spot     = user->get_tile();
+		const Game_object_weak user_ref = weak_from_obj(user);
+		const Class_skill*     what     = &skill;
+		for (uint32 t = 1000; t <= static_cast<uint32>(skill.duration_ms); t += 1000) {
+			Later(t, [=]() {
+				const Game_object_shared user_obj = user_ref.lock();
+				Actor*                   owner    = user_obj ? user_obj->as_actor() : nullptr;
+				if (!owner) {
+					return;
+				}
+				int hurt = 0;
+				for (Actor* foe : Hostiles_near(owner, spot, what->range)) {
+					if (!foe->is_dead()) {
+						foe->reduce_health(what->amount, Weapon_data::normal_damage, owner);
+						Sprite_on(foe, what->look.on_targets);
+						++hurt;
+					}
+				}
+				if (hurt) {
+					cout << "Friend Class: " << what->name << " hurt " << hurt << endl;
+				}
+			});
+		}
+		Show_field(user->get_npc_num(), skill, spot);
+		done = 1;
+		break;
+	}
 	}
 	const uint32 now = Now();
 	cooldowns[{user->get_npc_num(), skill.id}] = now + static_cast<uint32>(Cooldown_ms(skill));
@@ -1551,7 +1741,8 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 	Sound_at(user, skill.look.sound);
 	const bool own_look = skill.effect == Skill_effect::flash || skill.effect == Skill_effect::bomb
 						  || skill.effect == Skill_effect::field || skill.effect == Skill_effect::summon
-						  || skill.effect == Skill_effect::stance;
+						  || skill.effect == Skill_effect::stance || skill.effect == Skill_effect::trap
+						  || skill.dash;    // Blade Dance shows each strike as it lands.
 	for (Actor* each : targets) {
 		if (!own_look) {
 			Sprite_on(each, skill.look.on_targets);
@@ -1560,7 +1751,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			Missile_to(user, each, skill.look.missile);
 		}
 	}
-	if (skill.effect != Skill_effect::field) {    // A field has shown its own.
+	if (skill.effect != Skill_effect::field && skill.effect != Skill_effect::trap) {    // Shown on its spot.
 		Show_circle(user->get_npc_num(), skill, 2000);
 	}
 	if (Friend_mode_get_session().connected()) {
@@ -1631,6 +1822,22 @@ void Expire() {
 							 return false;
 						 }),
 				 taunts.end());
+	calms.erase(std::remove_if(calms.begin(), calms.end(),
+						[now](const Timed_calm& each) {
+							return each.until <= now || each.foe.expired();
+						}),
+				calms.end());
+	guards.erase(std::remove_if(guards.begin(), guards.end(),
+						 [now](const Timed_guard& each) {
+							 return each.until <= now || each.ward.expired() || each.guardian.expired();
+						 }),
+				 guards.end());
+	summoned_by.erase(std::remove_if(summoned_by.begin(), summoned_by.end(),
+							  [](const std::pair<Game_object_weak, int>& each) {
+								  const Game_object_shared obj = each.first.lock();
+								  return !obj || !obj->get_chunk();
+							  }),
+					  summoned_by.end());
 	const size_t before = bonuses.size();
 	bonuses.erase(std::remove_if(bonuses.begin(), bonuses.end(),
 						  [now](const Timed_bonus& each) {
@@ -1667,6 +1874,38 @@ bool Ai_wants(Actor* user, const Class_skill& skill) {
 	// Riposte: when something is at its throat.
 	if (skill.effect == Skill_effect::stance) {
 		return fighting && !Hostiles(user, 1).empty();
+	}
+	// Caltrops: something is coming for the user.
+	if (skill.effect == Skill_effect::trap) {
+		return fighting && !Hostiles(user, 3).empty();
+	}
+	// Shield Ally: someone else in range has a hostile on it in melee and
+	// is hurt, or is the Avatar (and the user has a shield).
+	if (skill.effect == Skill_effect::guard) {
+		if (!fighting || !Has_shield(user)) {
+			return false;
+		}
+		const std::vector<Actor*> ward = Targets(user, skill);
+		if (ward.empty()) {
+			return false;
+		}
+		bool pressed = false;
+		for (Actor* foe : Hostiles(ward.front(), 1)) {
+			pressed = pressed || foe->get_target() == ward.front();
+		}
+		return pressed
+			   && (ward.front() == Gwin()->get_main_actor() || Health(ward.front()) * 4 < Max_health(ward.front()) * 3);
+	}
+	// Summons: one of the user's creatures at a time.
+	if (skill.effect == Skill_effect::summon) {
+		const int npc = user->get_npc_num();
+		for (const auto& each : summoned_by) {
+			const Game_object_shared obj   = each.first.lock();
+			Actor*                   actor = obj ? obj->as_actor() : nullptr;
+			if (each.second == npc && actor && !actor->is_dead() && obj->get_chunk()) {
+				return false;
+			}
+		}
 	}
 	switch (skill.type) {
 	case Skill_type::heal: {
@@ -1732,9 +1971,18 @@ void Class_ai() {
 		if (!cls || member == gwin->get_controlled_actor() || Friend_mode_player_playing(member) >= 0) {
 			continue;    // A player uses its skills.
 		}
+		// The class's order; summons strongest first (Katrina's bee before
+		// her dogs).
+		std::vector<const Class_skill*> order;
 		for (const auto& skill : cls->skills) {
+			order.push_back(&skill);
+		}
+		std::stable_sort(order.begin(), order.end(), [](const Class_skill* a, const Class_skill* b) {
+			return a->effect == Skill_effect::summon && b->effect == Skill_effect::summon && a->level > b->level;
+		});
+		for (const Class_skill* skill : order) {
 			std::string why;
-			if (May_use(member, *cls, skill, why) && Ai_wants(member, skill) && Perform(member, *cls, skill, why)) {
+			if (May_use(member, *cls, *skill, why) && Ai_wants(member, *skill) && Perform(member, *cls, *skill, why)) {
 				break;    // One at a time.
 			}
 		}
@@ -1810,13 +2058,27 @@ bool Step_away(Actor* npc, const Actor* foe) {
 
 bool Place(Actor* npc) {
 	const Companion_class* cls = Class_of(npc);
-	if (!cls || cls->placement == Placement::front) {
-		return false;    // The front line fights as U7 does.
+	if (!cls) {
+		return false;
 	}
 	const uint32 now  = Now();
 	auto&        next = next_place[npc->get_npc_num()];
 	if (now < next) {
 		return false;
+	}
+	// Shielding someone (Dupre): stay within reach of the ward while it lasts.
+	for (const Timed_guard& each : guards) {
+		const Game_object_shared ward_obj = each.ward.lock();
+		Actor*                   ward     = ward_obj ? ward_obj->as_actor() : nullptr;
+		if (each.guardian.lock().get() == npc && each.until > now && ward && ward->get_map() == npc->get_map()
+			&& npc->distance(ward) > std::max(1, each.range - 2) && Walk_to(npc, ward->get_tile(), 1)) {
+			next = now + place_period_ms;
+			cout << "Friend Class: " << npc->get_npc_name() << " stays by " << ward->get_npc_name() << endl;
+			return true;
+		}
+	}
+	if (cls->placement == Placement::front) {
+		return false;    // The front line fights as U7 does.
 	}
 	const std::vector<Actor*> near = Hostiles(npc, 12);
 	if (cls->placement == Placement::ranged) {
@@ -1969,7 +2231,7 @@ void Take_event(const std::vector<unsigned char>& data) {
 	const int    id    = data[2] | (data[3] << 8);
 	Actor*       actor = Gwin()->get_npc(npc);
 	const auto*  skill = Skill_by_id(Class_of(actor), id);
-	if (skill && actor && skill->effect == Skill_effect::field) {
+	if (skill && actor && (skill->effect == Skill_effect::field || skill->effect == Skill_effect::trap)) {
 		Show_field(npc, *skill, actor->get_tile());
 	} else if (skill) {
 		Show_circle(npc, *skill, 2000);
@@ -2717,6 +2979,18 @@ std::vector<std::pair<Game_object_weak, int>> Host_marks() {
 			add(obj.get(), mark_down);
 		} else if (each.prop == Actor::strength || each.prop == Actor::combat || each.prop == Actor::dexterity) {
 			add(obj.get(), mark_up);
+		}
+	}
+	for (const Timed_calm& each : calms) {
+		const Game_object_shared obj = each.foe.lock();
+		if (obj && each.until > now) {
+			add(obj.get(), mark_down);
+		}
+	}
+	for (const Timed_guard& each : guards) {
+		const Game_object_shared obj = each.ward.lock();
+		if (obj && each.until > now) {
+			add(obj.get(), mark_shield);
 		}
 	}
 	for (Actor* member : Party()) {
@@ -3533,6 +3807,9 @@ void Friend_class_world_loaded() {
 	timed_flags.clear();
 	bonuses.clear();
 	taunts.clear();
+	calms.clear();
+	guards.clear();
+	summoned_by.clear();
 	pending.clear();
 	summons.clear();
 	circles.clear();
@@ -3552,6 +3829,7 @@ void Friend_class_saving(bool before) {
 			}
 		}
 		summons.clear();
+		summoned_by.clear();
 	}
 	// U7's own timers for sleep and paralysis are long: lift ours for the
 	// save, and put them back after it.
@@ -3670,6 +3948,43 @@ void Friend_class_adjust_damage(const Actor* target, Game_object* attacker, int&
 	}
 }
 
+bool Friend_class_calmed(const Actor* npc) {
+	if (calms.empty() || !npc) {
+		return false;
+	}
+	const uint32 now = Now();
+	for (const Timed_calm& each : calms) {
+		if (each.until > now && each.foe.lock().get() == npc) {
+			return true;
+		}
+	}
+	return false;
+}
+
+Actor* Friend_class_guardian(const Actor* target, Game_object* attacker) {
+	Actor* by = attacker ? attacker->as_actor() : nullptr;
+	if (guards.empty() || !target || !by || by->distance(target) > 1 || by->is_in_party()
+		|| by == Gwin()->get_main_actor()) {
+		return nullptr;    // Only melee blows from outside the party.
+	}
+	const uint32 now = Now();
+	for (const Timed_guard& each : guards) {
+		const Game_object_shared guard_obj = each.guardian.lock();
+		Actor*                   guardian  = guard_obj ? guard_obj->as_actor() : nullptr;
+		if (each.until > now && each.ward.lock().get() == target && guardian && guardian != target && Able(guardian)
+			&& guardian->get_map() == target->get_map() && guardian->distance(target) <= each.range
+			&& Has_shield(guardian)) {
+			React(guardian, "*shields*");
+			return guardian;
+		}
+	}
+	return nullptr;
+}
+
+bool Friend_class_sure_hit(const Game_object* attacker) {
+	return riposte_striking && attacker && attacker == riposte_striker;
+}
+
 void Friend_class_note_miss(Game_object* attacker, Game_object* target) {
 	static bool answering = false;    // A riposte never answers a riposte.
 	Actor*      user      = target ? target->as_actor() : nullptr;
@@ -3687,8 +4002,13 @@ void Friend_class_note_miss(Game_object* attacker, Game_object* target) {
 	}
 	answering = true;
 	user->change_frame(user->get_dir_framenum(user->get_direction(foe), Actor::strike1_frame));
+	// The answer always lands (Friend_class_sure_hit).
+	riposte_striking = true;
+	riposte_striker  = user;
 	Combat_schedule::attack_target(user, foe, foe->get_tile(), weapon);
-	answering = false;
+	riposte_striking = false;
+	riposte_striker  = nullptr;
+	answering        = false;
 	React(user, "*ripostes*");
 	for (const Timed_bonus& each : bonuses) {
 		if (each.prop == bonus_riposte && each.actor.lock().get() == user) {
