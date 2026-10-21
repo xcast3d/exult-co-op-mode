@@ -987,9 +987,10 @@ fills the Avatar's mana. Each spell still needs the level of its circle
 
 A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
 
-- [ ] The bar shows the companion's skills; locked ones say "L3" or "L6"
-      and a click says "Battle Hymn: level 6". The mouse over a slot shows
-      its name and what it does.
+- [ ] The bar shows the companion's skills; locked ones are only dimmed
+      (no level on them; 2026-10-21), the tooltip says "Locked" under the
+      name ("Not Learned" for a spell the Avatar doesn't know), and a click
+      says "Battle Hymn: level 6".
 - [ ] No bar while spectating or in follow mode (Y); it comes back on
       walking.
 - [ ] Switching companions (J) changes the bar; another companion's
@@ -1130,10 +1131,18 @@ you lead yet (step 2); it stands where it was.
       Avatar); walking stops the attack, Space takes it up again; clearing
       the target stops it; the Avatar and the others fight as U7 does.
 - [ ] Double-click in combat mode on a foe: the led companion attacks it.
+      On a townsperson (Space or double-click): "Attack Finnigan? Again to
+      attack"; again within a few seconds attacks; guards come as usual.
 - [ ] Doors, shutters, lamps, levers (the companion walks to the lever, not
       the Avatar), food, potions, keys, lockpicks, books and signs work as
-      for a guest; a locked door or chest says "Locked"; people, merchants
-      included, and story objects say "The Avatar must do this".
+      for a guest; a locked door or chest says "Locked"; other people and
+      story objects say "The Avatar must do this".
+- [ ] A merchant or trainer talks to the led companion, as to a guest's:
+      its portrait, only the shop's answers, the purchase in its pack and
+      the gold from the party, training only for it, spells "The Avatar
+      must do this". Afterwards the merchant hasn't "met" the Avatar if it
+      hadn't, and no story flag changed (the Avatar talking to them after
+      gets the usual first meeting).
 - [ ] The leash: past 20 tiles from the Avatar "Straying from the Avatar"
       and an arrow back to it; at 32 it won't go further ("You must return
       to the Avatar"); walking back is always allowed.
@@ -1142,6 +1151,26 @@ you lead yet (step 2); it stands where it was.
 - [ ] Saving while leading hands control back to the Avatar first (Phase
       1); the save loads with everyone following.
 - [ ] Co-op: a guest's picker doesn't offer the companion the host leads.
+
+Step 2, the party follows (built 2026-10-21, not tested yet):
+
+- [ ] Leading Shamino, walk: the Avatar and the rest follow him in the same
+      formation as when the Avatar leads (the Avatar in Shamino's place);
+      they stop when he stops.
+- [ ] Through a door, up and down stairs, into and out of a building: roofs
+      show for Shamino (the camera), not for where the Avatar is.
+- [ ] Walk off fast and far: whoever falls a screen and a half behind
+      (the Avatar too) is brought near.
+- [ ] Combat mode: the Avatar and the rest fight as U7's party does; after
+      combat they follow Shamino again.
+- [ ] Shift+Tab to another companion: everyone, the last one led
+      included, follows the new one; Shift+Tab back to the Avatar: they
+      follow the Avatar again, in formation.
+- [ ] A moongate or scripted move of the party while leading: the led
+      companion goes too.
+- [ ] Eggs: a scripted scene in a room plays when the Avatar arrives, not
+      when Shamino does.
+- [ ] Co-op: a guest in follow mode (Y) follows Shamino too.
 
 ## Leaving
 

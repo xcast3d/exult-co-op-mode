@@ -772,7 +772,12 @@ void Follow_avatar_schedule::now_what() {
 		|| gwin->main_actor_dont_move()) {    // Under Usecode control.
 		return;                               // Disabled.
 	}
-	Actor*           av        = gwin->get_main_actor();
+	// The Avatar, or the companion one leads (Friend Mode), whom the Avatar
+	// follows too.
+	Actor* av = gwin->get_party_leader();
+	if (av == npc) {
+		return;
+	}
 	const Tile_coord leaderpos = av->get_tile();
 	const Tile_coord pos       = npc->get_tile();
 	const int        dist2lead = av->distance(pos);

@@ -2166,6 +2166,14 @@ void Game_window::start_actor_alt(
 	ty = (ty + c_num_tiles) % c_num_tiles;
 	actor->walk_to_tile(tx, ty, lift, speed, 0);
 	if (actor != main_actor) {
+		if (actor == get_party_leader()) {
+			// A companion one leads: in formation, as the Avatar would.
+			if (walk_in_formation && actor->get_action()) {
+				actor->get_action()->set_get_party(true);
+			} else {
+				get_leader_followers();
+			}
+		}
 		return;
 	}
 	if (walk_in_formation && main_actor->get_action()) {
@@ -2279,8 +2287,45 @@ void Game_window::start_actor_along_path(
 		}
 		if (actor == main_actor) {
 			main_actor->get_followers();
+		} else if (actor == get_party_leader()) {
+			get_leader_followers();
 		}
 	}
+}
+
+Actor* Game_window::get_party_leader() const {
+	if (controlled_actor && controlled_actor != main_actor && !network_friend_control) {
+		return controlled_actor;
+	}
+	return main_actor;
+}
+
+void Game_window::get_leader_followers() {
+	Actor* leader = get_party_leader();
+	if (leader == main_actor) {
+		main_actor->get_followers();
+		return;
+	}
+	// The party and the Avatar, as Main_actor::get_followers does for the
+	// Avatar.
+	auto get = [leader](Actor* npc) {
+		if (!npc || npc == leader || npc->get_flag(Obj_flags::asleep) || npc->is_dead()) {
+			return;
+		}
+		const int sched = npc->get_schedule_type();
+		if (sched == Schedule::combat || sched == Schedule::wait || sched == Schedule::loiter) {
+			return;
+		}
+		if (sched != Schedule::follow_avatar) {
+			npc->set_schedule_type(Schedule::follow_avatar);
+		} else {
+			npc->follow(leader);
+		}
+	};
+	for (int i = 0; i < party_man->get_count(); ++i) {
+		get(get_npc(party_man->get_member(i)));
+	}
+	get(main_actor);
 }
 
 /*
@@ -2298,6 +2343,8 @@ void Game_window::stop_actor() {
 			//			if (!walk_in_formation)
 			if (actor == main_actor) {
 				main_actor->get_followers();
+			} else if (actor == get_party_leader()) {
+				get_leader_followers();
 			}
 		}
 	}
@@ -2334,9 +2381,10 @@ void Game_window::teleport_party(
 	for (i = 0; i < cnt; i++) {
 		const int party_member = party_man->get_member(i);
 		Actor*    person       = get_npc(party_member);
-		// A Friend Mode guest's companion waits on the host but still travels.
+		// A Friend Mode guest's companion waits on the host but still travels,
+		// as does the companion the host leads.
 		if (person && !person->is_dead()
-			&& (person->get_schedule_type() != Schedule::wait || is_remote_friend(person))
+			&& (person->get_schedule_type() != Schedule::wait || is_remote_friend(person) || person == controlled_actor)
 			&& (person->can_act() || no_status_check)) {
 			person->set_action(nullptr);
 			const Tile_coord t1 = Map_chunk::find_spot(t, 8, person->get_shapenum(), person->get_framenum(), 1);
@@ -2862,9 +2910,10 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 				obj->activate();
 				return;
 			} else if (controlled_actor && controlled_actor != main_actor) {
-				// Leading a companion (Shift+Tab): it fights, not the Avatar.
+				// Leading a companion (Shift+Tab): it fights, not the Avatar;
+				// a peaceful person after confirming, as for a guest.
 				if (npc) {
-					Friend_mode_attack_target(npc, true);
+					Friend_mode_attack_target(npc);
 				}
 				return;
 			} else {
@@ -2954,8 +3003,8 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 	if (controlled && controlled != main_actor) {
 		// Leading a companion (Shift+Tab, the host or a single player): the
 		// guests' rules (docs/friend-mode/interaction-policy.md), carried out
-		// here, where the world is.  People, merchants included, and story
-		// objects are the Avatar's.
+		// here, where the world is: merchants and trainers talk to it; other
+		// people and story objects are the Avatar's.
 		const int shape = obj->get_shapenum();
 		if (!clicked_actor && !obj->get_owner() && (obj->get_info().is_door() || Friend_mode_guest_usable_shape(shape))) {
 			if (obj->get_info().is_door() && obj->get_framenum() % 4 >= 2) {
@@ -2976,6 +3025,10 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 			effects->remove_text_effects();
 			usecode->init_conversation();
 			obj->activate();
+			return;
+		}
+		// Merchants and trainers talk to the companion, as to a guest's.
+		if (clicked_actor && Friend_mode_lead_talk_to_merchant(clicked_actor)) {
 			return;
 		}
 		if (clicked_actor || usecode->function_exists(obj->get_usecode())) {

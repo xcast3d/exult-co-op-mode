@@ -1425,8 +1425,11 @@ void Actor::follow(const Actor* leader) {
 		// +++++For formation, why not get correct positions?
 		static const int xoffs[10] = {-1, 1, -2, 2, -3, 3, -4, 4, -5, 5};
 		static const int yoffs[10] = {1, -1, 2, -2, 3, -3, 4, -4, 5, -5};
-		goal.tx += xoffs[party_id] + 1 - rand() % 3;
-		goal.ty += yoffs[party_id] + 1 - rand() % 3;
+		// The Avatar (no party number) following a companion takes the
+		// leader's place.
+		const int place = party_id >= 0 ? party_id : std::max(0, leader->get_party_id());
+		goal.tx += xoffs[place % 10] + 1 - rand() % 3;
+		goal.ty += yoffs[place % 10] + 1 - rand() % 3;
 		dist = 1;
 	}
 	// Already aiming along a path?
@@ -1463,8 +1466,9 @@ void Actor::follow(const Actor* leader) {
 	const TileRect wrect     = gwin->get_win_tile_rect();
 	const int      dist2lead = leader->distance(pos);
 	// Getting kind of far away?
-	if (dist2lead > wrect.w + wrect.w / 2 && party_id >= 0 &&    // And a member of the party.
-		!leaderpath) {                                           // But leader is not following path.
+	// (The Avatar too, while it follows a companion one leads.)
+	if (dist2lead > wrect.w + wrect.w / 2 && (party_id >= 0 || leader != gwin->get_main_actor())
+		&& !leaderpath) {    // But leader is not following path.
 		// Approach, or teleport.
 		// Try to approach from offscreen.
 		if (approach_another(leader)) {
@@ -4775,13 +4779,17 @@ bool Main_actor::step(
 	if (olist != nlist) {
 		Main_actor::switched_chunks(olist, nlist);
 	}
-	const int roof_height = nlist->is_roof(tx, ty, t.tz);
-	gwin->set_ice_dungeon(nlist->is_ice_dungeon(tx, ty));
-	if (gwin->set_above_main_actor(roof_height)) {
-		gwin->set_in_dungeon(nlist->has_dungeon() ? nlist->is_dungeon(tx, ty) : 0);
-		gwin->set_all_dirty();
-	} else if (roof_height < 31 && gwin->set_in_dungeon(nlist->has_dungeon() ? nlist->is_dungeon(tx, ty) : 0)) {
-		gwin->set_all_dirty();
+	// Roofs and dungeons follow the camera (Friend Mode: a companion one
+	// leads, with the Avatar following).
+	if (gwin->get_camera_actor() == this) {
+		const int roof_height = nlist->is_roof(tx, ty, t.tz);
+		gwin->set_ice_dungeon(nlist->is_ice_dungeon(tx, ty));
+		if (gwin->set_above_main_actor(roof_height)) {
+			gwin->set_in_dungeon(nlist->has_dungeon() ? nlist->is_dungeon(tx, ty) : 0);
+			gwin->set_all_dirty();
+		} else if (roof_height < 31 && gwin->set_in_dungeon(nlist->has_dungeon() ? nlist->is_dungeon(tx, ty) : 0)) {
+			gwin->set_all_dirty();
+		}
 	}
 	// Near an egg?  (Do this last, since
 	//   it may teleport.)

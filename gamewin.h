@@ -633,6 +633,12 @@ public:
 	Actor* get_controlled_actor() const {
 		return controlled_actor;
 	}
+	// Whom the party follows: the Avatar, or the companion the host or a
+	// single player leads (Friend Mode, Shift+Tab; the Avatar follows it
+	// too).  See docs/friend-mode/leading-companions.md.
+	Actor* get_party_leader() const;
+	// As Main_actor::get_followers, toward the party's leader.
+	void get_leader_followers();
 	// The person or creature picked with Q (WASD movement), or null.
 	Actor* get_action_target() const;
 	void   set_action_target(Actor* target);

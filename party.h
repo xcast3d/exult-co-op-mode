@@ -51,6 +51,10 @@ class Party_manager : public Game_singletons {
 	size_t validcnt;
 	// Formation-walking:
 	void move_followers(Actor* npc, int vindex, int dir) const;
+	// Place in the formation: the party number, with -1 for the leader
+	// (the Avatar, or a companion led in Friend Mode, whose place the
+	// Avatar takes).
+	int formation_slot(const Actor* npc) const;
 	int  step(Actor* npc, Actor* leader, int dir, const Tile_coord& dest) const;
 
 public:

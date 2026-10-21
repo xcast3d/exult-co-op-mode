@@ -1,7 +1,7 @@
 # Leading a companion
 
-Status: **step 1 built** (2026-10-21), not tested yet; steps 2 to 4
-planned.
+Status: **steps 1 and 2 built** (2026-10-21): step 1 tried and working
+(Shift+Tab cycling), step 2 not tested yet; steps 3 and 4 planned.
 
 The Class System gives every companion skills, but only guests can use them
 by hand: the host and a single player play the Avatar, whose bar holds
@@ -21,9 +21,13 @@ guest does, use its skill bar, and have the party follow it.
   Shamino for every script that looks for him.
 - **The Avatar stays the story actor.** A companion you lead follows the
   guests' rules ([interaction policy](interaction-policy.md)): doors,
-  levers, containers and items work; people and story objects say "The
-  Avatar must do this". Merchants and trainers too (decided 2026-10-21,
-  to keep it simple): only the Avatar talks to anyone on the host.
+  levers, containers and items work; merchants and trainers talk to the
+  companion; other people and story objects say "The Avatar must do this".
+  (First decided "only the Avatar talks to anyone", then changed the same
+  day to match guests exactly.)
+- **Fighting anyone, as guests may** (2026-10-21): creatures and hostiles
+  at once, peaceful people after confirming ("Attack Finnigan? Again to
+  attack"), the same as a guest's companion.
 - **The party follows whoever you lead, the Avatar included** (2026-10-21).
   Leaving the party behind would be simpler (scouting, laying caltrops,
   shooting from range), but going on into a dungeon would mean switching
@@ -137,6 +141,20 @@ guest does, use its skill bar, and have the party follow it.
 2. **The party follows the leader.** The leader setting, the formation
    driven by the led companion's steps, the Avatar on a follow schedule.
    The risky step; test it through doors, stairs, teleporters and fights.
+   Built 2026-10-21: `Game_window::get_party_leader` (the companion one
+   leads, else the Avatar) is whom `Follow_avatar_schedule` and
+   `Game_window::get_leader_followers` aim at; each walk the led companion
+   starts calls the followers, as the Avatar's walks do. Formation walking
+   (Exult's default) works with the led companion as its root: the first
+   try used Exult's "traditional" walking instead (each follower paths
+   after the leader) and looked chaotic, so `Party_manager::get_followers`
+   now starts the formation from the leader and puts the Avatar in the
+   leader's place in it (`Party_manager::formation_slot`), the same shape
+   as when the Avatar leads. The Avatar, like the others, is brought near
+   when it falls far behind. Its own
+   steps no longer set roofs and dungeon views unless the camera is on it.
+   `teleport_party` takes the led companion along (it is on the wait
+   schedule while led).
 3. **Y holds.** The wait schedule for everyone else, the leash, saves, and
    the end of a hold on a map change.
 4. **Co-op and the edges.** Pickers, the player list, back to the Avatar on
@@ -144,6 +162,9 @@ guest does, use its skill bar, and have the party follow it.
 
 ## Open questions
 
-None for now. Answered 2026-10-21: merchants and trainers stay the
-Avatar's; the Avatar fights by U7's own combat while it follows; a guest's
-companion in follow mode follows the leader, and holds with the party.
+None for now. Answered 2026-10-21: merchants and trainers talk to the
+companion one leads, as to a guest's (on the host it is the real
+conversation, so `Friend_mode_lead_talk_to_merchant` puts the story flags
+and the merchant's "met" back after); the Avatar fights by U7's own combat
+while it follows; a guest's companion in follow mode follows the leader,
+and holds with the party.

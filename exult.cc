@@ -920,8 +920,8 @@ Actor* Friend_mode_led_companion() {
 // Shift+Tab, on the host and in single player: lead the next companion in
 // the party (one no guest plays, awake and able), or the Avatar after the
 // last.  The companion left goes back to the party (fighting, in combat
-// mode).  Step 1 of docs/friend-mode/leading-companions.md: nobody follows
-// the one led yet.
+// mode).  The party, the Avatar included, follows the one led
+// (Game_window::get_party_leader); see docs/friend-mode/leading-companions.md.
 static void Friend_mode_lead_next() {
 	Main_actor*    avatar  = gwin->get_main_actor();
 	Actor*         current = gwin->get_controlled_actor();
@@ -942,6 +942,13 @@ static void Friend_mode_lead_next() {
 	}
 	if (next != order.end() && gwin->take_friend_mode_control((*next)->get_npc_num())) {
 		Friend_mode_notice("Leading " + (*next)->get_npc_name());
+		// The Avatar follows the one led, as the party does (in combat it
+		// fights as U7's party does, and follows again after).
+		const int sched = avatar->get_schedule_type();
+		if (sched != Schedule::combat && sched != Schedule::follow_avatar && !avatar->get_flag(Obj_flags::asleep)) {
+			avatar->set_schedule_type(Schedule::follow_avatar);
+		}
+		gwin->get_leader_followers();
 	} else {
 		if (current != avatar) {
 			gwin->release_friend_mode_control();
@@ -2862,8 +2869,14 @@ bool Friend_mode_attack_target(Actor* foe, bool confirmed) {
 		}
 	} else if (Actor* led = Friend_mode_led_companion()) {
 		// The companion one leads fights it, as the host fights for a
-		// guest's companion; walking or clearing the target ends it.
+		// guest's companion; walking or clearing the target ends it.  A
+		// peaceful person only after confirming, as for a guest.
 		if (!led->can_act_charmed()) {
+			return false;
+		}
+		const bool peaceful = foe->get_npc_num() > 0 && !Friend_guest_may_attack(foe);
+		if (peaceful && !confirmed
+			&& !Friend_confirmed(foe, Friend_confirm::attack, "Attack " + foe->get_name() + "? Again to attack")) {
 			return false;
 		}
 		if (led->get_attack_mode() == Actor::flee) {
@@ -4717,6 +4730,47 @@ bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
 	if (friend_session.connected()) {
 		friend_session.send_blob(Friend_mode_session::Blob_kind::resync_request, {1});
 	}
+	return true;
+}
+
+// The host or a single player: the companion one leads talks to a merchant
+// or trainer as a guest's does (the shop's own answers, its portrait,
+// purchases into its pack, training for it alone, spells the Avatar's).
+// This is the real world, so the story flags the talk changed, and whether
+// the merchant has met the party, are put back after.
+bool Friend_mode_lead_talk_to_merchant(Actor* npc) {
+	Actor* own = Friend_mode_led_companion();
+	if (!GAME_BG || !npc || !own || !friend_merchants.count(npc->get_npc_num())) {
+		return false;
+	}
+	Usecode_machine*  usecode = gwin->get_usecode();
+	const int         count   = static_cast<int>(usecode->get_num_global_flags());
+	std::vector<bool> flags(count);
+	for (int i = 0; i < count; ++i) {
+		flags[i] = usecode->get_global_flag_unsafe(i);
+	}
+	const bool met = npc->get_flag(Obj_flags::met);
+	usecode->set_friend_shopper(own);
+	const auto answers = friend_merchant_answers.find(npc->get_npc_num());
+	if (answers != friend_merchant_answers.end()) {
+		usecode->set_friend_answers(npc->get_usecode(), answers->second);
+	}
+	gwin->get_effects()->remove_text_effects();
+	usecode->init_conversation();
+	npc->activate();
+	usecode->set_friend_shopper(nullptr);
+	usecode->set_friend_answers(-1, {});
+	const int now = static_cast<int>(usecode->get_num_global_flags());
+	for (int i = 0; i < now; ++i) {
+		const bool was = i < count && flags[i];    // Flags the talk added were off.
+		if (usecode->get_global_flag_unsafe(i) != was) {
+			usecode->set_global_flag_unsafe(i, was);
+		}
+	}
+	if (!met) {
+		npc->clear_flag(Obj_flags::met);
+	}
+	cout << "Friend Mode: " << own->get_npc_name() << " talked to " << npc->get_npc_name() << endl;
 	return true;
 }
 

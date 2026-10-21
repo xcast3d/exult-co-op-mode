@@ -278,9 +278,15 @@ static const int right_offsets[4][2] = {
 
 void Party_manager::get_followers(int dir    // Direction (0-7) Avatar just stepped.
 ) {
-	validcnt = 0;    // Get party members to control.
+	// Friend Mode: a companion one leads is the formation's root, and the
+	// Avatar walks in its place (formation_slot).
+	Actor* leader = gwin->get_party_leader();
+	validcnt      = 0;    // Get party members to control.
 	for (size_t i = 0; i < party_count; i++) {
 		Actor* npc = gwin->get_npc(party[i]);
+		if (npc && npc == leader) {
+			npc = gwin->get_main_actor();
+		}
 		if (!npc || npc->get_flag(Obj_flags::asleep) || npc->get_flag(Obj_flags::paralyzed) || npc->is_dead()) {
 			continue;    // Not available.
 		}
@@ -293,8 +299,22 @@ void Party_manager::get_followers(int dir    // Direction (0-7) Avatar just step
 		}
 	}
 	if (validcnt) {
-		move_followers(gwin->get_main_actor(), -1, dir);
+		move_followers(leader, -1, dir);
 	}
+}
+
+int Party_manager::formation_slot(const Actor* npc) const {
+	const Actor* leader = gwin->get_party_leader();
+	const Actor* avatar = gwin->get_main_actor();
+	if (leader != avatar) {
+		if (npc == leader) {
+			return -1;
+		}
+		if (npc == avatar) {
+			return leader->get_party_id();
+		}
+	}
+	return npc->get_party_id();
 }
 
 /*
@@ -308,7 +328,7 @@ void Party_manager::move_followers(
 		int    dir        // Direction (0-7) he stepped in.
 ) const {
 	ignore_unused_variable_warning(vindex);
-	const int        id   = npc->get_party_id();    // (-1 if Avatar).
+	const int        id   = formation_slot(npc);    // (-1 if the leader).
 	const Tile_coord pos  = npc->get_tile();
 	const int        lnum = followers[1 + id][0];
 	const int        rnum = followers[1 + id][1];

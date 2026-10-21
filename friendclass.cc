@@ -2304,6 +2304,7 @@ struct Bar_slot {
 	bool usable  = false;
 	int  seconds = 0;    // Recharging.
 	int  level   = 0;    // Locked until this level.
+	bool unlearned = false;    // A spell the Avatar doesn't know.
 	std::string name;
 	std::string why;     // Why not usable.
 	std::string description;
@@ -2347,7 +2348,8 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 			if (!book) {
 				slot.why = "No spellbook";
 			} else if (!book->has_spell(spell)) {
-				slot.why = std::string("You don't know ") + slot.name;
+				slot.why       = std::string("You don't know ") + slot.name;
+				slot.unlearned = true;
 			} else if (!book->can_do_spell(actor, spell)) {
 				slot.why = slot.name + ": not enough mana, reagents or experience";
 			} else {
@@ -2745,9 +2747,16 @@ private:
 		return vertical ? std::max(1, n * Slot_h() + (n - 1) * slot_gap) : Slot_h();
 	}
 
-	// A tooltip's lines: the name only (decided 2026-10-20; the rest made it
-	// too big; clicking an unusable slot still says why).
+	// A tooltip's lines: the name (decided 2026-10-20; the rest made it too
+	// big; clicking an unusable slot still says why), and "Locked" or "Not
+	// Learned" for one that isn't open yet (2026-10-21: no level on the slot).
 	std::vector<std::string> tip_lines(const Bar_slot& slot) const {
+		if (slot.level > 0) {
+			return {slot.name, "Locked"};
+		}
+		if (slot.unlearned) {
+			return {slot.name, "Not Learned"};
+		}
 		return {slot.name};
 	}
 
@@ -2904,11 +2913,9 @@ void Skill_button::paint() {
 			ty += lh;
 		}
 	}
-	// Seconds left, or the level it opens at, in the corner.
+	// Seconds left, in the corner (a locked one is only dimmed).
 	char text[8] = "";
-	if (each->level > 0) {
-		std::snprintf(text, sizeof(text), "L%d", each->level);
-	} else if (each->seconds > 0) {
+	if (each->level <= 0 && each->seconds > 0) {
 		std::snprintf(text, sizeof(text), "%d", each->seconds);
 	}
 	if (text[0]) {

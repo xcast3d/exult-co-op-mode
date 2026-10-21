@@ -310,11 +310,11 @@ int Path_walking_actor_action::handle_event(Actor* actor) {
 		if (deleted) {
 			return 0;
 		}
-		if (get_party) {    // MUST be the Avatar.
+		if (get_party) {    // MUST be the party's leader (the Avatar, or a companion led in Friend Mode).
 			Game_window* gwin = Game_window::get_instance();
 			gwin->get_party_man()->get_followers(newdir);
 			if (done) {
-				gwin->get_main_actor()->get_followers();
+				gwin->get_leader_followers();
 			}
 		}
 		if (done) {    // Was this the last step?
