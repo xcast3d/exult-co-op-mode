@@ -1379,7 +1379,11 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			Game_object*       obj    = nullptr;
 			const Weapon_info* winf   = user->get_weapon(points, weapon, obj);
 			Actor*             foe    = targets.front();
-			if (winf && foe && user->distance(foe) > user->get_effective_range(winf, winf->get_range())) {
+			const int reach = winf ? user->get_effective_range(winf, winf->get_range()) : 1;
+			if (skill.range > 1 && reach <= 2) {
+				// A sword or nothing: a shot needs a bow, crossbow or sling.
+				why = user->get_npc_name() + " needs a bow, crossbow or sling readied";
+			} else if (winf && foe && user->distance(foe) > reach) {
 				why = foe->get_name() + " is out of reach of " + user->get_npc_name() + "'s weapon";
 			} else {
 				why = skill.range <= 1 ? "Needs a weapon in hand" : "Needs a bow, crossbow or sling, and ammunition";
