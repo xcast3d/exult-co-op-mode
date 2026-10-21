@@ -2129,7 +2129,9 @@ bool Ready_to_fight(Actor* user, Actor* pick, const std::string& what, int index
 		Friend_mode_class_notice("The Avatar must do this");    // Townsfolk.
 		return false;
 	}
-	if (!hostile && !gwin->in_combat()) {
+	// Animals and other creatures need no asking; townsfolk do.
+	const bool creature = pick->get_npc_num() < 0;
+	if (!hostile && !creature && !gwin->in_combat()) {
 		const bool confirmed = confirm_slot == index && confirm_pick.lock().get() == pick && Now() < confirm_until;
 		if (!confirmed) {
 			confirm_slot  = index;
@@ -2172,6 +2174,9 @@ void Use_slot(const Bar_slot& slot, int index) {
 			aim = pick;
 		}
 		book->do_spell(actor, slot.spell, false, false, aim);
+		if (aim && aim != actor && !Spell_heals(slot.spell)) {
+			Friend_mode_attack_target(static_cast<Actor*>(aim));    // And fight it, as Space would.
+		}
 		return;
 	}
 	const Companion_class* cls   = Class_of(actor);
@@ -2184,6 +2189,7 @@ void Use_slot(const Bar_slot& slot, int index) {
 		Friend_mode_class_notice(why);
 		return;
 	}
+	Actor* engage = nullptr;    // A pick to fight after the skill, as Space would.
 	if (Offensive(*skill)) {
 		Actor* pick = gwin->get_action_target();
 		if (pick && (pick->is_in_party() || pick == gwin->get_main_actor())) {
@@ -2192,6 +2198,7 @@ void Use_slot(const Bar_slot& slot, int index) {
 		if (!Ready_to_fight(actor, pick, skill->name, index)) {
 			return;
 		}
+		engage = pick;
 	}
 	if (Is_guest()) {
 		// The skill, and the Target System's pick (kind 2: none).
@@ -2208,10 +2215,15 @@ void Use_slot(const Bar_slot& slot, int index) {
 		}
 		Friend_mode_get_session().send_blob(Friend_mode_session::Blob_kind::class_use, request);
 		global_waits[actor->get_npc_num()] = Now() + global_wait_ms;
+		if (engage) {
+			Friend_mode_attack_target(engage);    // The host fights it for us.
+		}
 		return;
 	}
 	if (!Perform(actor, *cls, *skill, why)) {
 		Friend_mode_class_notice(why);
+	} else if (engage) {
+		Friend_mode_attack_target(engage);
 	}
 }
 
@@ -3489,6 +3501,11 @@ void Friend_class_frame() {
 
 void Friend_class_hide_overlays() {
 	Game_window* gwin = Gwin();
+	Friend_map_hide();
+	if (the_bar) {    // Closed; play brings it back.
+		gwin->get_gump_man()->close_gump(the_bar);
+		the_bar = nullptr;
+	}
 	for (const Icon_layer& each : icon_layers) {
 		if (each.layer >= 0) {
 			gwin->layer_set_visible(each.layer, false);

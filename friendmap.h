@@ -24,5 +24,7 @@ extern bool Friend_minimap_enabled;
 
 // Draw the corner minimap over the game view, if it is on.
 void Friend_map_paint(const std::vector<Friend_map_dot>& dots);
+// Hide it now (a full-screen menu is about to show; the next frame puts it back).
+void Friend_map_hide();
 
 #endif

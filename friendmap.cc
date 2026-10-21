@@ -204,6 +204,10 @@ void paint_corner_map(const std::vector<Friend_map_dot>& dots) {
 }
 }    // namespace
 
+void Friend_map_hide() {
+	hide_corner_map();
+}
+
 void Friend_map_paint(const std::vector<Friend_map_dot>& dots) {
 	Game_window* gwin = Game_window::get_instance();
 	if (!gwin->get_map()) {
