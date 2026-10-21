@@ -1,0 +1,139 @@
+# Leading a companion
+
+Status: **planned** (2026-10-21). Not built.
+
+The Class System gives every companion skills, but only guests can use them
+by hand: the host and a single player play the Avatar, whose bar holds
+spells, and the companions use their skills only through the Class AI. This
+plan lets the host (and a single player) take a companion in hand the way a
+guest does, use its skill bar, and have the party follow it.
+
+## Decided
+
+- **Like a guest, not a disguise** (2026-10-21). The host controls the real
+  companion, as a guest does: its own stats, pack, paperdoll, level and
+  weapon, so its skills work as they do for a guest. Swapping the Avatar's
+  sprite for a companion's, or making the companion "the Avatar", was
+  considered and dropped: the scripts, conversations, karma and saves all
+  expect NPC 0 to be the Avatar, and a disguised Avatar would carry the
+  Avatar's stats and pack into Shamino's skills, with a second, hidden
+  Shamino for every script that looks for him.
+- **The Avatar stays the story actor.** A companion you lead follows the
+  guests' rules ([interaction policy](interaction-policy.md)): doors,
+  levers, containers and items work; people and story objects say "The
+  Avatar must do this". Merchants and trainers too (decided 2026-10-21,
+  to keep it simple): only the Avatar talks to anyone on the host.
+- **The party follows whoever you lead, the Avatar included** (2026-10-21).
+  Leaving the party behind would be simpler (scouting, laying caltrops,
+  shooting from range), but going on into a dungeon would mean switching
+  back to the Avatar every time. So the Avatar and the other companions
+  follow the companion you lead, as they follow the Avatar today.
+- **Y holds the party** on the host and in single player: everyone you
+  don't lead stops and waits; Y again sends them back to following. For
+  creeping in alone with Shamino, vanishing and striking. (On a guest Y
+  stays follow mode.)
+- **The Avatar fights as it always has** while it follows (2026-10-21):
+  U7's own combat for the party, no Class AI placing.
+- **A guest in follow mode follows the leader** (2026-10-21): the party's
+  AI walks its companion behind whoever the host leads, as it walks the
+  rest of the party. While the host's party holds, it holds too.
+
+## How it plays
+
+- **Shift+Tab** (Tab is the player list) cycles whom you lead: the Avatar,
+  then each companion in the party that no guest is playing, then back to
+  the Avatar. The notice near the top says "Leading Shamino" (and
+  "Leading the Avatar").
+- The camera, roofs, night lighting, the Target System (Q, E, Space) and
+  the minimap follow whoever you lead; most of them already follow the
+  controlled actor.
+- The skill bar is that companion's, as a guest's is; back on the Avatar,
+  the spell bar returns.
+- The Avatar and the others walk behind you in formation. In a fight they
+  fight as U7's party does: the Class AI's skills and placing for the
+  companions, U7's own combat for the Avatar.
+- **Y** holds them where they stand ("The party holds"); Y again, "The
+  party follows". A held party fights back if attacked, standing its
+  ground.
+- Leading someone, you stay within reach of the Avatar, as guests do (the
+  leash). That only matters while the party holds; otherwise the Avatar is
+  right behind you.
+
+## What there is to build on
+
+- **Local possession** (Phase 1, `Game_window::toggle_friend_mode_control`,
+  Ctrl+F as a development key): taking a companion in hand, the camera
+  following it, its AI paused, and control going back to the Avatar before
+  saves and scripted scenes.
+- **Guests' companions on the host** (Phase 2 to 6): eggs, teleporters,
+  waking sleepers, creatures kept awake near them, item reach and theft,
+  the leash, and the interaction policy.
+- **The Class System**: the bar for any companion (`Bar_actor`), and the
+  Class AI already leaves alone whoever is controlled.
+
+## Issues and how to meet them
+
+1. **Following a leader that isn't the Avatar** (the biggest piece). Two
+   things move the party today, and both are tied to the Avatar:
+   - `Follow_avatar_schedule::now_what` (schedule.cc) aims every follower
+     at `gwin->get_main_actor()`;
+   - the formation steps: each step of the Avatar (`Main_actor::step`)
+     calls `Party_manager::get_followers`, which moves the followers
+     (`move_followers`) from the Avatar's step. A companion's steps don't.
+
+   Both get a **leader**: the Avatar normally, the companion you lead
+   otherwise (`Game_window::get_party_leader`, say). The led companion's
+   steps then call the formation code the Avatar's call. `Actor::follow`
+   already takes a leader.
+2. **The Avatar following.** When you lead someone else, the Avatar must
+   walk like a follower: put it on a follow schedule toward the leader (and
+   take it off when you switch back). Exult moves the Avatar by schedule
+   and path in cutscenes, so the pieces exist, but not for long stretches;
+   test it hard (doors, stairs, teleporters, combat starting and ending).
+   The formation places members by party number (the Avatar is -1), so the
+   Avatar needs a place in it too.
+3. **Holding.** `Party_manager::get_followers` already skips members on
+   the `wait` schedule, so a hold is the wait schedule for everyone but the
+   leader, and back to follow on release. Also:
+   - saves write held companions as following (the same fix as guests'
+     companions saved waiting, 2026-10-17);
+   - a map change (teleporter, moongate, stairs to another map) ends the
+     hold, or someone is left behind on another map;
+   - held companions fight back when attacked, without walking off to chase.
+4. **Scripts and eggs.** Script, music and weather eggs fire for the Avatar
+   only, as for guests: lead Shamino into a room and its scene plays when
+   the Avatar arrives. That suits scouting ahead. Traps and monster eggs
+   fire for the companion you lead, as for guests' companions.
+5. **Back to the Avatar.** Control already goes back to the Avatar before a
+   save and when a script takes over. Also: when someone starts a
+   conversation with the Avatar (Batlin walking up, a guard), and when the
+   companion you lead dies, leaves the party or is knocked out (the Avatar
+   takes over; the notice says why).
+6. **Co-op.** The host can lead only companions no guest plays; guests'
+   pickers leave out the one the host leads; a guest joining sees "Marc
+   leads Shamino" in the player list. A guest's companion in follow mode
+   follows the leader (the follow schedule's leader, so nothing extra) and
+   holds when the party holds. Y means "hold" on the host and
+   "follow mode" on a guest; the help line under each says so.
+7. **Keys.** Shift+Tab to cycle and Y to hold are free on the host. Ctrl+F
+   (the development key) goes, or becomes the same as Shift+Tab.
+
+## Steps
+
+1. **Lead and the bar.** Shift+Tab cycles whom you lead, on today's local
+   possession, with the skill bar following; the guests' interaction rules
+   for the companion you lead. Nobody follows yet (the party stands, as
+   Phase 1 left it). Enough to use caltrops or Volley from the host.
+2. **The party follows the leader.** The leader setting, the formation
+   driven by the led companion's steps, the Avatar on a follow schedule.
+   The risky step; test it through doors, stairs, teleporters and fights.
+3. **Y holds.** The wait schedule for everyone else, the leash, saves, and
+   the end of a hold on a map change.
+4. **Co-op and the edges.** Pickers, the player list, back to the Avatar on
+   conversations and on losing the companion, and the test checklist.
+
+## Open questions
+
+None for now. Answered 2026-10-21: merchants and trainers stay the
+Avatar's; the Avatar fights by U7's own combat while it follows; a guest's
+companion in follow mode follows the leader, and holds with the party.

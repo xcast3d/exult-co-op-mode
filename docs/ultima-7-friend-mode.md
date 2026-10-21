@@ -657,7 +657,10 @@ effects; an option the host sets, off by default. Plan:
 2026-10-20, ahead of Phase 8, since it needs balancing and changes today's
 combat: the foundation (Game menu → Class System, the bars, definitions,
 cooldowns, effects, the Class AI's choices) is built and not yet tested;
-Class AI placing and Challenge followed the same day (untested).
+Class AI placing and Challenge followed the same day (untested). Next for
+it: the host and a single player leading a companion, its skill bar and
+the party following it, with Y to hold the party
+([plan](friend-mode/leading-companions.md), 2026-10-21).
 
 ### Offering features to Exult
 

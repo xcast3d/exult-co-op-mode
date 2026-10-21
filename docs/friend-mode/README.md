@@ -36,8 +36,9 @@ creatures.
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md). The Target System's item groups are in
 [targeting groups](targeting-groups.md); a gamepad plan in [controller
-support](controller-plan.md); the Phase 8 [lobby](lobby.md); how the work splits into layers for forks in [branching](branching.md); class skills for companions (an idea for
-after v1) in [companion skills](companion-skills.md); what could go to
+support](controller-plan.md); the Phase 8 [lobby](lobby.md); how the work splits into layers for forks in [branching](branching.md); class skills for companions in [companion skills](companion-skills.md);
+the host leading a companion (planned) in [leading a
+companion](leading-companions.md); what could go to
 upstream Exult in
 [upstreaming notes](upstreaming.md).
 
