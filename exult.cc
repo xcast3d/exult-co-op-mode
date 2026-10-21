@@ -76,6 +76,7 @@
 #include "ignore_unused_variable_warning.h"
 #include "istring.h"
 #include "items.h"
+#include "weaponinf.h"
 #include "shapeinf/aniinf.h"
 #include "keyactions.h"
 #include "keys.h"
@@ -1137,6 +1138,50 @@ static void Friend_test_kit_magic() {
 	}
 }
 
+// The ranged weapon a companion's skills shoot with, in the weapon hand,
+// with ammunition (60, readied): what was in the hand goes to the pack.
+static void Friend_test_kit_arm(Actor* npc, int weapon_shape) {
+	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
+	if (weapon_shape < 0 || weapon_shape >= shapes.get_num_shapes()) {
+		return;
+	}
+	int                points = 0;
+	int                shape  = -1;
+	Game_object*       held   = nullptr;
+	const Weapon_info* winf   = npc->get_weapon(points, shape, held);
+	if (!winf || shape != weapon_shape) {
+		if (Game_object* current = npc->get_readied(lhand)) {
+			const Game_object_shared keep = current->shared_from_this();
+			npc->remove(current);
+			npc->add(current, true);
+		}
+		const Game_object_shared weapon = Friend_test_kit_create(weapon_shape, 0);
+		if (!npc->add_readied(weapon.get(), lhand, true, true)) {
+			npc->add(weapon.get(), true);
+		}
+	}
+	const Weapon_info* info = ShapeID::get_info(weapon_shape).get_weapon_info();
+	const int          ammo = info ? info->get_ammo_consumed() : -1;
+	if (ammo >= 0 && ammo < shapes.get_num_shapes() && npc->count_objects(ammo) < 20) {
+		const Game_object_shared stack = Friend_test_kit_create(ammo, 0);
+		stack->modify_quantity(59);
+		npc->add(stack.get(), true);
+	}
+	npc->ready_ammo();
+}
+
+// Black Gate's sling, by its name (its number isn't in our lists).
+static int Friend_test_kit_sling() {
+	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
+	for (int shape = 0; shape < shapes.get_num_shapes(); ++shape) {
+		const char* name = get_item_name(shape);
+		if (name && ShapeID::get_info(shape).get_weapon_info() && std::string(name) == "sling") {
+			return shape;
+		}
+	}
+	return -1;
+}
+
 // Host debug aid (F9, for the Class System): every companion who can come
 // stands by the Avatar and joins the party (as many as it holds: 8 besides
 // the Avatar), at level 6 or more so all their skills are open; the Avatar
@@ -1180,6 +1225,15 @@ static void Friend_mode_gather_companions() {
 			npc->move(spot);
 		}
 		npc->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
+		// The weapons their skills shoot with.
+		const std::string who = name;
+		if (who == "Shamino" || who == "Tseramed") {
+			Friend_test_kit_arm(npc, 597);    // Bow (and arrows).
+		} else if (who == "Iolo") {
+			Friend_test_kit_arm(npc, 598);    // Crossbow (and bolts).
+		} else if (who == "Spark") {
+			Friend_test_kit_arm(npc, Friend_test_kit_sling());
+		}
 		if (npc->get_property(Actor::exp) < level6) {
 			npc->set_property(Actor::exp, level6);
 		}

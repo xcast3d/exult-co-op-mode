@@ -2455,8 +2455,8 @@ private:
 		}
 	}
 
-	// Where the chosen position puts the bar, in game coordinates, flush
-	// with the edge.  True if it moved.
+	// Where the chosen position puts the bar, in game coordinates, a few
+	// pixels from the edge.  True if it moved.
 	bool place() {
 		Image_window* iwin   = Gwin()->get_win();
 		const bool    row    = tip_side == Tip_side::above || tip_side == Tip_side::below;
@@ -2467,6 +2467,7 @@ private:
 		const int     top    = iwin->get_start_y();
 		const int     right  = iwin->get_end_x();
 		const int     bottom = iwin->get_end_y();
+		constexpr int edge   = 3;    // Pixels from the screen's edge.
 		// The party's faces along the bottom (Exult's status bars).
 		TileRect faces(0, 0, 0, 0);
 		for (auto it = Gwin()->get_gump_man()->begin(); it != Gwin()->get_gump_man()->end(); ++it) {
@@ -2474,37 +2475,38 @@ private:
 				faces = stats->get_rect();
 			}
 		}
-		const bool faces_at_bottom = faces.w > 0 && faces.w > faces.h;
+		// Exult's side columns (mode 3) are no bottom row.
+		const bool faces_at_bottom = faces.w > 0 && faces.w > faces.h && Face_stats::get_state() != 3;
 		int        bx              = 0;
 		int        by              = 0;
 		switch (Friend_class_bar_position) {
 		case friend_bar_bottom_left:
-			bx = left;
-			by = bottom - h;
+			bx = left + edge;
+			by = bottom - h - edge;
 			break;
 		case friend_bar_bottom_right:
-			bx = right - w;
-			by = bottom - h;
+			bx = right - w - edge;
+			by = bottom - h - edge;
 			break;
 		case friend_bar_top_left:
-			bx = left;
-			by = top;
+			bx = left + edge;
+			by = top + edge;
 			break;
 		case friend_bar_top_right:
-			bx = right - w;
-			by = top + (Friend_minimap_enabled ? 56 : 0);    // Under the minimap.
+			bx = right - w - edge;
+			by = top + edge + (Friend_minimap_enabled ? 56 : 0);    // Under the minimap.
 			break;
 		case friend_bar_left_center:
-			bx = left;
+			bx = left + edge;
 			by = top + (bottom - top - h) / 2;
 			break;
 		case friend_bar_right_center:
-			bx = right - w;
+			bx = right - w - edge;
 			by = top + (bottom - top - h) / 2;
 			break;
 		default:    // Above the status bar, bottom centre.
 			bx = left + (right - left - w) / 2;
-			by = bottom - h;
+			by = bottom - h - edge;
 			break;
 		}
 		// Never on the faces: above them (the slots' part of it).
@@ -3440,7 +3442,8 @@ int Friend_hud_bottom_y() {
         }
 	};
 	for (auto it = gwin->get_gump_man()->begin(); it != gwin->get_gump_man()->end(); ++it) {
-		if (dynamic_cast<Face_stats*>(*it) || *it == the_bar) {
+		// Exult's side columns of faces (mode 3) are no bottom row.
+		if ((dynamic_cast<Face_stats*>(*it) && Face_stats::get_state() != 3) || *it == the_bar) {
 			check(*it);
 		}
 	}
