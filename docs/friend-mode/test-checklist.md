@@ -16,7 +16,9 @@ Mode, and tick off what you tried. Black Gate only for now.
 
 3. On the host, load a save with at least one companion besides the Avatar
    (for example Iolo or Spark), and stand somewhere open.
-4. Press **F9** on the host to place the test kit around the Avatar. The host
+4. Press **Ctrl+F9** on the host to place the object test kit (doors,
+   chests, keys, teleporters) around the Avatar. (**F9** alone gathers the
+   companions for the Class System; **Shift+F9** places test creatures.) The host
    shows "Friend Mode test kit placed".
    - **Do this before the guest joins.** Objects created after a guest joins
      are not synced yet, but the kit is part of the world the guest downloads.
@@ -964,7 +966,10 @@ Effect preview:
 
 The Avatar's spell bar (host, and single player):
 
-The F9 test kit now puts a bag with 20 of each reagent in the Avatar's
+**F9** (2026-10-20) brings every free companion to the Avatar and into the
+party (as many as it holds: 8 besides the Avatar; one of the nine is left
+out when all are free), raises companions to level 6 (every skill open) and
+the Avatar to level 5 (Great Heal), and puts a bag with 20 of each reagent in the Avatar's
 inventory (U7 only counts what the caster carries), puts every spell in
 the Avatar's spellbook (a new book in that bag if the Avatar has none), and
 fills the Avatar's mana. Each spell still needs the level of its circle

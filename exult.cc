@@ -1094,6 +1094,13 @@ static void Friend_mode_spawn_test_kit() {
 		Friend_test_kit_fill(supplies, 823, 2, 1);    // Paint brush.
 	}
 	Friend_test_kit_place(837, 0, 10, 5);    // Easel, to paint on.
+	// Teleporter pads west and east of the Avatar.
+	Friend_test_kit_teleporters(-11, 1, 14, 1);
+	gwin->set_all_dirty();
+	Friend_mode_notice("Friend Mode test kit placed");
+}
+
+static void Friend_test_kit_magic() {
 	// Magic, for the Class System's spell bar, carried by the Avatar (U7
 	// only counts a book and reagents one carries): a bag with 20 of each
 	// reagent, every spell in the Avatar's spellbook (a new book in the bag
@@ -1128,10 +1135,62 @@ static void Friend_mode_spawn_test_kit() {
 		}
 		avatar->set_property(Actor::mana, avatar->get_property(Actor::magic));
 	}
-	// Teleporter pads west and east of the Avatar.
-	Friend_test_kit_teleporters(-11, 1, 14, 1);
+}
+
+// Host debug aid (F9, for the Class System): every companion who can come
+// stands by the Avatar and joins the party (as many as it holds: 8 besides
+// the Avatar), at level 6 or more so all their skills are open; the Avatar
+// at level 5 or more (Great Heal's circle), with the magic kit.  Party
+// changes reach guests as always.  Ctrl+F9 is the object kit, Shift+F9 the
+// creatures.
+static void Friend_mode_gather_companions() {
+	if (!GAME_BG) {
+		Friend_mode_notice("The test kit uses Black Gate's companions");
+		return;
+	}
+	static const char* const companions[]
+			= {"Iolo", "Shamino", "Dupre", "Jaana", "Spark", "Sentri", "Julia", "Katrina", "Tseramed"};
+	Main_actor*      avatar   = gwin->get_main_actor();
+	Party_manager*   partyman = gwin->get_party_man();
+	const Tile_coord at       = avatar->get_tile();
+	constexpr int    level6   = 50 << 5;    // Level = 1 + log2(experience / 50).
+	constexpr int    level5   = 50 << 4;
+	int              joined   = 0;
+	int              full     = 0;
+	for (const char* name : companions) {
+		Actor* npc = nullptr;
+		for (int i = 1; i < gwin->get_num_npcs() && !npc; ++i) {
+			Actor* each = gwin->get_npc(i);
+			if (each && each->get_npc_name() == name) {
+				npc = each;
+			}
+		}
+		if (!npc || npc->is_dead()) {
+			continue;
+		}
+		if (!npc->is_in_party()) {
+			if (!partyman->add_to_party(npc)) {
+				++full;
+				continue;
+			}
+			++joined;
+		}
+		const Tile_coord spot = Map_chunk::find_spot(at, 4, npc);
+		if (spot.tx >= 0 && npc->get_map() == avatar->get_map()) {
+			npc->move(spot);
+		}
+		npc->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
+		if (npc->get_property(Actor::exp) < level6) {
+			npc->set_property(Actor::exp, level6);
+		}
+	}
+	if (avatar->get_property(Actor::exp) < level5) {
+		avatar->set_property(Actor::exp, level5);
+	}
+	Friend_test_kit_magic();
 	gwin->set_all_dirty();
-	Friend_mode_notice("Friend Mode test kit placed");
+	Friend_mode_notice("Companions gathered (" + std::to_string(joined) + " joined"
+					   + (full ? ", " + std::to_string(full) + " left out: the party is full" : std::string()) + ")");
 }
 
 // Host debug aid (Shift+F9): creatures that appear after a guest joined,
@@ -8976,8 +9035,10 @@ static void Handle_event(SDL_Event& event) {
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
 		if (event.key.mod & SDL_KMOD_SHIFT) {
 			Friend_mode_spawn_test_creatures();
+		} else if (event.key.mod & SDL_KMOD_CTRL) {
+			Friend_mode_spawn_test_kit();    // Doors, chests, keys, teleporters...
 		} else {
-			Friend_mode_spawn_test_kit();
+			Friend_mode_gather_companions();    // The party, for the Class System.
 		}
 		return;
 	}

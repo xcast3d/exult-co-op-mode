@@ -29,7 +29,10 @@ See [macOS setup](macos-setup.md) and [control-point notes](control-points.md).
 To play with someone outside your network, see [internet play](internet-play.md);
 for Windows, the [Windows build plan](windows-build.md).
 For a repeatable two-player pass, use the [test checklist](test-checklist.md);
-**F9** on the host places a test kit of usable objects around the Avatar.
+On the host, **Ctrl+F9** places a test kit of usable objects around the
+Avatar, **F9** gathers the companions into the party (levelled for the
+Class System, with reagents and a full spellbook), **Shift+F9** places test
+creatures.
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md). The Target System's item groups are in
 [targeting groups](targeting-groups.md); a gamepad plan in [controller
