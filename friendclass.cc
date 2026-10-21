@@ -877,8 +877,9 @@ std::vector<Pending> pending;
 std::vector<Game_object_weak> summons;    // Host: summoned creatures still about.
 
 // The pick a guest sent with its skill (the Target System's Q), for the
-// skill being carried out now.
+// skill being carried out now, and whether a peaceful one was confirmed.
 Game_object_weak chosen_pick;
+bool             chosen_peaceful = false;
 
 void Later(uint32 ms, std::function<void()> run) {
 	pending.push_back({Now() + ms, std::move(run)});
@@ -1070,7 +1071,7 @@ std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
 		// A pick the guest chose is final: never the nearest hostile instead.
 		if (const Game_object_shared chosen = chosen_pick.lock()) {
 			Actor* foe = chosen->as_actor();
-			if (foe && (Friend_mode_is_hostile(user, foe) || Friend_mode_guest_may_attack(user, foe))
+			if (foe && (Friend_mode_is_hostile(user, foe) || Friend_mode_guest_may_attack(user, foe, chosen_peaceful))
 				&& user->distance(foe) <= skill.range) {
 				return {foe};
 			}
@@ -1288,7 +1289,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			if (foe && skill.target == Skill_target::pick && user->distance(foe) > skill.range) {
 				why = foe->get_name() + " is out of range (" + std::to_string(skill.range) + " tiles)";
 			} else if (foe && skill.target == Skill_target::pick) {
-				why = "The Avatar must do this";
+				why = std::string("Can't use ") + skill.name + " on " + foe->get_name();
 			} else {
 				why = "No hostile in range";
 			}
@@ -2111,9 +2112,8 @@ bool Offensive(const Class_skill& skill) {
 
 // Fighting by the bar, as targeting does (decided 2026-10-20): an offensive
 // skill or spell on a hostile turns combat mode on; in combat mode it goes
-// through on anyone; in peace mode on someone peaceful it asks first (the
-// slot clicked again within a few seconds).  Guests never attack peaceful
-// people ("The Avatar must do this").
+// through on anyone; in peace mode on a peaceful person it asks first (the
+// slot clicked again within a few seconds); animals never ask.
 int              confirm_slot = -1;
 Game_object_weak confirm_pick;
 uint32           confirm_until = 0;
@@ -2125,11 +2125,8 @@ bool Ready_to_fight(Actor* user, Actor* pick, const std::string& what, int index
 		return true;    // The nearest hostile, or the crosshair.
 	}
 	const bool hostile = Friend_mode_is_hostile(user, pick);
-	if (!hostile && Is_guest() && !Friend_mode_guest_may_attack(user, pick)) {
-		Friend_mode_class_notice("The Avatar must do this");    // Townsfolk.
-		return false;
-	}
-	// Animals and other creatures need no asking; townsfolk do.
+	// Animals and other creatures need no asking; townsfolk do, for the
+	// Avatar and guests alike (guests may fight them too, 2026-10-20).
 	const bool creature = pick->get_npc_num() < 0;
 	if (!hostile && !creature && !gwin->in_combat()) {
 		const bool confirmed = confirm_slot == index && confirm_pick.lock().get() == pick && Now() < confirm_until;
@@ -2175,7 +2172,7 @@ void Use_slot(const Bar_slot& slot, int index) {
 		}
 		book->do_spell(actor, slot.spell, false, false, aim);
 		if (aim && aim != actor && !Spell_heals(slot.spell)) {
-			Friend_mode_attack_target(static_cast<Actor*>(aim));    // And fight it, as Space would.
+			Friend_mode_attack_target(static_cast<Actor*>(aim), true);    // And fight it, as Space would.
 		}
 		return;
 	}
@@ -2213,17 +2210,19 @@ void Use_slot(const Bar_slot& slot, int index) {
 		for (int b = 0; b < 4; ++b) {
 			request.push_back(static_cast<unsigned char>(id >> (8 * b)));
 		}
+		// A peaceful person, confirmed (Ready_to_fight asked).
+		request.push_back(engage && !Friend_mode_is_hostile(actor, engage) ? 1 : 0);
 		Friend_mode_get_session().send_blob(Friend_mode_session::Blob_kind::class_use, request);
 		global_waits[actor->get_npc_num()] = Now() + global_wait_ms;
 		if (engage) {
-			Friend_mode_attack_target(engage);    // The host fights it for us.
+			Friend_mode_attack_target(engage, true);    // The host fights it for us (already confirmed).
 		}
 		return;
 	}
 	if (!Perform(actor, *cls, *skill, why)) {
 		Friend_mode_class_notice(why);
 	} else if (engage) {
-		Friend_mode_attack_target(engage);
+		Friend_mode_attack_target(engage, true);
 	}
 }
 
@@ -3584,6 +3583,7 @@ bool Friend_class_host_blob(Friend_mode_session::Blob_kind kind, const std::vect
 		const uint32 pick = data[3] | (data[4] << 8) | (data[5] << 16) | (static_cast<uint32>(data[6]) << 24);
 		chosen_pick       = weak_from_obj(Friend_mode_actor_by_net_id(data[2], pick));
 	}
+	chosen_peaceful = data.size() >= 8 && data[7] == 1;
 	// Not while the Avatar talks or the host is in a menu.
 	const bool waiting = Gwin()->get_usecode()->in_usecode() || Gwin()->get_tqueue()->is_paused();
 	if (waiting) {
@@ -3591,6 +3591,7 @@ bool Friend_class_host_blob(Friend_mode_session::Blob_kind kind, const std::vect
 	}
 	const bool done = !waiting && skill && Perform(actor, *cls, *skill, why);
 	chosen_pick.reset();
+	chosen_peaceful = false;
 	if (done) {
 		return true;
 	}

@@ -76,7 +76,7 @@ void        Friend_targeting_save_settings();
 
 // WASD movement's targeting (Q): attack the picked target; and, when
 // combat mode comes on, attack it if it is hostile.
-bool Friend_mode_attack_target(Actor* foe);
+bool Friend_mode_attack_target(Actor* foe, bool confirmed = false);    // 'confirmed': a peaceful foe, already asked.
 void Friend_mode_combat_started();
 // Combat mode ended: the Avatar's own attack mode comes back.
 void Friend_mode_combat_ended();

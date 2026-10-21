@@ -365,7 +365,8 @@ upstream.
       mode on with a hostile picked attacks it.
 - [x] **Space attacks the target**, peaceful or not, turning combat mode
       on. While the Avatar is already attacking the pick, Space pauses
-      combat as before. Guests still can't attack peaceful people. Space
+      combat as before. Guests attack peaceful people only after confirming
+      ("Again to attack", 2026-10-20; it was not allowed before). Space
       was weighed against F (with food on Shift+F), double-clicking the
       target and an on-screen button, and kept: it only acts while the
       chat line is closed, and pausing combat does nothing in "original"

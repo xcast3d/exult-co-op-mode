@@ -90,8 +90,8 @@ void                 Friend_mode_class_notice(const std::string& text);
 // Hostile: evil or chaotic, outside the party, alive, someone 'own' may fight.
 bool Friend_mode_is_hostile(const Actor* own, const Actor* foe);
 // A guest may fight it: a creature (animals, monsters), or a hostile NPC;
-// never townsfolk ("The Avatar must do this").
-bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe);
+// townsfolk too with 'peaceful_ok' (after the guest confirmed).
+bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe, bool peaceful_ok = false);
 // Host: the guest playing this companion now (not following), or -1.
 int Friend_mode_player_playing(const Actor* actor);
 // Guest: its companion is in follow mode (the host's AI drives it).

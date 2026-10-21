@@ -154,7 +154,9 @@ Heals everyone in the circle"). Pictures for skills may come later.
 attack or hold on the pick) on a hostile turns combat mode on; in combat
 mode the Avatar's spells go through on anyone; in peace mode on someone
 peaceful they ask first ("Fire Blast on Deer? Click again", within 4
-seconds). Guests never attack peaceful people: "The Avatar must do this".
+seconds). Animals and other creatures never ask: the skill fires, combat
+mode comes on and the attack on the pick starts, as Space would. Guests may
+fight peaceful people too, after the same confirmation (2026-10-20).
 
 **Ranges** (2026-10-20): area skills got about half again as much range:
 songs, Mending Circle and Purify 12 tiles, Challenge and Sanctuary 9,

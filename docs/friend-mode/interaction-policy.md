@@ -18,7 +18,7 @@ request a limited set of safe actions without becoming the story Avatar.
 | Quest decisions and story dialogue | Allow | Deny | Always attributed to the canonical Avatar. |
 | Story-critical object Usecode | Allow | Deny | Requires an explicit allowlist or classification before guests can invoke it. |
 | Attack a creature or hostile NPC | Allow | Allow | The guest picks the foe; the host runs the companion's combat schedule against it. |
-| Attack a peaceful NPC | Allow | Deny | Like conversation, this stays with the Avatar. |
+| Attack a peaceful NPC | Allow | Allow, after confirming | Decided 2026-10-20: part of the game's freedom. The guest presses or clicks again within a few seconds ("Attack Finnigan? Again to attack"); the host checks the confirmation. Guards and fights back hit the whole party, as for the Avatar. Talking stays with the Avatar. |
 | Read and write the journal | Allow | Allow | One writer per note; the host's journal is authoritative. |
 
 ## Implementation direction

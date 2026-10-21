@@ -2375,18 +2375,26 @@ static bool Friend_is_attack_target(const Actor* own, const Actor* foe) {
 		   && !foe->get_info().is_body_shape();
 }
 
-bool Friend_mode_guest_attack(Game_object* obj) {
+enum class Friend_confirm { none, take, drop, attack };
+static bool Friend_confirmed(Game_object* obj, Friend_confirm action, const std::string& ask);
+constexpr unsigned char friend_attack_peaceful = 1;    // Last byte: a peaceful foe, confirmed.
+
+// Guests may fight townsfolk too (decided 2026-10-20: part of the game's
+// freedom), after confirming: the same key or click again within a few
+// seconds.  'confirmed' when that was already asked (a skill's own
+// confirmation).  True if an attack was asked of the host.
+static bool Friend_mode_guest_request_attack(Actor* foe, bool confirmed) {
 	Actor* own = gwin->get_controlled_actor();
-	Actor* foe = obj ? obj->as_actor() : nullptr;
 	if (!Friend_is_attack_target(own, foe) || friend_session.mode() != Friend_mode_session::Mode::guest) {
-		return false;    // Not a foe: doors and the like work as usual.
+		return false;
 	}
-	if (!Friend_guest_may_attack(foe)) {
-		gwin->get_effects()->add_text("The Avatar must do this", foe);
-		return true;
+	const bool peaceful = !Friend_guest_may_attack(foe);
+	if (peaceful && !confirmed
+		&& !Friend_confirmed(foe, Friend_confirm::attack, "Attack " + foe->get_name() + "? Again to attack")) {
+		return false;
 	}
 	if (!friend_session.connected()) {
-		return true;
+		return false;
 	}
 	std::vector<unsigned char> payload;
 	if (foe->get_npc_num() > 0) {
@@ -2399,8 +2407,19 @@ bool Friend_mode_guest_attack(Game_object* obj) {
 		Friend_put16(payload, static_cast<int>(id & 0xffff));
 		Friend_put16(payload, static_cast<int>(id >> 16));
 	}
+	Friend_put8(payload, peaceful ? friend_attack_peaceful : 0);
 	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_attack, payload);
-	cout << "Friend Mode: guest attacks " << foe->get_name() << endl;
+	cout << "Friend Mode: guest attacks " << foe->get_name() << (peaceful ? " (peaceful, confirmed)" : "") << endl;
+	return true;
+}
+
+bool Friend_mode_guest_attack(Game_object* obj) {
+	Actor* own = gwin->get_controlled_actor();
+	Actor* foe = obj ? obj->as_actor() : nullptr;
+	if (!Friend_is_attack_target(own, foe) || friend_session.mode() != Friend_mode_session::Mode::guest) {
+		return false;    // Not a foe: doors and the like work as usual.
+	}
+	Friend_mode_guest_request_attack(foe, false);
 	return true;
 }
 
@@ -2644,15 +2663,13 @@ void Friend_mode_combat_ended() {
 
 // Attack the picked target (combat mode is on): "Attacking Deer".  False
 // if it can't be (a guest and a peaceful person: "The Avatar must do this").
-bool Friend_mode_attack_target(Actor* foe) {
+bool Friend_mode_attack_target(Actor* foe, bool confirmed) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!foe || !Friend_is_attack_target(own, foe)) {
 		return false;
 	}
 	if (Friend_mode_is_guest()) {
-		const bool allowed = Friend_guest_may_attack(foe);
-		Friend_mode_guest_attack(foe);    // The host fights for our companion.
-		if (!allowed) {
+		if (!Friend_mode_guest_request_attack(foe, confirmed)) {    // The host fights for our companion.
 			return false;
 		}
 	} else {
@@ -2926,7 +2943,6 @@ static std::string Friend_thing_name(Game_object* obj) {
 
 // Space asks twice for a theft or a drop: the second Space must be on the
 // same thing, for the same action, within 3 seconds.
-enum class Friend_confirm { none, take, drop };
 static Game_object_weak friend_confirm_object;
 static Friend_confirm   friend_confirm_action = Friend_confirm::none;
 static uint32           friend_confirm_until  = 0;
@@ -3533,7 +3549,8 @@ static void Friend_mode_attack_for_guest(const std::vector<unsigned char>& data,
 	Actor*       foe  = kind == friend_attack_npc ? gwin->get_npc(static_cast<int>(id))
 						: kind == friend_attack_creature ? static_cast<Actor*>(Friend_creature_by_id(id))
 														 : nullptr;
-	if (!Friend_is_attack_target(actor, foe) || !Friend_guest_may_attack(foe)) {
+	const bool confirmed = data.size() >= 6 && data[5] == friend_attack_peaceful;    // A peaceful foe, asked.
+	if (!Friend_is_attack_target(actor, foe) || (!Friend_guest_may_attack(foe) && !confirmed)) {
 		cout << "Friend Mode: refused guest attack (not a foe)" << endl;
 		return;
 	}
@@ -3602,8 +3619,8 @@ bool Friend_mode_is_hostile(const Actor* own, const Actor* foe) {
 	return Friend_is_hostile_target(own, foe);
 }
 
-bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe) {
-	return Friend_is_attack_target(own, foe) && Friend_guest_may_attack(foe);
+bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe, bool peaceful_ok) {
+	return Friend_is_attack_target(own, foe) && (peaceful_ok || Friend_guest_may_attack(foe));
 }
 
 int Friend_mode_player_playing(const Actor* actor) {
