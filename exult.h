@@ -116,6 +116,9 @@ Actor* Friend_mode_usecode_walker();
 // docs/friend-mode/leading-companions.md): that companion, or null while
 // the Avatar is played.
 Actor* Friend_mode_led_companion();
+// Lead the next companion, or the Avatar after the last (Shift+Tab, and
+// Ctrl+F, Phase 1's key).  The host and a single player only.
+void Friend_mode_lead_cycle();
 // Lead that companion, or the Avatar (Shift+click on a face in the status
 // bars).  The host and a single player only; false on a guest.
 bool Friend_mode_lead_actor(Actor* target);

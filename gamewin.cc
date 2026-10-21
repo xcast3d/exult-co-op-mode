@@ -1673,8 +1673,13 @@ bool Game_window::init_gamedat(bool create) {
 
 void Game_window::write(bool nopaint) {
 	// Never serialize the temporary AI schedule used while a companion is
-	// locally possessed. Saving is also an explicit safe handoff point.
-	release_friend_mode_control();
+	// locally possessed.  A companion the host or a single player leads
+	// (Friend Mode) stays led, and is written following, as a guest's
+	// companion is below; any other possession is handed back here.
+	Actor* led = controlled_actor != main_actor && !network_friend_control ? controlled_actor : nullptr;
+	if (!led) {
+		release_friend_mode_control();
+	}
 
 	// Lets just show a nice message on screen first
 
@@ -1703,7 +1708,15 @@ void Game_window::write(bool nopaint) {
 		held_schedules.push_back(each.actor->get_schedule_type());
 		each.actor->set_schedule_type(friend_party_schedule(each));
 	}
+	const int led_schedule = led ? led->get_schedule_type() : -1;
+	if (led) {
+		const int prev = controlled_actor_previous_schedule;
+		led->set_schedule_type(prev >= 0 && prev != Schedule::wait ? prev : Schedule::follow_avatar);
+	}
 	write_npcs();              // Write out npc.dat.
+	if (led && led->get_schedule_type() != led_schedule) {
+		led->set_schedule_type(led_schedule);
+	}
 	for (size_t i = 0; i < remote_friends.size(); ++i) {
 		if (remote_friends[i].actor->get_schedule_type() != held_schedules[i]) {
 			remote_friends[i].actor->set_schedule_type(held_schedules[i]);

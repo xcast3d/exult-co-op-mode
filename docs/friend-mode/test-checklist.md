@@ -1152,8 +1152,8 @@ you lead yet (step 2); it stands where it was.
       to the Avatar"); walking back is always allowed.
 - [ ] Shift+Tab during combat mode: the companion left goes back into the
       fight.
-- [ ] Saving while leading hands control back to the Avatar first (Phase
-      1); the save loads with everyone following.
+- [ ] Saving while leading keeps the lead (step 4; it used to hand control
+      back); the save loads with everyone following.
 - [ ] Co-op: a guest's picker doesn't offer the companion the host leads.
 
 Step 2, the party follows (built 2026-10-21, not tested yet):
@@ -1191,6 +1191,27 @@ Step 3, Y holds the party (built 2026-10-21, not tested yet):
 - [ ] Take stairs or a teleporter to another map during a hold: the hold
       ends and the party comes along.
 - [ ] Co-op: a guest playing a companion isn't held; one in follow mode is.
+
+Step 4, co-op and the edges (built 2026-10-21, not tested yet):
+
+- [ ] Leading Shamino in co-op, the 5-minute autosave and a guest joining
+      (its world download) don't take the lead away.
+- [ ] Leading Shamino, someone speaks to the Avatar (a guard, a scene), or
+      the Avatar's conversation starts some other way: the Avatar takes
+      over ("Leading the Avatar"); when it ends, "Leading Shamino" again.
+      Shamino's own talk with a merchant doesn't do this.
+- [ ] The led companion knocked out: "Shamino is out of the fight; leading
+      the Avatar"; killed: "has fallen"; dismissed: "has left the party".
+- [ ] Ctrl+F cycles as Shift+Tab does.
+- [ ] Leading Shamino, drag something not the party's from a shop counter
+      with someone watching: the warnings and guards come for Shamino (the
+      witness looks at him, not the Avatar).
+- [ ] Leading Shamino during a hold, he's knocked out: "out of the fight",
+      the Avatar is played, and Shamino stays held; Y: he follows with the
+      rest once he's up.
+- [ ] On a guest, Tab (the player list): the host's row shows Shamino while
+      the host leads him; the guest's minimap dot for the host is on him.
+      A guest playing Sentri shows as "Sentri", not "fighter".
 
 Status marks and windows (2026-10-21): the skill status icons, the range
 circles and the target arrow are drawn under backpacks and paperdolls.

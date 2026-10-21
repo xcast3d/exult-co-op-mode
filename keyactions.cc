@@ -712,14 +712,14 @@ void ActionCenter(const int* params) {
 	gwin->paint();
 }
 
-// Phase 1 Friend Mode development action: switch local input between the
-// canonical Avatar and the first eligible party companion.
+// Friend Mode: lead the next companion, as Shift+Tab does (Phase 1's
+// development key, which once took only the first companion and back).
 void ActionToggleFriendControl(const int* params) {
 	ignore_unused_variable_warning(params);
 	if (Friend_mode_is_guest()) {
 		return;    // A network guest keeps the companion the host gave it.
 	}
-	Game_window::get_instance()->toggle_friend_mode_control();
+	Friend_mode_lead_cycle();
 }
 
 //  { ActionShapeBrowser, 0, "Shape browser", cheat_keys, NONE },

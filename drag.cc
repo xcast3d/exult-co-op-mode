@@ -810,7 +810,7 @@ bool Dragging_info::drop(
 	}
 	// Check for theft.
 	if (!okay_to_move && !cheat.in_hack_mover() && possible_theft && !gwin->is_in_dungeon()) {
-		gwin->theft();
+		gwin->theft(Friend_mode_led_companion());    // The companion one leads is the thief (null: the Avatar).
 	}
 	if (to_drop == obj.get()) {    // Whole thing?
 		// Watch for stuff on top of it.
@@ -930,7 +930,7 @@ bool Dragging_info::place(Container_game_object* dest, int spot, int count) {
 		gmap->get_chunk(oldcx, oldcy)->activate_eggs(obj.get(), old_pos.tx, old_pos.ty, old_pos.tz, old_pos.tx, old_pos.ty);
 	}
 	if (!okay_to_move && !cheat.in_hack_mover() && possible_theft && !gwin->is_in_dungeon()) {
-		gwin->theft();
+		gwin->theft(Friend_mode_led_companion());    // The companion one leads is the thief (null: the Avatar).
 	}
 	if (to_drop == obj.get()) {
 		if (old_foot.w > 0) {    // Watch for stuff on top of it.

@@ -1,8 +1,8 @@
 # Leading a companion
 
-Status: **steps 1 to 3 built** (2026-10-21): steps 1 and 2 tried and
-working (Shift+Tab, the party following in formation, roofs), step 3 not
-tested yet; step 4 planned.
+Status: **all four steps built** (2026-10-21): steps 1 to 3 tried and
+working (Shift+Tab and Shift+click on a face, the party following in
+formation, roofs, Y holding); step 4 not tested yet.
 
 The Class System gives every companion skills, but only guests can use them
 by hand: the host and a single player play the Avatar, whose bar holds
@@ -125,7 +125,7 @@ guest does, use its skill bar, and have the party follow it.
    holds when the party holds. Y means "hold" on the host and
    "follow mode" on a guest; the help line under each says so.
 7. **Keys.** Shift+Tab to cycle and Y to hold are free on the host. Ctrl+F
-   (the development key) goes, or becomes the same as Shift+Tab.
+   (the development key) became the same as Shift+Tab (2026-10-21).
 
 ## Steps
 
@@ -176,6 +176,29 @@ guest does, use its skill bar, and have the party follow it.
    held or not.
 4. **Co-op and the edges.** Pickers, the player list, back to the Avatar on
    conversations and on losing the companion, and the test checklist.
+   Built 2026-10-21:
+   - **Saves keep the lead.** Phase 1 handed control back before every
+     save, and in co-op saves are frequent (the 5-minute autosave, the
+     world sent to each joining guest). `Game_window::write` now writes the
+     led companion following, as it does a guest's companion, and keeps it
+     led.
+   - **Spoken to, the Avatar answers.** When a conversation shows its first
+     face while a companion is led (someone speaks to the Avatar, a
+     scene), the Avatar takes over for it, and the companion is led again
+     once the outermost script ends (`Friend_mode_lead_talk_begins`,
+     `_ends`). Not for the companion's own merchant talk.
+   - **Losing the one led** (Phase 1's safety check gives the Avatar back):
+     "Iolo has fallen", "has left the party" or "is out of the fight";
+     leading the Avatar.
+   - **The player list and the minimap** show the host on the companion it
+     leads (guests see "Marc: Shamino"), and the list names companions by
+     their own names ("Sentri", not "fighter").
+   - Pickers leaving out the led companion came in step 1.
+   - **Afterwards, the same day:** Ctrl+F (Phase 1's development key) does
+     what Shift+Tab does; theft by the led companion has it as the thief
+     (witnesses look at it, as for a guest's); a companion given back by
+     the safety check during a hold joins the hold, and one given back
+     "wait" otherwise follows.
 
 ## Open questions
 

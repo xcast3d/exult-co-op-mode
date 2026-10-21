@@ -773,7 +773,8 @@ static void Friend_mode_paint_maps() {
 			add(entry.actor >= 0 ? gwin->get_npc(entry.actor) : nullptr, player);
 		}
 	} else {
-		add(gwin->get_main_actor(), Friend_mode_session::host_player);
+		Actor* led = Friend_mode_led_companion();
+		add(led ? led : static_cast<Actor*>(gwin->get_main_actor()), Friend_mode_session::host_player);
 		for (const auto& [player, guest] : friend_guests) {
 			add(guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr, player);
 		}
@@ -919,6 +920,7 @@ Actor* Friend_mode_led_companion() {
 }
 
 static void Friend_mode_hold_swap(Actor* left, Actor* taken);
+static void Friend_mode_lead_lost(Actor* was);
 static void Friend_mode_hold_saving(bool before);
 
 // A companion the host or a single player may lead: in the party, awake,
@@ -927,6 +929,10 @@ static bool Friend_mode_can_lead(const Actor* npc) {
 	return npc && npc->is_in_party() && !npc->is_dead() && !npc->get_flag(Obj_flags::asleep)
 		   && !npc->get_flag(Obj_flags::paralyzed) && !gwin->is_remote_friend(npc);
 }
+
+// The companion led last, to say why if it stops being led without
+// Shift+Tab (it fell, left the party, was knocked out...).
+static Game_object_weak friend_lead_watch;
 
 // Lead 'target' (a companion; the Avatar, or null, to play the Avatar).
 // The companion left goes back to the party (fighting, in combat mode).
@@ -945,7 +951,9 @@ static void Friend_mode_lead(Actor* target) {
 	if (left) {
 		left->set_target(nullptr);
 	}
+	friend_lead_watch.reset();
 	if (target && gwin->take_friend_mode_control(target->get_npc_num())) {
+		friend_lead_watch = weak_from_obj(target);
 		Friend_mode_notice("Leading " + target->get_npc_name());
 		// The Avatar follows the one led, as the party does (in combat it
 		// fights as U7's party does, and follows again after).
@@ -1009,6 +1017,63 @@ static bool Friend_mode_shift_click_face(int x, int y) {
 	Container_game_object* found = gump->find_actor(gx, gy);
 	Actor*                 actor = found ? found->as_actor() : nullptr;
 	return actor && Friend_mode_lead_actor(actor);
+}
+
+// Every frame: the companion led is no longer (Phase 1's safety check gave
+// the Avatar back): say why.
+static void Friend_mode_lead_watch_frame() {
+	const Game_object_shared watched = friend_lead_watch.lock();
+	Actor*                   was     = watched ? watched->as_actor() : nullptr;
+	if (!was) {
+		friend_lead_watch.reset();
+		return;
+	}
+	if (Friend_mode_led_companion() == was) {
+		return;
+	}
+	friend_lead_watch.reset();
+	Friend_mode_lead_lost(was);
+	const std::string name = was->get_npc_name();
+	if (was->is_dead()) {
+		Friend_mode_notice(name + " has fallen; leading the Avatar");
+	} else if (!was->is_in_party()) {
+		Friend_mode_notice(name + " has left the party; leading the Avatar");
+	} else if (was->get_flag(Obj_flags::asleep) || was->get_flag(Obj_flags::paralyzed)) {
+		Friend_mode_notice(name + " is out of the fight; leading the Avatar");
+	}
+}
+
+// Someone speaks to the Avatar (a conversation's first face) while a
+// companion is led: the Avatar takes over for it, and the companion is led
+// again once the conversation is over.  Not for the companion's own talk
+// with a merchant.
+static Game_object_weak friend_lead_after_talk;
+
+static void Friend_mode_lead_talk_begins() {
+	Actor* led = Friend_mode_led_companion();
+	if (!led || gwin->get_usecode()->get_friend_shopper()) {
+		return;
+	}
+	friend_lead_after_talk = weak_from_obj(led);
+	Friend_mode_lead(nullptr);
+}
+
+static void Friend_mode_lead_talk_ends() {
+	if (gwin->get_usecode()->in_usecode()) {
+		return;
+	}
+	const Game_object_shared obj = friend_lead_after_talk.lock();
+	friend_lead_after_talk.reset();
+	Actor* again = obj ? obj->as_actor() : nullptr;
+	if (again && Friend_mode_can_lead(again) && gwin->get_controlled_actor() == gwin->get_main_actor()) {
+		Friend_mode_lead(again);
+	}
+}
+
+void Friend_mode_lead_cycle() {
+	if (!Friend_mode_is_guest()) {
+		Friend_mode_lead_next();
+	}
 }
 
 bool Friend_mode_lead_actor(Actor* target) {
@@ -4975,6 +5040,21 @@ static void Friend_mode_hold_frame() {
 	}
 }
 
+// The companion led was given back without Shift+Tab (Phase 1's safety
+// check): it joins a hold, or, given back 'wait' (taken while held),
+// follows.
+static void Friend_mode_lead_lost(Actor* was) {
+	if (!was || was->is_dead() || !was->is_in_party() || was == gwin->get_controlled_actor()
+		|| gwin->is_remote_friend(was)) {
+		return;
+	}
+	if (friend_holding) {
+		Friend_mode_hold_one(was);
+	} else if (was->get_schedule_type() == Schedule::wait) {
+		was->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
+	}
+}
+
 // Around a save: held companions are written as following.
 static void Friend_mode_hold_saving(bool before) {
 	for (const int num : friend_held) {
@@ -6334,7 +6414,7 @@ static void Friend_mode_paint_player_list() {
 	auto row_for = [](const std::string& player, int npc, bool following) {
 		Row row{player.empty() ? std::string("Player") : player, "Spectating", "-"};
 		if (Actor* actor = npc >= 0 ? gwin->get_npc(npc) : nullptr) {
-			row.character = actor == gwin->get_main_actor() ? std::string("Avatar") : actor->get_name();
+			row.character = actor == gwin->get_main_actor() ? std::string("Avatar") : actor->get_npc_name();
 			if (following) {
 				row.character += " (following)";
 			}
@@ -6345,7 +6425,8 @@ static void Friend_mode_paint_player_list() {
 	};
 	std::vector<Row> rows = {{"Player", "Character", "Health"}};
 	if (friend_session.mode() == Friend_mode_session::Mode::host) {
-		rows.push_back(row_for(friend_player_name, 0, false));
+		const Actor* led = Friend_mode_led_companion();
+		rows.push_back(row_for(friend_player_name, led ? led->get_npc_num() : 0, false));
 		for (const auto& [player, guest] : friend_guests) {
 			rows.push_back(row_for(guest.name, guest.actor, guest.following));
 		}
@@ -6533,6 +6614,7 @@ void Friend_mode_note_speech(Game_object* source, const char* text) {
 }
 
 void Friend_mode_note_dialogue_reset() {
+	Friend_mode_lead_talk_ends();
 	if (friend_session.mode() == Friend_mode_session::Mode::host && friend_session.connected()
 			&& friend_host_dialogue_active) {
 		friend_session.send_dialogue_end();
@@ -6543,6 +6625,7 @@ void Friend_mode_note_dialogue_reset() {
 }
 
 void Friend_mode_note_dialogue_face(int shape, int frame, int slot) {
+	Friend_mode_lead_talk_begins();
 	Friend_mode_ensure_dialogue();
 	if (friend_host_dialogue_active) {
 		friend_session.send_dialogue_face(shape, frame, slot);
@@ -6691,7 +6774,9 @@ static void Friend_mode_player_list_pass() {
 		payload.insert(payload.end(), name.begin(), name.begin() + length);
 	};
 	Friend_put8(payload, static_cast<int>(friend_guests.size() + 1));
-	put_player(Friend_mode_session::host_player, friend_player_name, 0, false);
+	// The host plays the Avatar, or the companion it leads ("Marc leads Shamino").
+	const Actor* led = Friend_mode_led_companion();
+	put_player(Friend_mode_session::host_player, friend_player_name, led ? led->get_npc_num() : 0, false);
 	for (const auto& [player, guest] : friend_guests) {
 		put_player(player, guest.name, guest.actor, guest.following);
 	}
@@ -9114,6 +9199,7 @@ static void Handle_events() {
 		Friend_class_frame();
 		if (!Friend_mode_is_guest()) {
 			Friend_mode_hold_frame();
+			Friend_mode_lead_watch_frame();
 			// Leading a companion: the guests' leash (none while the Avatar is played).
 			Actor* led = Friend_mode_led_companion();
 			Friend_mode_update_leash_zone(led);
