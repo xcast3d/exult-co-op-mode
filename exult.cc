@@ -4768,9 +4768,11 @@ static void Friend_mode_apply_object_speech(const std::vector<unsigned char>& da
 // health drops so poison and damage show.
 
 namespace {
+// Eight at most (one byte).  Invisible: Shamino's Vanish shows on guests too.
 constexpr int friend_status_flags[] = {Obj_flags::asleep,    Obj_flags::charmed,    Obj_flags::cursed,
 									   Obj_flags::paralyzed, Obj_flags::poisoned,   Obj_flags::protection,
-									   Obj_flags::might};
+									   Obj_flags::might,     Obj_flags::invisible};
+static_assert(std::size(friend_status_flags) <= 8, "party status sends the flags in one byte");
 std::vector<unsigned char> friend_last_party_status;
 }    // namespace
 
