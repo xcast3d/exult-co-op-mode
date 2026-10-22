@@ -758,6 +758,8 @@ static int Friend_player_color(int player) {
 	return gwin->get_pal()->find_color(c[0], c[1], c[2]);
 }
 
+static std::string Friend_mode_hold_button_label();
+
 // Where every player is, for the corner minimap: the Avatar, and each
 // player's companion (just the Avatar in single player).
 static void Friend_mode_paint_maps() {
@@ -779,7 +781,7 @@ static void Friend_mode_paint_maps() {
 			add(guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr, player);
 		}
 	}
-	Friend_map_paint(dots);
+	Friend_map_paint(dots, {Friend_mode_hold_button_label()});
 }
 
 static void Friend_mode_update_leash_zone(Actor* actor) {
@@ -3367,6 +3369,46 @@ static int Friend_window_index(Game_object* obj) {
 	return at == things.end() ? 0 : static_cast<int>(at - things.begin());
 }
 
+static bool Friend_is_theft(Game_object* obj);
+
+// Everything in 'from' into one's pack, asking once ('ask', with 'asker'
+// for the second press) if any of it isn't one's to take.  Shift+Space in
+// a window and the window's take-all button.
+bool Friend_mode_take_all(Container_game_object* from, Game_object* asker, const std::string& ask) {
+	Actor* own = gwin->get_controlled_actor();
+	if (!own || !from) {
+		return false;
+	}
+	Container_game_object*          pack = Friend_pack_of(own);
+	std::vector<Game_object_shared> all;
+	bool                            theirs = false;    // Some of it isn't okay to take.
+	{    // The iterator ends before anything moves.
+		Object_iterator next(from->get_objects());
+		while (Game_object* each = next.get_next()) {
+			all.push_back(each->shared_from_this());
+			theirs = theirs || !each->get_flag(Obj_flags::okay_to_take);
+		}
+	}
+	if (all.empty()) {
+		Friend_mode_target_notice("Nothing to take");
+		return true;
+	}
+	if (theirs && !gwin->is_in_dungeon() && !from->get_outermost()->get_flag(Obj_flags::in_party)
+		&& !Friend_confirmed(asker, Friend_confirm::take, ask)) {
+		return true;
+	}
+	int taken = 0;
+	for (const Game_object_shared& each : all) {
+		if (!gwin->move_object(each.get(), gwin->get_gump_man()->find_gump(each.get()), pack)) {
+			break;
+		}
+		++taken;
+	}
+	Friend_mode_target_notice(taken ? "Took " + std::to_string(taken) + (taken == 1 ? " thing" : " things")
+									: std::string("Nothing taken"));
+	return true;
+}
+
 // Taking 'obj' would be theft: not okay to take, outside dungeons, and not
 // already the party's (Exult's own rule for a drag).
 static bool Friend_is_theft(Game_object* obj) {
@@ -3380,6 +3422,23 @@ static bool Friend_is_theft(Game_object* obj) {
 static bool Friend_is_readable(const Game_object* obj) {
 	const int shape = obj->get_shapenum();
 	return GAME_BG && (shape == 642 || shape == 797 || shape == 178);
+}
+
+// Something on the map that Space uses rather than takes (Shift+Space
+// takes it): what can be read, the gavel and the bucket, and the guests'
+// harmless ones (a telescope, a sundial).  A list, not every script: food
+// or a gem on a merchant's table is taken, never eaten or "used".
+static bool Friend_is_usable_thing(const Game_object* obj) {
+	if (!GAME_BG) {
+		return false;
+	}
+	const int shape = obj->get_shapenum();
+	if (shape == 644) {
+		return false;    // Gold: taken (its script is the coin toss).
+	}
+	return Friend_is_readable(obj) || (shape == 675 && obj->get_framenum() == 0)    // Gavel (a desk item).
+		   || shape == 810                                                          // Bucket.
+		   || Friend_mode_guest_local_shape(shape) || Friend_mode_guest_usable_shape(shape);
 }
 
 // Readying: an item meant to be worn or wielded.  Anything can be held in
@@ -3483,17 +3542,20 @@ static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 // while the Avatar is already attacking it, Space pauses combat as before
 // (in single player only: there is no pausing in co-op).
 //
-// A thing (E): on the map, a container or body opens, and a door, lamp,
-// lever or piece of furniture is used (Shift: picked up, if it can be).  A loose thing, or one in someone else's open container, goes
-// into the pack (Shift on a stack: how many; Shift on a single thing in a
-// window: everything in it).  Books, scrolls and the cloth map are read
-// wherever they are; Shift+Space picks them up, or drops one's own.  Not
-// okay to take: asks first.  One's own:
-// used if it has a use, readied or put away if it is worn, else dropped at
-// one's feet, after asking (Shift on a stack: how many to drop).
+// A thing (E), 2026-10-22 (docs/friend-mode/feedback-2026-10-22.md, C1):
+// - on the map, a container or body opens; a door, lamp, lever, piece of
+//   furniture, or a thing with a use (Friend_is_usable_thing: books,
+//   scrolls, the gavel, the bucket) is used or read.  Shift takes it
+//   instead, if it can be taken.  Anything else is taken (Alt: how many).
+// - in someone else's window: Space takes it, books too; Shift+Space
+//   takes everything there; Alt+Space splits a stack (how many).
+// - one's own: used, read, readied or put away; what has none of those
+//   is dropped at one's feet after asking.  Shift+Space drops at once;
+//   Alt+Space drops some (how many).
+// Not okay to take: asks first.  Alt always means "how many".
 //
 // False if Space should do its usual thing.
-static bool Friend_mode_space(bool shift) {
+static bool Friend_mode_space(bool shift, bool alt) {
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
 	const Game_object_shared thing  = friend_object_target.lock();
@@ -3526,27 +3588,29 @@ static bool Friend_mode_space(bool shift) {
 		Mouse::mouse()->flash_shape(Mouse::outofrange);
 		return true;
 	}
-	// Something to read: Space reads it, wherever it is.
+	const bool plain = !shift && !alt;
+	// Something to read: Space reads it on the map and among one's own
+	// things; in someone else's window it is taken like the rest.
 	const bool readable = Friend_is_readable(obj);
-	if (readable && !shift) {
+	if (readable && plain && (!window || mine)) {
 		gwin->double_clicked_object(obj, window != nullptr || mine);
 		return true;
 	}
 	// One's own.  Space: use, ready or put away; what has none of those is
-	// dropped, after asking.  Shift+Space always drops, at once (a stack:
-	// how many).
+	// dropped, after asking.  Shift+Space drops at once; Alt+Space drops
+	// some (how many).
 	if (mine) {
-		if (!shift && (obj->as_container() || obj->usecode_exists())) {
+		if (plain && (obj->as_container() || obj->usecode_exists())) {
 			gwin->double_clicked_object(obj, true);
-		} else if (!shift && Friend_is_wearable(own, obj)) {
+		} else if (plain && Friend_is_wearable(own, obj)) {
 			Friend_mode_equip(own, obj, window);
 		} else {
-			const int         count = Friend_how_many(obj, shift);
+			const int         count = Friend_how_many(obj, alt);
 			const std::string name  = count < obj->get_quantity()
 											 ? std::to_string(count) + " of " + Friend_thing_name(obj)
 											 : Friend_thing_name(obj);
 			const int index = window ? Friend_window_index(obj) : 0;
-			if (count > 0 && (shift || Friend_confirmed(obj, Friend_confirm::drop, "Drop " + name + "? Space again"))
+			if (count > 0 && (!plain || Friend_confirmed(obj, Friend_confirm::drop, "Drop " + name + "? Space again"))
 				&& gwin->move_object(obj, window, nullptr, -1, count)) {
 				Friend_mode_target_notice("Dropped " + name);
 				if (window) {
@@ -3556,47 +3620,28 @@ static bool Friend_mode_space(bool shift) {
 		}
 		return true;
 	}
-	// On the map, a container or body opens, and a door, lamp, lever or
-	// piece of furniture is used; Shift picks it up instead, if it can be.
+	// On the map, a container or body opens, and a door, lamp, lever, piece
+	// of furniture or thing with a use is used; Shift takes it instead, if
+	// it can be taken.
 	const Friend_thing_group group = Friend_thing_group_of(obj);
-	const bool use = !window && group != Friend_thing_group::loot && group != Friend_thing_group::decor;
-	if (use && !(shift && obj->is_dragable())) {
+	const bool               use   = !window
+							 && ((group != Friend_thing_group::loot && group != Friend_thing_group::decor)
+								 || Friend_is_usable_thing(obj));
+	if (use && !((shift || alt) && obj->is_dragable())) {
 		gwin->double_clicked_object(obj);
 		return true;
 	}
-	// Take it.  Shift on a single thing in a window: everything there.
-	Container_game_object* pack = Friend_pack_of(own);
-	if (shift && window && obj->get_quantity() <= 1 && !readable) {
-		Container_game_object* from = obj->get_owner();
-		std::vector<Game_object_shared> all;
-		bool                            theirs = false;    // Some of it isn't okay to take.
-		{    // The iterator ends before anything moves.
-			Object_iterator next(from->get_objects());
-			while (Game_object* each = next.get_next()) {
-				all.push_back(each->shared_from_this());
-				theirs = theirs || !each->get_flag(Obj_flags::okay_to_take);
-			}
-		}
-		if (theirs && !gwin->is_in_dungeon() && !from->get_outermost()->get_flag(Obj_flags::in_party)
-			&& !Friend_confirmed(obj, Friend_confirm::take, "Not all yours: Shift+Space again to take all")) {
-			return true;
-		}
-		int taken = 0;
-		for (const Game_object_shared& each : all) {
-			if (!gwin->move_object(each.get(), gwin->get_gump_man()->find_gump(each.get()), pack)) {
-				break;
-			}
-			++taken;
-		}
-		Friend_mode_target_notice(taken ? "Took " + std::to_string(taken) + (taken == 1 ? " thing" : " things")
-										: std::string("Nothing taken"));
+	// Shift in someone else's window: everything there.
+	if (shift && window) {
+		Friend_mode_take_all(obj->get_owner(), obj, "Not all yours: Shift+Space again to take all");
 		Friend_mode_pick_next_in_window();
 		return true;
 	}
+	Container_game_object* pack = Friend_pack_of(own);
 	if (Friend_is_theft(obj) && !Friend_confirmed(obj, Friend_confirm::take, "Steal? Space again")) {
 		return true;
 	}
-	const int         count = Friend_how_many(obj, shift);
+	const int         count = Friend_how_many(obj, alt);
 	const std::string name  = count < obj->get_quantity()
 									 ? std::to_string(count) + " of " + Friend_thing_name(obj)
 									 : Friend_thing_name(obj);
@@ -3623,8 +3668,15 @@ static std::string Friend_space_hint() {
 	if (!own || (!target && !thing)) {
 		return {};
 	}
-	auto two = [](const std::string& space, const std::string& shift) {
-		return shift.empty() ? space + " (Space)" : space + " (Space)  " + shift + " (Shift+Space)";
+	auto two = [](const std::string& space, const std::string& shift, const std::string& alt = {}) {
+		std::string line = space + " (Space)";
+		if (!shift.empty()) {
+			line += "  " + shift + " (Shift+Space)";
+		}
+		if (!alt.empty()) {
+			line += "  " + alt + " (Alt+Space)";
+		}
+		return line;
 	};
 	if (!thing) {
 		if (!gwin->in_combat()) {
@@ -3651,21 +3703,25 @@ static std::string Friend_space_hint() {
 	const bool   stack  = obj->get_quantity() > 1;
 	// Taking it would be a crime: "Steal" (Space asks again first).
 	const std::string take = Friend_is_theft(obj) ? "Steal" : "Take";
-	if (Friend_is_readable(obj)) {
-		return two("Read", mine ? "Drop" : take);
-	}
+	const std::string some = stack ? "Split" : "";
 	if (mine) {
-		const std::string drop = stack ? "Drop some" : "Drop";
+		const std::string drop = stack ? "Drop some" : "";
+		if (Friend_is_readable(obj)) {
+			return two("Read", "Drop", drop);
+		}
 		if (obj->as_container() || obj->usecode_exists()) {
-			return two(obj->as_container() ? "Open" : "Use", drop);
+			return two(obj->as_container() ? "Open" : "Use", "Drop", drop);
 		}
 		if (Friend_is_wearable(own, obj)) {
-			return two(own->find_readied(obj) >= 0 ? "Put away" : "Ready", drop);
+			return two(own->find_readied(obj) >= 0 ? "Put away" : "Ready", "Drop", drop);
 		}
-		return two("Drop", stack ? "Drop some" : "");
+		return two("Drop", "", drop);
 	}
 	if (window) {
-		return two(take, stack ? "Split" : "Take all");
+		return two(take, "Take all", some);
+	}
+	if (Friend_is_usable_thing(obj)) {
+		return two(Friend_is_readable(obj) ? "Read" : "Use", obj->is_dragable() ? take : "");
 	}
 	switch (Friend_thing_group_of(obj)) {
 	case Friend_thing_group::box:
@@ -3677,7 +3733,7 @@ static std::string Friend_space_hint() {
 	case Friend_thing_group::furniture:
 		return two("Use", obj->is_dragable() ? "Pick up" : "");
 	default:
-		return two(take, stack ? "Split" : "");
+		return two(take, "", some);
 	}
 }
 
@@ -3795,17 +3851,17 @@ static Actor* Friend_party_member(int index) {
 	return index <= party->get_count() ? gwin->get_npc(party->get_member(index - 1)) : nullptr;
 }
 
-// Shift+C: sort the newest open window of a container in someone's
-// inventory (a backpack, a bag in it; chests keep their own layout).
+// Shift+C: sort the newest open container window (a backpack, a chest, a
+// ship's hold; every container since 2026-10-22).
 static void Friend_mode_sort_window() {
 	Gump* newest = nullptr;
 	for (Gump* gump : *gwin->get_gump_man()) {
-		if (gump && gump->is_inventory_container() && !gump->is_persistent()) {
+		if (gump && gump->get_container() && !gump->get_container()->as_actor() && !gump->is_persistent()) {
 			newest = gump;    // The list runs oldest to newest.
 		}
 	}
 	if (!newest) {
-		Friend_mode_target_notice("No backpack open");
+		Friend_mode_target_notice("No container open");
 		return;
 	}
 	newest->sort_objects();
@@ -3965,6 +4021,7 @@ static void Friend_mode_check_guest_attack(Friend_guest& guest) {
 // again.  For stepping away without losing one's companion.
 
 static bool friend_following = false;    // Guest: the host's AI drives ours.
+static bool friend_button_pressed = false;    // The hold button took a click.
 
 // What the Class System (friendclass.cc) needs from here.
 Friend_mode_session& Friend_mode_get_session() {
@@ -4984,6 +5041,49 @@ static void Friend_mode_set_hold(bool hold) {
 	friend_holding = false;
 	Friend_mode_notice("The party follows");
 	gwin->get_leader_followers();
+}
+
+// Y, and the button under the minimap.  The host and a single player: the
+// party holds, or follows again.  A guest: follow the Avatar (the party's
+// AI drives our companion) until we walk, or Y again.
+static void Friend_mode_hold_or_follow() {
+	if (!Friend_mode_is_guest()) {
+		Friend_mode_set_hold(!friend_holding);
+		return;
+	}
+	Actor* own = gwin->has_network_friend_control() ? gwin->get_controlled_actor() : nullptr;
+	if (!friend_session.connected() || !own || gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
+		Mouse::mouse()->flash_shape(Mouse::redx);
+		return;
+	}
+	own->stop();
+	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {static_cast<unsigned char>(!friend_following)});
+}
+
+// The button's label (what a click does), or empty when it has nothing to
+// do: no companions to hold, or a guest without one.
+static std::string Friend_mode_hold_button_label() {
+	if (!Friend_mode_is_guest()) {
+		return gwin->get_party_man()->get_count() > 0 ? (friend_holding ? "Follow" : "Hold") : std::string();
+	}
+	if (!friend_session.connected() || !gwin->has_network_friend_control()) {
+		return {};
+	}
+	return friend_following ? "Take over" : "Follow";
+}
+
+// What the button does, near the top with its key, as the Space hint is.
+static void Friend_mode_hold_button_hint() {
+	std::string what;
+	if (!Friend_mode_is_guest()) {
+		what = friend_holding ? "The party follows you" : "The party holds where it stands";
+	} else {
+		what = friend_following ? "Take over your companion" : "Follow the Avatar";
+	}
+	Friend_mode_top_line(what);
+	friend_hint_shown   = "Shortcut: Y";
+	friend_hint_at      = static_cast<uint32>(SDL_GetTicks());
+	friend_hint_changed = true;
 }
 
 // Shift+Tab while holding: the one led now isn't held; the one left is.
@@ -9078,6 +9178,18 @@ static void Handle_events() {
 			}
 		}
 
+		// Caps Lock: keys run, else walk (get_walking_speed); say which when
+		// it changes (2026-10-22, instead of Shift, which means too much).
+		{
+			static bool running = (SDL_GetModState() & SDL_KMOD_CAPS) != 0;
+			const bool  caps    = (SDL_GetModState() & SDL_KMOD_CAPS) != 0;
+			if (caps != running) {
+				running = caps;
+				if (!friend_chat_active && !Notebook_gump::get_instance()) {
+					Friend_mode_notice(running ? "Running" : "Walking");
+				}
+			}
+		}
 		// WASD movement: walk toward the held keys every frame, as the arrow
 		// keys do (two keys walk diagonally), so a new direction takes effect
 		// at once.  Read from the keyboard itself, so a key let go while a
@@ -9469,8 +9581,9 @@ static void Handle_event(SDL_Event& event) {
 		return;
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_SPACE
-		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
-		&& !Notebook_gump::get_instance() && Friend_mode_space(event.key.mod & SDL_KMOD_SHIFT)) {
+		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) && !friend_chat_active
+		&& !Notebook_gump::get_instance()
+		&& Friend_mode_space(event.key.mod & SDL_KMOD_SHIFT, event.key.mod & SDL_KMOD_ALT)) {
 		return;    // Space: talk to, use or attack the pick.
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_E
@@ -9500,7 +9613,12 @@ static void Handle_event(SDL_Event& event) {
 		&& Friend_is_wasd_key(event.key.scancode) && !friend_chat_active && !Notebook_gump::get_instance()) {
 		// WASD movement: the keys alone walk (the main loop reads them as
 		// they are held), so the key bindings don't get them; with Shift
-		// they do what the key alone did (Shift+W the watch, Shift+S Save).
+		// they do what the key alone did (Shift+W the watch), except Shift+S
+		// (Save/Restore), taken out 2026-10-22: Ctrl+S quicksaves and the
+		// game menu has Save.
+		if ((event.key.mod & SDL_KMOD_SHIFT) && event.key.scancode == SDL_SCANCODE_S) {
+			return;
+		}
 		if (event.key.mod & SDL_KMOD_SHIFT) {
 			event.key.mod = static_cast<SDL_Keymod>(event.key.mod & ~SDL_KMOD_SHIFT);
 			event.key.key = SDL_GetKeyFromScancode(event.key.scancode, SDL_KMOD_NONE, false);
@@ -9555,22 +9673,13 @@ static void Handle_event(SDL_Event& event) {
 	if (!Friend_mode_is_guest() && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN
 		&& event.key.key == SDLK_Y && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
-		Friend_mode_set_hold(!friend_holding);    // Y: the party holds, or follows again.
+		Friend_mode_hold_or_follow();    // Y: the party holds, or follows again.
 		return;
 	}
 	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active
 		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_Y && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
-		// Y: follow the Avatar (the party's AI drives our companion) until we
-		// walk, or press E again.
-		Actor* own = gwin->has_network_friend_control() ? gwin->get_controlled_actor() : nullptr;
-		if (!own || gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
-			Mouse::mouse()->flash_shape(Mouse::redx);
-		} else {
-			own->stop();
-			friend_session.send_blob(
-					Friend_mode_session::Blob_kind::guest_follow, {static_cast<unsigned char>(!friend_following)});
-		}
+		Friend_mode_hold_or_follow();    // Y: follow the Avatar, or take over again.
 		return;
 	}
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
@@ -9690,6 +9799,11 @@ static void Handle_event(SDL_Event& event) {
 		}
 		last_b1down_click = SDL_GetTicks();
 		if (g_shortcutBar && g_shortcutBar->handle_event(&event)) {
+			break;
+		}
+		if (event.button.button == 1 && Friend_map_button_at(event.button.x, event.button.y)) {
+			friend_button_pressed = true;    // Its button-up does nothing else.
+			Friend_mode_hold_or_follow();
 			break;
 		}
 		int x;
@@ -9822,6 +9936,10 @@ static void Handle_event(SDL_Event& event) {
 	case SDL_EVENT_MOUSE_BUTTON_UP: {
 		SDL_SetWindowMouseGrab(gwin->get_win()->get_screen_window(), false);
 		SDL_ConvertEventToRenderCoordinates(renderer, &event);
+		if (friend_button_pressed && event.button.button == 1) {
+			friend_button_pressed = false;
+			break;
+		}
 		int x;
 		int y;
 		gwin->get_win()->screen_to_game(event.button.x, event.button.y, gwin->get_fastmouse(), x, y);
@@ -9938,6 +10056,14 @@ static void Handle_event(SDL_Event& event) {
 			Mouse::use_touch_input = false;
 		}
 		gwin->get_win()->screen_to_game(event.motion.x, event.motion.y, gwin->get_fastmouse(), mx, my);
+		{    // Over the hold button: say what it does, once each time.
+			static bool over = false;
+			const bool  now  = Friend_map_button_at(event.motion.x, event.motion.y);
+			if (now && !over) {
+				Friend_mode_hold_button_hint();
+			}
+			over = now;
+		}
 
 		Mouse::mouse()->move(mx, my);
 		if (!dragging) {

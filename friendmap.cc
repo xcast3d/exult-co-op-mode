@@ -11,6 +11,7 @@
 #include "actors.h"
 #include "chunkter.h"
 #include "exult_constants.h"
+#include "font.h"
 #include "gamemap.h"
 #include "gamewin.h"
 #include "ibuf8.h"
@@ -21,6 +22,7 @@
 #include <array>
 
 bool Friend_minimap_enabled = false;
+bool Friend_minimap_large   = false;
 
 namespace {
 // Each chunk's ground as a grid of averaged colors for the corner minimap
@@ -109,6 +111,15 @@ void paint_dot(Image_buffer8* buffer, int x, int y, int color) {
 // resolution; drawn in the game view, a big game area made it tiny.
 int  map_layer = -1;
 bool map_shown = false;
+int  map_bottom = -1;    // Where the minimap ends on screen, while shown.
+
+// The hold / follow button: its own layer, at the HUD's scale like the map.
+int         button_layer = -1;
+bool        button_shown = false;
+std::string button_drawn;               // The label it has.
+int         button_rect[4] = {0, 0, 0, 0};    // On screen: x, y, w, h.
+constexpr int button_w = 36;            // Game pixels, before the HUD's scale.
+constexpr int button_h = 13;
 
 void hide_corner_map() {
 	Game_window* gwin = Game_window::get_instance();
@@ -116,7 +127,76 @@ void hide_corner_map() {
 		gwin->layer_set_visible(map_layer, false);
 		gwin->set_painted();
 	}
-	map_shown = false;
+	map_shown  = false;
+	map_bottom = -1;
+}
+
+void hide_button() {
+	Game_window* gwin = Game_window::get_instance();
+	if (button_layer >= 0 && button_shown) {
+		gwin->layer_set_visible(button_layer, false);
+		gwin->set_painted();
+	}
+	button_shown = false;
+}
+
+// Exult's drawn button (as Basic_button's colours) with the label.
+void paint_button(const std::string& label) {
+	Game_window* gwin = Game_window::get_instance();
+	if (button_layer < 0) {
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As the map.
+		button_layer = gwin->create_layer("Hold button", button_w, button_h, 255, 0, text_layer_z - 2);
+		if (button_layer < 0) {
+			return;
+		}
+		gwin->layer_set_ui_kind(button_layer, Image_window::UiLayerHudGumps);
+		button_drawn.clear();
+	}
+	if (label != button_drawn) {
+		Image_buffer8* buffer = gwin->get_layer_ibuf(button_layer);
+		if (!buffer) {
+			return;
+		}
+		constexpr int background = 140;    // Basic_button's colours.
+		buffer->clear_clip();
+		buffer->fill8(0);    // The black edge.
+		buffer->draw_beveled_box(1, 1, button_w - 2, button_h - 2, 1, background, background - 2, background - 2,
+								 background + 3, background + 4, background + 1);
+		auto font = fontManager.get_font("SMALL_BLACK_FONT");
+		if (font) {
+			// Fonts paint into the current render target.
+			Image_buffer8* prev = gwin->push_render_target(buffer);
+			const int      x    = (button_w - font->get_text_width(label.c_str())) / 2;
+			const int      y    = (button_h - font->get_text_height()) / 2;
+			font->paint_text(buffer, label.c_str(), x, y);
+			gwin->pop_render_target(prev);
+		}
+		gwin->layer_set_dirty(button_layer);
+		button_drawn = label;
+		gwin->set_painted();
+	}
+	// Under the minimap, or in the top-right corner without it.
+	Image_window* iwin = gwin->get_win();
+	const float   f    = iwin->get_ui_scale_factor(Image_window::UiLayerHudGumps);
+	int           sx;
+	int           sy;
+	iwin->game_to_screen(gwin->get_width() - 5, 5, false, sx, sy);
+	const int dw  = static_cast<int>(button_w * f);
+	const int dh  = static_cast<int>(button_h * f);
+	const int top = map_bottom >= 0 ? map_bottom + static_cast<int>(3 * f) : sy;
+	if (button_rect[0] != sx - dw || button_rect[1] != top || button_rect[2] != dw || button_rect[3] != dh) {
+		button_rect[0] = sx - dw;
+		button_rect[1] = top;
+		button_rect[2] = dw;
+		button_rect[3] = dh;
+		gwin->layer_set_dest(button_layer, sx - dw, top, dw, dh);
+		gwin->set_painted();
+	}
+	if (!button_shown) {
+		gwin->layer_set_visible(button_layer, true);
+		button_shown = true;
+		gwin->set_painted();
+	}
 }
 
 void paint_corner_map(const std::vector<Friend_map_dot>& dots) {
@@ -185,7 +265,7 @@ void paint_corner_map(const std::vector<Friend_map_dot>& dots) {
 	int           sx;
 	int           sy;
 	iwin->game_to_screen(gwin->get_width() - 5, 5, false, sx, sy);
-	const int  dw        = static_cast<int>(size * f);
+	const int  dw        = static_cast<int>(size * f * (Friend_minimap_large ? 1.5f : 1.0f));
 	static int placed[3] = {-1, -1, -1};
 	const bool moved     = placed[0] != sx - dw || placed[1] != sy || placed[2] != dw;
 	if (moved) {
@@ -198,6 +278,7 @@ void paint_corner_map(const std::vector<Friend_map_dot>& dots) {
 		gwin->layer_set_visible(map_layer, true);
 		map_shown = true;
 	}
+	map_bottom = sy + dw;
 	if (changed || moved) {
 		gwin->set_painted();
 	}
@@ -206,9 +287,10 @@ void paint_corner_map(const std::vector<Friend_map_dot>& dots) {
 
 void Friend_map_hide() {
 	hide_corner_map();
+	hide_button();
 }
 
-void Friend_map_paint(const std::vector<Friend_map_dot>& dots) {
+void Friend_map_paint(const std::vector<Friend_map_dot>& dots, const Friend_map_button& button) {
 	Game_window* gwin = Game_window::get_instance();
 	if (!gwin->get_map()) {
 		return;
@@ -218,4 +300,25 @@ void Friend_map_paint(const std::vector<Friend_map_dot>& dots) {
 	} else {
 		hide_corner_map();
 	}
+	if (!button.label.empty() && !gwin->is_in_exult_menu()) {
+		paint_button(button.label);
+	} else {
+		hide_button();
+	}
+}
+
+int Friend_map_top_right_height() {
+	int height = 0;
+	if (map_shown) {
+		height = 5 + static_cast<int>((12 * cells + 2) * (Friend_minimap_large ? 1.5f : 1.0f));
+	}
+	if (button_shown) {
+		height = (height ? height + 3 : 5) + button_h;
+	}
+	return height;
+}
+
+bool Friend_map_button_at(float sx, float sy) {
+	return button_shown && sx >= button_rect[0] && sy >= button_rect[1] && sx < button_rect[0] + button_rect[2]
+		   && sy < button_rect[1] + button_rect[3];
 }

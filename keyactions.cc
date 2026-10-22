@@ -55,6 +55,8 @@
 #include "ucmachine.h"
 #include "version.h"
 
+#include <SDL3/SDL.h>
+
 namespace {
 	class Strings {
 	public:
@@ -635,8 +637,12 @@ int get_walking_speed(const int* params) {
 		speed = Mouse::slow_speed_factor;
 	} else if (gwin->in_combat() || (gwin->is_hostile_nearby() && !cheat.in_god_mode())) {
 		speed = Mouse::medium_combat_speed_factor;
+	} else if (parm == 1) {
+		speed = Mouse::medium_speed_factor;
 	} else {
-		speed = parm == 1 ? Mouse::medium_speed_factor : Mouse::fast_speed_factor;
+		// Friend Mode (2026-10-22): keys walk at the second fastest speed;
+		// Caps Lock on runs at the fastest.
+		speed = (SDL_GetModState() & SDL_KMOD_CAPS) ? Mouse::fast_speed_factor : Mouse::medium_speed_factor;
 	}
 	return 200 * gwin->get_std_delay() / speed;
 }

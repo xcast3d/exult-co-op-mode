@@ -42,6 +42,10 @@ private:
 	int                      paperdolls;
 	int                      language;
 	int                      fonts;
+	int                      health_bars;     // Friend Mode: enemy health bars,
+	int                      minimap;         //   the corner minimap,
+	int                      minimap_large;   //   and its size (moved from Game Engine).
+	int                      minimap_row = 0;    // Its row on the page.
 
 	enum button_ids {
 		id_first = 0,
@@ -62,6 +66,9 @@ private:
 		id_android_autolaunch,
 		id_language,
 		id_fonts,
+		id_health_bars,
+		id_minimap,
+		id_minimap_size,
 
 		id_count
 	};
@@ -129,6 +136,22 @@ public:
 	void toggle_paperdolls(int state) {
 		paperdolls = state;
 	}
+
+	void toggle_health_bars(int state) {
+		health_bars = state;
+	}
+
+	void toggle_minimap(int state) {
+		minimap = state;
+		update_minimap_buttons();
+	}
+
+	void toggle_minimap_size(int state) {
+		minimap_large = state;
+	}
+
+	// The size row shows only while the minimap is on.
+	void update_minimap_buttons();
 
 private:
 	int android_autolaunch;

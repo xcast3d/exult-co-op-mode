@@ -12,6 +12,7 @@
 
 #include "tiles.h"
 
+#include <string>
 #include <vector>
 
 struct Friend_map_dot {
@@ -19,12 +20,26 @@ struct Friend_map_dot {
 	int         color;    // Palette index.
 };
 
-// The corner minimap option (Game Engine options), off by default.
+// The corner minimap option (Game Display), off by default, and its size:
+// large is half as big again.
 extern bool Friend_minimap_enabled;
+extern bool Friend_minimap_large;
 
-// Draw the corner minimap over the game view, if it is on.
-void Friend_map_paint(const std::vector<Friend_map_dot>& dots);
-// Hide it now (a full-screen menu is about to show; the next frame puts it back).
+// The hold / follow button under the minimap (or in the top-right corner
+// without it), an alternative to Y.  'label' empty: not shown.
+struct Friend_map_button {
+	std::string label;    // "Hold", "Follow"...
+};
+
+// Draw the corner minimap over the game view, if it is on, and the button.
+void Friend_map_paint(const std::vector<Friend_map_dot>& dots, const Friend_map_button& button);
+// Hide them now (a full-screen menu is about to show; the next frame puts them back).
 void Friend_map_hide();
+// Is the screen point (an event's, after SDL_ConvertEventToRenderCoordinates)
+// on the button?
+bool Friend_map_button_at(float sx, float sy);
+// How far down from the top of the view the minimap and the button reach,
+// in HUD pixels (0 with neither), for what goes under them (the skill bar).
+int Friend_map_top_right_height();
 
 #endif

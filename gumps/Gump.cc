@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "U7obj.h"
 #include "cheat.h"
 #include "contain.h"
+#include "exult.h"
 #include "game.h"
 #include "gamewin.h"
 #include "gumpinf.h"
@@ -411,10 +412,50 @@ bool Gump::smart_placement = true;
 bool Gump::sort_button     = true;
 
 namespace {
-	// The sort button: one of Exult's drawn text buttons, "Sort".
-	class Sort_button : public Text_button {
+	// A small (16x16) Exult drawn button with a picture: B black, X the
+	// light colour, '.' the button showing through.
+	constexpr int icon_button_size = 16;
+	constexpr int icon_picture     = 9;
+
+	class Icon_button : public Basic_button {
+		const char* const* rows;
+
 	public:
-		Sort_button(Gump* par, int px, int py) : Text_button(par, "Sort", px, py) {}
+		Icon_button(Gump* par, int px, int py, const char* const* picture)
+				: Basic_button(par, px, py, icon_button_size, icon_button_size), rows(picture) {}
+
+		void paint() override {
+			Basic_button::paint();
+			Image_buffer8* ib8  = gwin->get_win()->get_ib8();
+			TileRect       area = get_draw_area();
+			local_to_screen(area.x, area.y);
+			const int x0 = area.x + (area.w - icon_picture) / 2;
+			const int y0 = area.y + (area.h - icon_picture) / 2;
+			for (int y = 0; y < icon_picture; ++y) {
+				for (int x = 0; x < icon_picture; ++x) {
+					if (rows[y][x] == 'B') {
+						ib8->put_pixel8(0, x0 + x, y0 + y);
+					} else if (rows[y][x] == 'X') {
+						ib8->put_pixel8(BevelDoubleHighlight, x0 + x, y0 + y);
+					}
+				}
+			}
+		}
+	};
+
+	// Sort: rows of things, longest first.
+	const char* const sort_picture[icon_picture]
+			= {"BBBBBBBBB", "BXXXXXXXB", "BBBBBBBBB", ".........", "BBBBBBB..",
+			   "BXXXXXB..", "BBBBBBB..", ".........", "BBBBB...."};
+	// Take all: an arrow down into a tray.
+	const char* const take_picture[icon_picture]
+			= {"...BBB...", "...BXB...", "...BXB...", ".BBBXBBB.", "..BXXXB..",
+			   "...BXB...", "B...B...B", "BX.....XB", "BBBBBBBBB"};
+
+	// The sort button, under the checkmark: sorts the window's container.
+	class Sort_button : public Icon_button {
+	public:
+		Sort_button(Gump* par, int px, int py) : Icon_button(par, px, py, sort_picture) {}
 
 		bool activate(MouseButton button) override {
 			auto* gump = dynamic_cast<Gump*>(parent);
@@ -425,11 +466,28 @@ namespace {
 			return false;
 		}
 	};
+
+	// Take all, beside it, on containers in the world: everything into the
+	// controlled actor's pack, as Shift+Space in the window.
+	class Take_all_button : public Icon_button {
+	public:
+		Take_all_button(Gump* par, int px, int py) : Icon_button(par, px, py, take_picture) {}
+
+		bool activate(MouseButton button) override {
+			auto* gump = dynamic_cast<Gump*>(parent);
+			if (button == MouseButton::Left && gump && gump->get_container()) {
+				Friend_mode_take_all(gump->get_container(), gump->get_container(), "Not all yours: click again to take all");
+				return true;
+			}
+			return false;
+		}
+	};
 }    // namespace
 
 /*
  *  Is this window a container in someone's inventory (a backpack, a bag in
- *  it)?  Only those get sorted: a chest or a body keeps its own layout.
+ *  it)?  Those don't get the take-all button.  (Since 2026-10-22 every
+ *  container window sorts: a ship's hold, a chest on the magic carpet.)
  */
 
 bool Gump::is_inventory_container() const {
@@ -446,7 +504,7 @@ bool Gump::is_inventory_container() const {
  */
 
 bool Gump::sort_objects() {
-	if (!is_inventory_container()) {
+	if (!container || container->as_actor()) {
 		return false;
 	}
 	auto kind = [](Game_object* obj) {
@@ -811,8 +869,12 @@ void Container_gump::initialize(int shnum) {
 	} else {
 		set_object_area(TileRect(52, 22, 60, 40), 24, 52);
 	}
-	// The sort button, a little below the checkmark (inventory only).
-	if (sort_button && is_inventory_container()) {
+	// The sort button, a little below the checkmark (every container), and
+	// take all beside it (containers in the world, not in anyone's
+	// inventory).
+	const bool sorts = sort_button && container && !container->as_actor();
+	const bool takes = container && !container->as_actor() && !container->get_outermost()->as_actor();
+	if (sorts || takes) {
 		for (Gump_widget* elem : elems) {
 			if (dynamic_cast<Checkmark_button*>(elem)) {
 				// A shape is drawn around its hot spot; the button from its
@@ -820,7 +882,14 @@ void Container_gump::initialize(int shnum) {
 				Shape_frame* check = elem->get_shape();
 				const int    left  = elem->get_x() - (check ? check->get_xleft() : 0);
 				const int    below = elem->get_y() + (check ? check->get_ybelow() : 8);
-				add_elem(new Sort_button(this, left - 10, below + 12));
+				int          x     = left - 4;
+				if (sorts) {
+					add_elem(new Sort_button(this, x, below + 4));
+					x += icon_button_size + 2;
+				}
+				if (takes) {
+					add_elem(new Take_all_button(this, x, below + 4));
+				}
 				break;
 			}
 		}

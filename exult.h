@@ -26,6 +26,8 @@
 
 class Actor;
 class Cheat;
+class Container_game_object;
+class Game_object;
 class Configuration;
 class Game_window;
 class KeyBinder;
@@ -39,6 +41,10 @@ class Game_object;
 // Co-Op Mode (Friend Mode) hosting.  Set from the title menu before a game
 // starts; Friend_mode_open_to_coop starts it during play.
 bool Friend_mode_hosting();
+// Everything in 'from' into the controlled actor's pack, asking once
+// ('ask', on a second press on 'asker') if some isn't one's to take
+// (Shift+Space in a window, and a container window's take-all button).
+bool Friend_mode_take_all(Container_game_object* from, Game_object* asker, const std::string& ask);
 void Friend_mode_set_hosting(bool on);
 bool Friend_mode_open_to_coop();
 // Friend Mode connection identity is collected before the guest world loads.

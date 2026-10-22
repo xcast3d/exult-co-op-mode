@@ -97,6 +97,16 @@ the words over their heads); the target arrow shows over a window when the
 pick is inside it; the effect preview's crash at sprite 20 (an empty
 sprite, as is 25) is fixed in `Sprites_effect` itself.
 
+**Batches C and D built and tested the same day:** Space uses what has a
+use on the map (books, the gavel, the bucket) and Shift+Space takes it; in
+someone else's window Space takes, Shift+Space takes all, Alt+Space splits;
+Alt+Space drops some of one's own. Keys walk at the second fastest speed and
+Caps Lock runs; Shift+S no longer opens Save/Restore. Small Sort and Take
+all icons on container windows (Sort on every container now); a Hold /
+Follow button under the minimap (or in the corner), the same as Y; the
+minimap and enemy health bars moved to Game Display, with a Small / Large
+minimap.
+
 **Leading a companion, step 1, built 2026-10-21 (no protocol change;
 untested).** The host and a single player press Shift+Tab to lead the next
 companion (one no guest plays), with its skill bar and the Q pick; combat

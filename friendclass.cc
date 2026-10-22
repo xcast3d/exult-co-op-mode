@@ -2853,7 +2853,7 @@ private:
 			break;
 		case friend_bar_top_right:
 			bx = right - w - edge;
-			by = top + edge + (Friend_minimap_enabled ? 56 : 0);    // Under the minimap.
+			by = top + edge + Friend_map_top_right_height();    // Under the minimap and its button.
 			break;
 		case friend_bar_left_center:
 			bx = left + edge;

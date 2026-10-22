@@ -1271,6 +1271,77 @@ not tested.
 - [ ] Effect preview: step to sprite 20: "Sprite 20 is empty", no crash;
       25 the same; step through every sprite to the end without a crash.
 
+## Feedback round, batches C and D (2026-10-22)
+
+Space, Shift+Space and Alt+Space; Caps Lock; the window icons; the hold
+button; the options moved to Game Display. Built, not tested. The rules
+are in [the feedback round](feedback-2026-10-22.md), C1.
+
+Space and its hint line (the second line under "Targeting ..."):
+
+- [ ] E to a book lying on a table: "Read (Space)  Take (Shift+Space)";
+      Space reads it, Shift+Space takes it.
+- [ ] The bucket and the gavel on the map: Space uses them, Shift+Space
+      takes them (the hint says so).
+- [ ] Gold coins on the map: Space takes them (no coin toss).
+- [ ] In a chest with a stack of arrows: Space takes the whole stack,
+      Shift+Space takes everything in the chest, Alt+Space asks how many.
+      The hint reads "Take (Space)  Take all (Shift+Space)  Split
+      (Alt+Space)".
+- [ ] A book in a chest: Space takes it (doesn't read it); Shift+Space
+      takes everything.
+- [ ] A chest that isn't yours: Shift+Space asks "Not all yours" once,
+      again takes everything (and the theft rules apply).
+- [ ] In one's own pack: Space uses or readies; on a gem, Space asks to
+      drop; Shift+Space drops at once; Alt+Space on a stack asks how many
+      to drop.
+- [ ] Option (Alt)+Space on the Mac works the same.
+
+Walking:
+
+- [ ] WASD and the arrow keys walk at the second fastest speed. Caps Lock
+      on: "Running", and they run; off: "Walking". In combat they walk at
+      combat speed either way.
+- [ ] Shift+arrows still walk slowly (Exult's own).
+- [ ] With WASD on, Shift+S does nothing (no Save/Restore); Ctrl+S still
+      quicksaves; Shift+W still shows the watch.
+- [ ] A guest running with Caps Lock doesn't stutter or get pulled back.
+
+Windows:
+
+- [ ] A backpack: a small Sort icon under the checkmark, no take-all.
+- [ ] A chest, a crate, a body, a bag on the ground: Sort and Take all
+      icons side by side. Take all empties it into the pack ("Took 5
+      things"); one not yours asks "click again".
+- [ ] Sort on a chest lays it out by kind, as a backpack.
+- [ ] A bag inside a chest: both icons. A bag inside a backpack: Sort only.
+- [ ] Shift+C sorts the newest open container, a chest too.
+- [ ] A guest: Take all moves the items through the host; sorting a chest
+      on host and guest at once just leaves whichever came last.
+
+The hold button:
+
+- [ ] Host with companions: "Hold" under the minimap (minimap on) or in
+      the top-right corner (minimap off). Hover: "The party holds where it
+      stands" and "Shortcut: Y" near the top. Click: the party holds, and
+      the button reads "Follow"; click again, they follow.
+- [ ] Y and the button stay in step (Y, then the button reads "Follow").
+- [ ] Clicking the button doesn't also walk or pick anything under it.
+- [ ] No companions in the party: no button.
+- [ ] A guest with a companion: "Follow" (follow the Avatar), then "Take
+      over". A spectating guest: no button.
+- [ ] Skill bar set to top right: it sits under the minimap and the
+      button, with Small and with Large.
+
+Options:
+
+- [ ] Game Engine no longer lists Enemy health bars or Corner minimap.
+- [ ] Game Display lists both at the end; with the minimap Yes a "Minimap
+      size" row shows (Small, Large); No hides it. OK keeps them, and they
+      survive a restart.
+- [ ] Large: the minimap is half as big again, the dots in the right
+      places, the button under it.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".

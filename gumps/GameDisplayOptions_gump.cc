@@ -43,6 +43,8 @@
 #include "GameDisplayOptions_gump.h"
 #include "Gump_ToggleButton.h"
 #include "Gump_button.h"
+#include "combat_opts.h"
+#include "friendmap.h"
 #include "Gump_manager.h"
 #include "ShortcutBar_gump.h"
 #include "Text_button.h"
@@ -227,6 +229,18 @@ public:
 	static auto Serif() {
 		return get_text_msg(0x5DA - msg_file_start);
 	}
+
+	static auto EnemyHealthBars_() {
+		return "Enemy health bars:";
+	}
+
+	static auto CornerMinimap_() {
+		return "Corner minimap:";
+	}
+
+	static auto MinimapSize_() {
+		return "Minimap size:";
+	}
 };
 
 using GameDisplayOptions_button = CallbackTextButton<GameDisplayOptions_gump>;
@@ -349,6 +363,27 @@ void GameDisplayOptions_gump::build_buttons() {
 			this, &GameDisplayOptions_gump::toggle_fonts, fonts_txt, fonts, get_button_pos_for_label(Strings::Fonts_()),
 			yForRow(++y_index), large_size);
 
+	// Friend Mode (2026-10-22, moved from Game Engine).
+	buttons[id_health_bars] = std::make_unique<GameDisplayTextToggle>(
+			this, &GameDisplayOptions_gump::toggle_health_bars, yesNo, health_bars,
+			get_button_pos_for_label(Strings::EnemyHealthBars_()), yForRow(++y_index), small_size);
+	buttons[id_minimap] = std::make_unique<GameDisplayTextToggle>(
+			this, &GameDisplayOptions_gump::toggle_minimap, yesNo, minimap,
+			get_button_pos_for_label(Strings::CornerMinimap_()), yForRow(++y_index), small_size);
+	minimap_row = y_index;
+	update_minimap_buttons();
+}
+
+void GameDisplayOptions_gump::update_minimap_buttons() {
+	if (minimap) {
+		buttons[id_minimap_size] = std::make_unique<GameDisplayTextToggle>(
+				this, &GameDisplayOptions_gump::toggle_minimap_size, std::vector<std::string>{"Small", "Large"},
+				minimap_large, get_button_pos_for_label(Strings::MinimapSize_()), yForRow(minimap_row + 1), 44);
+	} else {
+		buttons[id_minimap_size].reset();
+	}
+	gwin->set_all_dirty();
+
 	// Risize to fit all
 	ResizeWidthToFitWidgets(tcb::span(buttons.data() + id_first, id_count));
 
@@ -405,10 +440,13 @@ void GameDisplayOptions_gump::load_settings() {
 	} else {
 		fonts = 0;    // original
 	}
+	health_bars   = Combat::health_bars ? 1 : 0;
+	minimap       = Friend_minimap_enabled ? 1 : 0;
+	minimap_large = Friend_minimap_large ? 1 : 0;
 }
 
 GameDisplayOptions_gump::GameDisplayOptions_gump() : Modal_gump(nullptr, -1) {
-	SetProceduralBackground(TileRect(0, 0, 100, yForRow(13)), -1);
+	SetProceduralBackground(TileRect(0, 0, 100, yForRow(16)), -1);
 
 	for (auto& btn : buttons) {
 		btn.reset();
@@ -416,13 +454,13 @@ GameDisplayOptions_gump::GameDisplayOptions_gump() : Modal_gump(nullptr, -1) {
 
 	// Ok
 	buttons[id_ok] = std::make_unique<GameDisplayOptions_button>(
-			this, &GameDisplayOptions_gump::close, Strings::OK(), 15, yForRow(12), 50);
+			this, &GameDisplayOptions_gump::close, Strings::OK(), 15, yForRow(15), 50);
 	// Help
 	buttons[id_help] = std::make_unique<GameDisplayOptions_button>(
-			this, &GameDisplayOptions_gump::help, Strings::HELP(), 50, yForRow(12), 50);
+			this, &GameDisplayOptions_gump::help, Strings::HELP(), 50, yForRow(15), 50);
 	// Cancel
 	buttons[id_cancel] = std::make_unique<GameDisplayOptions_button>(
-			this, &GameDisplayOptions_gump::cancel, Strings::CANCEL(), 75, yForRow(12), 50);
+			this, &GameDisplayOptions_gump::cancel, Strings::CANCEL(), 75, yForRow(15), 50);
 
 	load_settings();
 	build_buttons();
@@ -490,6 +528,13 @@ void GameDisplayOptions_gump::save_settings() {
 		Game::setup_text();
 	}
 
+	Combat::health_bars = (health_bars != 0);
+	config->set("config/gameplay/combat/health_bars", health_bars ? "yes" : "no", false);
+	Friend_minimap_enabled = (minimap != 0);
+	config->set("config/gameplay/minimap", minimap ? "yes" : "no", false);
+	Friend_minimap_large = (minimap_large != 0);
+	config->set("config/gameplay/minimap_size", minimap_large ? "large" : "small", false);
+
 	config->write_back();
 }
 
@@ -527,6 +572,11 @@ void GameDisplayOptions_gump::paint() {
 	}
 	if (buttons[id_fonts]) {
 		font->paint_text(iwin->get_ib8(), Strings::Fonts_(), x + label_margin, y + yForRow(++y_index) + 1);
+	}
+	font->paint_text(iwin->get_ib8(), Strings::EnemyHealthBars_(), x + label_margin, y + yForRow(++y_index) + 1);
+	font->paint_text(iwin->get_ib8(), Strings::CornerMinimap_(), x + label_margin, y + yForRow(++y_index) + 1);
+	if (buttons[id_minimap_size]) {
+		font->paint_text(iwin->get_ib8(), Strings::MinimapSize_(), x + label_margin, y + yForRow(++y_index) + 1);
 	}
 	gwin->set_painted();
 }

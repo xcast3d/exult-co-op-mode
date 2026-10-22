@@ -341,7 +341,9 @@ upstream.
       (W+D = north-east).
 - [x] With WASD on, Shift plus W, A, S or D does what the key alone did:
       Shift+W the watch, Shift+S Save/Restore (W was a conflict too, not
-      only S). Ctrl+S stays quicksave.
+      only S). Ctrl+S stays quicksave. (2026-10-22: Shift+S taken out.)
+- [x] Keys walk at the second fastest speed; Caps Lock runs (2026-10-22;
+      Shift was considered and dropped, it already means too much).
 - [ ] Single-click attack: tried 2026-10-18 and taken out again (combat
       felt stuck, partly from WASD keys that stayed held). Replaced by the
       targeting below.
@@ -428,6 +430,12 @@ upstream.
       "more" key: on a stack it asks how many; on a single item in a
       window it takes everything there (asking once if any of it isn't
       yours).
+    Changed 2026-10-22 ([feedback round](friend-mode/feedback-2026-10-22.md),
+    C1): on the map, things with a use (books, the gavel, the bucket) are
+    used with Space and taken with Shift+Space; in someone else's window
+    Space takes (books too), Shift+Space takes everything and Alt+Space
+    splits a stack; Alt+Space drops some of one's own. Alt always means
+    "how many".
     It all moves items the way a drag and drop does
     (`Game_window::move_object`, drag.cc: weight, theft, eggs, guests'
     lift and move to the host), so guests need nothing new.

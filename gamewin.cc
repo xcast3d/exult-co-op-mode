@@ -373,6 +373,9 @@ Game_window::Game_window(
 	config->value("config/gameplay/minimap", str, "no");    // Friend Mode corner minimap.
 	Friend_minimap_enabled = (str == "yes");
 	config->set("config/gameplay/minimap", str, false);
+	config->value("config/gameplay/minimap_size", str, "small");
+	Friend_minimap_large = (str == "large");
+	config->set("config/gameplay/minimap_size", str, false);
 	config->value("config/audio/disablepause", str, "no");
 	config->set("config/audio/disablepause", str, false);
 
