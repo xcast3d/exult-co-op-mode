@@ -1378,7 +1378,7 @@ static int Friend_test_kit_sling() {
 
 // Host debug aid (F9, for the Class System): every companion who can come
 // stands by the Avatar and joins the party (as many as it holds: 8 besides
-// the Avatar), at level 6 or more so all their skills are open; the Avatar
+// the Avatar), at level 7 or more so all their skills are open; the Avatar
 // at level 5 or more (Great Heal's circle), with the magic kit.  Party
 // changes reach guests as always.  Ctrl+F9 is the object kit, Shift+F9 the
 // creatures.
@@ -1392,7 +1392,7 @@ static void Friend_mode_gather_companions() {
 	Main_actor*      avatar   = gwin->get_main_actor();
 	Party_manager*   partyman = gwin->get_party_man();
 	const Tile_coord at       = avatar->get_tile();
-	constexpr int    level6   = 50 << 5;    // Level = 1 + log2(experience / 50).
+	constexpr int    level7   = 50 << 6;    // Level = 1 + log2(experience / 50).
 	constexpr int    level5   = 50 << 4;
 	int              joined   = 0;
 	int              full     = 0;
@@ -1428,8 +1428,8 @@ static void Friend_mode_gather_companions() {
 		} else if (who == "Spark") {
 			Friend_test_kit_arm(npc, Friend_test_kit_sling());
 		}
-		if (npc->get_property(Actor::exp) < level6) {
-			npc->set_property(Actor::exp, level6);
+		if (npc->get_property(Actor::exp) < level7) {
+			npc->set_property(Actor::exp, level7);
 		}
 	}
 	if (avatar->get_property(Actor::exp) < level5) {

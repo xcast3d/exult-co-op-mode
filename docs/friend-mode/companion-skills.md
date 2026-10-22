@@ -106,17 +106,19 @@ Class_skill(30, "Mending Circle")
 		.says("*calls on the earth to mend*"),
 ```
 
-Levels (2026-10-20): the first skill at level 1, the second at 3, the
-third at 6. U7's level is 1 + log2(experience / 50), so level 8 would be
-near the end of Black Gate; 6 is reachable.
+Levels (2026-10-22, were 1, 3, 6): the first skill at level 1, the second
+at 4, the third at 7 (`level_second`, `level_third` in friendclass.cc). U7's
+level is 1 + log2(experience / 50), so level 7 takes 3200 experience and
+level 8 would be near the end of Black Gate.
 
 **Cooldowns** (after testing with testers, 2026-10-20): by place on the
-bar, 30 seconds for the level 1 skill, 60 for level 3 and 90 for level 6,
+bar, 30 seconds for the first skill, 60 for the second and 90 for the third,
 with a few exceptions (Crippling Shot 30, Flashbang 60, Summon Dogs and
-Summon Wolf 60). The level 6 skills may go to 120 after more testing.
+Summon Wolf 60). The third skills may go to 120 after more testing.
 Kept on the host per companion and skill, sent to the guest who plays it;
-not saved. A short global wait (1.5 seconds) after any skill stops two
-landing in the same instant.
+not saved. After any skill, all of that character's skills wait 5 seconds
+(was 1.5, 2026-10-22), counted down on the bar, so a high level can't fire
+all three at once; each skill's own cooldown runs as well.
 
 **Paused with the game.** Every timer (cooldowns, buffs, stuns, fields,
 fuses, summons) runs on the Class System's own clock, which stops while
@@ -294,15 +296,21 @@ later, once the first set has been played.
 
 | Companion | U4 class | Skills (level, cooldown) |
 | --- | --- | --- |
-| Iolo | Bard | **Song of Warding** (1, 60 s): protection for the party within 12. **Song of Peace** (3, 60 s): hostiles within 12 fall asleep for 5 s, each rolls to resist. **Battle Hymn** (6, 90 s): +3 strength (so +3 health) and +3 combat for the party within 12, for 30 s. |
-| Shamino | Ranger | **Vanish** (1, 30 s): invisible for a moment. **Aimed Shot** (3, 60 s): one harder shot at the pick, within 16. **Volley** (6, 90 s): arrows at the 3 nearest hostiles within 12. |
-| Jaana | Druid | **Greater Heal** (1, 30 s): a full heal on the most hurt within 12. **Purify** (3, 60 s): cures poison, paralysis and curses within 12. **Mending Circle** (6, 90 s): +20 health for the party within 12. |
-| Dupre | Paladin | **Lay on Hands** (1, 30 s): +25 health on the most hurt within 3. **Shield Ally** (3, 60 s): for 15 s, melee blows on an ally within 6 land on Dupre instead (shield required). **Challenge** (6, 90 s): hostiles within 9 turn on him for 6 s. |
-| Spark | (boy) | With his sling. **Stun Shot** (1, 30 s): a stone, then the pick stops for 3 s, within 16. **Trick Shot** (3, 60 s): stones at the 2 nearest hostiles within 14. **Dirty Trick** (6, 90 s): mud at hostiles within 12; they don't attack for 3 s. |
-| Sentri | Swordmaster (agile duelist) | **Riposte** (1, 30 s): for 10 s, every melee strike that misses him is answered with a strike that always hits. **Master's Strike** (3, 60 s): a harder blow that ignores 6 armour. **Blade Dance** (6, 90 s): he darts to every foe within 6 in turn, striking each. |
-| Tseramed | Huntsman (disabling archer, beside Shamino's attacking one) | **Sleep Arrow** (1, 30 s): the pick sleeps for 5 s, within 16. **Crippling Shot** (3, 30 s): the pick loses 10 dexterity for 10 s, within 16 (U7 has no slowed walking, so it attacks less often). **Hunter's Mark** (6, 90 s): the pick takes +4 damage from party hits for 20 s, within 16. |
-| Julia | Tinker (combat engineer) | **Set Trap** (1, 30 s): caltrops at her feet, 2 tiles round, for 5 s; hostiles in them lose 3 health a second, never the party. **Quick Fix** (3, 60 s): +5 armour on the weakest ally within 4, for 30 s. **Flashbang** (6, 60 s): thrown up to 12; hostiles within 5 of where it lands are stunned for 2.5 s. |
-| Katrina | Shepherd (gentle support) | **Summon Dogs** (1, 60 s): two of her sheepdogs fight for 30 s. **Summon Wolf** (3, 60 s): a wolf fights for her for 30 s. **Summon Bee** (6, 90 s): a giant bee fights for her for 30 s. |
+| Iolo | Bard | **Song of Peace** (1, 30 s): hostiles within 12 fall asleep for 5 s, each rolls to resist. **Song of Warding** (4, 60 s): protection for the party within 12. **Battle Hymn** (7, 90 s): +3 strength (so +3 health) and +3 combat for the party within 12, for 30 s. |
+| Shamino | Ranger | **Vanish** (1, 30 s): invisible for a moment. **Aimed Shot** (4, 60 s): one harder shot at the pick, within 16. **Volley** (7, 90 s): arrows at the 3 nearest hostiles within 12. |
+| Jaana | Druid | **Greater Heal** (1, 30 s): a full heal on the most hurt within 12. **Purify** (4, 60 s): cures poison, paralysis and curses within 12. **Mending Circle** (7, 90 s): +20 health for the party within 12. |
+| Dupre | Paladin | **Lay on Hands** (1, 30 s): +25 health on the most hurt within 3. **Shield Ally** (4, 60 s): for 15 s, melee blows on an ally within 6 land on Dupre instead (shield required). **Challenge** (7, 90 s): hostiles within 9 turn on him for 6 s. |
+| Spark | (boy) | With his sling. **Stun Shot** (1, 30 s): a stone, then the pick stops for 3 s, within 16. **Trick Shot** (4, 60 s): stones at the 2 nearest hostiles within 14. **Dirty Trick** (7, 90 s): mud at hostiles within 12; they don't attack for 3 s. |
+| Sentri | Swordmaster (agile duelist) | **Riposte** (1, 30 s): for 10 s, every melee strike that misses him is answered with a strike that always hits. **Master's Strike** (4, 60 s): he lunges beside the pick, within 4, and strikes a harder blow that ignores 6 armour. **Blade Dance** (7, 90 s): he darts to every foe within 6 in turn, striking each. |
+| Tseramed | Huntsman (disabling archer, beside Shamino's attacking one) | **Sleep Arrow** (1, 30 s): the pick sleeps for 5 s, within 16. **Crippling Shot** (4, 30 s): the pick loses 10 dexterity for 10 s, within 16 (U7 has no slowed walking, so it attacks less often). **Hunter's Mark** (7, 90 s): the pick takes +4 damage from party hits for 20 s, within 16. |
+| Julia | Tinker (combat engineer) | **Set Trap** (1, 30 s): caltrops at her feet, 2 tiles round, for 5 s; hostiles in them lose 3 health a second, never the party. **Quick Fix** (4, 60 s): +5 armour on the weakest ally within 4, for 30 s. **Flashbang** (7, 60 s): thrown up to 12; hostiles within 5 of where it lands are stunned for 2.5 s. |
+| Katrina | Shepherd (gentle support) | **Summon Dogs** (1, 60 s): two of her sheepdogs fight for 30 s. **Summon Wolf** (4, 60 s): a wolf fights for her for 30 s. **Summon Bee** (7, 90 s): a giant bee fights for her for 30 s. |
+
+Changed 2026-10-22 (feedback round): unlock levels 1, 4, 7 (Iolo and the
+Avatar start at level 3, so the second skill was open from the start); Iolo's
+Song of Peace first, Song of Warding second; Master's Strike a lunge (range
+4, `dashing`), since U7's melee often stood a tile off and refused it; the
+wait after any skill 5 seconds. The levels below read 3 and 6 in the history.
 
 Changed after testing with testers (2026-10-20): the skills reordered so
 each bar runs level 1, 3, 6; cooldowns 30/60/90 by level; Jaana's Entangle

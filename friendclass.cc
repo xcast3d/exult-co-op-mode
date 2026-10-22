@@ -475,8 +475,13 @@ constexpr int spell_protect      = 21;
 constexpr int spell_flame_strike = 51;
 constexpr int spell_tremor       = 55;
 
+// Unlock levels for the second and third skill (the first is at 1).  Iolo
+// and the Avatar start at level 3, so the second waits a level (2026-10-22).
+constexpr int level_second = 4;
+constexpr int level_third  = 7;
+
 // Each companion's class and skills, in bar order.  Levels: the first at 1,
-// the next at 3, the last at 6 (U7's levels: 1 + log2(experience / 50)).
+// then level_second and level_third (U7's levels: 1 + log2(experience / 50)).
 // Cooldowns (after testing, 2026-10-20): 30 s for the first skill, 60 s for
 // the second, 90 s for the third, with a few exceptions (Crippling Shot 30,
 // Flashbang 60, Katrina's first two summons 60).
@@ -490,35 +495,37 @@ const std::vector<Companion_class>& Classes() {
 			 -1,
 			 "Iolo's Lute",
 			 {
-					 Class_skill(11, "Song of Warding")
-							 .describe("Protection for the party in the circle")
-							 .icon_spell(spell_protect_all)
-							 .kind(T::support)
-							 .aim(G::party_area, 12, true)
-							 .set_flag(Obj_flags::protection)
-							 .targets(2)
-							 .on_targets(sprite_music)
-							 .says("*sings a song of warding*"),
-					 // Hostiles in the circle drowse for a few seconds (each rolls).
+					 // Hostiles in the circle drowse for a few seconds (each
+					 // rolls).  First since 2026-10-22, Warding second.
 					 Class_skill(12, "Song of Peace")
 							 .describe("Hostiles in the circle drowse a few seconds")
+							 .recharge(30)
 							 .icon_spell(spell_dance)
 							 .kind(T::control)
 							 .aim(G::hostiles_nearest, 12, true)
-							 .unlock(3)
 							 .hinder(Obj_flags::asleep, 5000)
 							 .reacts("*drowsy*")
 							 .targets(8)
 							 .on_user(sprite_music)
 							 .on_targets(sprite_music)
 							 .says("*plays a song of peace*"),
+					 Class_skill(11, "Song of Warding")
+							 .describe("Protection for the party in the circle")
+							 .icon_spell(spell_protect_all)
+							 .kind(T::support)
+							 .aim(G::party_area, 12, true)
+							 .unlock(level_second)
+							 .set_flag(Obj_flags::protection)
+							 .targets(2)
+							 .on_targets(sprite_music)
+							 .says("*sings a song of warding*"),
 					 Class_skill(10, "Battle Hymn")
 							 .describe("The party nearby hits harder and has more health")
 							 .recharge(90)
 							 .icon_spell(spell_mass_might)
 							 .kind(T::support)
 							 .aim(G::party_area, 12, true)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .bonus(3, 30000)
 							 .targets(3)
 							 .on_targets(sprite_music)
@@ -543,7 +550,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_death_bolt)
 							 .kind(T::attack)
 							 .aim(G::pick, 16)
-							 .unlock(3)
+							 .unlock(level_second)
 							 .volley(6, 3000)
 							 .says("*takes careful aim*"),
 					 Class_skill(20, "Volley")
@@ -552,7 +559,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_swordstrike)
 							 .kind(T::attack)
 							 .aim(G::hostiles_nearest, 12)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .volley()
 							 .targets(3)
 							 .says("*looses a volley*"),
@@ -578,7 +585,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_mass_cure)
 							 .kind(T::cure)
 							 .aim(G::party_area, 12, true)
-							 .unlock(3)
+							 .unlock(level_second)
 							 .cure()
 							 .on_targets(sprite_bubbles)
 							 .says("*purifies the air*"),
@@ -588,7 +595,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_restoration)
 							 .kind(T::heal)
 							 .aim(G::party_area, 12, true)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .heal(20)
 							 .targets(2)
 							 .on_targets(sprite_sparkles)
@@ -616,7 +623,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_protection)
 							 .kind(T::support)
 							 .aim(G::ward, 6, true)
-							 .unlock(3)
+							 .unlock(level_second)
 							 .guard(15000)
 							 .on_targets(sprite_barrier)
 							 .says("*raises his shield*"),
@@ -626,7 +633,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_cause_fear)
 							 .kind(T::control)
 							 .aim(G::hostiles_nearest, 9, true)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .taunt(6000)
 							 .targets(8)
 							 .says("*issues a challenge*"),
@@ -652,7 +659,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_fireworks)
 							 .kind(T::attack)
 							 .aim(G::hostiles_nearest, 14)
-							 .unlock(3)
+							 .unlock(level_second)
 							 .volley()
 							 .targets(2)
 							 .says("*tries a trick shot*"),
@@ -664,7 +671,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_mass_curse)
 							 .kind(T::control)
 							 .aim(G::hostiles_nearest, 12, true)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .calm(3000)
 							 .reacts("*confused*")
 							 .targets(8)
@@ -686,13 +693,16 @@ const std::vector<Companion_class>& Classes() {
 							 .on_user(sprite_barrier)
 							 .on_targets(sprite_sword)    // On each foe answered.
 							 .says("*takes a dueling stance*"),
+					 // A lunge: he darts beside the pick and strikes, since U7's
+					 // melee often stands a tile or more off (2026-10-22).
 					 Class_skill(62, "Master's Strike")
-							 .describe("A precise blow that ignores some armour")
+							 .describe("Lunges at the target: a precise blow that ignores some armour")
 							 .icon_spell(spell_flame_strike)
 							 .kind(T::attack)
-							 .aim(G::pick, 1)
-							 .unlock(3)
+							 .aim(G::pick, 4)
+							 .unlock(level_second)
 							 .volley(6, 2000)
+							 .dashing()
 							 .pierce_armor(6)
 							 .on_targets(sprite_fireworks)
 							 .says("*strikes with perfect precision*"),
@@ -703,7 +713,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_tremor)
 							 .kind(T::attack)
 							 .aim(G::hostiles_nearest, 6)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .volley()
 							 .dashing()
 							 .targets(8)
@@ -733,7 +743,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_curse)
 							 .kind(T::control)
 							 .aim(G::pick, 16)
-							 .unlock(3)
+							 .unlock(level_second)
 							 .volley()
 							 .then_weaken(Actor::dexterity, -10, 10000)
 							 .on_targets(sprite_burst_arrow)
@@ -744,7 +754,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_mass_curse)
 							 .kind(T::attack)
 							 .aim(G::pick, 16)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .mark(4, 20000)
 							 .on_targets(sprite_purple)
 							 .says("*marks the quarry*"),
@@ -771,7 +781,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_protect)
 							 .kind(T::support)
 							 .aim(G::ally, 4)
-							 .unlock(3)
+							 .unlock(level_second)
 							 .armor(5, 30000)
 							 .targets(1)
 							 .on_targets(sprite_barrier)
@@ -781,7 +791,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_explosion)
 							 .kind(T::control)
 							 .aim(G::pick, 12)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .flash(5, Obj_flags::paralyzed, 2500)
 							 .missile(shape_powder_keg)
 							 .on_targets(sprite_fireworks)
@@ -806,7 +816,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("A wolf fights beside you a while")
 							 .icon_spell(spell_summon)
 							 .kind(T::support)
-							 .unlock(3)
+							 .unlock(level_second)
 							 .summon(shape_wolf, 30000)
 							 .targets(2)
 							 .on_targets(sprite_teleport)
@@ -816,7 +826,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(90)
 							 .icon_spell(spell_summon)
 							 .kind(T::support)
-							 .unlock(6)
+							 .unlock(level_third)
 							 .summon(shape_bee, 30000)
 							 .targets(2)
 							 .on_targets(sprite_teleport)
@@ -855,7 +865,10 @@ const Class_skill* Skill_by_id(const Companion_class* cls, int id) {
  *  messages); none of it is saved.
  */
 
-constexpr uint32 global_wait_ms = 1500;    // After any skill, before the next.
+// After any skill, every skill of that character waits this long (shown on
+// the bar), so a high level can't fire all three at once (2026-10-22; was
+// 1.5 s).  Each skill's own cooldown still runs as well.
+constexpr uint32 global_wait_ms = 5000;
 constexpr uint32 ai_period_ms   = 500;     // How often the Class AI looks.
 
 struct Cooldown_key {
@@ -969,6 +982,16 @@ uint32 Seconds_left(int npc, int skill) {
 	const auto found = cooldowns.find({npc, skill});
 	const uint32 now = Now();
 	if (found == cooldowns.end() || found->second <= now) {
+		return 0;
+	}
+	return (found->second - now + 999) / 1000;
+}
+
+// Seconds left of the wait after any skill (global_wait_ms).
+uint32 Global_wait_left(int npc) {
+	const auto   found = global_waits.find(npc);
+	const uint32 now   = Now();
+	if (found == global_waits.end() || found->second <= now) {
 		return 0;
 	}
 	return (found->second - now + 999) / 1000;
@@ -1092,9 +1115,8 @@ bool May_use(const Actor* user, const Companion_class& cls, const Class_skill& s
 		why = std::string(skill.name) + ": " + std::to_string(left) + (left == 1 ? " second" : " seconds");
 		return false;
 	}
-	const auto wait = global_waits.find(user->get_npc_num());
-	if (wait != global_waits.end() && wait->second > Now()) {
-		why = "Not so fast";
+	if (const uint32 left = Global_wait_left(user->get_npc_num())) {
+		why = "All skills: " + std::to_string(left) + (left == 1 ? " second" : " seconds");
 		return false;
 	}
 	return true;
@@ -2369,7 +2391,8 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 		slot.icon    = skill.icon;
 		slot.name    = skill.name;
 		slot.description = skill.description;
-		slot.seconds = static_cast<int>(Seconds_left(actor->get_npc_num(), skill.id));
+		slot.seconds = static_cast<int>(std::max(Seconds_left(actor->get_npc_num(), skill.id),
+												 Global_wait_left(actor->get_npc_num())));
 		slot.level   = actor->get_level() < skill.level ? skill.level : 0;
 		slot.usable  = May_use(actor, *cls, skill, slot.why);
 		slots.push_back(slot);
@@ -2512,10 +2535,10 @@ Skill_bar* the_bar = nullptr;
 
 constexpr int name_slot_w     = 56;    // A slot with the skill's name (two lines at most).
 constexpr int name_slot_h     = 30;
-constexpr int skill_icon_size = 40;    // A skill's picture.
+constexpr int skill_icon_size = 36;    // A skill's picture (was 40: large on screen).
 constexpr int slot_gap        = 2;
 
-// The skill pictures (data/friend/skills/): one 40x40 frame per skill, in
+// The skill pictures (data/friend/skills/): one 36x36 frame per skill, in
 // the order of Classes() (each companion's skills in bar order).  Colour
 // ones have a transparent ground; parchment ones carry their own tile.
 // Neither sits on a button.  Loaded once; a missing file means names.

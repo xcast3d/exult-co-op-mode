@@ -1,6 +1,6 @@
 Friend Mode skill icons (data/friend/skills/)
 
-skill_icons_colour.shp and skill_icons_parchment.shp: one 40x40 frame per
+skill_icons_colour.shp and skill_icons_parchment.shp: one 36x36 frame per
 companion skill, in the order of Classes() in friendclass.cc.
 
 The pictures were made for Friend Mode after icons from game-icons.net

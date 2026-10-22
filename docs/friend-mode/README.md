@@ -81,6 +81,16 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Feedback round, 2026-10-22: batch A built (no protocol change;
+untested).** Unlock levels 1, 4, 7 (were 1, 3, 6); Iolo's Song of Peace
+first; Sentri's Master's Strike a lunge (range 4, darting beside the pick);
+skill icons 36x36 (were 40); after any skill every skill of that character
+waits 5 seconds (was 1.5), counted down on the bar. Batches B to F (badges,
+the arrow over windows, the preview crash, Space rules, Caps Lock to run,
+the sort and take-all icons, the hold button, gavel, bucket and fountains,
+conversation choices by key) are planned in [the feedback
+round](feedback-2026-10-22.md).
+
 **Leading a companion, step 1, built 2026-10-21 (no protocol change;
 untested).** The host and a single player press Shift+Tab to lead the next
 companion (one no guest plays), with its skill bar and the Q pick; combat
@@ -96,7 +106,7 @@ to and the companion is led again after, notices when the one led falls,
 and guests see the host on the companion it leads. See [leading a
 companion](leading-companions.md) and the [test checklist](test-checklist.md).
 
-**Skill icons, built 2026-10-21 (untested in a long session).** 40x40 pictures per skill in `data/friend/skills/`, colour
+**Skill icons, built 2026-10-21 (untested in a long session).** 40x40 (36x36 since 2026-10-22) pictures per skill in `data/friend/skills/`, colour
 (transparent) and parchment, chosen on the Class System page ("Skill
 icons", each machine); the name shows in the tooltip, unusable ones are
 dimmed. Built from `scratch/class-skill-icons/` (not in the repo) with

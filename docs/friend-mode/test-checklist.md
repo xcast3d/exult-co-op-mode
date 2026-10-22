@@ -1219,6 +1219,34 @@ circles and the target arrow are drawn under backpacks and paperdolls.
 - [ ] Open a backpack over Iolo after Song of Warding: the blue shields
       and the arrow don't show through the backpack.
 
+## Feedback round, batch A (2026-10-22)
+
+Levels, Iolo's order, Sentri's lunge, smaller icons, and the 5-second wait
+after any skill. See [the feedback round](feedback-2026-10-22.md). Built,
+not tested. Class System on, no short cooldowns (they don't change the
+5-second wait).
+
+- [ ] A fresh Black Gate start (Iolo and the Avatar at level 3): Iolo's
+      bar has Song of Peace first and usable; Song of Warding says "Not
+      yet: level 4"; Battle Hymn "level 7".
+- [ ] Iolo's first two icons match their names (the peace picture on Song
+      of Peace) in both icon styles.
+- [ ] F9: every companion reaches level 7 and all three skills open.
+- [ ] Skill icons look smaller (36 pixels) and the bar's spacing and
+      tooltips still line up, in each bar position.
+- [ ] Sentri, Master's Strike on a pick 2 to 4 tiles off: he darts beside
+      it (a puff where he stood) and strikes. Beyond 4: "out of range (4
+      tiles)". With no weapon: "Needs a weapon in hand".
+- [ ] Sentri fighting under the Class AI uses Master's Strike instead of
+      never getting close enough.
+- [ ] Use any skill: every slot on the bar counts down from 5, and the
+      tooltip says "All skills: N seconds". After 5 seconds the others are
+      usable; the used one keeps its own cooldown.
+- [ ] On a guest the same countdown shows after its own skill.
+- [ ] The Class AI with F9's level 7 party against a wave: no companion
+      fires two skills within 5 seconds (host log, "Friend Class: ...
+      uses").
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".
