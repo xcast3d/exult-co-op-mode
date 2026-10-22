@@ -81,8 +81,8 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
-**Feedback round, 2026-10-22: batch A built (no protocol change;
-untested).** Unlock levels 1, 4, 7 (were 1, 3, 6); Iolo's Song of Peace
+**Feedback round, 2026-10-22: batch A built and tested (no protocol
+change).** Unlock levels 1, 4, 7 (were 1, 3, 6); Iolo's Song of Peace
 first; Sentri's Master's Strike a lunge (range 4, darting beside the pick);
 skill icons 36x36 (were 40); after any skill every skill of that character
 waits 5 seconds (was 1.5), counted down on the bar. Batches B to F (badges,
@@ -90,6 +90,12 @@ the arrow over windows, the preview crash, Space rules, Caps Lock to run,
 the sort and take-all icons, the hold button, gavel, bucket and fountains,
 conversation choices by key) are planned in [the feedback
 round](feedback-2026-10-22.md).
+
+**Batch B built and tested the same day** (then the armour badge made blue and lined up with U7's badges): the skill status icons moved from
+under people to badges on the status bar's faces (party only; foes keep
+the words over their heads); the target arrow shows over a window when the
+pick is inside it; the effect preview's crash at sprite 20 (an empty
+sprite, as is 25) is fixed in `Sprites_effect` itself.
 
 **Leading a companion, step 1, built 2026-10-21 (no protocol change;
 untested).** The host and a single player press Shift+Tab to lead the next

@@ -1213,11 +1213,12 @@ Step 4, co-op and the edges (built 2026-10-21, not tested yet):
       the host leads him; the guest's minimap dot for the host is on him.
       A guest playing Sentri shows as "Sentri", not "fighter".
 
-Status marks and windows (2026-10-21): the skill status icons, the range
-circles and the target arrow are drawn under backpacks and paperdolls.
+Status marks and windows (2026-10-21): the range circles and the target
+arrow are drawn under backpacks and paperdolls. (The status icons under
+people moved to the status bar on 2026-10-22.)
 
-- [ ] Open a backpack over Iolo after Song of Warding: the blue shields
-      and the arrow don't show through the backpack.
+- [ ] Open a backpack over Iolo after Song of Warding: the arrow on a
+      creature behind it doesn't show through the backpack.
 
 ## Feedback round, batch A (2026-10-22)
 
@@ -1246,6 +1247,29 @@ not tested. Class System on, no short cooldowns (they don't change the
 - [ ] The Class AI with F9's level 7 party against a wave: no companion
       fires two skills within 5 seconds (host log, "Friend Class: ...
       uses").
+
+## Feedback round, batch B (2026-10-22)
+
+Badges on the status bar, the arrow over windows, empty sprites. Built,
+not tested.
+
+- [ ] Battle Hymn: a green up arrow on each affected face in the status
+      bar, after U7's own badges; nothing under the people in the world.
+      It goes when the hymn ends.
+- [ ] Quick Fix (armour) or Shield Ally: a blue shield on the face.
+      Song of Warding: only U7's protected badge, no second shield.
+- [ ] Hunter's Mark, Crippling Shot, Dirty Trick, Stun Shot on a foe:
+      "*marked*", "*crippled*", "*confused*", "*stunned*" over it, and no
+      picture under it.
+- [ ] Two marks on one face (Battle Hymn and Quick Fix) sit side by side,
+      not on top of each other, and don't spill off the face.
+- [ ] On a guest the same badges show on the faces.
+- [ ] E into an open chest: the green arrow shows on the item inside the
+      window. Close it, E on the map: the arrow is under an open backpack
+      again.
+- [ ] A book open over the chest still covers the arrow.
+- [ ] Effect preview: step to sprite 20: "Sprite 20 is empty", no crash;
+      25 the same; step through every sprite to the end without a crash.
 
 ## Leaving
 

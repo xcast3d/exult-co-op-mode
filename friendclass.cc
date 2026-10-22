@@ -3062,11 +3062,13 @@ struct Circle_layers {
 std::array<Circle_layers, 4> circle_layers;
 
 /*
- *  Status icons: small pictures under whoever a timed skill is on, drawn
- *  like the target arrow (in a layer, from a few pixels), on every machine.
- *  A green up arrow for a stat boost, a blue shield for armour (and
- *  Riposte, and U7's protection), a red down arrow for a weakened or marked
- *  foe.  Emotes would clash with chat, so these are pictures.
+ *  Status badges: small pictures on the faces in Exult's status bar for a
+ *  party member a timed skill is on, on every machine (Face_stats.cc asks
+ *  Friend_class_status_marks).  A green up arrow for a stat boost, a blue
+ *  shield for armour (and Riposte, and a ward), a red down arrow for a
+ *  weakening.  Under people in the world they broke U7's look (2026-10-22);
+ *  foes get only the words over their heads ("*marked*").  U7's protection
+ *  has its own badge already.
  */
 
 enum Status_mark { mark_up = 1, mark_shield = 2, mark_down = 4 };
@@ -3109,11 +3111,13 @@ std::vector<std::pair<Game_object_weak, int>> Host_marks() {
 			add(obj.get(), mark_shield);
 		}
 	}
-	for (Actor* member : Party()) {
-		if (member->get_flag(Obj_flags::protection)) {
-			add(member, mark_shield);
-		}
-	}
+	// Party members only: they have a face to show it on.
+	found.erase(std::remove_if(found.begin(), found.end(),
+						 [](const std::pair<Game_object_weak, int>& each) {
+							 const Game_object_shared obj = each.first.lock();
+							 return !obj || !obj->get_flag(Obj_flags::in_party);
+						 }),
+				found.end());
 	return found;
 }
 
@@ -3181,114 +3185,31 @@ const char* const* Icon_rows(int mark) {
 	return mark == mark_up ? up : mark == mark_shield ? shield : down;
 }
 
-struct Icon_layer {
-	int layer = -1;
-	int mark  = 0;    // The picture it holds.
-};
-std::array<Icon_layer, 24> icon_layers;
+std::map<const Actor*, int> status_marks;    // This frame's, by actor.
 
-void Paint_marks() {
-	Game_window*  gwin = Gwin();
-	Image_window* iwin = gwin->get_win();
-	// Who shows what, on this machine.
-	std::vector<std::pair<Actor*, int>> shown;
-	if (Friend_class_active() && !gwin->is_in_exult_menu()) {
-		if (Is_guest()) {
-			for (const Guest_mark& each : guest_marks) {
-				if (Actor* actor = Friend_mode_actor_by_net_id(each.kind, each.id)) {
-					shown.emplace_back(actor, each.mark);
-				}
-			}
-		} else {
-			const auto marks = Host_marks();
-			if (Is_host()) {
-				Send_marks(marks);
-			}
-			for (const auto& [ref, mark] : marks) {
-				const Game_object_shared obj = ref.lock();
-				if (Actor* actor = obj ? obj->as_actor() : nullptr) {
-					shown.emplace_back(actor, mark);
-				}
-			}
-		}
+// Work out who shows what this frame (and, on the host, tell guests).
+void Update_marks() {
+	status_marks.clear();
+	if (!Friend_class_active()) {
+		return;
 	}
-	size_t        used         = 0;
-	// In the world: under every window (gumps start at 1 << 18, see
-	// Gump_manager), so a backpack covers them.
-	constexpr int world_mark_z = 1 << 18;
-	for (const auto& [actor, marks] : shown) {
-		if (!actor->get_chunk() || actor->is_dead()) {
-			continue;
-		}
-		int pictures[3];
-		int n = 0;
-		for (const int mark : {mark_up, mark_shield, mark_down}) {
-			if (marks & mark) {
-				pictures[n++] = mark;
+	if (Is_guest()) {
+		for (const Guest_mark& each : guest_marks) {
+			if (Actor* actor = Friend_mode_actor_by_net_id(each.kind, each.id)) {
+				status_marks[actor] |= each.mark;
 			}
 		}
-		int x;
-		int y;
-		gwin->get_shape_location(actor, x, y);
-		// A row under the feet, centred.
-		const int row_w = n * (icon_size + 1) - 1;
-		int       left  = x - c_tilesize / 2 - row_w / 2;
-		for (int i = 0; i < n && used < icon_layers.size(); ++i, ++used) {
-			Icon_layer& slot = icon_layers[used];
-			if (slot.layer < 0) {
-				slot.layer = gwin->create_layer("Skill status icon", icon_size, icon_size, 255, 0, world_mark_z - 7);
-				slot.mark  = 0;
-				if (slot.layer < 0) {
-					return;
-				}
-			}
-			if (slot.mark != pictures[i]) {
-				Image_buffer8* buf = gwin->get_layer_ibuf(slot.layer);
-				if (!buf) {
-					return;
-				}
-				Shape_manager*      sman  = Shape_manager::get_instance();
-				const unsigned char color = pictures[i] == mark_up
-													? static_cast<unsigned char>(gwin->get_pal()->find_color(15, 58, 15))
-											: pictures[i] == mark_shield ? sman->get_special_pixel(PROTECT_PIXEL)
-																		 : sman->get_special_pixel(HIT_PIXEL);
-				const char* const* rows = Icon_rows(pictures[i]);
-				buf->fill8(255);
-				for (int py = 0; py < icon_size; ++py) {
-					for (int px = 0; px < icon_size; ++px) {
-						const char c = rows[py][px];
-						if (c == 'B') {
-							buf->put_pixel8(0, px, py);
-						} else if (c == 'X') {
-							buf->put_pixel8(color, px, py);
-						}
-					}
-				}
-				gwin->layer_set_dirty(slot.layer);
-				slot.mark = pictures[i];
-			}
-			int sx0;
-			int sy0;
-			int sx1;
-			int sy1;
-			iwin->game_to_screen(left, y + 1, false, sx0, sy0);
-			iwin->game_to_screen(left + icon_size, y + 1 + icon_size, false, sx1, sy1);
-			gwin->layer_set_dest(slot.layer, sx0, sy0, sx1 - sx0, sy1 - sy0);
-			if (!iwin->layer_is_visible(slot.layer)) {
-				gwin->layer_set_visible(slot.layer, true);
-			}
-			left += icon_size + 1;
-		}
+		return;
 	}
-	bool hid = false;
-	for (size_t i = used; i < icon_layers.size(); ++i) {
-		if (icon_layers[i].layer >= 0 && iwin->layer_is_visible(icon_layers[i].layer)) {
-			gwin->layer_set_visible(icon_layers[i].layer, false);
-			hid = true;
-		}
+	const auto marks = Host_marks();
+	if (Is_host()) {
+		Send_marks(marks);
 	}
-	if (used > 0 || hid) {
-		gwin->set_painted();
+	for (const auto& [ref, mark] : marks) {
+		const Game_object_shared obj = ref.lock();
+		if (const Actor* actor = obj ? obj->as_actor() : nullptr) {
+			status_marks[actor] |= mark;
+		}
 	}
 }
 
@@ -3574,6 +3495,12 @@ public:
 		}
 		switch (mode) {
 		case Preview_mode::sprites:
+			// Some numbers are empty (Black Gate's 20 and 25).
+			if (ShapeID(num, 0, SF_SPRITES_VGA).get_num_frames() <= 0) {
+				cout << "Friend Class: preview sprite " << num << " is empty" << endl;
+				Friend_mode_class_notice("Sprite " + std::to_string(num) + " is empty");
+				return;
+			}
 			gwin->get_effects()->add_effect(std::make_unique<Sprites_effect>(num, actor, 0, 0, 0, 0));
 			break;
 		case Preview_mode::missiles: {
@@ -3904,7 +3831,7 @@ void Friend_class_frame() {
 	Update_bar();
 	Update_preview();
 	Paint_circles();
-	Paint_marks();
+	Update_marks();
 }
 
 void Friend_class_hide_overlays() {
@@ -3913,11 +3840,6 @@ void Friend_class_hide_overlays() {
 	if (the_bar) {    // Closed; play brings it back.
 		gwin->get_gump_man()->close_gump(the_bar);
 		the_bar = nullptr;
-	}
-	for (const Icon_layer& each : icon_layers) {
-		if (each.layer >= 0) {
-			gwin->layer_set_visible(each.layer, false);
-		}
 	}
 	for (const Circle_layers& each : circle_layers) {
 		for (const int layer : {each.fill, each.border}) {
@@ -3943,6 +3865,7 @@ void Friend_class_world_loaded() {
 	circles.clear();
 	sent_states.clear();
 	guest_marks.clear();
+	status_marks.clear();
 }
 
 void Friend_class_saving(bool before) {
@@ -4144,6 +4067,32 @@ void Friend_class_note_miss(Game_object* attacker, Game_object* target) {
 				Sprite_on(foe, skill->look.on_targets);
 			}
 			break;
+		}
+	}
+}
+
+int Friend_class_status_marks(const Actor* actor) {
+	const auto found = status_marks.find(actor);
+	return found == status_marks.end() ? 0 : found->second;
+}
+
+void Friend_class_paint_status_mark(int mark, int x, int y) {
+	Game_window*        gwin  = Gwin();
+	Image_buffer8*      buf   = gwin->get_win()->get_ib8();    // The current render target.
+	Shape_manager*      sman  = Shape_manager::get_instance();
+	// Blue for armour, so it isn't read as U7's white "protected" badge.
+	const unsigned char color = mark == mark_up ? static_cast<unsigned char>(gwin->get_pal()->find_color(15, 58, 15))
+								: mark == mark_shield ? static_cast<unsigned char>(gwin->get_pal()->find_color(16, 32, 63))
+													  : sman->get_special_pixel(HIT_PIXEL);
+	const char* const*  rows  = Icon_rows(mark);
+	for (int py = 0; py < icon_size; ++py) {
+		for (int px = 0; px < icon_size; ++px) {
+			const char c = rows[py][px];
+			if (c == 'B') {
+				buf->put_pixel8(0, x + px, y + py);
+			} else if (c == 'X') {
+				buf->put_pixel8(color, x + px, y + py);
+			}
 		}
 	}
 }

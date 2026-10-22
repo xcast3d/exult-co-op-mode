@@ -429,6 +429,12 @@ bool Sprites_effect::pause_while_faded(unsigned long curtime, uintptr udata) {
  */
 
 void Sprites_effect::handle_event(unsigned long curtime, uintptr udata) {
+	if (frames <= 0) {
+		// An empty sprite (Black Gate's 20 and 25): nothing to show, and
+		// stepping it would look up a frame that isn't there.
+		auto ownHandle = eman->remove_effect(this);
+		return;
+	}
 	if (pause_while_faded(curtime, udata)) {
 		return;
 	}

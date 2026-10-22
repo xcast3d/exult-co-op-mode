@@ -113,4 +113,12 @@ bool Friend_mode_guest_following();
 bool   Friend_mode_actor_net_id(const Actor* actor, int& kind, uint32& id);
 Actor* Friend_mode_actor_by_net_id(int kind, uint32 id);
 
+// Status badges for the status bar's faces (Face_stats.cc): the skill
+// marks on 'actor' this frame (bits: 1 up, 2 shield, 4 down), and one
+// painted 7x7 at (x, y) in the current render target.
+constexpr int friend_status_mark_count = 3;
+constexpr int friend_status_mark_size  = 7;
+int  Friend_class_status_marks(const Actor* actor);
+void Friend_class_paint_status_mark(int mark, int x, int y);
+
 #endif

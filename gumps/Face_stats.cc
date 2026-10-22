@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "effects.h"
 #include "exult.h"
 #include "exult_flx.h"
+#include "friendclass.h"
 #include "game.h"
 #include "gamewin.h"
 #include "party.h"
@@ -176,6 +177,7 @@ protected:
 	bool      freezing;
 	bool      hungry;
 	bool      asleep;
+	int       skill_marks;    // Friend_class_status_marks.
 
 public:
 	Portrait_button(Gump* par, int px, int py, Actor* a);
@@ -214,6 +216,7 @@ Portrait_button::Portrait_button(Gump* par, int px, int py, Actor* a)
 	freezing = actor->get_flag(Obj_flags::freeze);
 	hungry   = actor->get_property(static_cast<int>(Actor::food_level)) <= 9;
 	asleep   = actor->get_flag(Obj_flags::asleep);
+	skill_marks = Friend_class_status_marks(actor);
 
 	gwin->add_dirty(get_rect());
 }
@@ -270,7 +273,7 @@ void Portrait_button::update_widget() {
 		|| para != actor->get_flag(Obj_flags::paralyzed) || charm != actor->get_flag(Obj_flags::charmed)
 		|| curse != actor->get_flag(Obj_flags::cursed) || freezing != actor->get_flag(Obj_flags::freeze)
 		|| hungry != (actor->get_property(static_cast<int>(Actor::food_level)) <= 9)
-		|| asleep != actor->get_flag(Obj_flags::asleep)) {
+		|| asleep != actor->get_flag(Obj_flags::asleep) || skill_marks != Friend_class_status_marks(actor)) {
 		TileRect r = get_rect();
 		gwin->add_dirty(r);
 		hit      = actor->was_hit();
@@ -282,6 +285,7 @@ void Portrait_button::update_widget() {
 		freezing = actor->get_flag(Obj_flags::freeze);
 		hungry   = actor->get_property(static_cast<int>(Actor::food_level)) <= 9;
 		asleep   = actor->get_flag(Obj_flags::asleep);
+		skill_marks = Friend_class_status_marks(actor);
 		r        = get_rect();
 		gwin->add_dirty(r);
 	}
@@ -348,6 +352,27 @@ void Portrait_button::paint() {
 	}
 	if (freezing) {
 		paintBadge(FREEZING, badge++);
+	}
+	// Class System skills on them (up, shield, down), in the same row as
+	// U7's badges and after them.  U7's are drawn from a hot spot, ours from
+	// the top left, so line ours up with a badge's picture.
+	ShapeID      first(EXULT_FLX_FS_BADGES_SHP, 0, SF_EXULT_FLX);
+	Shape_frame* frame  = first.get_shape();
+	int          mark_x = badge * 6 - 8 - (frame ? frame->get_xleft() : 0);
+	const int    mark_y = 11 - (frame ? frame->get_yabove() : 0)
+					   + (frame ? (frame->get_height() - friend_status_mark_size) / 2 : 0);
+	if (badge > 0 && frame) {
+		mark_x += frame->get_width() - 6 + 1;    // Clear of the last one.
+	}
+	for (int i = 0; i < friend_status_mark_count; ++i) {
+		const int mark = 1 << i;
+		if (skill_marks & mark) {
+			int sx = mark_x;
+			int sy = mark_y;
+			local_to_screen(sx, sy);
+			Friend_class_paint_status_mark(mark, sx, sy);
+			mark_x += friend_status_mark_size + 1;
+		}
 	}
 }
 

@@ -3064,6 +3064,7 @@ void Friend_mode_combat_started() {
 static void Friend_mode_paint_target_arrow() {
 	static int    layer   = -1;
 	static int    painted = -1;    // The colors it has: combat mode, and 2 for a thing.
+	static int    z       = -1;    // Its depth now: under windows, or over them.
 	Image_window* iwin    = gwin->get_win();
 	const Game_object_shared thing  = friend_object_target.lock();
 	Game_object*             target = gwin->get_action_target();
@@ -3087,14 +3088,24 @@ static void Friend_mode_paint_target_arrow() {
 	constexpr int         aw         = 9;
 	constexpr int         ah         = 6;
 	constexpr const char* arrow[ah] = {"BBBBBBBBB", "BRRRRRRRB", ".BRRRRRB.", "..BRRRB..", "...BRB...", "....B...."};
+	// On the world: under every window (gumps start at 1 << 18), so a
+	// backpack covers it.  On a thing in a window: over the ordinary windows
+	// (each is 1 << 18 plus its place), so it shows on the window; books and
+	// dialogs (1 << 16 and 1 << 17 higher) still cover it.
+	constexpr int world_mark_z  = 1 << 18;
+	constexpr int window_mark_z = (1 << 18) + (1 << 16) - 1;
+	const int     want_z        = window ? window_mark_z : world_mark_z - 1;
 	if (layer < 0) {
-		// Under every window (gumps start at 1 << 18), over the world.
-		constexpr int world_mark_z = 1 << 18;
-		layer                      = gwin->create_layer("Target arrow", aw, ah, 255, 0, world_mark_z - 1);
-		painted                    = -1;
+		layer   = gwin->create_layer("Target arrow", aw, ah, 255, 0, want_z);
+		painted = -1;
+		z       = want_z;
 		if (layer < 0) {
 			return;
 		}
+	}
+	if (z != want_z) {
+		gwin->layer_set_z(layer, want_z);
+		z = want_z;
 	}
 	// Red in combat, white out of it; green on a thing (E).
 	const int fighting = thing && target == thing.get() ? 2 : gwin->in_combat() ? 1 : 0;
