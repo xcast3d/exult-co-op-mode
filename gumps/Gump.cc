@@ -884,11 +884,11 @@ void Container_gump::initialize(int shnum) {
 				const int    below = elem->get_y() + (check ? check->get_ybelow() : 8);
 				int          x     = left - 4;
 				if (sorts) {
-					add_elem(new Sort_button(this, x, below + 4));
+					add_elem(new Sort_button(this, x, below + 7));
 					x += icon_button_size + 2;
 				}
 				if (takes) {
-					add_elem(new Take_all_button(this, x, below + 4));
+					add_elem(new Take_all_button(this, x, below + 7));
 				}
 				break;
 			}

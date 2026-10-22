@@ -2535,10 +2535,10 @@ Skill_bar* the_bar = nullptr;
 
 constexpr int name_slot_w     = 56;    // A slot with the skill's name (two lines at most).
 constexpr int name_slot_h     = 30;
-constexpr int skill_icon_size = 36;    // A skill's picture (was 40: large on screen).
+constexpr int skill_icon_size = 24;    // A skill's picture (40, then 36: still large on screen).
 constexpr int slot_gap        = 2;
 
-// The skill pictures (data/friend/skills/): one 36x36 frame per skill, in
+// The skill pictures (data/friend/skills/): one 24x24 frame per skill, in
 // the order of Classes() (each companion's skills in bar order).  Colour
 // ones have a transparent ground; parchment ones carry their own tile.
 // Neither sits on a button.  Loaded once; a missing file means names.

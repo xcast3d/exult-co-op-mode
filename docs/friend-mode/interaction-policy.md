@@ -16,6 +16,7 @@ request a limited set of safe actions without becoming the story Avatar.
 | Buy, sell and train with merchants and trainers | Allow | Planned (Phase 7) | The conversation runs on the guest's copy only; the host carries out the purchase or training with the party's gold. |
 | General NPC conversation | Allow | Deny | Companion input must not advance story or expose quest choices. |
 | Quest decisions and story dialogue | Allow | Deny | Always attributed to the canonical Avatar. |
+| Everyday items with a script | Allow | Allow, from a list | Food, potions, bottles, torches, the pocketwatch, keys and lockpicks, the brush; since 2026-10-22 the bucket, pools of water (a drink, on the drinker) and the gavel (on anything in reach). `Friend_mode_guest_item_use` in exult.cc; a companion the host leads uses the same list. |
 | Story-critical object Usecode | Allow | Deny | Requires an explicit allowlist or classification before guests can invoke it. |
 | Attack a creature or hostile NPC | Allow | Allow | The guest picks the foe; the host runs the companion's combat schedule against it. |
 | Attack a peaceful NPC | Allow | Allow, after confirming | Decided 2026-10-20: part of the game's freedom. The guest presses or clicks again within a few seconds ("Attack Finnigan? Again to attack"); the host checks the confirmation. Guards and fights back hit the whole party, as for the Avatar. Talking stays with the Avatar. |

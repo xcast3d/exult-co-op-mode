@@ -178,6 +178,7 @@ protected:
 	bool      hungry;
 	bool      asleep;
 	int       skill_marks;    // Friend_class_status_marks.
+	int       controller;     // Friend_mode_controller_color, or -1.
 
 public:
 	Portrait_button(Gump* par, int px, int py, Actor* a);
@@ -217,6 +218,7 @@ Portrait_button::Portrait_button(Gump* par, int px, int py, Actor* a)
 	hungry   = actor->get_property(static_cast<int>(Actor::food_level)) <= 9;
 	asleep   = actor->get_flag(Obj_flags::asleep);
 	skill_marks = Friend_class_status_marks(actor);
+	controller  = Friend_mode_controller_color(actor);
 
 	gwin->add_dirty(get_rect());
 }
@@ -273,7 +275,8 @@ void Portrait_button::update_widget() {
 		|| para != actor->get_flag(Obj_flags::paralyzed) || charm != actor->get_flag(Obj_flags::charmed)
 		|| curse != actor->get_flag(Obj_flags::cursed) || freezing != actor->get_flag(Obj_flags::freeze)
 		|| hungry != (actor->get_property(static_cast<int>(Actor::food_level)) <= 9)
-		|| asleep != actor->get_flag(Obj_flags::asleep) || skill_marks != Friend_class_status_marks(actor)) {
+		|| asleep != actor->get_flag(Obj_flags::asleep) || skill_marks != Friend_class_status_marks(actor)
+		|| controller != Friend_mode_controller_color(actor)) {
 		TileRect r = get_rect();
 		gwin->add_dirty(r);
 		hit      = actor->was_hit();
@@ -286,6 +289,7 @@ void Portrait_button::update_widget() {
 		hungry   = actor->get_property(static_cast<int>(Actor::food_level)) <= 9;
 		asleep   = actor->get_flag(Obj_flags::asleep);
 		skill_marks = Friend_class_status_marks(actor);
+		controller  = Friend_mode_controller_color(actor);
 		r        = get_rect();
 		gwin->add_dirty(r);
 	}
@@ -352,6 +356,16 @@ void Portrait_button::paint() {
 	}
 	if (freezing) {
 		paintBadge(FREEZING, badge++);
+	}
+	// Friend Mode: who plays them, as a dot in that player's minimap colour
+	// beside the face's top right, clear of the hair (a black edge round it).
+	if (controller >= 0 && s) {
+		int dx = s->get_xright() - 1;
+		int dy = -s->get_yabove();
+		local_to_screen(dx, dy);
+		Image_buffer8* ib8 = gwin->get_win()->get_ib8();
+		ib8->fill8(0, 6, 6, dx, dy);
+		ib8->fill8(static_cast<unsigned char>(controller), 4, 4, dx + 1, dy + 1);
 	}
 	// Class System skills on them (up, shield, down), in the same row as
 	// U7's badges and after them.  U7's are drawn from a hot spot, ours from

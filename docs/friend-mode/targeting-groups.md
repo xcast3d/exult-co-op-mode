@@ -48,7 +48,9 @@ spindle of thread, dough, desk items, sack of wheat, jar, glass item, cannon
 ball, log saw, plate, baby, stuffed toy, alchemist's apparatus, music box,
 small orrery, orrery viewer, bucket, stone chips, diaper, artist's equipment,
 pitcher, cloth, kitchen items, thumbscrews, test tubes, pieces of wood, pot,
-bee stinger, tongs, horseshoe, plant, haystack.
+bee stinger, tongs, horseshoe, plant, haystack. Also the pool of water
+(893, Black Gate's fountains): it can't be picked up, but E offers it within
+6 tiles while decor is on, and Space drinks (2026-10-22).
 
 ## Borderline, for review
 

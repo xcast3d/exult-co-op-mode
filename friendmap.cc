@@ -109,6 +109,7 @@ void paint_dot(Image_buffer8* buffer, int x, int y, int color) {
 // The map has its own layer, sized by Exult's HUD scale (Game Engine's UI
 // options), so it stays the same size on screen whatever the game area's
 // resolution; drawn in the game view, a big game area made it tiny.
+constexpr int minimap_layer_z = -3;    // Under a conversation's layers (-1, 0).
 int  map_layer = -1;
 bool map_shown = false;
 int  map_bottom = -1;    // Where the minimap ends on screen, while shown.
@@ -118,7 +119,7 @@ int         button_layer = -1;
 bool        button_shown = false;
 std::string button_drawn;               // The label it has.
 int         button_rect[4] = {0, 0, 0, 0};    // On screen: x, y, w, h.
-constexpr int button_w = 36;            // Game pixels, before the HUD's scale.
+constexpr int button_w = 46;            // Game pixels, before the HUD's scale ("Take over" fits).
 constexpr int button_h = 13;
 
 void hide_corner_map() {
@@ -144,8 +145,7 @@ void hide_button() {
 void paint_button(const std::string& label) {
 	Game_window* gwin = Game_window::get_instance();
 	if (button_layer < 0) {
-		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As the map.
-		button_layer = gwin->create_layer("Hold button", button_w, button_h, 255, 0, text_layer_z - 2);
+		button_layer = gwin->create_layer("Hold button", button_w, button_h, 255, 0, minimap_layer_z);    // As the map.
 		if (button_layer < 0) {
 			return;
 		}
@@ -209,8 +209,9 @@ void paint_corner_map(const std::vector<Friend_map_dot>& dots) {
 	constexpr int span = 12 * cells;    // 12 chunks across, a pixel per cell.
 	constexpr int size = span + 2;      // With a black edge.
 	if (map_layer < 0) {
-		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As effects.cc's text.
-		map_layer                  = gwin->create_layer("Corner minimap", size, size, 255, 0, text_layer_z - 2);
+		// Over the world, under conversations (their layers are -1 and 0)
+		// and windows.
+		map_layer = gwin->create_layer("Corner minimap", size, size, 255, 0, minimap_layer_z);
 		if (map_layer < 0) {
 			return;
 		}

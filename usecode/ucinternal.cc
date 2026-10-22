@@ -508,6 +508,11 @@ Game_object* Usecode_internal::get_item(const Usecode_value& itemref) {
 	}
 	Game_object* obj = nullptr;
 	if (val == -356) {    // Avatar.
+		// Friend Mode: a companion a guest (or the host, leading it) uses
+		// an item with stands in for the Avatar in that item's script.
+		if (Actor* walker = Friend_mode_usecode_walker()) {
+			return walker;
+		}
 		return gwin->get_main_actor();
 	} else if (val < -356 && val > -360) {    // Special cases.
 		return nullptr;
@@ -1524,7 +1529,11 @@ bool Usecode_internal::path_run_usecode(
 		return res;
 	}
 	// Walk there and execute.
-	auto* action = new If_else_path_actor_action(npc, dest, new Usecode_actor_action(usefun, obj, eventval.get_int_value()));
+	// Friend Mode: a companion walking for a guest stays the one the script
+	// runs for when it arrives (Usecode_actor_action).
+	Actor* walker = Friend_mode_usecode_walker() == npc ? npc : nullptr;
+	auto*  action = new If_else_path_actor_action(
+            npc, dest, new Usecode_actor_action(usefun, obj, eventval.get_int_value(), walker));
 	if (companions) {
 		action->set_get_party();
 	}
@@ -1534,7 +1543,7 @@ bool Usecode_internal::path_run_usecode(
 		// SI usecode because the script developers assumed that the failure
 		// event could be overriden by UI_set_path_failure. Most of the time,
 		// they just use this value anyway so nothing is lost.
-		action->set_failure(new Usecode_actor_action(usefun, obj, Usecode_machine::si_path_fail));
+		action->set_failure(new Usecode_actor_action(usefun, obj, Usecode_machine::si_path_fail, walker));
 	}
 	npc->set_action(action);    // Get into time queue.
 	npc->start(gwin->get_std_delay(), 0);
@@ -1776,6 +1785,13 @@ int Usecode_internal::get_user_choice_num() {
 		const bool result = Get_click(x, y, Mouse::hand, &chr, false, conv, true);
 		if (!result) {    // ESC pressed, select 'bye' if poss.
 			choice_num = conv->locate_answer("bye");
+		} else if (chr == 'e' || chr == 'E') {
+			// Friend Mode (2026-10-22): E and Shift+E move a highlight through
+			// the choices and Space picks it, so E no longer picks the 14th.
+			conv->move_highlight(chr == 'E' ? -1 : 1);
+			choice_num = -1;
+		} else if (chr == ' ') {
+			choice_num = conv->get_highlight();    // -1 (none yet): wait on.
 		} else if (chr) {       // key pressed
 			choice_num = -1;    // invalid key
 			if (std::isalnum(static_cast<unsigned char>(chr))) {

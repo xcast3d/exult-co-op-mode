@@ -1101,6 +1101,7 @@ USECODE_INTRINSIC(click_on_item) {
 	//   clicks on an item.  Rets. item.
 	Game_object* obj;
 	Tile_coord   t;
+	bool         friend_ask = true;    // Friend_mode_walker_click.
 
 	// intercept this click?
 	if (intercept_item) {
@@ -1131,6 +1132,14 @@ USECODE_INTRINSIC(click_on_item) {
 		// it is used.
 		obj = caller_item.get();
 		t   = obj->get_tile();
+	} else if (Game_object* picked = Friend_mode_usecode_walker() ? Friend_mode_walker_click(
+															   Friend_mode_usecode_walker(), friend_ask)
+																   : nullptr) {
+		// Friend Mode: the target a guest picked for its companion's item.
+		obj = picked;
+		t   = obj->get_tile();
+	} else if (!friend_ask) {
+		return Usecode_value(0);    // A guest's companion: never the host's click.
 	} else {
 		int x;
 		int y;    // Allow dragging while here:

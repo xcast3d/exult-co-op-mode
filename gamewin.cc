@@ -1372,6 +1372,22 @@ bool Game_window::release_friend_mode_control() {
  * host refuses its moves meanwhile, and frees it only if it dies or leaves
  * the party.
  */
+// A script has 'actor' in hand: in_usecode_control, but not counting the
+// scripts of an item it is using itself (a bucket it fills, led by the
+// host), which were made for it (Usecode_script::get_friend_walker).
+static bool Friend_story_controls(const Actor* actor) {
+	if (actor->get_flag(Obj_flags::dont_render) || actor->get_flag(Obj_flags::dont_move)) {
+		return true;
+	}
+	Usecode_script* scr = nullptr;
+	while ((scr = Usecode_script::find_active(actor, scr)) != nullptr) {
+		if (!scr->is_no_halt() && scr->get_friend_walker() != actor) {
+			return true;
+		}
+	}
+	return false;
+}
+
 void Game_window::enforce_friend_mode_control_safety() {
 	Actor* current = get_controlled_actor();
 	if (!current || current == main_actor) {
@@ -1379,7 +1395,7 @@ void Game_window::enforce_friend_mode_control_safety() {
 	}
 	const bool incapacitated = current->get_flag(Obj_flags::asleep) || current->get_flag(Obj_flags::paralyzed);
 	if ((!network_friend_control
-		 && (main_actor_dont_move() || main_actor->in_usecode_control() || current->in_usecode_control()
+		 && (main_actor_dont_move() || main_actor->in_usecode_control() || Friend_story_controls(current)
 			 || incapacitated))
 		|| !current->is_in_party() || current->is_dead()) {
 		release_friend_mode_control();
@@ -2966,7 +2982,7 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 	if (controlled && controlled != main_actor && network_friend_control) {
 		// Food, potions, keys and lockpicks: the host runs them for us.
 		const Friend_item_use item_use = clicked_actor ? Friend_item_use::none
-													   : Friend_mode_guest_item_use(obj->get_shapenum());
+													   : Friend_mode_guest_item_use(obj->get_shapenum(), obj->get_framenum());
 		if (item_use != Friend_item_use::none) {
 			Actor* holder = obj->get_outermost()->as_actor();
 			if (holder && holder != controlled) {
@@ -3036,12 +3052,27 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 			effects->add_text("Locked", obj);    // A key or lockpick opens it.
 			return;
 		}
-		if (!clicked_actor
-			&& (Friend_mode_guest_item_use(shape) != Friend_item_use::none || Friend_mode_guest_local_shape(shape))) {
-			// Food, potions, keys and lockpicks; signs, books and the like.
+		const Friend_item_use lead_use
+				= clicked_actor ? Friend_item_use::none : Friend_mode_guest_item_use(shape, obj->get_framenum());
+		if (!clicked_actor && (lead_use != Friend_item_use::none || Friend_mode_guest_local_shape(shape))) {
+			// Food, potions, keys and lockpicks, the gavel, the bucket and
+			// pools of water; signs, books and the like.  What a guest uses
+			// on itself is used by the one led (a drink from a pool).
 			effects->remove_text_effects();
 			usecode->init_conversation();
+			if (lead_use == Friend_item_use::on_self) {
+				usecode->intercept_click_on_item(controlled);
+			}
+			// The one led stands in for the Avatar in the item's script
+			// (walks to the well, fills the bucket).
+			Actor* const before = lead_use != Friend_item_use::none ? Friend_mode_set_usecode_walker(controlled) : nullptr;
 			obj->activate();
+			if (lead_use != Friend_item_use::none) {
+				Friend_mode_set_usecode_walker(before);
+			}
+			if (lead_use == Friend_item_use::on_self) {
+				usecode->intercept_click_on_item(nullptr);    // In case it went unused.
+			}
 			return;
 		}
 		// Merchants and trainers talk to the companion, as to a guest's.

@@ -760,6 +760,31 @@ static int Friend_player_color(int player) {
 
 static std::string Friend_mode_hold_button_label();
 
+int Friend_mode_controller_color(const Actor* actor) {
+	if (!actor || !Friend_mode_in_session()) {
+		return -1;
+	}
+	const int npc_num = actor->get_npc_num();
+	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
+		for (const auto& [player, entry] : friend_players) {
+			if (entry.actor >= 0 && entry.actor == npc_num) {
+				return Friend_player_color(player);
+			}
+		}
+		return -1;
+	}
+	const Actor* led = Friend_mode_led_companion();
+	if (actor == (led ? led : static_cast<const Actor*>(gwin->get_main_actor()))) {
+		return Friend_player_color(Friend_mode_session::host_player);
+	}
+	for (const auto& [player, guest] : friend_guests) {
+		if (guest.actor >= 0 && guest.actor == npc_num) {
+			return Friend_player_color(player);
+		}
+	}
+	return -1;
+}
+
 // Where every player is, for the corner minimap: the Avatar, and each
 // player's companion (just the Avatar in single player).
 static void Friend_mode_paint_maps() {
@@ -911,6 +936,28 @@ static Actor* friend_usecode_walker = nullptr;
 
 Actor* Friend_mode_usecode_walker() {
 	return friend_usecode_walker;
+}
+
+// Host: a guest's item target its script didn't use at once (the bucket
+// asks after a pause), kept for that companion's next click for a while.
+static Game_object_weak friend_walker_click_target;
+static Game_object_weak friend_walker_click_actor;
+static uint32           friend_walker_click_until = 0;
+
+Game_object* Friend_mode_walker_click(Actor* walker, bool& ask) {
+	ask = !walker || !gwin->is_remote_friend(walker);
+	const Game_object_shared target = friend_walker_click_target.lock();
+	if (!target || friend_walker_click_actor.lock().get() != walker || SDL_GetTicks() > friend_walker_click_until) {
+		return nullptr;
+	}
+	friend_walker_click_target.reset();
+	return target.get();
+}
+
+Actor* Friend_mode_set_usecode_walker(Actor* actor) {
+	Actor* before         = friend_usecode_walker;
+	friend_usecode_walker = actor;
+	return before;
 }
 
 Actor* Friend_mode_led_companion() {
@@ -2452,7 +2499,7 @@ bool Friend_mode_guest_local_shape(int shape) {
 	}
 }
 
-Friend_item_use Friend_mode_guest_item_use(int shape) {
+Friend_item_use Friend_mode_guest_item_use(int shape, int frame) {
 	if (!GAME_BG) {
 		return Friend_item_use::none;    // Serpent Isle shapes not reviewed yet.
 	}
@@ -2473,6 +2520,17 @@ Friend_item_use Friend_mode_guest_item_use(int shape) {
 	case 823:    // Artist's equipment: the brush paints (two clicks, see
 				 // Friend_mode_guest_use_item); the pigments only get a remark.
 		return Friend_item_use::on_self;
+	// Added 2026-10-22 (docs/friend-mode/feedback-2026-10-22.md, E1, E2);
+	// scripts read with tools/friend-mode/ucread.py, no story flags.
+	case 810:    // Bucket: walks to it, then a later step asks where to
+				 // fill or empty it: the guest picks that first.
+		return Friend_item_use::on_anything;
+	case 893:    // Pool of water (fountains): acts on whoever drinks, by its
+				 // quality (cures, heals, hurts, light...); the drinker is us.
+		return Friend_item_use::on_self;
+	case 675:    // Desk items: only the gavel (frame 0), which strikes what
+				 // is clicked ("Hey, that hurt!").
+		return frame == 0 ? Friend_item_use::on_anything : Friend_item_use::none;
 	default:
 		return Friend_item_use::none;
 	}
@@ -2501,11 +2559,12 @@ bool Friend_mode_guest_use_item(Game_object* item) {
 		}
 		return true;
 	}
-	switch (Friend_mode_guest_item_use(item->get_shapenum())) {
+	switch (Friend_mode_guest_item_use(item->get_shapenum(), item->get_framenum())) {
 	case Friend_item_use::on_self:
 		Friend_mode_request_item_use(item, own);
 		return true;
 	case Friend_item_use::on_target:
+	case Friend_item_use::on_anything:
 		if (Game_object* target = Friend_mode_pick_item_target()) {
 			Friend_mode_request_item_use(item, target);
 		}
@@ -2583,7 +2642,7 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 	if (pos < data.size() && (!Friend_read_path(data, pos, second, tile) || !second)) {
 		return refuse("second target not found");
 	}
-	const Friend_item_use use = Friend_mode_guest_item_use(item->get_shapenum());
+	const Friend_item_use use = Friend_mode_guest_item_use(item->get_shapenum(), item->get_framenum());
 	if (use == Friend_item_use::none) {
 		return refuse("item not allowed");
 	}
@@ -2604,6 +2663,12 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 		if (target != actor) {
 			return refuse("food and potions are for the guest's own companion");
 		}
+	} else if (use == Friend_item_use::on_anything) {
+		// The gavel: U7 sets no reach on what it strikes; keep it near.
+		const Game_object* outer = target->get_outermost();
+		if (target != actor && (outer->get_map() != actor->get_map() || actor->distance(outer) > 8)) {
+			return refuse("target out of reach");
+		}
 	} else if (target->as_actor() || !(target->get_info().is_door() || target->as_container())) {
 		return refuse("keys and lockpicks work on doors and chests");
 	} else if (!Friend_guest_may_touch(actor, target)) {
@@ -2617,6 +2682,12 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 		usecode->queue_click_on_item(second);
 	}
 	item->activate();
+	if (usecode->get_intercept_click_on_item() == target) {
+		// Unused yet: a later step of the item's script asks (the bucket).
+		friend_walker_click_target = weak_from_obj(target);
+		friend_walker_click_actor  = weak_from_obj(actor);
+		friend_walker_click_until  = SDL_GetTicks() + 10000;
+	}
 	usecode->intercept_click_on_item(nullptr);    // In case it went unused.
 	friend_usecode_walker = nullptr;
 	gwin->set_all_dirty();
@@ -2880,7 +2951,26 @@ static bool Friend_cycle_moved(const Actor* own) {
 	return moved;
 }
 
-// Who Q can pick: on screen, in range; party members out of combat (last).
+// Under a roof that is being drawn: inside a building while we are
+// outside it (or in another one), where the roof hides it, so it can't be
+// seen to be clicked on.  Exult skips drawing roofs at and above the lift
+// of the roof over the one it follows (get_render_skip_lift).  Dungeons'
+// ceilings work differently: never hidden there.
+static bool Friend_is_hidden_by_roof(const Game_object* obj) {
+	if (!obj || gwin->is_in_dungeon()) {
+		return false;
+	}
+	const Game_object* outer = obj->get_outermost();
+	Map_chunk*         chunk = outer->get_chunk();
+	if (!chunk) {
+		return false;
+	}
+	chunk->setup_cache();
+	return chunk->is_roof(outer->get_tx(), outer->get_ty(), outer->get_lift()) < gwin->get_render_skip_lift();
+}
+
+// Who Q can pick: on screen, in range, not hidden under a roof; party
+// members out of combat (last).
 static std::vector<Actor*> Friend_target_candidates(Actor* own) {
 	Actor_vector nearby;
 	own->find_nearby_actors(nearby, c_any_shapenum, friend_attack_max_tiles);
@@ -2888,7 +2978,7 @@ static std::vector<Actor*> Friend_target_candidates(Actor* own) {
 	std::vector<Actor*> foes;
 	for (Actor* actor : nearby) {
 		const Tile_coord at = actor->get_tile();
-		if (Friend_is_pickable(own, actor) && view.has_point(at.tx, at.ty)) {
+		if (Friend_is_pickable(own, actor) && view.has_point(at.tx, at.ty) && !Friend_is_hidden_by_roof(actor)) {
 			foes.push_back(actor);
 		}
 	}
@@ -3425,8 +3515,9 @@ static bool Friend_is_readable(const Game_object* obj) {
 }
 
 // Something on the map that Space uses rather than takes (Shift+Space
-// takes it): what can be read, the gavel and the bucket, and the guests'
-// harmless ones (a telescope, a sundial).  A list, not every script: food
+// takes it): what can be read, the gavel, the bucket, pools of water
+// (fountains: a drink), and the guests' harmless ones (a telescope, a
+// sundial).  A list, not every script: food
 // or a gem on a merchant's table is taken, never eaten or "used".
 static bool Friend_is_usable_thing(const Game_object* obj) {
 	if (!GAME_BG) {
@@ -3437,7 +3528,7 @@ static bool Friend_is_usable_thing(const Game_object* obj) {
 		return false;    // Gold: taken (its script is the coin toss).
 	}
 	return Friend_is_readable(obj) || (shape == 675 && obj->get_framenum() == 0)    // Gavel (a desk item).
-		   || shape == 810                                                          // Bucket.
+		   || shape == 810 || shape == 893                                          // Bucket, pool of water.
 		   || Friend_mode_guest_local_shape(shape) || Friend_mode_guest_usable_shape(shape);
 }
 
@@ -3570,6 +3661,11 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	}
 	if (gwin->network_input_blocked() || !gwin->main_actor_can_act()) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
+		return true;
+	}
+	// Picked outside, then went indoors: the roof hides it now.
+	if (Friend_is_hidden_by_roof(thing ? thing.get() : target)) {
+		Friend_mode_target_notice("Can't see " + (thing ? Friend_thing_name(thing.get()) : Friend_target_name(target)));
 		return true;
 	}
 	if (!thing) {
@@ -3721,7 +3817,8 @@ static std::string Friend_space_hint() {
 		return two(take, "Take all", some);
 	}
 	if (Friend_is_usable_thing(obj)) {
-		return two(Friend_is_readable(obj) ? "Read" : "Use", obj->is_dragable() ? take : "");
+		const char* what = Friend_is_readable(obj) ? "Read" : obj->get_shapenum() == 893 ? "Drink" : "Use";
+		return two(what, obj->is_dragable() ? take : "");
 	}
 	switch (Friend_thing_group_of(obj)) {
 	case Friend_thing_group::box:
@@ -3783,10 +3880,12 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		const Friend_thing_group group = Friend_thing_group_of(obj);
 		// Containers, bodies and signs within reach; the rest near one's
 		// feet: things one can pick up, and doors, lamps and levers to use.
-		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::lever;
+		// Pools of water (fountains) are decor that can't be picked up.
+		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::lever
+							 || (GAME_BG && obj->get_shapenum() == 893);
 		const bool near    = (obj->is_dragable() || fixture) && from.distance(at) <= loose_tiles;
 		const bool far     = group == Friend_thing_group::box || group == Friend_thing_group::sign;
-		if (Friend_thing_group_on(group) && (far || near)
+		if (Friend_thing_group_on(group) && (far || near) && !Friend_is_hidden_by_roof(obj)
 			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5
 			&& (cheat.in_hack_mover() || Fast_pathfinder_client::is_grabable(own, obj))) {
 			things.push_back(obj);
@@ -5814,6 +5913,7 @@ bool Friend_mode_open_to_coop() {
 
 static bool friend_world_reloaded = false;    // Host loaded a save.
 static bool friend_picker_requested = false;    // Guest pressed Tab; roster on its way.
+static bool friend_cycle_requested = false;    // Guest: Shift+Tab waits for the host's list.
 static bool friend_spectate_requested = false;    // Guest chose Spectate itself.
 // Guest spectating: the player companion the view follows (X cycles), or
 // -1 for the Avatar.
@@ -8877,6 +8977,28 @@ static void Handle_events() {
 			if (guest_close_at != 0 && SDL_GetTicks() >= guest_close_at) {
 				quitting_time = QUIT_TIME_YES;
 			}
+			// Shift+Tab: the next companion in the host's list after ours
+			// (the list is ours and the free ones, in party order).
+			if (friend_cycle_requested && !gwin->is_network_dialogue_paused() && friend_session.take_roster_update()) {
+				friend_cycle_requested           = false;
+				const std::vector<uint32>& roster = friend_session.party_roster();
+				const auto                 mine   = std::find(roster.begin(), roster.end(),
+                                                    static_cast<uint32>(guest_assigned_actor));
+				uint32                     next   = 0;
+				bool                       found  = false;
+				if (mine == roster.end()) {
+					found = !roster.empty();    // Spectating: the first free one.
+					next  = found ? roster.front() : 0;
+				} else if (roster.size() > 1) {
+					found = true;
+					next  = std::next(mine) == roster.end() ? roster.front() : *std::next(mine);
+				}
+				if (found) {
+					friend_session.request_actor(next);
+				} else {
+					Friend_mode_notice("No other companion is free");
+				}
+			}
 			// The picker waits out a host conversation (a companion can leave
 			// the party in one).
 			if (friend_picker_requested && !gwin->is_network_dialogue_paused()
@@ -9574,6 +9696,25 @@ static bool Friend_mode_chat_event(SDL_Event& event) {
  */
 
 static void Handle_event(SDL_Event& event) {
+	// A guest during the Avatar's conversation: E and Shift+E move a
+	// highlight through the choices, Space suggests it (as a click does).
+	if (Friend_mode_is_guest() && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && !friend_chat_active
+		&& gwin->is_network_dialogue_paused()
+		&& (event.key.scancode == SDL_SCANCODE_E || event.key.scancode == SDL_SCANCODE_SPACE)
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
+		Conversation* conversation = gwin->get_usecode()->get_conversation();
+		if (conversation && conversation->choices_shown()) {
+			if (event.key.scancode == SDL_SCANCODE_E) {
+				conversation->move_highlight((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);
+			} else {
+				const int choice = conversation->get_highlight();
+				if (choice >= 0 && choice < conversation->get_num_answers()) {
+					friend_session.send_suggestion(friend_session.local_player(), conversation->get_answer(choice));
+				}
+			}
+			return;
+		}
+	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_Q
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
 		&& !Notebook_gump::get_instance()) {
@@ -9631,6 +9772,21 @@ static void Handle_event(SDL_Event& event) {
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
 		friend_chat_log_hidden = !friend_chat_log_hidden;    // L: hide or show the chat log.
 		Friend_mode_notice(friend_chat_log_hidden ? "Chat Log Disabled" : "Chat Log Enabled");
+		return;
+	}
+	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN
+		&& event.key.key == SDLK_TAB && (event.key.mod & SDL_KMOD_SHIFT) && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
+		// Shift+Tab on a guest: the next free companion (never the Avatar,
+		// another player's, or the one the host leads).  Asks the host for
+		// what is free now; the main loop takes the answer.
+		if (gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		} else if (!friend_cycle_requested && !friend_picker_requested) {
+			friend_cycle_requested = true;
+			friend_session.take_roster_update();    // Wait for the fresh list.
+			friend_session.send_blob(Friend_mode_session::Blob_kind::roster_request, {1});
+		}
 		return;
 	}
 	if (!Friend_mode_is_guest() && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN

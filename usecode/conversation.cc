@@ -836,16 +836,19 @@ void Conversation::show_avatar_choices(int num_choices, char** choices) {
 		char text[256];
 		text[0] = 127;    // A circle.
 		strcpy(&text[1], choices[i]);
+		// The highlighted one (E) in white, over any suggestion's colour.
 		const auto suggested = suggestions.find(choices[i]);
-		if (suggested == suggestions.end()) {
+		if (suggested == suggestions.end() && i != highlight) {
 			sman->paint_text(0, text, conv_choices[i].x, conv_choices[i].y);
 			continue;
 		}
-		const Palette* pal = gwin->get_pal();
-		unsigned char  recolor[256];
+		const Palette*      pal   = gwin->get_pal();
+		const unsigned char color = i == highlight ? static_cast<unsigned char>(pal->find_color(63, 63, 63))
+												   : suggested->second;
+		unsigned char       recolor[256];
 		for (int c = 0; c < 256; ++c) {
 			const bool body = pal->get_red(c) > 35 && pal->get_green(c) > 35 && pal->get_blue(c) < 30;
-			recolor[c]      = body ? suggested->second : static_cast<unsigned char>(c);
+			recolor[c]      = body ? color : static_cast<unsigned char>(c);
 		}
 		sman->get_font(0)->paint_text(nullptr, text, conv_choices[i].x, conv_choices[i].y, recolor);
 	}
@@ -880,6 +883,20 @@ void Conversation::build_avatar_choices() {
 void Conversation::show_avatar_choices() {
 	Friend_mode_note_dialogue_choices(answers);
 	choices_active = true;
+	highlight      = -1;    // A new set of choices.
+	repaint_conversation();
+}
+
+void Conversation::move_highlight(int by) {
+	const int count = static_cast<int>(answers.size());
+	if (!choices_active || count == 0) {
+		return;
+	}
+	if (highlight < 0 || highlight >= count) {
+		highlight = by > 0 ? 0 : count - 1;
+	} else {
+		highlight = ((highlight + by) % count + count) % count;
+	}
 	repaint_conversation();
 }
 
@@ -899,6 +916,7 @@ void Conversation::clear_avatar_choices() {
 	Friend_mode_note_dialogue_clear_choices();
 	suggestions.clear();
 	choices_active = false;
+	highlight      = -1;
 	avatar_face.w  = 0;
 	repaint_conversation();    // Repaint the faces without the choices.
 }
@@ -909,6 +927,7 @@ void Conversation::show_remote_choices(const std::vector<std::string>& choices) 
 		add_answer(choice.c_str());
 	}
 	choices_active = true;
+	highlight      = -1;
 	repaint_conversation();
 }
 

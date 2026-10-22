@@ -47,6 +47,7 @@ class Usecode_script : public Time_sensitive {
 	bool                   must_finish;     // 1 to finish before deleting.
 	bool                   killed_barks;    // 1 to prevent barks from showing.
 	int                    delay;           // Used for restoring.
+	Game_object_weak       friend_walker;    // Friend Mode: the companion it runs for.
 	// For restore:
 	Usecode_script(Game_object* item, Usecode_value* cd, int findex, int nhalt, int del);
 
@@ -87,6 +88,12 @@ public:
 
 	int get_length() {
 		return cnt;
+	}
+
+	// Friend Mode: the companion a guest or the host's lead used an item
+	// with, when the script was made (Friend_mode_usecode_walker), or null.
+	Game_object* get_friend_walker() const {
+		return friend_walker.lock().get();
 	}
 
 	// Find for given item.

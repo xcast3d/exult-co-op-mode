@@ -306,7 +306,7 @@ later, once the first set has been played.
 | Julia | Tinker (combat engineer) | **Set Trap** (1, 30 s): caltrops at her feet, 2 tiles round, for 5 s; hostiles in them lose 3 health a second, never the party. **Quick Fix** (4, 60 s): +5 armour on the weakest ally within 4, for 30 s. **Flashbang** (7, 60 s): thrown up to 12; hostiles within 5 of where it lands are stunned for 2.5 s. |
 | Katrina | Shepherd (gentle support) | **Summon Dogs** (1, 60 s): two of her sheepdogs fight for 30 s. **Summon Wolf** (4, 60 s): a wolf fights for her for 30 s. **Summon Bee** (7, 90 s): a giant bee fights for her for 30 s. |
 
-Changed 2026-10-22 (feedback round): unlock levels 1, 4, 7 (Iolo and the
+Changed 2026-10-22 (feedback round): skill icons 24x24; unlock levels 1, 4, 7 (Iolo and the
 Avatar start at level 3, so the second skill was open from the start); Iolo's
 Song of Peace first, Song of Warding second; Master's Strike a lunge (range
 4, `dashing`), since U7's melee often stood a tile off and refused it; the

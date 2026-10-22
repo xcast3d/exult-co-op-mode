@@ -275,9 +275,10 @@ class Usecode_actor_action : public Actor_action {
 	int              fun;     // Fun. #.
 	Game_object_weak item;    // Call it on this item.
 	int              eventid;
+	Game_object_weak walker;    // Friend Mode: the companion it runs for.
 
 public:
-	Usecode_actor_action(int f, Game_object* i, int ev);
+	Usecode_actor_action(int f, Game_object* i, int ev, Actor* friend_walker = nullptr);
 	// Handle time event.
 	int handle_event(Actor* actor) override;
 };

@@ -96,6 +96,10 @@ void Friend_mode_request_main_menu();
 bool Friend_mode_is_guest();
 // Hosting or joined: a co-op session is on.
 bool Friend_mode_in_session();
+// The palette colour of the player controlling 'actor' (their minimap dot),
+// or -1: the host's character (the Avatar, or the companion it leads) and
+// each guest's companion, during a co-op session.  For the status bar.
+int Friend_mode_controller_color(const Actor* actor);
 // Gump_manager: the first of Exult's menus opened, or the last closed.
 void Friend_mode_modal_menu(bool open);
 // Host: a saved game was loaded, so guests need the new world.
@@ -118,6 +122,15 @@ bool Friend_mode_guest_usable_shape(int shape);
 // Host: while using an object for a guest, the guest's companion (not the
 // Avatar) walks to it for scripts that path the Avatar there first.
 Actor* Friend_mode_usecode_walker();
+// Set (or clear, with null) the companion a script runs for; returns the
+// one before, to put back.  While set, scripts asking for the Avatar (-356)
+// get it instead, so it is the one who walks, fills a bucket or drinks.
+Actor* Friend_mode_set_usecode_walker(Actor* actor);
+// Host: a script running for 'walker' asks for a click.  The target a guest
+// picked, if still waiting (a bucket asks after a pause), else null; 'ask'
+// is set false when the host must not be asked instead (a guest's
+// companion: the click isn't the host's to give).
+Game_object* Friend_mode_walker_click(Actor* walker, bool& ask);
 // The host or a single player leading a companion (Shift+Tab, see
 // docs/friend-mode/leading-companions.md): that companion, or null while
 // the Avatar is played.
@@ -141,10 +154,12 @@ bool Friend_mode_lead_talk_to_merchant(Actor* npc);
 bool Friend_mode_is_held(const Actor* actor);
 // Guest: ask the host to use a door or other guest-usable object.
 void Friend_mode_request_object_use(Game_object* object);
-// Items guests may use: food and potions on their own companion, keys and
-// lockpicks on a door or chest they pick.
-enum class Friend_item_use { none, on_self, on_target };
-Friend_item_use Friend_mode_guest_item_use(int shape);
+// Items guests may use: food, potions, the bucket and pools of water on
+// their own companion; keys and lockpicks on a door or chest they pick; the
+// gavel on anything in reach.  'frame' matters for some shapes (the gavel
+// is one frame of the desk items); -1 when not known.
+enum class Friend_item_use { none, on_self, on_target, on_anything };
+Friend_item_use Friend_mode_guest_item_use(int shape, int frame = -1);
 // Read-only objects (signs, books, map, telescope...): a guest uses them on
 // its own copy of the world, and only the guest sees the result.
 bool Friend_mode_guest_local_shape(int shape);

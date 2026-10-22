@@ -726,7 +726,8 @@ int Activate_actor_action::handle_event(Actor* actor) {
 /**
  *  Create usecode action.
  */
-Usecode_actor_action::Usecode_actor_action(int f, Game_object* i, int ev) : fun(f), item(weak_from_obj(i)), eventid(ev) {}
+Usecode_actor_action::Usecode_actor_action(int f, Game_object* i, int ev, Actor* friend_walker)
+		: fun(f), item(weak_from_obj(i)), eventid(ev), walker(weak_from_obj(friend_walker)) {}
 
 /**
  *  Handle a time event.
@@ -739,7 +740,13 @@ int Usecode_actor_action::handle_event(Actor* actor) {
 	Game_window*             gwin     = Game_window::get_instance();
 	const Game_object_shared item_ptr = item.lock();
 	if (item_ptr) {
+		// Friend Mode: still the companion's script once it has walked there.
+		const Game_object_shared walker_ptr = walker.lock();
+		Actor* const             before = walker_ptr ? Friend_mode_set_usecode_walker(walker_ptr->as_actor()) : nullptr;
 		gwin->get_usecode()->call_usecode(fun, item_ptr.get(), static_cast<Usecode_machine::Usecode_events>(eventid));
+		if (walker_ptr) {
+			Friend_mode_set_usecode_walker(before);
+		}
 		gwin->set_all_dirty();    // Clean up screen.
 	}
 	return 0;    // That's all.

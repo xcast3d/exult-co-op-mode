@@ -107,6 +107,24 @@ Follow button under the minimap (or in the corner), the same as Y; the
 minimap and enemy health bars moved to Game Display, with a Small / Large
 minimap.
 
+**Batch E built the same day (tested on the host; guests not yet):** guests and a led companion can
+use the bucket, the gavel and pools of water (Black Gate's fountains; E
+offers them with decor on, Space drinks); the window icons a little lower,
+the hold button wider, skill icons 24x24.
+
+**Batch F built the same day (tested on the host; guests not yet):** in conversations E and Shift+E
+move a white highlight through the choices and Space picks it; on a guest
+watching the Avatar talk, Space suggests the highlighted choice. E no
+longer picks the 14th choice.
+
+**Fixes after that, same day (host tested; guests not yet):** a companion
+stands in for the Avatar in the item scripts it runs (the bucket, walks
+and the scripts they schedule), so a guest or a led companion fills the
+bucket itself; the gavel reaches 8 tiles; Shift+Tab on a guest takes the
+next free companion; a dot in each player's minimap colour on the face of
+the character they play; the minimap and hold button under conversations;
+Q, E and Space skip people and things hidden under a roof.
+
 **Leading a companion, step 1, built 2026-10-21 (no protocol change;
 untested).** The host and a single player press Shift+Tab to lead the next
 companion (one no guest plays), with its skill bar and the Q pick; combat
@@ -130,7 +148,7 @@ dimmed. Built from `scratch/class-skill-icons/` (not in the repo) with
 `data/friend/skills/CREDITS.txt`. Installed with the game: `Makefile.mingw`
 (`install`, `debug`, and so the GitHub Windows build), the macOS bundle
 (`macosx/macosx.am`) and `make install` (`data/Makefile.am`) copy the
-folder to `data/friend/skills/`.
+folder to `data/friend/skills/`. Since 2026-10-22 they are 24x24.
 
 **Pauses in co-op, built 2026-10-20 (no protocol change; untested).**
 Only the host pauses the game. In co-op, windows (backpacks, paperdolls)

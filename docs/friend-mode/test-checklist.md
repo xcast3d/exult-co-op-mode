@@ -1342,6 +1342,79 @@ Options:
 - [ ] Large: the minimap is half as big again, the dots in the right
       places, the button under it.
 
+## Feedback round, batch E (2026-10-22)
+
+Built, not tested. Target System → decor on for the pool.
+
+- [ ] A guest double-clicks a bucket (in its pack or on the ground): the
+      script runs on the host for the companion (it walks if it needs to);
+      fills at a well or trough, empties.
+- [ ] A guest double-clicks the gavel (a desk item): crosshair; on a
+      person in reach "Hey, that hurt!"; out of reach the host refuses
+      (host log "target out of reach"). Other desk items (inkwell, quill)
+      still say "The Avatar must do this".
+- [ ] A guest at a pool of water (a fountain in Britain): E offers it,
+      the hint says "Drink (Space)", Space: the companion drinks, and the
+      effect (if the pool has one) lands on the companion, not the Avatar.
+- [ ] The host leading Shamino: the same three work for him; Space at the
+      pool makes Shamino drink without a crosshair; food from his pack
+      feeds him.
+- [ ] Leading a companion: a merchant talks to the companion ("buy"
+      works with the party's gold); another person says "The Avatar must
+      do this".
+- [ ] The Sort and Take all icons sit a little lower, clear of the
+      checkmark.
+- [ ] The hold button fits "Follow" and, on a guest, "Take over".
+- [ ] Skill icons are 24 pixels; tooltips and the bar's spacing still
+      line up in every bar position, in both icon styles.
+
+## Feedback round, batch F (2026-10-22)
+
+Conversation choices by key. Built, not tested.
+
+- [ ] Host, talking to anyone: E highlights the first choice in white;
+      E again the next, round the end; Shift+E back. Space picks it.
+- [ ] Space before any E does nothing; 1-9 and clicks still pick.
+- [ ] Each new set of choices starts with nothing highlighted.
+- [ ] A long list (Lord British): E steps through all of them.
+- [ ] With the chat line open, E and Space type into it.
+- [ ] A guest during the Avatar's conversation: E highlights on the
+      guest's screen only; Space suggests it (its colour on every screen,
+      "Marc suggests: ..." in the log), as a click does.
+- [ ] A guest at a merchant: E and Space pick its own choices.
+
+## Feedback round, after E and F (2026-10-22)
+
+Built, not tested.
+
+- [ ] A guest uses the bucket: a crosshair first (pick the well or
+      trough); its companion walks and fills it, not the Avatar, and the
+      host gets no crosshair. Again on someone: empties it on them.
+- [ ] Leading Iolo, the bucket from his pack: crosshair, click the well:
+      Iolo walks and fills it, and you stay leading Iolo.
+- [ ] Leading Iolo, a story scene that takes him over still hands control
+      back to the Avatar.
+- [ ] The Avatar's own bucket, food and doors still work as before when
+      nobody is led.
+- [ ] A guest's gavel on a person a few tiles off: "Hey, that hurt!" over
+      them on both screens. Beyond 8 tiles: refused (host log).
+- [ ] A guest presses Shift+Tab: switches to the next free companion
+      ("Marc switches to Shamino"); skips the Avatar, the other guest's and
+      the one the host leads; with none free, "No other companion is free".
+      A spectating guest takes the first free one.
+- [ ] Status bar faces: a dot in the host's colour on the Avatar (or on
+      the companion the host leads), and in each guest's colour on its
+      companion, on host and guests alike; it moves when someone switches.
+      None in single player.
+- [ ] Minimap on, talk to someone: the conversation draws over the
+      minimap and the hold button. A backpack over the minimap covers it.
+- [ ] Standing outside a shop: Q doesn't offer the shopkeeper inside; walk
+      in, Q offers them. From inside, Q doesn't offer people out in the
+      street under another roof, but does offer those in the open.
+- [ ] Pick someone outside, they walk indoors: Space says "Can't see ...".
+- [ ] E outside doesn't offer a chest inside a building.
+- [ ] In a dungeon Q still offers everyone on screen.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".

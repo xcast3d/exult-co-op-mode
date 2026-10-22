@@ -70,6 +70,9 @@ changed without a rebuild.
    suggestion (`Conversation::suggest_choice`, a choice in a palette
    color), in a color of its own. The same keys work on the keyboard:
    Q/E move it and Space picks, so conversations need no mouse either.
+   Keyboard part built 2026-10-22 (`Conversation::move_highlight`, white;
+   E and Shift+E, Space; nothing highlighted until the first E). A
+   controller only has to send those keys.
    Guests watching the Avatar's conversation use the same highlight to
    pick their suggestion: A sends it (the "Suggest a reply" message).
 4. **NPC text that waits for a click** ("click to continue") takes A as a

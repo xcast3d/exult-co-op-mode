@@ -51,6 +51,7 @@ private:
 	std::deque<std::vector<std::string>> answer_stack;
 	// Friend Mode: choices a guest suggested, drawn in that player's color.
 	std::map<std::string, unsigned char> suggestions;
+	int highlight = -1;    // Friend Mode: the choice E moved to, or -1.
 
 public:
 	inline int get_num_answers() const {
@@ -79,6 +80,12 @@ public:
 	bool suggest_choice(const std::string& choice, unsigned char color);
 	bool choices_shown() const {
 		return choices_active;
+	}
+	// Friend Mode: E and Shift+E move a highlight through the choices (round
+	// the ends; the first E takes the first); Space picks it.  -1: none.
+	void move_highlight(int by);
+	int  get_highlight() const {
+		return highlight;
 	}
 	int  conversation_choice(int x, int y);
 

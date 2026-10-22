@@ -73,7 +73,8 @@ Usecode_script::Usecode_script(
 		Usecode_value* cd    // May be nullptr for empty script.
 		)
 		: next(nullptr), prev(nullptr), obj(weak_from_obj(o)), code(cd), cnt(0), i(0), frame_index(0), started(false),
-		  no_halt(false), must_finish(false), killed_barks(false), delay(0) {
+		  no_halt(false), must_finish(false), killed_barks(false), delay(0),
+		  friend_walker(weak_from_obj(Friend_mode_usecode_walker())) {
 	if (!code) {    // Empty?
 		code = new Usecode_value(0, nullptr);
 	} else {
@@ -316,7 +317,14 @@ void Usecode_script::handle_event(
 		cout << "Executing script (" << i << ":" << cnt << ") for " << o << ", time: " << curtime << endl;
 	}
 #endif
-	const int delay = exec(usecode, false);
+	// Friend Mode: still the companion's when it runs (a bucket's later
+	// steps, scheduled by its first).
+	const Game_object_shared walker = friend_walker.lock();
+	Actor* const             before = walker ? Friend_mode_set_usecode_walker(walker->as_actor()) : nullptr;
+	const int                delay  = exec(usecode, false);
+	if (walker) {
+		Friend_mode_set_usecode_walker(before);
+	}
 	if (i < cnt) {    // More to do?
 		Usecode_internal::gwin->get_tqueue()->add(curtime + delay, this, udata);
 		return;
