@@ -18,7 +18,7 @@ Mode, and tick off what you tried. Black Gate only for now.
    (for example Iolo or Spark), and stand somewhere open.
 4. Press **Ctrl+F9** on the host to place the object test kit (doors,
    chests, keys, teleporters) around the Avatar. (**F9** alone gathers the
-   first group of companions for the Class System, **F8** the second; **Shift+F9** places test creatures.) The host
+   first group of companions for the Class System, **F8** the second; **Shift+F9** places a fight, two each of troll, headless and skeleton; **Shift+F8** a rat, a wolf and a rabbit.) The host
    shows "Friend Mode test kit placed".
    - **Do this before the guest joins.** Objects created after a guest joins
      are not synced yet, but the kit is part of the world the guest downloads.
@@ -251,7 +251,7 @@ the first request and the second person's drag snaps back.
 
 - [ ] Guest joins near some animals or monsters: each one on the guest is in
       the same place as on the host, and they move the same way.
-- [ ] Host presses **Shift+F9**: a rat, a wolf and a rabbit appear near the
+- [ ] Host presses **Shift+F8**: a rat, a wolf and a rabbit appear near the
       Avatar on both screens.
 - [ ] The creatures walk around: the guest sees each one move the way it does
       on the host (no creature moving in another's place).
@@ -345,7 +345,7 @@ Best in Trinsic near the start of the game (the stables).
 
 ## Combat
 
-Shift+F9 on the host gives a rat, a wolf and a rabbit to fight.
+Shift+F8 on the host gives a rat, a wolf and a rabbit to fight (Shift+F9 a harder fight).
 
 - [ ] Guest presses C: the guest is in combat mode; the guest's view of the
       Avatar doesn't start fighting on its own.
@@ -1058,7 +1058,7 @@ Class AI (companions nobody plays, host):
 
 - [ ] Single player, Class System on, Jaana in the party: someone below
       half health nearby, and she uses Greater Heal by herself; someone
-      poisoned near her (level 3+), Restoration; two below half (level 6),
+      poisoned near her (level 3+), Mass Cure; two below half (level 6),
       Mending Circle.
 - [ ] Iolo sings Song of Warding when two or more hostiles are near in a
       fight; Shamino volleys at two or more.
@@ -1492,6 +1492,41 @@ Built, not tested.
       Restoration and "In Vas Mani" for Mending Circle, over her head and
       in the chat log, on host and guest.
 - [x] Her second skill is named Restoration on the bar and in its tooltip.
+
+## Skill changes 2026-10-23, second round: reach and choosing
+
+- [x] Jaana's bar: Greater Heal, Mass Cure, Restoration (names and
+      tooltips); she says "Vas Mani", "Vas An Nox", "Vas Mani Hur".
+- [x] Mass Cure cures a poisoned companion across the screen; Restoration
+      heals everyone hurt, however far; neither shows a circle.
+- [x] Song of Warding and Battle Hymn reach the whole party, no circle.
+- [x] Greater Heal, Lay on Hands, Quick Fix: no crosshair; the most hurt
+      (Quick Fix: the weakest) in the whole party, however far.
+- [x] Host out of combat, Q on a party member, then Greater Heal: that one
+      is healed; at full health: "<name> isn't hurt".
+- [x] Shield Ally: no crosshair; the ally within 6 a foe is on is shielded
+      (badge), and blows on them land on Dupre while he is within 6 tiles.
+- [x] No Q pick: Aimed Shot, Stun Shot, Sleep Arrow, Master's Strike show
+      the crosshair; click a hostile: the skill lands on it; a party member:
+      "Not a foe"; the ground: "No target"; Escape: nothing used.
+- [x] With a Q pick: no crosshair, as before.
+- [x] Class System page: "Skills on a foe: Ask" (default). Set Auto: with
+      no Q pick, Aimed Shot or Stun Shot lands on the companion's foe or
+      the nearest hostile, no crosshair; with none in range, "No hostile in
+      range". Kept after a restart; a guest's own setting.
+- [x] Hunter's Mark with Auto (and the Class AI): with Shift+F8's rat and
+      a troll in range, the troll is marked. The same for Sleep Arrow,
+      Crippling Shot and Master's Strike (within 4).
+- [x] Flashbang with Auto: thrown at the foe with the most hostiles within
+      5 of it, not the nearest lone one.
+- [x] Shift+F9: two trolls, two headless and two skeletons appear north-east
+      of the Avatar, hostile; "Test creatures placed". Shift+F8: a rat, a
+      wolf and a rabbit.
+- [x] Song of Peace, Volley, Challenge still use their ranges; circles
+      only for Song of Peace, Dirty Trick, Challenge and Set Trap.
+- [x] All of the above on a guest, and for a companion the host leads.
+- [x] The Class AI (nobody playing Jaana or Dupre) still heals the most
+      hurt and shields on its own.
 
 ## Leaving
 

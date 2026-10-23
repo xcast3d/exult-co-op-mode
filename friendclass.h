@@ -26,6 +26,7 @@ extern bool Friend_class_show_ranges;      // Circles for shown ranges (on).
 extern int  Friend_class_icon_style;       // Friend_class_icons (parchment).
 extern bool Friend_class_ai;               // Companions nobody plays use skills (on).
 extern bool Friend_class_require_items;    // Skills need the class item (off).
+extern bool Friend_class_auto_foe;         // A skill on one foe with no pick chooses (off: the crosshair).
 
 enum Friend_class_bar_place {
 	friend_bar_above_status = 0,

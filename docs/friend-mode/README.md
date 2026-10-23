@@ -30,9 +30,10 @@ To play with someone outside your network, see [internet play](internet-play.md)
 for Windows, the [Windows build plan](windows-build.md).
 For a repeatable two-player pass, use the [test checklist](test-checklist.md);
 On the host, **Ctrl+F9** places a test kit of usable objects around the
-Avatar, **F9** gathers the companions into the party (levelled for the
-Class System, with reagents and a full spellbook), **Shift+F9** places test
-creatures.
+Avatar, **F9** and **F8** gather two groups of companions into the party
+(levelled for the Class System, with reagents and a full spellbook),
+**Shift+F9** places a fight (two each of troll, headless and skeleton) and
+**Shift+F8** a rat, a wolf and a rabbit.
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md). The Target System's item groups are in
 [targeting groups](targeting-groups.md); a gamepad plan in [controller
@@ -99,8 +100,15 @@ F9 (Iolo, Shamino, Dupre, Jaana, Spark) and F8 (Sentri, Julia, Katrina,
 Tseramed), at most seven; gathering leaves alone the companions players
 have (a guest's one fought the follow AI). Then skill changes (tested): bow skills
 reach 24 tiles (past the bow's own 20), Spark's sling keeps 16; Jaana says
-words of power (Vas Mani, Vas Mani Hur, In Vas Mani) and Purify is now
-Restoration.
+words of power. Second round (tested): Jaana's are Greater Heal, Mass
+Cure and Restoration (U7's spells, whole party); party buffs reach the
+whole party with no range; skills on one ally (Greater Heal, Lay on Hands,
+Quick Fix, Shield Ally within 6) choose by need from the whole party; with
+no Q pick, skills on one foe ask with the crosshair, or choose for
+themselves with the Class System page's "Skills on a foe: Auto" (Hunter's
+Mark, Sleep Arrow, Crippling Shot and Master's Strike the strongest foe,
+Flashbang the biggest group). Shift+F9 places a fight (two each of troll,
+headless and skeleton); the old rat, wolf and rabbit are Shift+F8.
 
 **Feedback round, 2026-10-22: batch A built and tested (no protocol
 change).** Unlock levels 1, 4, 7 (were 1, 3, 6); Iolo's Song of Peace
@@ -214,7 +222,8 @@ yet** (built remotely; it compiles). See "Class System" in the
   for `Spellbook_object::do_spell` (the spell bar's pick answers the
   crosshair).
 - **Game menu → Class System:** Enable (off), Skill bar position (above the
-  status bar, four corners), Show skill ranges, Class AI, Require class
+  status bar, four corners), Show skill ranges, Skills on a foe (Ask /
+  Auto, 2026-10-23), Class AI, Require class
   items (off; no items exist yet).
 - **Skill bar** for a guest's companion; **spell bar** for the Avatar
   (Great Heal, Fire Blast, Lightning). Mouse only so far.
@@ -1042,8 +1051,8 @@ a second, so a creature lost to the guest's own map unloading comes back.
 Moves go out as creature states by ID, only when a creature moved or changed
 frame. Monster eggs do nothing on the guest; the host's eggs make the
 creatures (and items, which item sync shares). Health and combat are still
-the host's alone (Phase 5). **Shift+F9** on the host places a rat, a wolf and
-a rabbit near the Avatar.
+the host's alone (Phase 5). **Shift+F8** on the host places a rat, a wolf and
+a rabbit near the Avatar (Shift+F9 until 2026-10-23; it is a fight now).
 
 ### Clock and weather
 

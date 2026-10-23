@@ -658,7 +658,7 @@ through Emscripten.
 Two or three skills per companion, from the class they had in Ultima IV,
 so a guest playing one as their "main" has more to do in a fight than let
 it swing: Iolo's songs (Battle Hymn, Song of Warding, Song of Peace),
-Shamino's Volley at the three nearest hostiles, Jaana's Mending Circle and
+Shamino's Volley at the three nearest hostiles, Jaana's Mass Cure and
 Restoration, Dupre's Challenge, Spark's sling tricks. A small skill bar for
 guests, about one skill per fight (cooldowns), and each companion's skills
 unlocked by an item of their own found in their home (Iolo's lute).

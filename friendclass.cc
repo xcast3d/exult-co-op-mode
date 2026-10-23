@@ -75,6 +75,7 @@ bool Friend_class_show_ranges   = true;
 int  Friend_class_icon_style    = friend_icons_parchment;
 bool Friend_class_ai            = true;
 bool Friend_class_require_items = false;
+bool Friend_class_auto_foe      = false;
 
 namespace {
 
@@ -193,6 +194,8 @@ struct Class_skill {
 	int          hits        = 1;     // 'bomb': how many blasts each hostile takes; 'summon': how many come.
 	int          summon_shape = -1;   // 'summon': the creature's shape.
 	bool         dash         = false;    // Volley: dart beside each target before striking it.
+	bool         strongest    = false;    // On one foe, chosen for itself: the strongest in range, not the nearest.
+	bool         densest      = false;    // Thrown, chosen for itself: the foe with the most hostiles within 'blast'.
 	const char*  reaction     = nullptr;    // Over each foe it lands on ("*stunned*"); null: by effect.
 	Skill_look   look;
 	const char*  words = "";    // Over the user.
@@ -300,6 +303,16 @@ struct Class_skill {
 	// turn, so it reaches foes beyond its weapon.
 	Class_skill& dashing() {
 		dash = true;
+		return *this;
+	}
+
+	Class_skill& strongest_foe() {
+		strongest = true;
+		return *this;
+	}
+
+	Class_skill& densest_foe() {
+		densest = true;
 		return *this;
 	}
 
@@ -514,21 +527,21 @@ const std::vector<Companion_class>& Classes() {
 							 .on_targets(sprite_music)
 							 .says("*plays a song of peace*"),
 					 Class_skill(11, "Song of Warding")
-							 .describe("Protection for the party in the circle")
+							 .describe("Protection for the whole party")
 							 .icon_spell(spell_protect_all)
 							 .kind(T::support)
-							 .aim(G::party_area, 12, true)
+							 .aim(G::party_area)
 							 .unlock(level_second)
 							 .set_flag(Obj_flags::protection)
 							 .targets(2)
 							 .on_targets(sprite_music)
 							 .says("*sings a song of warding*"),
 					 Class_skill(10, "Battle Hymn")
-							 .describe("The party nearby hits harder and has more health")
+							 .describe("The whole party hits harder and has more health")
 							 .recharge(90)
 							 .icon_spell(spell_mass_might)
 							 .kind(T::support)
-							 .aim(G::party_area, 12, true)
+							 .aim(G::party_area)
 							 .unlock(level_third)
 							 .bonus(3, 30000)
 							 .targets(3)
@@ -574,36 +587,38 @@ const std::vector<Companion_class>& Classes() {
 			 -1,
 			 "Jaana's Staff",
 			 {
-					 // A full heal on one: the most hurt in range.
+					 // A full heal on one: the most hurt in the party.
 					 Class_skill(33, "Greater Heal")
-							 .describe("Heals the most hurt nearby fully")
+							 .describe("Fully heals the most hurt in the party")
 							 .recharge(30)
 							 .icon_spell(spell_great_heal)
 							 .kind(T::heal)
-							 .aim(G::hurt_party, 12)
+							 .aim(G::hurt_party)
 							 .heal(255)    // Capped at strength: a full heal.
 							 .on_targets(sprite_sparkles)
 							 .says("Vas Mani"),    // Her skills say U7's words of power, as she casts.
-					 Class_skill(31, "Restoration")    // Was Purify.
-							 .describe("Cures poison, paralysis and curses nearby")
+					 // U7's spells, the whole party as theirs do (2026-10-23: Mass
+					 // Cure was Purify, Restoration was Mending Circle).
+					 Class_skill(31, "Mass Cure")
+							 .describe("Cures poison, paralysis and curses on the whole party")
 							 .icon_spell(spell_mass_cure)
 							 .kind(T::cure)
-							 .aim(G::party_area, 12, true)
+							 .aim(G::party_area)
 							 .unlock(level_second)
 							 .cure()
 							 .on_targets(sprite_bubbles)
-							 .says("Vas Mani Hur"),    // U7's Restoration.
-					 Class_skill(30, "Mending Circle")
-							 .describe("Heals everyone in the circle")
+							 .says("Vas An Nox"),
+					 Class_skill(30, "Restoration")
+							 .describe("Heals the whole party")
 							 .recharge(90)
 							 .icon_spell(spell_restoration)
 							 .kind(T::heal)
-							 .aim(G::party_area, 12, true)
+							 .aim(G::party_area)
 							 .unlock(level_third)
 							 .heal(20)
 							 .targets(2)
 							 .on_targets(sprite_sparkles)
-							 .says("In Vas Mani"),    // No U7 spell: "In" as in the field spells.
+							 .says("Vas Mani Hur"),
 			 }},
 			{"Dupre",
 			 "Paladin",
@@ -612,21 +627,22 @@ const std::vector<Companion_class>& Classes() {
 			 "Dupre's Shield",
 			 {
 					 Class_skill(41, "Lay on Hands")
-							 .describe("A big heal on the most hurt nearby")
+							 .describe("A big heal on the most hurt in the party")
 							 .recharge(30)
 							 .icon_spell(spell_heal)
 							 .kind(T::heal)
-							 .aim(G::hurt_party, 3)
+							 .aim(G::hurt_party)
 							 .heal(25)
 							 .on_targets(sprite_sparkles)
 							 .says("*lays on hands*"),
-					 // Blows on the ward land on Dupre while he stays in range
-					 // (the Class AI keeps him there) with a shield readied.
+					 // Blows on the ward land on Dupre while he stays within
+					 // 'guard_reach' (the Class AI keeps him there) with a shield
+					 // readied.
 					 Class_skill(43, "Shield Ally")
 							 .describe("Takes the melee blows meant for an ally")
 							 .icon_spell(spell_protection)
 							 .kind(T::support)
-							 .aim(G::ward, 6, true)
+							 .aim(G::ward, 6)    // Allies within his reach of them (guard_reach).
 							 .unlock(level_second)
 							 .guard(15000)
 							 .on_targets(sprite_barrier)
@@ -705,6 +721,7 @@ const std::vector<Companion_class>& Classes() {
 							 .kind(T::attack)
 							 .aim(G::pick, 4)
 							 .unlock(level_second)
+							 .strongest_foe()    // Its armour piercing counts most on the toughest.
 							 .volley(6, 2000)
 							 .dashing()
 							 .pierce_armor(6)
@@ -737,6 +754,7 @@ const std::vector<Companion_class>& Classes() {
 							 .icon_spell(spell_sleep)
 							 .kind(T::control)
 							 .aim(G::pick, bow_range)
+							 .strongest_foe()    // Take the biggest threat out of the fight.
 							 .volley()
 							 .then_hinder(Obj_flags::asleep, 5000)
 							 .says("*nocks a sleeping arrow*"),
@@ -748,6 +766,7 @@ const std::vector<Companion_class>& Classes() {
 							 .kind(T::control)
 							 .aim(G::pick, bow_range)
 							 .unlock(level_second)
+							 .strongest_foe()    // Wasted on what dies in two hits.
 							 .volley()
 							 .then_weaken(Actor::dexterity, -10, 10000)
 							 .on_targets(sprite_burst_arrow)
@@ -759,6 +778,7 @@ const std::vector<Companion_class>& Classes() {
 							 .kind(T::attack)
 							 .aim(G::pick, bow_range)
 							 .unlock(level_third)
+							 .strongest_foe()    // Marking the nearest rat wastes it.
 							 .mark(4, 20000)
 							 .on_targets(sprite_purple)
 							 .says("*marks the quarry*"),
@@ -781,10 +801,10 @@ const std::vector<Companion_class>& Classes() {
 							 .says("*scatters caltrops*"),
 					 // One ally, a strong boost.
 					 Class_skill(80, "Quick Fix")
-							 .describe("Much more armour for the weakest ally nearby")
+							 .describe("Much more armour for the weakest ally")
 							 .icon_spell(spell_protect)
 							 .kind(T::support)
-							 .aim(G::ally, 4)
+							 .aim(G::ally)
 							 .unlock(level_second)
 							 .armor(5, 30000)
 							 .targets(1)
@@ -796,6 +816,7 @@ const std::vector<Companion_class>& Classes() {
 							 .kind(T::control)
 							 .aim(G::pick, 12)
 							 .unlock(level_third)
+							 .densest_foe()    // Where the most hostiles stand together.
 							 .flash(5, Obj_flags::paralyzed, 2500)
 							 .missile(shape_powder_keg)
 							 .on_targets(sprite_fireworks)
@@ -965,6 +986,7 @@ struct Timed_guard {
 	uint32           until;
 };
 std::vector<Timed_guard> guards;    // Host: Shield Ally.
+constexpr int            guard_reach = 6;    // Tiles: how far Dupre may be from his ward.
 
 // Host: a Riposte's answer being struck now (it always hits).
 bool               riposte_striking = false;
@@ -1052,14 +1074,62 @@ std::vector<Actor*> Party() {
 	return party;
 }
 
+// 'range' 0: the whole party, wherever it stands (party buffs, 2026-10-23).
 std::vector<Actor*> Party_in_range(const Actor* user, int range) {
 	std::vector<Actor*> found;
 	for (Actor* member : Party()) {
-		if (member->get_map() == user->get_map() && user->distance(member) <= range) {
+		if (member->get_map() == user->get_map() && (range <= 0 || user->distance(member) <= range)) {
 			found.push_back(member);
 		}
 	}
 	return found;
+}
+
+// A skill on one party member, chosen by need unless a player picked one
+// with Q (Greater Heal, Lay on Hands, Shield Ally, Quick Fix).
+bool Is_one_ally(const Class_skill& skill) {
+	return skill.target == Skill_target::hurt_party || skill.target == Skill_target::ally
+		   || skill.target == Skill_target::ward;
+}
+
+std::vector<Actor*> Hostiles(const Actor* user, int range);
+
+std::vector<Actor*> Hostiles_near(const Actor* user, const Tile_coord& spot, int radius);
+
+// A skill on one foe choosing for itself (the Class AI, or "Skills on a
+// foe: Auto"): the strongest hostile in range for skills that say so
+// (Hunter's Mark, Sleep Arrow, Crippling Shot, Master's Strike: the most
+// health at full, then now), the one with the most hostiles round it for a
+// thrown one (Flashbang: within its blast; the nearest of equals), else the
+// user's own foe, then the nearest.  Null if none.
+Actor* Auto_foe(Actor* user, const Class_skill& skill) {
+	std::vector<Actor*> near = Hostiles(user, skill.range);
+	if (near.empty()) {
+		return nullptr;
+	}
+	if (skill.strongest) {
+		return *std::max_element(near.begin(), near.end(), [](const Actor* a, const Actor* b) {
+			return Max_health(a) != Max_health(b) ? Max_health(a) < Max_health(b) : Health(a) < Health(b);
+		});
+	}
+	if (skill.densest) {
+		Actor*      best  = nullptr;
+		std::size_t most  = 0;
+		for (Actor* each : near) {    // Nearest first, so ties keep the nearest.
+			const std::size_t around = Hostiles_near(user, each->get_tile(), skill.blast).size();
+			if (around > most) {
+				best = each;
+				most = around;
+			}
+		}
+		return best ? best : near.front();
+	}
+	Game_object* target = user->get_target();
+	Actor*       foe    = target ? target->as_actor() : nullptr;
+	if (foe && Friend_mode_is_hostile(user, foe) && user->distance(foe) <= skill.range) {
+		return foe;
+	}
+	return near.front();
 }
 
 // Hostiles within 'range' of the user, nearest first.
@@ -1126,8 +1196,25 @@ bool May_use(const Actor* user, const Companion_class& cls, const Class_skill& s
 	return true;
 }
 
+// The party member a player picked with Q for a skill on one ally
+// (carried in 'chosen_pick'), or null: the skill chooses by need.  'others': not the user (Shield Ally).
+Actor* Chosen_member(const Actor* user, bool others) {
+	const Game_object_shared chosen = chosen_pick.lock();
+	Actor*                   member = chosen ? chosen->as_actor() : nullptr;
+	if (!member || (others && member == user)) {
+		return nullptr;
+	}
+	const std::vector<Actor*> party = Party();
+	return std::find(party.begin(), party.end(), member) != party.end() ? member : nullptr;
+}
+
 // Who the skill would touch now.
 std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
+	if (Is_one_ally(skill)) {
+		if (Actor* member = Chosen_member(user, skill.target == Skill_target::ward)) {
+			return {member};
+		}
+	}
 	switch (skill.target) {
 	case Skill_target::self:
 		return {user};
@@ -1197,16 +1284,10 @@ std::vector<Actor*> Targets(Actor* user, const Class_skill& skill) {
 			}
 			return {};
 		}
-		Game_object* target = user->get_target();
-		Actor*       foe    = target ? target->as_actor() : nullptr;
-		if (foe && Friend_mode_is_hostile(user, foe) && user->distance(foe) <= skill.range) {
+		if (Actor* foe = Auto_foe(user, skill)) {
 			return {foe};
 		}
-		std::vector<Actor*> near = Hostiles(user, skill.range);
-		if (near.empty()) {
-			return {};
-		}
-		return {near.front()};
+		return {};
 	}
 	case Skill_target::hostiles_nearest: {
 		std::vector<Actor*> near = Hostiles(user, skill.range);
@@ -1408,7 +1489,11 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 	if (targets.empty()) {
 		switch (skill.type) {
 		case Skill_type::heal:
-			why = "Nobody needs healing";
+			if (const Actor* member = Is_one_ally(skill) ? Chosen_member(user, false) : nullptr) {
+				why = member->get_npc_name() + " isn't hurt";
+			} else {
+				why = "Nobody needs healing";
+			}
 			break;
 		case Skill_type::cure:
 			why = "Nobody needs curing";
@@ -1734,7 +1819,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 								 return each.guardian.lock().get() == user;
 							 }),
 					 guards.end());
-		guards.push_back({weak_from_obj(targets.front()), weak_from_obj(user), skill.range,
+		guards.push_back({weak_from_obj(targets.front()), weak_from_obj(user), guard_reach,
 						  Now() + static_cast<uint32>(skill.duration_ms)});
 		done = 1;
 		break;
@@ -2500,15 +2585,46 @@ void Use_slot(const Bar_slot& slot, int index) {
 		return;
 	}
 	Actor* engage = nullptr;    // A pick to fight after the skill, as Space would.
+	Actor* chosen = nullptr;    // The party member a skill on one ally is for.
 	if (Offensive(*skill)) {
 		Actor* pick = gwin->get_action_target();
 		if (pick && (pick->is_in_party() || pick == gwin->get_main_actor())) {
 			pick = nullptr;
 		}
+		// A skill on one foe with nothing picked (no Q): "Skills on a foe"
+		// Auto chooses as the Class AI does (the strongest, for Hunter's
+		// Mark); Ask (the default) brings up the crosshair, as a spell does
+		// (2026-10-23; it always took the nearest hostile).
+		if (!pick && skill->target == Skill_target::pick && Friend_class_auto_foe) {
+			pick = Auto_foe(actor, *skill);
+			if (!pick) {
+				Friend_mode_class_notice("No hostile in range");
+				return;
+			}
+		} else if (!pick && skill->target == Skill_target::pick) {
+			Game_object* clicked = Friend_mode_pick_item_target();
+			pick                 = clicked ? clicked->as_actor() : nullptr;
+			const std::vector<Actor*> party = Party();
+			if (!pick || pick->is_dead() || std::find(party.begin(), party.end(), pick) != party.end()) {
+				Friend_mode_class_notice(clicked ? std::string("Not a foe") : std::string("No target"));
+				return;
+			}
+		}
 		if (!Ready_to_fight(actor, pick, skill->name, index)) {
 			return;
 		}
 		engage = pick;
+	} else if (Is_one_ally(*skill)) {
+		// A skill on one party member chooses by need (the most hurt, the
+		// one a foe is on), as the Class AI does; no crosshair (decided
+		// 2026-10-23).  A party member picked with Q (the host, out of
+		// combat) is taken instead.
+		Actor*                    pick  = gwin->get_action_target();
+		const std::vector<Actor*> party = Party();
+		if (pick && std::find(party.begin(), party.end(), pick) != party.end()
+			&& !(skill->target == Skill_target::ward && pick == actor)) {
+			chosen = pick;
+		}
 	}
 	if (Is_guest()) {
 		// The skill, and the Target System's pick (kind 2: none).
@@ -2516,7 +2632,8 @@ void Use_slot(const Bar_slot& slot, int index) {
 											  static_cast<unsigned char>(skill->id >> 8)};
 		int    kind = 2;
 		uint32 id   = 0;
-		if (!Friend_mode_actor_net_id(gwin->get_action_target(), kind, id)) {
+		Actor* aim  = chosen ? chosen : engage ? engage : gwin->get_action_target();
+		if (!Friend_mode_actor_net_id(aim, kind, id)) {
 			kind = 2;
 		}
 		request.push_back(static_cast<unsigned char>(kind));
@@ -2534,7 +2651,7 @@ void Use_slot(const Bar_slot& slot, int index) {
 	}
 	// The Target System's pick, as a guest's skill carries it (a peaceful
 	// one only once confirmed above).
-	chosen_pick     = weak_from_obj(engage);
+	chosen_pick     = weak_from_obj(chosen ? chosen : engage);
 	chosen_peaceful = engage && !Friend_mode_is_hostile(actor, engage);
 	const bool done = Perform(actor, *cls, *skill, why);
 	chosen_pick.reset();
@@ -3628,7 +3745,7 @@ void Update_preview() {
 class Class_options_gump : public Modal_gump {
 	// "Require class items" is kept in the config but off the page until
 	// there are items (a story question, decided later).
-	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_ai, set_count };
+	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_foe, set_ai, set_count };
 
 	enum button_ids { id_ok, id_cancel, id_preview, id_first_setting, id_count = id_first_setting + set_count };
 
@@ -3637,7 +3754,7 @@ class Class_options_gump : public Modal_gump {
 
 	static const char* label(int setting) {
 		static const char* const labels[set_count]
-				= {"Enable:", "Skill bar:", "Skill icons:", "Show skill ranges:", "Class AI:"};
+				= {"Enable:", "Skill bar:", "Skill icons:", "Show skill ranges:", "Skills on a foe:", "Class AI:"};
 		return labels[setting];
 	}
 
@@ -3672,7 +3789,7 @@ public:
 	Class_options_gump() : Modal_gump(nullptr, -1) {
 		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 3)), -1);
 		settings = {Friend_class_enabled ? 1 : 0, Friend_class_bar_position, Friend_class_icon_style - friend_icons_colour,
-					Friend_class_show_ranges ? 1 : 0, Friend_class_ai ? 1 : 0};
+					Friend_class_show_ranges ? 1 : 0, Friend_class_auto_foe ? 1 : 0, Friend_class_ai ? 1 : 0};
 		buttons[id_ok]     = std::make_unique<Button>(this, &Class_options_gump::close, GumpStrings::OK(), 25,
                                                   yForRow(set_count + 2), 50);
 		buttons[id_cancel] = std::make_unique<Button>(this, &Class_options_gump::cancel, GumpStrings::CANCEL(), 75,
@@ -3685,12 +3802,15 @@ public:
 		// While both styles are being compared (2026-10-21); one may go.
 		// The page's choice is the style less one (names aren't offered).
 		const std::vector<std::string> styles = {"Colour", "Parchment"};
+		// With nothing picked: the crosshair, or chosen as the Class AI does.
+		const std::vector<std::string> foes = {"Ask", "Auto"};
 		using Callback          = void (Class_options_gump::*)(int);
 		Callback toggles[set_count] = {&Class_options_gump::toggle<0>, &Class_options_gump::toggle<1>,
-				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>, &Class_options_gump::toggle<4>};
+				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>, &Class_options_gump::toggle<4>,
+				&Class_options_gump::toggle<5>};
 		for (int i = 0; i < set_count; ++i) {
 			buttons[id_first_setting + i] = std::make_unique<Toggle>(this, std::move(toggles[i]),
-					i == set_bar ? places : (i == set_icons ? styles : yesNo), settings[i],
+					i == set_bar ? places : (i == set_icons ? styles : (i == set_foe ? foes : yesNo)), settings[i],
 					get_button_pos_for_label(label(i)), yForRow(i), i == set_bar || i == set_icons ? 85 : 44);
 		}
 		ResizeWidthToFitWidgets(tcb::span(buttons.data(), id_count));
@@ -3706,6 +3826,7 @@ public:
 		Friend_class_bar_position = settings[set_bar];
 		Friend_class_icon_style   = settings[set_icons] + friend_icons_colour;
 		Friend_class_show_ranges  = settings[set_ranges] != 0;
+		Friend_class_auto_foe     = settings[set_foe] != 0;
 		Friend_class_save_settings();
 		done = true;
 	}
@@ -3804,6 +3925,7 @@ void Friend_class_load_settings() {
 	config->value("config/friend/class/bar_position", Friend_class_bar_position, friend_bar_above_status);
 	config->value("config/friend/class/show_ranges", Friend_class_show_ranges, true);
 	config->value("config/friend/class/ai", Friend_class_ai, true);
+	config->value("config/friend/class/auto_foe", Friend_class_auto_foe, false);
 	config->value("config/friend/class/require_items", Friend_class_require_items, false);
 	if (Friend_class_bar_position < 0 || Friend_class_bar_position >= friend_bar_place_count) {
 		Friend_class_bar_position = friend_bar_above_status;
@@ -3827,6 +3949,7 @@ void Friend_class_save_settings() {
 	config->set("config/friend/class/bar_position", Friend_class_bar_position, false);
 	config->set("config/friend/class/icon_style", Friend_class_icon_style, false);
 	put("config/friend/class/show_ranges", Friend_class_show_ranges);
+	put("config/friend/class/auto_foe", Friend_class_auto_foe);
 	config->write_back();
 	rules_changed = true;
 	Gwin()->set_all_dirty();

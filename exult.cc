@@ -1459,7 +1459,7 @@ static bool Friend_test_kit_player_has(const Actor* npc) {
 // companions leave the party first (as a script dismisses them, waiting
 // where they stand), except those a player has; never more than seven
 // companions, U7's party.  Party changes reach guests as always.  Ctrl+F9
-// is the object kit, Shift+F9 the creatures.
+// is the object kit, Shift+F9 a fight, Shift+F8 a rat, a wolf and a rabbit.
 static void Friend_mode_gather_companions(bool second_group) {
 	if (!GAME_BG) {
 		Friend_mode_notice("The test kit uses Black Gate's companions");
@@ -1533,20 +1533,29 @@ static void Friend_mode_gather_companions(bool second_group) {
 					   + (full ? ", " + std::to_string(full) + " left out: the party is full" : std::string()) + ")");
 }
 
-// Host debug aid (Shift+F9): creatures that appear after a guest joined,
-// for creature sync.  Found by name, so they work in either game.
-static void Friend_mode_spawn_test_creatures() {
-	const char* wanted[] = {"rat", "wolf", "rabbit"};
+// Host debug aid: creatures that appear after a guest joined, for creature
+// sync and the Class System.  Shift+F9: a fight, two each of troll,
+// headless and skeleton (2026-10-23; nothing as strong as a dragon);
+// Shift+F8: a rat, a wolf and a rabbit (the old Shift+F9; the rabbit for
+// peaceful picks).  Found by name, so they work in either game; two rows
+// a few tiles north-east of the Avatar.
+static void Friend_mode_spawn_test_creatures(bool small) {
+	static const char* const fight[] = {"troll", "headless", "skeleton", "troll", "headless", "skeleton"};
+	static const char* const tame[]  = {"rat", "wolf", "rabbit"};
+	const char* const*       wanted  = small ? tame : fight;
+	const std::size_t        count   = small ? std::size(tame) : std::size(fight);
 	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
 	int              made   = 0;
-	for (std::size_t i = 0; i < std::size(wanted); ++i) {
+	for (std::size_t i = 0; i < count; ++i) {
 		for (int shape = 150; shape < shapes.get_num_shapes(); ++shape) {
 			const char* name = get_item_name(shape);
 			if (!name || std::strcmp(name, wanted[i]) != 0 || !ShapeID::get_info(shape).is_npc()) {
 				continue;
 			}
 			const Tile_coord avatar = gwin->get_main_actor()->get_tile();
-			const Tile_coord want(avatar.tx + 4 + 3 * static_cast<int>(i), avatar.ty - 4, avatar.tz);
+			const int        column = static_cast<int>(i % 3);
+			const int        row    = static_cast<int>(i / 3);
+			const Tile_coord want(avatar.tx + 5 + 3 * column, avatar.ty - 4 - 3 * row, avatar.tz);
 			const Tile_coord pos = Map_chunk::find_spot(want, 4, shape, 0, 1);
 			if (pos.tx >= 0) {
 				Monster_actor::create(shape, pos);
@@ -10029,7 +10038,7 @@ static void Handle_event(SDL_Event& event) {
 	}
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
 		if (event.key.mod & SDL_KMOD_SHIFT) {
-			Friend_mode_spawn_test_creatures();
+			Friend_mode_spawn_test_creatures(false);    // A fight.
 		} else if (event.key.mod & SDL_KMOD_CTRL) {
 			Friend_mode_spawn_test_kit();    // Doors, chests, keys, teleporters...
 		} else {
@@ -10038,8 +10047,12 @@ static void Handle_event(SDL_Event& event) {
 		return;
 	}
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F8
-		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI | SDL_KMOD_SHIFT))) {
-		Friend_mode_gather_companions(true);    // F8: the second group.
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
+		if (event.key.mod & SDL_KMOD_SHIFT) {
+			Friend_mode_spawn_test_creatures(true);    // A rat, a wolf and a rabbit.
+		} else {
+			Friend_mode_gather_companions(true);    // F8: the second group.
+		}
 		return;
 	}
 	if (Friend_mode_chat_event(event)) {

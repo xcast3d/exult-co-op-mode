@@ -15,8 +15,8 @@ for each skill, with its author:
  4  Shamino: Aimed Shot - Target shot by Lorc, https://game-icons.net/1x1/lorc/target-shot.html
  5  Shamino: Volley - Striking arrows by Lorc, https://game-icons.net/1x1/lorc/striking-arrows.html
  6  Jaana: Greater Heal - Health normal by Sbed, https://game-icons.net/1x1/sbed/health-normal.html
- 7  Jaana: Restoration (was Purify) - Sunbeams by Lorc, https://game-icons.net/1x1/lorc/sunbeams.html
- 8  Jaana: Mending Circle - Health increase by Sbed, https://game-icons.net/1x1/sbed/health-increase.html
+ 7  Jaana: Mass Cure (was Purify) - Sunbeams by Lorc, https://game-icons.net/1x1/lorc/sunbeams.html
+ 8  Jaana: Restoration (was Mending Circle) - Health increase by Sbed, https://game-icons.net/1x1/sbed/health-increase.html
  9  Dupre: Lay on Hands - Magic palm by Lorc, https://game-icons.net/1x1/lorc/magic-palm.html
 10  Dupre: Shield Ally - Checked shield by Lorc, https://game-icons.net/1x1/lorc/checked-shield.html
 11  Dupre: Challenge - Knight banner by Delapouite, https://game-icons.net/1x1/delapouite/knight-banner.html
