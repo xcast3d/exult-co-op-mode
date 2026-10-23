@@ -1435,56 +1435,89 @@ static int Friend_test_kit_sling() {
 	return -1;
 }
 
-// Host debug aid (F9, for the Class System): every companion who can come
-// stands by the Avatar and joins the party (as many as it holds: 8 besides
-// the Avatar), at level 7 or more so all their skills are open; the Avatar
-// at level 5 or more (Great Heal's circle), with the magic kit.  Party
-// changes reach guests as always.  Ctrl+F9 is the object kit, Shift+F9 the
-// creatures.
-static void Friend_mode_gather_companions() {
+// Test kit companions a player has: a guest's, one held for a guest who
+// dropped, and the one the host leads.  Gathering leaves their schedules
+// alone (setting follow on a guest's fought the guest's input) and never
+// sends them away.
+static bool Friend_test_kit_player_has(const Actor* npc) {
+	if (gwin->is_remote_friend(npc) || npc == Friend_mode_led_companion()) {
+		return true;
+	}
+	for (const auto& [name, hold] : friend_rejoin_holds) {
+		if (hold.actor == npc->get_npc_num()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Host debug aid (F9 and F8, for the Class System): one group of
+// companions stands by the Avatar and joins the party, at level 7 or more
+// so all their skills are open; the Avatar at level 5 or more (Great
+// Heal's circle), with the magic kit.  F9: Iolo, Shamino, Dupre, Jaana and
+// Spark; F8: Sentri, Julia, Katrina and Tseramed.  The other group's
+// companions leave the party first (as a script dismisses them, waiting
+// where they stand), except those a player has; never more than seven
+// companions, U7's party.  Party changes reach guests as always.  Ctrl+F9
+// is the object kit, Shift+F9 the creatures.
+static void Friend_mode_gather_companions(bool second_group) {
 	if (!GAME_BG) {
 		Friend_mode_notice("The test kit uses Black Gate's companions");
 		return;
 	}
-	static const char* const companions[]
-			= {"Iolo", "Shamino", "Dupre", "Jaana", "Spark", "Sentri", "Julia", "Katrina", "Tseramed"};
+	static const std::vector<std::string> first  = {"Iolo", "Shamino", "Dupre", "Jaana", "Spark"};
+	static const std::vector<std::string> second = {"Sentri", "Julia", "Katrina", "Tseramed"};
+	const std::vector<std::string>&       group  = second_group ? second : first;
+	const std::vector<std::string>&       others = second_group ? first : second;
+	constexpr int                         party_max = 7;    // Companions, besides the Avatar.
 	Main_actor*      avatar   = gwin->get_main_actor();
 	Party_manager*   partyman = gwin->get_party_man();
 	const Tile_coord at       = avatar->get_tile();
 	constexpr int    level7   = 50 << 6;    // Level = 1 + log2(experience / 50).
 	constexpr int    level5   = 50 << 4;
-	int              joined   = 0;
-	int              full     = 0;
-	for (const char* name : companions) {
-		Actor* npc = nullptr;
-		for (int i = 1; i < gwin->get_num_npcs() && !npc; ++i) {
+	auto             find_npc = [](const std::string& name) -> Actor* {
+		for (int i = 1; i < gwin->get_num_npcs(); ++i) {
 			Actor* each = gwin->get_npc(i);
 			if (each && each->get_npc_name() == name) {
-				npc = each;
+				return each;
 			}
 		}
+		return nullptr;
+	};
+	for (const std::string& name : others) {
+		Actor* npc = find_npc(name);
+		if (npc && npc->is_in_party() && !Friend_test_kit_player_has(npc) && partyman->remove_from_party(npc)) {
+			npc->set_alignment(Actor::neutral);    // As the remove_from_party intrinsic.
+			npc->set_schedule_type(Schedule::wait);
+		}
+	}
+	int joined = 0;
+	int full   = 0;
+	for (const std::string& name : group) {
+		Actor* npc = find_npc(name);
 		if (!npc || npc->is_dead()) {
 			continue;
 		}
 		if (!npc->is_in_party()) {
-			if (!partyman->add_to_party(npc)) {
+			if (partyman->get_count() >= party_max || !partyman->add_to_party(npc)) {
 				++full;
 				continue;
 			}
 			++joined;
 		}
-		const Tile_coord spot = Map_chunk::find_spot(at, 4, npc);
-		if (spot.tx >= 0 && npc->get_map() == avatar->get_map()) {
-			npc->move(spot);
+		if (!Friend_test_kit_player_has(npc)) {
+			const Tile_coord spot = Map_chunk::find_spot(at, 4, npc);
+			if (spot.tx >= 0 && npc->get_map() == avatar->get_map()) {
+				npc->move(spot);
+			}
+			npc->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
 		}
-		npc->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
 		// The weapons their skills shoot with.
-		const std::string who = name;
-		if (who == "Shamino" || who == "Tseramed") {
+		if (name == "Shamino" || name == "Tseramed") {
 			Friend_test_kit_arm(npc, 597);    // Bow (and arrows).
-		} else if (who == "Iolo") {
+		} else if (name == "Iolo") {
 			Friend_test_kit_arm(npc, 598);    // Crossbow (and bolts).
-		} else if (who == "Spark") {
+		} else if (name == "Spark") {
 			Friend_test_kit_arm(npc, Friend_test_kit_sling());
 		}
 		if (npc->get_property(Actor::exp) < level7) {
@@ -10000,8 +10033,13 @@ static void Handle_event(SDL_Event& event) {
 		} else if (event.key.mod & SDL_KMOD_CTRL) {
 			Friend_mode_spawn_test_kit();    // Doors, chests, keys, teleporters...
 		} else {
-			Friend_mode_gather_companions();    // The party, for the Class System.
+			Friend_mode_gather_companions(false);    // The first group, for the Class System.
 		}
+		return;
+	}
+	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F8
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI | SDL_KMOD_SHIFT))) {
+		Friend_mode_gather_companions(true);    // F8: the second group.
 		return;
 	}
 	if (Friend_mode_chat_event(event)) {
