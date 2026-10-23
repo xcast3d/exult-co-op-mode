@@ -3657,6 +3657,12 @@ static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 // Not okay to take: asks first.  Alt always means "how many".
 //
 // False if Space should do its usual thing.
+// People with a conversation have an NPC number and a script of their
+// own; a deer or a rat has neither.
+static bool Friend_has_conversation(const Actor* actor) {
+	return actor->get_npc_num() > 0 && gwin->get_usecode()->function_exists(actor->get_usecode());
+}
+
 static bool Friend_mode_space(bool shift, bool alt) {
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
@@ -3681,7 +3687,11 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	}
 	if (!thing) {
 		if (!fighting) {
-			gwin->double_clicked_object(target);    // Talk.
+			// Talk.  A deer or a rabbit has nothing to say: Space does nothing
+			// (a guest's double-click there said "The Avatar must do this").
+			if (Friend_has_conversation(target)) {
+				gwin->double_clicked_object(target);
+			}
 		} else {
 			Friend_mode_attack_target(target);
 		}
@@ -3790,11 +3800,7 @@ static std::string Friend_space_hint() {
 	};
 	if (!thing) {
 		if (!gwin->in_combat()) {
-			// People with a conversation have an NPC number and a script
-			// of their own; a deer or a rat has neither.
-			const bool talks = target->get_npc_num() > 0
-							   && gwin->get_usecode()->function_exists(target->get_usecode());
-			if (!talks) {
+			if (!Friend_has_conversation(target)) {
 				return "Attack (C, then Space)";
 			}
 			// A guest talks only to merchants and trainers.
@@ -5901,6 +5907,7 @@ bool Friend_mode_is_guest() {
 // Keyboard play options (exult.h): WASD movement (Game Input) and the
 // Target System (its own options page).  Each machine keeps its own.
 bool                            Friend_wasd_movement  = false;
+bool                            Friend_running        = false;
 bool                            Friend_keyboard_targeting = true;
 bool                            Friend_targeting_circle      = true;
 bool                            Friend_targeting_party       = true;
@@ -8249,6 +8256,7 @@ static void Init() {
 		bool skip_splash;
 		config->value("config/gameplay/skip_splash", skip_splash);
 		config->value("config/gameplay/wasd_movement", Friend_wasd_movement);
+		config->value("config/gameplay/running", Friend_running);
 		Friend_targeting_load_settings();
 		Friend_class_load_settings();
 
@@ -9449,18 +9457,6 @@ static void Handle_events() {
 			}
 		}
 
-		// Caps Lock: keys run, else walk (get_walking_speed); say which when
-		// it changes (2026-10-22, instead of Shift, which means too much).
-		{
-			static bool running = (SDL_GetModState() & SDL_KMOD_CAPS) != 0;
-			const bool  caps    = (SDL_GetModState() & SDL_KMOD_CAPS) != 0;
-			if (caps != running) {
-				running = caps;
-				if (!friend_chat_active && !Notebook_gump::get_instance()) {
-					Friend_mode_notice(running ? "Running" : "Walking");
-				}
-			}
-		}
 		// WASD movement: walk toward the held keys every frame, as the arrow
 		// keys do (two keys walk diagonally), so a new direction takes effect
 		// at once.  Read from the keyboard itself, so a key let go while a
@@ -9864,6 +9860,17 @@ static void Handle_event(SDL_Event& event) {
 			}
 			return;
 		}
+	}
+	if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_R && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI | SDL_KMOD_SHIFT)) && !friend_chat_active
+		&& !Notebook_gump::get_instance()) {
+		// R: keys run, or walk (get_walking_speed).  2026-10-23, was Caps
+		// Lock, which capitalised chat too.  The status bar style moved to
+		// Shift+R.  Each machine's own, kept in the config.
+		Friend_running = !Friend_running;
+		config->set("config/gameplay/running", Friend_running, true);
+		Friend_mode_notice(Friend_running ? "Running" : "Walking");
+		return;
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI | SDL_KMOD_SHIFT))

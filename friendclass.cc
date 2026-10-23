@@ -2829,9 +2829,18 @@ private:
 		constexpr int edge   = 3;    // Pixels from the screen's edge.
 		// The party's faces along the bottom (Exult's status bars).
 		TileRect faces(0, 0, 0, 0);
+		// Exult's side columns (mode 3): each is drawn flush against its
+		// screen edge, at the HUD's scale as the bar is, so a bar on that
+		// side moves in by the column's width.
+		int left_column  = 0;
+		int right_column = 0;
 		for (auto it = Gwin()->get_gump_man()->begin(); it != Gwin()->get_gump_man()->end(); ++it) {
 			if (auto* stats = dynamic_cast<Face_stats*>(*it)) {
 				faces = stats->get_rect();
+				if (Face_stats::get_state() == 3) {
+					left_column  = stats->hud_part_rect(0).w;
+					right_column = stats->hud_part_rect(1).w;
+				}
 			}
 		}
 		// Exult's side columns (mode 3) are no bottom row.
@@ -2856,11 +2865,11 @@ private:
 			by = top + edge + Friend_map_top_right_height();    // Under the minimap and its button.
 			break;
 		case friend_bar_left_center:
-			bx = left + edge;
+			bx = left + edge + left_column;
 			by = top + (bottom - top - h) / 2;
 			break;
 		case friend_bar_right_center:
-			bx = right - w - edge;
+			bx = right - w - edge - right_column;
 			by = top + (bottom - top - h) / 2;
 			break;
 		default:    // Above the status bar, bottom centre.

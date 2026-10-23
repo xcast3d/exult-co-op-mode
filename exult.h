@@ -62,6 +62,9 @@ void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object*
 // default): W, A, S and D walk (two at once diagonally), and Shift with one
 // of them does what the key alone did (Shift+W the watch, Shift+S Save).
 extern bool Friend_wasd_movement;
+// R toggles running for the movement keys (config/gameplay/running, off:
+// they walk at the second fastest speed).
+extern bool Friend_running;
 // Targeting options page (Q, E, Space; config/gameplay/keyboard_targeting
 // and config/gameplay/targeting/...).  Each machine keeps its own.
 extern bool Friend_keyboard_targeting;    // Q, E and Space at all (on).

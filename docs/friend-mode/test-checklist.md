@@ -1417,28 +1417,49 @@ Built, not tested.
 
 ## Feedback round 2026-10-23, batch G
 
-- [ ] Guest: the button under the minimap reads "Follow", then "Stop"
+- [x] Guest: the button under the minimap reads "Follow", then "Stop"
       (whole word); hovering says "Take over your companion", "Shortcut: Y".
-- [ ] Open a chest with items in two or three loose rows: E goes left to
+- [x] Open a chest with items in two or three loose rows: E goes left to
       right along the top row first, then the next row; Shift+E backwards.
-- [ ] With your backpack open and its item picked, open a chest: the next E
+- [x] With your backpack open and its item picked, open a chest: the next E
       starts at the chest's top left, not in the backpack.
-- [ ] E to a chest on the map, Space: the window opens with its top left
+- [x] E to a chest on the map, Space: the window opens with its top left
       item picked; Shift+Space takes everything.
-- [ ] Space on an empty chest or body: "Empty", no pick.
-- [ ] Space on a locked chest: no window, the chest stays picked.
-- [ ] A guest opening a chest with Space: the first item is picked too.
-- [ ] Q a person, Escape: "No target", no menu. Escape again: the game
+- [x] Space on an empty chest or body: "Empty", no pick.
+- [x] Space on a locked chest: no window, the chest stays picked.
+- [x] A guest opening a chest with Space: the first item is picked too.
+- [x] Q a person, Escape: "No target", no menu. Escape again: the game
       menu (or the windows close first, if any are open).
-- [ ] In combat, attacking a Q pick, Escape: the attack stops.
-- [ ] E an item in a window, Escape: the pick clears and the window
+- [x] In combat, attacking a Q pick, Escape: the attack stops.
+- [x] E an item in a window, Escape: the pick clears and the window
       closes in one press.
-- [ ] While chatting, Escape still only cancels the chat line.
-- [ ] Guest: Shift+click a free companion's face: you play it now.
-- [ ] Guest: Shift+click another player's companion: "<name> is another
+- [x] While chatting, Escape still only cancels the chat line.
+- [x] Guest: Shift+click a free companion's face: you play it now.
+- [x] Guest: Shift+click another player's companion: "<name> is another
       player's"; the one the host leads or one held: "<name> isn't free".
-- [ ] Guest: Shift+click your own face or the Avatar's: nothing happens.
-- [ ] Host: Shift+click on a face still leads that companion.
+- [x] Guest: Shift+click your own face or the Avatar's: nothing happens.
+- [x] Host: Shift+click on a face still leads that companion.
+
+## Feedback round 2026-10-23, batch H
+
+- [x] R: "Running", keys (WASD and arrows) run; R again: "Walking".
+- [x] Quit and start again: running or walking is as you left it.
+- [x] Caps Lock no longer changes the speed; chat with it off types
+      lower case.
+- [x] R while chatting types an r, nothing else.
+- [x] Shift+R changes the status bar style (R used to).
+- [x] Guest: R works the same, and running keeps up with the host.
+- [x] Status bar in its side columns (Shift+R until the faces are down
+      both sides), skill bar on the left (Class System page): the bar sits
+      just inside the faces, not on them. The same on the right.
+- [x] The other status bar styles: the left and right bars are back at
+      the edge.
+- [x] Out of combat, Q a rabbit or deer: the hint says "Attack (C, then
+      Space)"; Space does nothing (no "The Avatar must do this"), on the
+      host and on a guest.
+- [x] Guest, out of combat: Q a rabbit, C, Space: the companion attacks.
+- [x] Guest, out of combat: Q a townsperson, Space: "The Avatar must do
+      this" still; a merchant still talks.
 
 ## Leaving
 

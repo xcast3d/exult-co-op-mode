@@ -342,8 +342,10 @@ upstream.
 - [x] With WASD on, Shift plus W, A, S or D does what the key alone did:
       Shift+W the watch, Shift+S Save/Restore (W was a conflict too, not
       only S). Ctrl+S stays quicksave. (2026-10-22: Shift+S taken out.)
-- [x] Keys walk at the second fastest speed; Caps Lock runs (2026-10-22;
-      Shift was considered and dropped, it already means too much).
+- [x] Keys walk at the second fastest speed; R toggles running
+      (2026-10-23, was Caps Lock, which capitalised chat too; the status
+      bar style moved to Shift+R. Shift was considered and dropped, it
+      already means too much).
 - [ ] Single-click attack: tried 2026-10-18 and taken out again (combat
       felt stuck, partly from WASD keys that stayed held). Replaced by the
       targeting below.

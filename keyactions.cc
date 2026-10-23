@@ -641,8 +641,8 @@ int get_walking_speed(const int* params) {
 		speed = Mouse::medium_speed_factor;
 	} else {
 		// Friend Mode (2026-10-22): keys walk at the second fastest speed;
-		// Caps Lock on runs at the fastest.
-		speed = (SDL_GetModState() & SDL_KMOD_CAPS) ? Mouse::fast_speed_factor : Mouse::medium_speed_factor;
+		// running (R, 2026-10-23; was Caps Lock) at the fastest.
+		speed = Friend_running ? Mouse::fast_speed_factor : Mouse::medium_speed_factor;
 	}
 	return 200 * gwin->get_std_delay() / speed;
 }

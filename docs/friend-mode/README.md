@@ -89,9 +89,12 @@ show, and starts again in a newly opened window; Space opening a container
 picks its first item (so E, Space, Shift+Space takes all); Escape clears
 the pick before closing windows or opening the menu (a pick in a window
 clears and closes it in one press); Shift+click on a face
-on a guest takes that companion. Next: batch H (a guest's attack from
-peace, R to run instead of Caps Lock, the skill bar beside the vertical
-status bar) and I (F9 and F8 companion groups, leaving players'
+on a guest takes that companion. Batch H, same day (tested): R toggles
+running (Caps Lock no longer does; the status bar style is Shift+R); the
+skill bar on the left or right sits inside the status bar's side columns.
+Space out of combat does nothing on a
+creature with no conversation (a rabbit said "The Avatar must do this" on
+a guest). Still to do: batch I (F9 and F8 companion groups, leaving players'
 companions alone).
 
 **Feedback round, 2026-10-22: batch A built and tested (no protocol
