@@ -162,9 +162,13 @@ mode comes on and the attack on the pick starts, as Space would. Guests may
 fight peaceful people too, after the same confirmation (2026-10-20).
 
 **Ranges** (2026-10-20): area skills got about half again as much range:
-songs, Mending Circle, Purify and Dirty Trick 12 tiles, Challenge 9,
+songs, Mending Circle, Restoration and Dirty Trick 12 tiles, Challenge 9,
 Shield Ally 6, Blade Dance 6, Flashbang 5 around where it lands, Set Trap
-2 around Julia's feet.
+2 around Julia's feet. Bow skills (2026-10-23): 24 tiles (were 16, and
+Volley 12), Shamino's and Tseramed's; U7's bow reaches 20, so a skill's
+shot reaches as far as the skill (`Friend_class_shot_reach` in
+`Combat_schedule::attack_target`). Spark's sling skills keep 16 and 14,
+the sling's own 16, so bows outrange slings.
 
 **Strength is health.** U7's maximum health is strength, so Battle Hymn's
 +3 strength gives +3 health too, taken back when it ends.
@@ -179,7 +183,7 @@ measures distance. Two kinds:
 
 - **Shown:** a faint circle around the user while the mouse is on its icon
   and for 2 seconds after it is used, on every machine (Iolo's songs,
-  Mending Circle, Purify). "Show skill ranges" turns it off.
+  Mending Circle, Restoration). "Show skill ranges" turns it off.
 - **Silent:** checked, never drawn (Stun Shot, Aimed Shot, Hunter's Mark): too
   far gives "Too far".
 
@@ -188,7 +192,7 @@ measures distance. Two kinds:
 | Effect | Does | Skills |
 | --- | --- | --- |
 | heal | health up, capped at strength | Greater Heal (full), Mending Circle, Lay on Hands |
-| cure | clears poison, paralysis, curse | Purify |
+| cure | clears poison, paralysis, curse | Restoration |
 | flag | sets a U7 flag on whoever it targets: protection, invisible | Song of Warding, Vanish |
 | hinder | paralyze or knock out each target for a few seconds, with a roll each | Song of Peace (sleep) |
 | volley riders | a shot that, as it lands, also hinders (`then_hinder`) or lowers a stat (`then_weaken`); `pierce_armor` makes the user's strikes ignore some armour; `dashing` darts the user beside each target in turn before a melee strike | Stun Shot, Sleep Arrow, Crippling Shot, Master's Strike, Blade Dance |
@@ -297,12 +301,12 @@ later, once the first set has been played.
 | Companion | U4 class | Skills (level, cooldown) |
 | --- | --- | --- |
 | Iolo | Bard | **Song of Peace** (1, 30 s): hostiles within 12 fall asleep for 5 s, each rolls to resist. **Song of Warding** (4, 60 s): protection for the party within 12. **Battle Hymn** (7, 90 s): +3 strength (so +3 health) and +3 combat for the party within 12, for 30 s. |
-| Shamino | Ranger | **Vanish** (1, 30 s): invisible for a moment. **Aimed Shot** (4, 60 s): one harder shot at the pick, within 16. **Volley** (7, 90 s): arrows at the 3 nearest hostiles within 12. |
-| Jaana | Druid | **Greater Heal** (1, 30 s): a full heal on the most hurt within 12. **Purify** (4, 60 s): cures poison, paralysis and curses within 12. **Mending Circle** (7, 90 s): +20 health for the party within 12. |
+| Shamino | Ranger | **Vanish** (1, 30 s): invisible for a moment. **Aimed Shot** (4, 60 s): one harder shot at the pick, within 24. **Volley** (7, 90 s): arrows at the 3 nearest hostiles within 24. |
+| Jaana | Druid | She says words of power as she uses them (2026-10-23). **Greater Heal** (1, 30 s, "Vas Mani"): a full heal on the most hurt within 12. **Restoration** (4, 60 s, "Vas Mani Hur", U7's Restoration; was Purify): cures poison, paralysis and curses within 12. **Mending Circle** (7, 90 s, "In Vas Mani": no U7 spell matches, "In" as in the field spells): +20 health for the party within 12. |
 | Dupre | Paladin | **Lay on Hands** (1, 30 s): +25 health on the most hurt within 3. **Shield Ally** (4, 60 s): for 15 s, melee blows on an ally within 6 land on Dupre instead (shield required). **Challenge** (7, 90 s): hostiles within 9 turn on him for 6 s. |
 | Spark | (boy) | With his sling. **Stun Shot** (1, 30 s): a stone, then the pick stops for 3 s, within 16. **Trick Shot** (4, 60 s): stones at the 2 nearest hostiles within 14. **Dirty Trick** (7, 90 s): mud at hostiles within 12; they don't attack for 3 s. |
 | Sentri | Swordmaster (agile duelist) | **Riposte** (1, 30 s): for 10 s, every melee strike that misses him is answered with a strike that always hits. **Master's Strike** (4, 60 s): he lunges beside the pick, within 4, and strikes a harder blow that ignores 6 armour. **Blade Dance** (7, 90 s): he darts to every foe within 6 in turn, striking each. |
-| Tseramed | Huntsman (disabling archer, beside Shamino's attacking one) | **Sleep Arrow** (1, 30 s): the pick sleeps for 5 s, within 16. **Crippling Shot** (4, 30 s): the pick loses 10 dexterity for 10 s, within 16 (U7 has no slowed walking, so it attacks less often). **Hunter's Mark** (7, 90 s): the pick takes +4 damage from party hits for 20 s, within 16. |
+| Tseramed | Huntsman (disabling archer, beside Shamino's attacking one) | **Sleep Arrow** (1, 30 s): the pick sleeps for 5 s, within 24. **Crippling Shot** (4, 30 s): the pick loses 10 dexterity for 10 s, within 24 (U7 has no slowed walking, so it attacks less often). **Hunter's Mark** (7, 90 s): the pick takes +4 damage from party hits for 20 s, within 24. |
 | Julia | Tinker (combat engineer) | **Set Trap** (1, 30 s): caltrops at her feet, 2 tiles round, for 5 s; hostiles in them lose 3 health a second, never the party. **Quick Fix** (4, 60 s): +5 armour on the weakest ally within 4, for 30 s. **Flashbang** (7, 60 s): thrown up to 12; hostiles within 5 of where it lands are stunned for 2.5 s. |
 | Katrina | Shepherd (gentle support) | **Summon Dogs** (1, 60 s): two of her sheepdogs fight for 30 s. **Summon Wolf** (4, 60 s): a wolf fights for her for 30 s. **Summon Bee** (7, 90 s): a giant bee fights for her for 30 s. |
 
@@ -469,7 +473,7 @@ companion stands**.
 | --- | --- |
 | Iolo | Sings by need: Song of Warding when two or more hostiles are near, Song of Peace when a hostile is on a badly hurt companion, Battle Hymn when three or more are near. Keeps a few tiles back with his crossbow. |
 | Shamino | Always fights from a distance: steps away from a foe that comes beside him, then shoots; Vanish when he is hurt and a foe is close, Aimed Shot at his foe, Volley when two or more hostiles are in range. Falls back to his sword with no arrows. |
-| Jaana | Watches health: stays near the middle of the party, out of the front line; Greater Heal when someone is below half, Purify when someone is poisoned or paralyzed, Mending Circle when two or more are badly hurt; fights only when nobody needs her. |
+| Jaana | Watches health: stays near the middle of the party, out of the front line; Greater Heal when someone is below half, Restoration when someone is poisoned or paralyzed, Mending Circle when two or more are badly hurt; fights only when nobody needs her. |
 | Dupre | Front line: Lay on Hands on the most hurt when someone is below half, Shield Ally on an ally a foe is beating on (the Avatar, or anyone below three quarters), then stays within reach of that ally while it lasts; Challenge when a foe is on a hurt party member. |
 | Spark | Hangs back with his sling; Stun Shot on a foe beside a hurt party member; Dirty Trick the same way, on everything near. |
 | Sentri | Front line; Riposte when a foe is beside him; Master's Strike on his foe; Blade Dance with two or more foes within 6. |
@@ -528,7 +532,7 @@ own verbs, so hit chance, damage, armour and saves stay U7's:
 - Entangle, Snare: set `paralyzed` with a short timer, with a roll against
   the target's strength, as hits with powers do (`roll_to_win`).
 - Stun Shot: a real shot, then `paralyzed` for a moment, with the same kind of roll.
-- Purify: clear `poisoned`, `paralyzed`, `cursed` (like the Cure spell).
+- Restoration (was Purify): clear `poisoned`, `paralyzed`, `cursed` (like the Cure spell).
 - Mending Circle, Lay on Hands, Patch Up, Second Wind: raise health, capped
   at strength (as the Heal spells do).
 - Volley, Aimed Shot, Trick Shot: fire the companion's readied bow,

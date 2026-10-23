@@ -1235,7 +1235,8 @@ bool Combat_schedule::attack_target(
 	const int  dist   = target ? attacker->distance(target) : attacker->distance(tile);
 	const bool ranged = not_in_melee_range(winf, dist, reach);
 	// Out of range?
-	if (attacker->get_effective_range(winf, reach) < dist) {
+	// (Friend Mode: a class skill's shot reaches as far as the skill.)
+	if (attacker->get_effective_range(winf, reach) < dist && Friend_class_shot_reach() < dist) {
 		// We are out of range.
 		if (flash_mouse) {
 			Mouse::mouse()->flash_shape(Mouse::outofrange);

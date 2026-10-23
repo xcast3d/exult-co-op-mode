@@ -521,7 +521,7 @@ WASD, targeting and the minimap. What is tied to Black Gate today:
       Isle's merchants and trainers in its scripts, as was done for Black
       Gate ([shops and trainers](friend-mode/shops-and-trainers.md)).
 - [ ] **Picker descriptions** of the companions, for Serpent Isle's.
-- [ ] **The test kit** (F9) with Serpent Isle shapes.
+- [ ] **The test kit** (F9 and F8, Ctrl+F9) with Serpent Isle shapes and companions.
 - [ ] **Its story:** Serpent Isle separates and swaps companions far more
       often (Iolo, Shamino and Dupre are parted from the Avatar early). The
       "losing a companion" handling covers the mechanics; test it through
@@ -659,7 +659,7 @@ Two or three skills per companion, from the class they had in Ultima IV,
 so a guest playing one as their "main" has more to do in a fight than let
 it swing: Iolo's songs (Battle Hymn, Song of Warding, Song of Peace),
 Shamino's Volley at the three nearest hostiles, Jaana's Mending Circle and
-Purify, Dupre's Challenge, Spark's sling tricks. A small skill bar for
+Restoration, Dupre's Challenge, Spark's sling tricks. A small skill bar for
 guests, about one skill per fight (cooldowns), and each companion's skills
 unlocked by an item of their own found in their home (Iolo's lute).
 Companions nobody plays use their skills on their own through a "Class AI"

@@ -91,6 +91,9 @@ void Friend_class_adjust_damage(const Actor* target, Game_object* attacker, int&
 void Friend_class_note_miss(Game_object* attacker, Game_object* target);
 // Combat_schedule::attack_target: this strike always hits (a Riposte's answer).
 bool Friend_class_sure_hit(const Game_object* attacker);
+// Combat_schedule::attack_target: a skill's shot may reach this far, past
+// the weapon's own range (0 when no skill is shooting).
+int Friend_class_shot_reach();
 // Combat_schedule::now_what: confused by Dirty Trick, so not attacking.
 bool Friend_class_calmed(const Actor* npc);
 // Actor::apply_damage: whoever shields 'target' from this melee blow (Shield

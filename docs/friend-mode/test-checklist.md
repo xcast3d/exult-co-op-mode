@@ -18,7 +18,7 @@ Mode, and tick off what you tried. Black Gate only for now.
    (for example Iolo or Spark), and stand somewhere open.
 4. Press **Ctrl+F9** on the host to place the object test kit (doors,
    chests, keys, teleporters) around the Avatar. (**F9** alone gathers the
-   companions for the Class System; **Shift+F9** places test creatures.) The host
+   first group of companions for the Class System, **F8** the second; **Shift+F9** places test creatures.) The host
    shows "Friend Mode test kit placed".
    - **Do this before the guest joins.** Objects created after a guest joins
      are not synced yet, but the kit is part of the world the guest downloads.
@@ -966,9 +966,10 @@ Effect preview:
 
 The Avatar's spell bar (host, and single player):
 
-**F9** (2026-10-20) brings every free companion to the Avatar and into the
-party (as many as it holds: 8 besides the Avatar; one of the nine is left
-out when all are free), raises companions to level 6 (every skill open) and
+**F9** (2026-10-20) brings a group of companions to the Avatar and into
+the party (since 2026-10-23 F9 brings Iolo, Shamino, Dupre, Jaana and Spark,
+F8 Sentri, Julia, Katrina and Tseramed, sending the other group away; at
+most seven companions), raises companions to level 7 (every skill open) and
 the Avatar to level 5 (Great Heal), and puts a bag with 20 of each reagent in the Avatar's
 inventory (U7 only counts what the caster carries), puts every spell in
 the Avatar's spellbook (a new book in that bag if the Avatar has none), and
@@ -1057,7 +1058,7 @@ Class AI (companions nobody plays, host):
 
 - [ ] Single player, Class System on, Jaana in the party: someone below
       half health nearby, and she uses Greater Heal by herself; someone
-      poisoned near her (level 3+), Purify; two below half (level 6),
+      poisoned near her (level 3+), Restoration; two below half (level 6),
       Mending Circle.
 - [ ] Iolo sings Song of Warding when two or more hostiles are near in a
       fight; Shamino volleys at two or more.
@@ -1460,6 +1461,37 @@ Built, not tested.
 - [x] Guest, out of combat: Q a rabbit, C, Space: the companion attacks.
 - [x] Guest, out of combat: Q a townsperson, Space: "The Avatar must do
       this" still; a merchant still talks.
+
+## Feedback round 2026-10-23, batch I
+
+- [x] F9: Iolo, Shamino, Dupre, Jaana and Spark join and stand by the
+      Avatar, at level 7; "Companions gathered (n joined)".
+- [x] F8: those five leave the party and wait where they stand; Sentri,
+      Julia, Katrina and Tseramed join (Tseramed too).
+- [x] F9 again: back to the first group; the second waits where it stands.
+- [x] Never more than seven companions in the party (the status bar).
+- [x] With a guest playing Iolo, F8: Iolo stays in the party and the
+      guest keeps control (no tug of war with the follow AI); Iolo still
+      gets level 7 and his crossbow. The same for F9 with a guest on
+      Sentri.
+- [x] Leading a companion (Shift+Tab) from the other group, F8 or F9:
+      it stays, and stays led.
+- [x] On a guest, F8 and F9 do nothing.
+
+## Skill changes 2026-10-23: bow range, Jaana's words
+
+- [x] Shamino's Aimed Shot on a pick about 22 tiles off (past the bow's
+      own 20): the arrow flies and can hit; past 24: "out of range (24
+      tiles)".
+- [x] Shamino's Volley picks hostiles up to 24 tiles off.
+- [x] Tseramed's Sleep Arrow and Crippling Shot reach 24; Hunter's Mark
+      marks a pick 24 off.
+- [x] Spark's Stun Shot still stops at 16.
+- [x] Ordinary bow shots (no skill) still stop at the bow's 20.
+- [x] Jaana says "Vas Mani" for Greater Heal, "Vas Mani Hur" for
+      Restoration and "In Vas Mani" for Mending Circle, over her head and
+      in the chat log, on host and guest.
+- [x] Her second skill is named Restoration on the bar and in its tooltip.
 
 ## Leaving
 

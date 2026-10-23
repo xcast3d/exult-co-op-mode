@@ -488,6 +488,10 @@ constexpr int level_third  = 7;
 const std::vector<Companion_class>& Classes() {
 	using T = Skill_type;
 	using G = Skill_target;
+	// Bow skills reach 24 tiles (2026-10-23; were 16, which felt short).
+	// U7's bow itself reaches 20, so their shots go past the weapon's range
+	// (Shoot); slings (Spark) keep 16, the sling's own.
+	constexpr int bow_range = 24;
 	static const std::vector<Companion_class> classes = {
 			{"Iolo",
 			 "Bard",
@@ -549,7 +553,7 @@ const std::vector<Companion_class>& Classes() {
 							 .describe("One careful shot that hits harder")
 							 .icon_spell(spell_death_bolt)
 							 .kind(T::attack)
-							 .aim(G::pick, 16)
+							 .aim(G::pick, bow_range)
 							 .unlock(level_second)
 							 .volley(6, 3000)
 							 .says("*takes careful aim*"),
@@ -558,7 +562,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(90)
 							 .icon_spell(spell_swordstrike)
 							 .kind(T::attack)
-							 .aim(G::hostiles_nearest, 12)
+							 .aim(G::hostiles_nearest, bow_range)
 							 .unlock(level_third)
 							 .volley()
 							 .targets(3)
@@ -579,8 +583,8 @@ const std::vector<Companion_class>& Classes() {
 							 .aim(G::hurt_party, 12)
 							 .heal(255)    // Capped at strength: a full heal.
 							 .on_targets(sprite_sparkles)
-							 .says("*calls on the earth to heal*"),
-					 Class_skill(31, "Purify")
+							 .says("Vas Mani"),    // Her skills say U7's words of power, as she casts.
+					 Class_skill(31, "Restoration")    // Was Purify.
 							 .describe("Cures poison, paralysis and curses nearby")
 							 .icon_spell(spell_mass_cure)
 							 .kind(T::cure)
@@ -588,7 +592,7 @@ const std::vector<Companion_class>& Classes() {
 							 .unlock(level_second)
 							 .cure()
 							 .on_targets(sprite_bubbles)
-							 .says("*purifies the air*"),
+							 .says("Vas Mani Hur"),    // U7's Restoration.
 					 Class_skill(30, "Mending Circle")
 							 .describe("Heals everyone in the circle")
 							 .recharge(90)
@@ -599,7 +603,7 @@ const std::vector<Companion_class>& Classes() {
 							 .heal(20)
 							 .targets(2)
 							 .on_targets(sprite_sparkles)
-							 .says("*calls on the earth to mend*"),
+							 .says("In Vas Mani"),    // No U7 spell: "In" as in the field spells.
 			 }},
 			{"Dupre",
 			 "Paladin",
@@ -732,7 +736,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_sleep)
 							 .kind(T::control)
-							 .aim(G::pick, 16)
+							 .aim(G::pick, bow_range)
 							 .volley()
 							 .then_hinder(Obj_flags::asleep, 5000)
 							 .says("*nocks a sleeping arrow*"),
@@ -742,7 +746,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(30)
 							 .icon_spell(spell_curse)
 							 .kind(T::control)
-							 .aim(G::pick, 16)
+							 .aim(G::pick, bow_range)
 							 .unlock(level_second)
 							 .volley()
 							 .then_weaken(Actor::dexterity, -10, 10000)
@@ -753,7 +757,7 @@ const std::vector<Companion_class>& Classes() {
 							 .recharge(90)
 							 .icon_spell(spell_mass_curse)
 							 .kind(T::attack)
-							 .aim(G::pick, 16)
+							 .aim(G::pick, bow_range)
 							 .unlock(level_third)
 							 .mark(4, 20000)
 							 .on_targets(sprite_purple)
@@ -1311,9 +1315,7 @@ void Add_might(Actor* actor, int amount, int ms) {
 	Add_bonus(actor, Actor::combat, amount, ms);
 }
 
-// A shot with the user's readied weapon, through the combat code (range,
-// ammunition, hit and damage as U7).  False if it couldn't be made.
-bool Shoot(Actor* user, Actor* target) {
+bool Shoot_once(Actor* user, Actor* target) {
 	int                points = 0;
 	int                weapon = -1;
 	Game_object*       obj    = nullptr;
@@ -1327,6 +1329,20 @@ bool Shoot(Actor* user, Actor* target) {
 	return Combat_schedule::attack_target(user, target, target->get_tile(), weapon);
 }
 
+// How far the shot being made may reach, past the weapon's own range
+// (Friend_class_shot_reach): a skill's range (U7's bow reaches 20, the
+// bow skills 24).
+int shot_reach = 0;
+
+// A shot with the user's readied weapon, through the combat code
+// (ammunition, hit and damage as U7; range as the weapon's or 'reach',
+// whichever is longer).  False if it couldn't be made.
+bool Shoot(Actor* user, Actor* target, int reach = 0) {
+	shot_reach      = reach;
+	const bool shot = Shoot_once(user, target);
+	shot_reach      = 0;
+	return shot;
+}
 // Paralyze or put to sleep for 'ms', after a roll as hits with powers make
 // (Actor::figure_hit_points).  Some creatures can't be: no flag.
 // An emote-style line over someone a skill landed on (or didn't), on every
@@ -1495,7 +1511,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			break;
 		}
 		for (Actor* each : targets) {
-			if (!Shoot(user, each)) {
+			if (!Shoot(user, each, skill.range)) {
 				continue;
 			}
 			++done;
@@ -1539,7 +1555,7 @@ bool Perform(Actor* user, const Companion_class& cls, const Class_skill& skill, 
 			if (skill.range > 1 && reach <= 2) {
 				// A sword or nothing: a shot needs a bow, crossbow or sling.
 				why = user->get_npc_name() + " needs a bow, crossbow or sling readied";
-			} else if (winf && foe && user->distance(foe) > reach) {
+			} else if (winf && foe && user->distance(foe) > std::max(reach, skill.range)) {
 				why = foe->get_name() + " is out of reach of " + user->get_npc_name() + "'s weapon";
 			} else {
 				why = skill.range <= 1 ? "Needs a weapon in hand" : "Needs a bow, crossbow or sling, and ammunition";
@@ -4006,6 +4022,10 @@ void Friend_class_adjust_damage(const Actor* target, Game_object* attacker, int&
 	if (party) {
 		damage += Bonus_of(target, bonus_damage_taken);
 	}
+}
+
+int Friend_class_shot_reach() {
+	return shot_reach;
 }
 
 bool Friend_class_calmed(const Actor* npc) {

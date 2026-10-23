@@ -94,8 +94,13 @@ running (Caps Lock no longer does; the status bar style is Shift+R); the
 skill bar on the left or right sits inside the status bar's side columns.
 Space out of combat does nothing on a
 creature with no conversation (a rabbit said "The Avatar must do this" on
-a guest). Still to do: batch I (F9 and F8 companion groups, leaving players'
-companions alone).
+a guest). Batch I, same day (tested): the test kit's companions in two groups,
+F9 (Iolo, Shamino, Dupre, Jaana, Spark) and F8 (Sentri, Julia, Katrina,
+Tseramed), at most seven; gathering leaves alone the companions players
+have (a guest's one fought the follow AI). Then skill changes (tested): bow skills
+reach 24 tiles (past the bow's own 20), Spark's sling keeps 16; Jaana says
+words of power (Vas Mani, Vas Mani Hur, In Vas Mani) and Purify is now
+Restoration.
 
 **Feedback round, 2026-10-22: batch A built and tested (no protocol
 change).** Unlock levels 1, 4, 7 (were 1, 3, 6); Iolo's Song of Peace
