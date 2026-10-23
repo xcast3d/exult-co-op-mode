@@ -9,7 +9,16 @@ the first proof of concept changes only the local controller and camera target.
 
 ## Current milestone
 
-Phase 1: harden the working local party-member possession prototype.
+Phases 0 to 7 are built, and so is most of Phase 9 (WASD, the Target
+System) and the Class System; the brief's [roadmap](../ultima-7-friend-mode.md#roadmap)
+keeps the boxes. Next is **Phase 8**, the last step before a release:
+WebRTC data channels in Exult behind `Friend_connection` (the lobby is
+deployed and the libdatachannel spike passed), a TURN relay fallback, an
+optional session password, and Mac and Windows builds for release. Still
+waiting for more testers: Phase 6's three-player exit test and two people
+grabbing the same item.
+
+Phase 1 (local possession), for the record:
 
 - [x] Import the official Exult source and history.
 - [x] Configure GitHub as `upstream` and Bitbucket as `origin`.
@@ -38,7 +47,7 @@ The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md). The Target System's item groups are in
 [targeting groups](targeting-groups.md); a gamepad plan in [controller
 support](controller-plan.md); the Phase 8 [lobby](lobby.md); how the work splits into layers for forks in [branching](branching.md); class skills for companions in [companion skills](companion-skills.md);
-the host leading a companion (planned) in [leading a
+the host leading a companion in [leading a
 companion](leading-companions.md); what could go to
 upstream Exult in
 [upstreaming notes](upstreaming.md).
@@ -155,7 +164,7 @@ the character they play; the minimap and hold button under conversations;
 Q, E and Space skip people and things hidden under a roof.
 
 **Leading a companion, step 1, built 2026-10-21 (no protocol change;
-untested).** The host and a single player press Shift+Tab to lead the next
+played since in the 2026-10-22 and 10-23 rounds, checklist not ticked).** The host and a single player press Shift+Tab to lead the next
 companion (one no guest plays), with its skill bar and the Q pick; combat
 through targeting and double-clicks uses it; it follows the guests' rules
 ("The Avatar must do this" for people, merchants included); the guests'
@@ -193,7 +202,7 @@ companion quietly (guest_follow 2 and 3: no bar, no notice), and hands it
 back when the menu closes. The host's menus still pause everyone.
 
 **Skills changed after testing, built 2026-10-20 (protocol version 35);
-not tested yet.** From the user's sheet after playing with testers; the
+played since, and changed again in the 2026-10-22 and 10-23 rounds.** From the user's sheet after playing with testers; the
 table is in [companion skills](companion-skills.md), the checks in "Class
 System" in the [test checklist](test-checklist.md).
 
@@ -210,8 +219,9 @@ System" in the [test checklist](test-checklist.md).
 - Riposte's answer always hits (`Friend_class_sure_hit`); Blade Dance
   reaches 6 tiles by darting Sentri beside each foe in turn.
 
-**Class System, built 2026-10-20 (protocol version 33); not tested
-yet** (built remotely; it compiles). See "Class System" in the
+**Class System, built 2026-10-20 (protocol version 33); played and
+tuned since** (the 2026-10-22 and 10-23 feedback rounds; the checklist's
+Class System boxes aren't ticked). See "Class System" in the
 [test checklist](test-checklist.md) and the plan in
 [companion skills](companion-skills.md).
 
@@ -1154,11 +1164,8 @@ replicated to guests.
   stay in sync near the players, but theft by guests and giving items to other
   party members are not handled yet; see the
   [world sync plan](world-sync-plan.md).
-- Creature identity currently relies on deterministic loaded-world ordering;
-  spawned/despawned creature replication needs a durable network identity.
-- The companion selector still appears after loading rather than in the
-  pre-game connection flow.
-- Exult has no in-game return to the title menu, so a guest whose host
-  disconnects sees a notice and Exult closes after a few seconds.
-- Sessions have a single peer, so chat is not yet relayed among several
-  guests.
+- A guest whose host disconnects sees a notice and Exult closes after a few
+  seconds: Exult can't tear a game down and go back to the title menu in one
+  process (the host's Main Menu button restarts Exult instead).
+- Joining is by address only until Phase 8's lobby codes; over the internet
+  that means port forwarding or Tailscale.

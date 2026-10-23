@@ -490,14 +490,16 @@ upstream.
     screen (that was the "can't attack at large resolutions" bug), and
     guests get items and creatures 3 chunks around their companion (was
     2).
-- [ ] Attack the selected target with a key or left-click, through the
+- [x] Attack the selected target with a key or left-click, through the
       existing attack code. Hit chance, damage, and timing stay unchanged.
+      (Space attacks the pick in combat mode, as a double-click does.)
 - [ ] Each player has their own target; the host relays it, and other players
       see a small marker for who is attacking what.
 - [ ] Decide when party combat AI may switch away from a target a player
       picked by hand.
-- [ ] Toggles in Game Input / Game Engine options, saved in the config; a
-      guest's toggles apply to that guest only.
+- [x] Toggles in Game Input / Game Engine options, saved in the config; a
+      guest's toggles apply to that guest only. (WASD movement in Game
+      Input; Targeting on its own Target System page; running on R.)
 
 **Exit criterion:** With both toggles on, a guest walks with WASD, cycles
 targets with Q and attacks the selected enemy, while the host plays with
@@ -728,21 +730,31 @@ Keep project planning in `docs/friend-mode/` within the source tree. Track upstr
 
 ## Open technical questions
 
-1. How strongly does Exult couple input, camera, and event dispatch to its main Avatar actor?
-2. Can we safely suppress companion AI without suppressing scripted sequences that require that NPC?
-3. Which Usecode triggers can ordinary party NPCs activate, even without initiating dialogue?
-4. Does the engine update NPC schedules and objects outside the Avatar's vicinity?
-5. What state needs authoritative replication for movement, object changes, and combat?
-6. How do save/load and character-controller mappings interact?
-7. How do we detect incompatible Exult builds, mods, and game data?
-8. What parts of Exult Studio and the existing debugging tools can accelerate development?
+The early questions (how Exult ties input and the camera to the Avatar,
+suppressing companion AI, which scripts companions can trigger, what to
+replicate, saves with players in them) were answered while building Phases
+1 to 7; the answers are in the [Friend Mode README](friend-mode/README.md),
+[control points](friend-mode/control-points.md) and the
+[interaction policy](friend-mode/interaction-policy.md). Still open:
+
+1. How to detect incompatible Exult builds, mods and game data beyond
+   today's handshake (protocol version and game).
+2. Whether the host can simulate distant regions for independent
+   exploration ([research](friend-mode/independent-views-research.md)).
 
 ## Next steps
 
-1. **The Class System** (companion skills, all nine companions): test it
-   and tune it; keys for the bars come last.
-2. **Lobby codes over WebRTC**, the last step before an official release
-   (Phase 8).
+1. **Lobby codes over WebRTC** (Phase 8), the last step before an
+   official release: `friendrtc.cc` behind `Friend_connection`,
+   libdatachannel in the Mac and Windows builds, TURN fallback, then
+   release builds and packaging.
+2. **A test with more players:** Phase 6's three-player exit test, two
+   people grabbing the same item, four players, and guests' movement over
+   a real internet connection.
+3. **The Class System:** keys for the skill bars, and balancing over
+   longer play (tested and tuned in the 2026-10-22 and 10-23 rounds).
+4. **The in-game keyboard command list and the webpage feature list**,
+   once the in-game features settle.
 
 ---
 

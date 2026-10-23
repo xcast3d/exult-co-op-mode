@@ -97,15 +97,21 @@ Each skill is written as a chain of named settings in `friendclass.cc`, one
 per line, so a new one reads like this:
 
 ```cpp
-Class_skill(30, "Mending Circle")
-		.icon_spell(spell_great_heal)
+Class_skill(30, "Restoration")
+		.describe("Heals the whole party")
+		.recharge(90)
+		.icon_spell(spell_restoration)
 		.kind(T::heal)
-		.aim(G::party_area, 8, true)    // 8 tiles, drawn
-		.heal(10)
+		.aim(G::party_area)             // No range: the whole party
+		.unlock(level_third)
+		.heal(20)
 		.targets(2)                     // The Class AI waits for two hurt
 		.on_targets(sprite_sparkles)
-		.says("*calls on the earth to mend*"),
+		.says("Vas Mani Hur"),
 ```
+
+A skill on foes gives its range, and `true` to draw it:
+`.aim(G::hostiles_nearest, 12, true)` (Song of Peace).
 
 Levels (2026-10-22, were 1, 3, 6): the first skill at level 1, the second
 at 4, the third at 7 (`level_second`, `level_third` in friendclass.cc). U7's
@@ -344,7 +350,7 @@ Song of Peace first, Song of Warding second; Master's Strike a lunge (range
 wait after any skill 5 seconds. The levels below read 3 and 6 in the history.
 
 Changed after testing with testers (2026-10-20): the skills reordered so
-each bar runs level 1, 3, 6; cooldowns 30/60/90 by level; Jaana's Entangle
+each bar runs level 1, 3, 6 (1, 4, 7 since 2026-10-22); cooldowns 30/60/90 by level; Jaana's Entangle
 became Greater Heal; Dupre's Stand Fast became Shield Ally; Spark got Dirty
 Trick; Julia's Time Bomb became Set Trap; Katrina's Healing Field and
 Sanctuary became summons. New skill numbers: Greater Heal 33, Shield Ally

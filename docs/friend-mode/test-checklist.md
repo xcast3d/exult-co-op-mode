@@ -928,11 +928,12 @@ Built 2026-10-20, untested. Only the host pauses the game.
 
 ## Class System (protocol 32)
 
-Built 2026-10-20 without a test run (the user was away); everything here
-is untested. Turn it on first: Game menu → Class System → Enable: Yes on
+Built 2026-10-20 without a test run (the user was away); played and tuned
+since in the 2026-10-22 and 10-23 rounds (their own sections below), but
+these boxes were never ticked. Turn it on first: Game menu → Class System → Enable: Yes on
 the host. For quick rounds, set `config/friend/class/short_cooldowns` to
 `yes` in the host's cfg (5-second cooldowns; not on the options page).
-The host's log says "Friend Class: Jaana uses Mending Circle on 3 targets
+The host's log says "Friend Class: Jaana uses Restoration on 3 targets
 (+24 health)" for every skill used.
 
 Options page:
@@ -996,31 +997,32 @@ A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
       walking.
 - [ ] Switching companions (J) changes the bar; another companion's
       cooldowns are their own.
-Skills as changed after testing (2026-10-20, protocol 35): bar order is
-level 1, 3, 6; cooldowns mostly 30, 60 and 90 seconds.
+Skills as changed after testing (2026-10-20, protocol 35), with the later
+rounds: bar order is level 1, 4, 7 (was 1, 3, 6, until 2026-10-22);
+cooldowns mostly 30, 60 and 90 seconds. Party buffs reach the whole party
+with no circle since 2026-10-23.
 
-- [ ] Jaana: Greater Heal (1) heals the most hurt within 12 fully;
-      Mending Circle (6) with someone hurt nearby heals the party within
-      the green circle by up to 20, "*calls on the earth to mend*" over
-      her, sparkles on each; the slot counts down 90 and clicking it
-      meanwhile says "Mending Circle: 42 seconds".
-- [ ] Jaana: Mending Circle with nobody hurt says "Nobody needs healing"
+- [ ] Jaana: Greater Heal (1) heals the most hurt in the party fully;
+      Restoration (7) with someone hurt heals the whole party by up to 20,
+      "Vas Mani Hur" over her, sparkles on each; the slot counts down 90
+      and clicking it meanwhile says "Restoration: 42 seconds".
+- [ ] Jaana: Restoration with nobody hurt says "Nobody needs healing"
       and starts no cooldown.
-- [ ] Iolo: Song of Warding (1) gives the party nearby protection (U7's
-      protection flag; the blue badge). Song of Peace (3) puts hostiles in
-      the circle to sleep for about 5 seconds (some resist), music notes on
-      Iolo and on each; the party stays awake. Battle Hymn (6): the party
+- [ ] Iolo: Song of Peace (1) puts hostiles in the circle to sleep for
+      about 5 seconds (some resist), music notes on Iolo and on each; the
+      party stays awake. Song of Warding (4) gives the whole party
+      protection (U7's protection flag; the blue badge). Battle Hymn (7): the party
       hits harder for 30 seconds.
 - [ ] Shamino: Vanish (1) makes him invisible, on the guest who plays him
-      too. Aimed Shot (3) at the pick. Volley (6) with a bow and arrows
+      too. Aimed Shot (4) at the pick. Volley (7) with a bow and arrows
       shoots at up to three hostiles, an arrow each; without a bow: "Shamino
       needs a bow, crossbow or sling readied".
 - [ ] Spark: Stun Shot fires a stone; the target stops for about 3
-      seconds, or "*resisted*". Dirty Trick (6): "*throws mud*", hostiles
+      seconds, or "*resisted*". Dirty Trick (7): "*throws mud*", hostiles
       within 12 show "*confused*" (or "*resisted*") and a red down arrow,
       and don't attack for 3 seconds; then they fight again.
-- [ ] Dupre: Lay on Hands (1) heals the most hurt within 3 by 25. Shield
-      Ally (3) with a shield readied: the ally nearest trouble within 6
+- [ ] Dupre: Lay on Hands (1) heals the most hurt in the party by 25. Shield
+      Ally (4) with a shield readied: the ally a foe is on within 6
       gets a blue shield; for 15 seconds melee blows on that ally land on
       Dupre ("*shields*" over him) while he is within 6 tiles; without a
       shield: "Dupre needs a shield readied". Played by the Class AI, he
@@ -1030,20 +1032,20 @@ level 1, 3, 6; cooldowns mostly 30, 60 and 90 seconds.
       none. "Show skill ranges: No" hides them on that machine.
 - [ ] Sentri: Riposte, then let a foe swing at him: every miss is answered
       with a strike that always hits ("*ripostes*", a sword sprite on the
-      foe) for 10 seconds. Master's Strike (3) on an armoured foe does more
-      than his normal hits. Blade Dance (6): he darts beside each foe within
+      foe) for 10 seconds. Master's Strike (4) on an armoured foe does more
+      than his normal hits. Blade Dance (7): he darts beside each foe within
       6 in turn (a poof where he was) and strikes each; on a guest too.
 - [ ] Tseramed with a bow: Sleep Arrow puts the target to sleep as the
       arrow lands; Crippling Shot makes it attack less often for 10 seconds;
-      Hunter's Mark (level 6, 90 s): party hits on it do more (compare
+      Hunter's Mark (level 7, 90 s): party hits on it do more (compare
       "combat shows hits" numbers).
 - [ ] Julia: Set Trap (1) leaves a red circle 2 tiles round at her feet for
       5 seconds; hostiles in it lose 3 health a second, the party none.
-      Quick Fix (3) on the weakest nearby (fewer hits get through for 30
-      seconds); Flashbang (6): a keg flies to the pick and hostiles near it
+      Quick Fix (4) on the weakest in the party (fewer hits get through for 30
+      seconds); Flashbang (7): a keg flies to the pick and hostiles near it
       stop for 2.5 seconds.
-- [ ] Katrina: Summon Dogs (1): two sheepdogs; Summon Wolf (3): a wolf;
-      Summon Bee (6): a giant bee. Each fights for 30 seconds, then
+- [ ] Katrina: Summon Dogs (1): two sheepdogs; Summon Wolf (4): a wolf;
+      Summon Bee (7): a giant bee. Each fights for 30 seconds, then
       vanishes with a poof (guests see it too). The Class AI calls one
       creature at a time, the strongest ready first.
 - [ ] Reactions over foes, emote-style, on every machine: *stunned*
@@ -1051,15 +1053,15 @@ level 1, 3, 6; cooldowns mostly 30, 60 and 90 seconds.
       *confused* (Dirty Trick), *dazed* (Flashbang), *crippled* (Crippling
       Shot), *marked* (Hunter's Mark), *enraged* (Challenge), *resisted*
       when a roll fails; *ripostes* over Sentri, *shields* over Dupre.
-- [ ] Dupre at level 6: Challenge turns hostiles in the circle on him;
+- [ ] Dupre at level 7: Challenge turns hostiles in the circle on him;
       for 6 seconds they keep coming back to him.
 
 Class AI (companions nobody plays, host):
 
 - [ ] Single player, Class System on, Jaana in the party: someone below
       half health nearby, and she uses Greater Heal by herself; someone
-      poisoned near her (level 3+), Mass Cure; two below half (level 6),
-      Mending Circle.
+      poisoned (level 4+), Mass Cure; two below half (level 7),
+      Restoration.
 - [ ] Iolo sings Song of Warding when two or more hostiles are near in a
       fight; Shamino volleys at two or more.
 - [ ] A guest's companion never uses skills by itself, but does in follow
@@ -1106,9 +1108,10 @@ Class AI (companions nobody plays, host):
 - [ ] Shamino or Iolo with a bow or crossbow: a foe closing to melee makes
       them step back about 4 tiles ("keeps its distance" in the host's
       log), then shoot; never more than 12 tiles from the Avatar.
-- [ ] Jaana: two companions below half, the worst far off: she walks into
-      range ("moves to heal") and uses Mending Circle; a foe beside her
-      sends her back to the party ("falls back").
+- [ ] Jaana: two companions below half, the worst far off: she uses
+      Restoration, which reaches the whole party (since 2026-10-23 she no
+      longer needs to walk into range); a foe beside her sends her back to
+      the party ("falls back").
 - [ ] Dupre and the others close in as before.
 - [ ] A guest's companion is never moved by this; in follow mode it is.
 
@@ -1274,8 +1277,10 @@ not tested.
 
 ## Feedback round, batches C and D (2026-10-22)
 
-Space, Shift+Space and Alt+Space; Caps Lock; the window icons; the hold
-button; the options moved to Game Display. Built, not tested. The rules
+Space, Shift+Space and Alt+Space; running (Caps Lock then, R since
+2026-10-23); the window icons; the hold button; the options moved to Game
+Display. Tested on the host 2026-10-22 (the feedback round says so), boxes
+not ticked. The rules
 are in [the feedback round](feedback-2026-10-22.md), C1.
 
 Space and its hint line (the second line under "Targeting ..."):
@@ -1300,13 +1305,13 @@ Space and its hint line (the second line under "Targeting ..."):
 
 Walking:
 
-- [ ] WASD and the arrow keys walk at the second fastest speed. Caps Lock
-      on: "Running", and they run; off: "Walking". In combat they walk at
-      combat speed either way.
+- [ ] WASD and the arrow keys walk at the second fastest speed. R:
+      "Running", and they run; R again: "Walking" (Caps Lock until
+      2026-10-23). In combat they walk at combat speed either way.
 - [ ] Shift+arrows still walk slowly (Exult's own).
 - [ ] With WASD on, Shift+S does nothing (no Save/Restore); Ctrl+S still
       quicksaves; Shift+W still shows the watch.
-- [ ] A guest running with Caps Lock doesn't stutter or get pulled back.
+- [ ] A guest running (R) doesn't stutter or get pulled back.
 
 Windows:
 
