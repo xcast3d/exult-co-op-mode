@@ -66,12 +66,18 @@ used; a click uses it and the reason shows near the top when it can't
 ("Restoration: 23 seconds", "Needs a hostile", "Not yet: level 3").
 
 - A guest's bar holds its companion's skills.
-- The host's bar holds the Avatar's spells: Great Heal, Fire Blast and
-  Lightning to start, each greyed while the Avatar doesn't know it or lacks
+- The host's bar holds the Avatar's spells: slots 1, 2 and 3 are
+  Telekinesis, Lightning and Time Stop (2026-10-23; were Great Heal, Fire
+  Blast and Lightning), each greyed while the Avatar doesn't know it or lacks
   the mana, reagents or level. A click casts through the spellbook's own
   code (mana, reagents, words of power as in U7); a spell that wants a
-  target takes the Target System's pick instead of the crosshair (the
-  Avatar for Great Heal, unless a party member is picked).
+  target takes the Target System's pick instead of the crosshair:
+  Lightning the Q pick, Telekinesis the E pick (a lever, a chest, an
+  item), else the Q pick; the crosshair only with no pick. Time Stop needs
+  none. A slot clicked is used on the next frame, not inside the click: a
+  crosshair inside it crashed Exult (2026-10-23). A spell at a foe starts
+  the Avatar's fight with it once the cast is over (fighting at once left
+  the Avatar standing while the rest of the party fought).
 - No bar for spectators, in follow mode, in conversations or menus.
 
 **Definitions, one table per companion.** In `friendclass.cc`, by NPC
@@ -462,6 +468,12 @@ spell when the Avatar fights with a spellbook readied; the bar is the same
 idea with more slots and a target.
 
 ## Keys
+
+**Ctrl+1, Ctrl+2 and Ctrl+3** use the bar's first three slots, as a click
+does (2026-10-23), on the host, single player and guests alike; with no
+bar, a red X. (Ctrl+number had no binding in Exult's keys. On a Mac whose
+Mission Control uses Ctrl+number to switch desktops, the system takes them
+first.)
 
 Decided 2026-10-20: **the mouse is enough for now; keys are the last phase
 of this feature.** The reason for keys was a game controller one day, and a

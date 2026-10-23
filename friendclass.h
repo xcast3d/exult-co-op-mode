@@ -59,6 +59,10 @@ int Friend_hud_bottom_y();
 // host (or in single player) the cooldowns and the Class AI.
 void Friend_class_frame();
 
+// Ctrl+1 to Ctrl+3: use that slot of the bar shown (0 the first), as a
+// click does.  False if there is no bar or no such slot.
+bool Friend_class_use_slot(int index);
+
 // A new world (load, a guest's download): cooldowns and bonuses start over.
 void Friend_class_world_loaded();
 

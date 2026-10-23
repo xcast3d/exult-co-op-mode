@@ -53,6 +53,7 @@
 #include "Flex.h"
 #include "spellbook.h"
 #include "ucmachine.h"
+#include "ucsched.h"
 #include "utils.h"
 #include "weaponinf.h"
 
@@ -65,6 +66,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <utility>
 
 using std::cout;
 using std::endl;
@@ -467,6 +469,7 @@ constexpr int spell_fireworks    = 3;
 constexpr int spell_fire_blast   = 18;
 constexpr int spell_mass_cure    = 20;
 constexpr int spell_protection   = 21;
+constexpr int spell_telekinesis  = 22;
 constexpr int spell_heal         = 25;
 constexpr int spell_paralyze     = 28;
 constexpr int spell_protect_all  = 27;
@@ -479,6 +482,7 @@ constexpr int spell_cause_fear   = 48;
 constexpr int spell_death_bolt   = 57;
 constexpr int spell_mass_might   = 62;
 constexpr int spell_swordstrike  = 70;
+constexpr int spell_time_stop    = 71;
 constexpr int spell_curse        = 24;
 constexpr int spell_mass_curse   = 35;
 constexpr int spell_explosion    = 43;
@@ -2370,8 +2374,10 @@ void Take_event(const std::vector<unsigned char>& data) {
  *  The bars.
  */
 
-// The Avatar's spell bar: chosen spells, cast in one click.
-const std::array<int, 3> avatar_spells = {spell_great_heal, spell_fire_blast, spell_lightning};
+// The Avatar's spell bar: chosen spells, cast in one click (2026-10-23:
+// slots 1, 2 and 3 are Telekinesis, Lightning and Time Stop; were Great
+// Heal, Fire Blast and Lightning).
+const std::array<int, 3> avatar_spells = {spell_telekinesis, spell_lightning, spell_time_stop};
 
 const char* Spell_name(int spell) {
 	switch (spell) {
@@ -2381,6 +2387,10 @@ const char* Spell_name(int spell) {
 		return "Fire Blast";
 	case spell_lightning:
 		return "Lightning";
+	case spell_telekinesis:
+		return "Telekinesis";
+	case spell_time_stop:
+		return "Time Stop";
 	default:
 		return "Spell";
 	}
@@ -2394,6 +2404,10 @@ const char* Spell_description(int spell) {
 		return "A bolt of fire at the pick";
 	case spell_lightning:
 		return "Lightning at the pick";
+	case spell_telekinesis:
+		return "Uses what is picked (E, else Q) from afar";
+	case spell_time_stop:
+		return "Stops time for a while: all but the Avatar freeze";
 	default:
 		return "";
 	}
@@ -2401,6 +2415,16 @@ const char* Spell_description(int spell) {
 
 bool Spell_heals(int spell) {
 	return spell == spell_great_heal;
+}
+
+// Aimed at a thing (E's pick), not a person.
+bool Spell_on_thing(int spell) {
+	return spell == spell_telekinesis;
+}
+
+// Asks for no target at all.
+bool Spell_untargeted(int spell) {
+	return spell == spell_time_stop;
 }
 
 Spellbook_object* Avatar_spellbook() {
@@ -2543,6 +2567,34 @@ bool Ready_to_fight(Actor* user, Actor* pick, const std::string& what, int index
 	return true;
 }
 
+// A foe the Avatar fights once its spell is cast (Engage_after_cast).
+Game_object_weak pending_engage;
+uint32           pending_engage_until = 0;
+
+// Each frame: when the Avatar's cast is over (no spell script running on
+// it), pick up the fight with the spell's foe, as a double-click in combat
+// mode starts one: the target, then the combat schedule afresh.
+void Engage_after_cast() {
+	const Game_object_shared foe = pending_engage.lock();
+	if (!foe) {
+		return;
+	}
+	Game_window* gwin   = Gwin();
+	Actor*       avatar = gwin->get_main_actor();
+	Actor*       target = foe->as_actor();
+	if (!avatar || !target || target->is_dead() || !gwin->in_combat() || Now() > pending_engage_until) {
+		pending_engage.reset();
+		return;
+	}
+	if (Usecode_script::find_active(avatar) || avatar->in_usecode_control()) {
+		return;    // Still casting.
+	}
+	pending_engage.reset();
+	if (Friend_mode_attack_target(target, true) && avatar == gwin->get_controlled_actor()) {
+		avatar->set_schedule_type(Schedule::combat);    // Wake it with the target set.
+	}
+}
+
 void Use_slot(const Bar_slot& slot, int index) {
 	Game_window* gwin  = Gwin();
 	Actor*       actor = Bar_actor();
@@ -2562,6 +2614,14 @@ void Use_slot(const Bar_slot& slot, int index) {
 		Game_object* aim  = nullptr;
 		if (Spell_heals(slot.spell)) {
 			aim = pick && (pick->is_in_party() || pick == actor) ? pick : actor;
+		} else if (Spell_on_thing(slot.spell)) {
+			// E's pick, else Q's; the crosshair only with neither.
+			aim = Friend_mode_object_target();
+			if (!aim) {
+				aim = pick;
+			}
+		} else if (Spell_untargeted(slot.spell)) {
+			aim = nullptr;
 		} else if (pick && !pick->is_in_party()) {
 			if (!Ready_to_fight(actor, pick, slot.name, index)) {
 				return;
@@ -2569,8 +2629,12 @@ void Use_slot(const Bar_slot& slot, int index) {
 			aim = pick;
 		}
 		book->do_spell(actor, slot.spell, false, false, aim);
-		if (aim && aim != actor && !Spell_heals(slot.spell)) {
-			Friend_mode_attack_target(static_cast<Actor*>(aim), true);    // And fight it, as Space would.
+		if (aim && aim != actor && aim->as_actor() && !Spell_heals(slot.spell) && !Spell_on_thing(slot.spell)) {
+			// And fight it, as Space would, once the cast is over: fighting
+			// at once left the Avatar standing (2026-10-23), the spell's
+			// script and casting frames outlasting the attack.
+			pending_engage       = weak_from_obj(aim);
+			pending_engage_until = Now() + 5000;
 		}
 		return;
 	}
@@ -3028,13 +3092,17 @@ private:
 	friend class Skill_button;
 };
 
+// The slot clicked, used on the next frame (Friend_class_frame), not
+// inside the click: a spell or skill may bring up the crosshair, whose own
+// click loop replaces the drag the button's click is still part of
+// (Dragging_info::drop then went on in freed memory, 2026-10-23).
+int pending_slot = -1;
+
 bool Skill_button::activate(MouseButton button) {
 	if (button != MouseButton::Left || !the_bar) {
 		return false;
 	}
-	if (const Bar_slot* slot = the_bar->slot(index)) {
-		Use_slot(*slot, index);
-	}
+	pending_slot = index;
 	return true;
 }
 
@@ -3960,6 +4028,14 @@ void Friend_class_options() {
 	Gwin()->get_gump_man()->do_modal_gump(&options, Mouse::hand);
 }
 
+bool Friend_class_use_slot(int index) {
+	if (!the_bar || !the_bar->slot(index)) {
+		return false;
+	}
+	pending_slot = index;    // On the next frame, as a click.
+	return true;
+}
+
 void Friend_class_frame() {
 	Game_window* gwin = Gwin();
 	if (!gwin->get_main_actor()) {
@@ -3974,6 +4050,13 @@ void Friend_class_frame() {
 		}
 		if (Is_host()) {
 			Send_states();
+		}
+	}
+	Engage_after_cast();
+	if (const int index = std::exchange(pending_slot, -1); index >= 0 && the_bar) {
+		if (const Bar_slot* slot = the_bar->slot(index)) {
+			const Bar_slot copy = *slot;    // Using it may rebuild the bar.
+			Use_slot(copy, index);
 		}
 	}
 	Update_bar();

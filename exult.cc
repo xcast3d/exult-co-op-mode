@@ -1358,8 +1358,9 @@ static void Friend_test_kit_magic() {
 	// Magic, for the Class System's spell bar, carried by the Avatar (U7
 	// only counts a book and reagents one carries): a bag with 20 of each
 	// reagent, every spell in the Avatar's spellbook (a new book in the bag
-	// if it has none), and full mana.  The book still asks for the level of
-	// each spell's circle.
+	// if it has none), and full mana, at least 8 (Time Stop's cost).  The
+	// book still asks for the level of each spell's circle (the kit makes
+	// the Avatar level 8).
 	const Game_object_shared reagents = Friend_test_kit_create(802, 0);
 	if (reagents && gwin->get_main_actor()->add(reagents.get(), true)) {
 		for (int frame = 0; frame < 8; ++frame) {
@@ -1386,6 +1387,9 @@ static void Friend_test_kit_magic() {
 			for (int spell = 0; spell < 9 * 8; ++spell) {    // A full book: nine circles of eight.
 				book->add_spell(spell);
 			}
+		}
+		if (avatar->get_property(Actor::magic) < 8) {
+			avatar->set_property(Actor::magic, 8);
 		}
 		avatar->set_property(Actor::mana, avatar->get_property(Actor::magic));
 	}
@@ -1474,7 +1478,7 @@ static void Friend_mode_gather_companions(bool second_group) {
 	Party_manager*   partyman = gwin->get_party_man();
 	const Tile_coord at       = avatar->get_tile();
 	constexpr int    level7   = 50 << 6;    // Level = 1 + log2(experience / 50).
-	constexpr int    level5   = 50 << 4;
+	constexpr int    level8   = 50 << 7;    // The Avatar: every circle (Time Stop is the 8th).
 	auto             find_npc = [](const std::string& name) -> Actor* {
 		for (int i = 1; i < gwin->get_num_npcs(); ++i) {
 			Actor* each = gwin->get_npc(i);
@@ -1524,8 +1528,8 @@ static void Friend_mode_gather_companions(bool second_group) {
 			npc->set_property(Actor::exp, level7);
 		}
 	}
-	if (avatar->get_property(Actor::exp) < level5) {
-		avatar->set_property(Actor::exp, level5);
+	if (avatar->get_property(Actor::exp) < level8) {
+		avatar->set_property(Actor::exp, level8);
 	}
 	Friend_test_kit_magic();
 	gwin->set_all_dirty();
@@ -2992,6 +2996,10 @@ static Game_object_weak friend_object_target;
 static bool             friend_object_in_window = false;    // It was picked in a window.
 static uint32           friend_range_shown_until = 0;    // Ticks; after Q or E.
 
+Game_object* Friend_mode_object_target() {
+	return friend_object_target.lock().get();
+}
+
 // Q and E start again at the nearest once one has moved; standing still,
 // they go on to the next (and past the last to "No target", then round).
 static Tile_coord friend_cycle_at(-1, -1, -1);
@@ -3018,7 +3026,14 @@ static bool Friend_is_hidden_by_roof(const Game_object* obj) {
 		return false;
 	}
 	chunk->setup_cache();
-	return chunk->is_roof(outer->get_tx(), outer->get_ty(), outer->get_lift()) < gwin->get_render_skip_lift();
+	const int roof = chunk->is_roof(outer->get_tx(), outer->get_ty(), outer->get_lift());
+	if (roof >= gwin->get_render_skip_lift()) {
+		return false;
+	}
+	// A thing that reaches the roof stands under its eave, outside (a lamp
+	// post by a house, 2026-10-23): seen, not hidden.  People keep the
+	// plain rule.
+	return outer->as_actor() || outer->get_lift() + outer->get_info().get_3d_height() < roof;
 }
 
 // Who Q can pick: on screen, in range, not hidden under a roof; party
@@ -3383,7 +3398,7 @@ static void Friend_mode_check_target() {
 // picked up (tools/friend-mode/pickup_items.py lists them); see
 // docs/friend-mode/targeting-groups.md.  Weapons, armour and ammunition
 // are loot by their game data; anything not listed is decor.
-enum class Friend_thing_group { box, loot, decor, furniture, interactive, lever, sign };
+enum class Friend_thing_group { box, loot, decor, furniture, interactive, usable, sign };
 
 // The group of a thing in the world (containers and bodies are 'box').
 static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
@@ -3392,7 +3407,12 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 			645, 646, 648, 649, 650, 662, 668, 691, 692, 693, 726, 728, 738, 746, 747, 754, 756, 760, 761, 769, 771,
 			772, 785, 786, 790, 797, 827, 838, 839, 842, 877, 914, 915, 916, 921, 937, 955, 981};
 	static const std::unordered_set<int> furniture{
-			336, 338, 997, 873, 697, 702, 704, 812, 813, 837, 987, 991, 992, 995, 1013};
+			336, 338, 997, 873, 697, 702, 704, 812, 813, 987, 991, 992, 995, 1013};
+	// Usable things (2026-10-23; was levers and switches): levers (787),
+	// switches (788), the bucket (810), artist's equipment (823: pigments
+	// and the paint brush) and the easel (837, was furniture); the gavel
+	// below.  Decor is what has no use.
+	static const std::unordered_set<int> usable{787, 788, 810, 823, 837};
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
 	// walls (828, 845) that slide open.
 	static const std::unordered_set<int> interactive{290, 291, 322, 372, 435, 481, 526, 657, 678, 828, 845, 889};
@@ -3401,8 +3421,8 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	if (info.get_shape_class() == Shape_info::container || info.is_body_shape()) {
 		return Friend_thing_group::box;
 	}
-	if (shape == 787 || shape == 788) {    // Levers and switches.
-		return Friend_thing_group::lever;
+	if (usable.count(shape) || (shape == 675 && obj->get_framenum() == 0)) {    // 675 frame 0: the gavel.
+		return Friend_thing_group::usable;
 	}
 	if (shape == 379 || shape == 820 || shape == 715) {    // Sign, plaque, tombstone.
 		return Friend_thing_group::sign;
@@ -3432,7 +3452,7 @@ static bool Friend_thing_group_on(Friend_thing_group group) {
 		return Friend_targeting_furniture;
 	case Friend_thing_group::interactive:
 		return Friend_targeting_interactive;
-	case Friend_thing_group::lever:
+	case Friend_thing_group::usable:
 		return Friend_targeting_levers;
 	case Friend_thing_group::sign:
 		return Friend_targeting_signs;
@@ -3888,7 +3908,7 @@ static std::string Friend_space_hint() {
 	case Friend_thing_group::sign:
 		return two("Read", "");
 	case Friend_thing_group::interactive:
-	case Friend_thing_group::lever:
+	case Friend_thing_group::usable:
 	case Friend_thing_group::furniture:
 		return two("Use", obj->is_dragable() ? "Pick up" : "");
 	default:
@@ -3951,8 +3971,8 @@ static std::vector<Game_object*> Friend_window_reading_order(Gump* gump) {
 // E: things.  With a container window open (a chest, a body, a pack, a
 // paperdoll), what is in the open windows, the newest window first, top
 // left to bottom right as they show (Friend_window_reading_order).  Otherwise things in the world within reach,
-// nearest first: containers and bodies, and loose things within 6 tiles
-// (not one in the next building).  Shift+E the previous; past the last the
+// nearest first: containers and bodies on screen, loose things within 18
+// tiles, with a path to them (not one in the next building).  Shift+E the previous; past the last the
 // pick clears.  See Friend_mode_space for what Space does with them.
 static std::vector<Game_object*> Friend_window_candidates() {
 	std::vector<Gump*> windows;
@@ -3971,7 +3991,7 @@ static std::vector<Game_object*> Friend_window_candidates() {
 
 // E with no container window open: things in the world, nearest first.
 static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
-	constexpr int      loose_tiles = 6;
+	constexpr int      reach_tiles = 18;    // Loose things and fixtures (was 6, the screen, then 12).
 	Game_object_vector nearby;
 	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0);
 	const TileRect            view = gwin->get_win_tile_rect();
@@ -3983,12 +4003,15 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		}
 		const Tile_coord         at    = obj->get_tile();
 		const Friend_thing_group group = Friend_thing_group_of(obj);
-		// Containers, bodies and signs within reach; the rest near one's
-		// feet: things one can pick up, and doors, lamps and levers to use.
-		// Pools of water (fountains) are decor that can't be picked up.
-		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::lever
+		// Containers, bodies and signs on screen; things one can pick up,
+		// and doors, lamps and levers to use, within 18 tiles (2026-10-23;
+		// were 6, and the whole screen offered far shutters).  All with a
+		// path to them that walls don't block, as Exult lets one take
+		// things.  Pools of water (fountains) are decor that can't be
+		// picked up.
+		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::usable
 							 || (GAME_BG && obj->get_shapenum() == 893);
-		const bool near    = (obj->is_dragable() || fixture) && from.distance(at) <= loose_tiles;
+		const bool near    = (obj->is_dragable() || fixture) && from.distance(at) <= reach_tiles;
 		const bool far     = group == Friend_thing_group::box || group == Friend_thing_group::sign;
 		if (Friend_thing_group_on(group) && (far || near) && !Friend_is_hidden_by_roof(obj)
 			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5
@@ -4142,10 +4165,14 @@ static void Friend_mode_backpack_key(int member) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
-	if (own != gwin->get_main_actor()) {    // A guest: its companion's only.
-		Friend_mode_toggle_backpack_of(own);
+	if (Friend_mode_is_guest()) {    // A guest: its companion's only.
+		if (own != gwin->get_main_actor()) {
+			Friend_mode_toggle_backpack_of(own);
+		}
 		return;
 	}
+	// The host and single player are the game master: every member's, even
+	// while leading a companion.
 	if (member >= 0) {
 		if (Actor* who = Friend_party_member(member)) {
 			Friend_mode_toggle_backpack_of(who);
@@ -9935,6 +9962,16 @@ static void Handle_event(SDL_Event& event) {
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
 		&& !Notebook_gump::get_instance()) {
 		Friend_mode_cycle_object((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);    // E: the next thing.
+		return;
+	}
+	if (event.type == SDL_EVENT_KEY_DOWN && (event.key.mod & SDL_KMOD_CTRL) && !event.key.repeat
+		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
+		&& !Notebook_gump::get_instance() && event.key.scancode >= SDL_SCANCODE_1
+		&& event.key.scancode <= SDL_SCANCODE_3) {
+		// Ctrl+1 to Ctrl+3: the skill or spell bar's slots (2026-10-23).
+		if (!Friend_class_use_slot(event.key.scancode - SDL_SCANCODE_1)) {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		}
 		return;
 	}
 	if (event.type == SDL_EVENT_KEY_DOWN && (event.key.mod & SDL_KMOD_SHIFT) && !event.key.repeat

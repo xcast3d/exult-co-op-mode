@@ -413,7 +413,8 @@ upstream.
   - **Things, not just containers** (built 2026-10-19; not tested yet).
     E is context-sensitive instead of adding a third key or a type key:
     with no container window open it cycles containers, bodies and loose
-    items (within 6 tiles) nearest first; with one open (a chest, a body,
+    items (within 18 tiles with a path, as for picking up; 6 until
+    2026-10-23) nearest first; with one open (a chest, a body,
     a pack, a paperdoll) it cycles what is inside, the newest window first.
     Space by the pick:
     - a container or body on the map opens; Shift+Space picks it up;
@@ -450,8 +451,10 @@ upstream.
     Game menu → **Target System**, next to Game Input (the "Targeting"
     switch moved there): Enable (the rest hides when off), the range
     circle, Q offering the party, and what E offers by group: loot (on),
-    decor (off), furniture (off), doors, shutters and lamps (off), levers
-    and switches (on), signs, plaques and graves (on; Space reads them).
+    decor (off), furniture (off), doors, shutters and lamps (off), usable
+    things (on; levers, switches, the bucket, gavel, paint brush and easel,
+    2026-10-23, was levers and switches), signs, plaques and graves (on;
+    Space reads them).
     Q and E start again at the nearest after you move. Space takes loot and decor, and uses furniture, doors, lamps and
     levers (Shift picks furniture up). The groups are our own shape lists;
     see [targeting groups](friend-mode/targeting-groups.md), with the
@@ -480,7 +483,10 @@ upstream.
     member's paperdoll as before, and pressing it again shuts it.
     Shift+1 to Shift+8 open or shut that member's backpack; Shift+I opens
     the next backpack not open yet, the Avatar's first, and with all open
-    shuts them all. A guest only has its own companion's. While a sign,
+    shuts them all. The host and single player are the game master: every
+    member's, even while leading a companion (2026-10-23; also
+    double-clicking a member or a bag in a member's pack). A guest only
+    has its own companion's. While a sign,
     plaque, tombstone, scroll or book is open, Space closes it (or turns
     the page).
   - **Doors open by walking into them** (2026-10-19), standing or on the

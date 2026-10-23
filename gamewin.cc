@@ -2962,16 +2962,20 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 	Actor* controlled = get_controlled_actor();
 	if (gump && controlled && controlled != main_actor && !obj->as_actor()) {
 		Container_game_object* container = obj->as_container();
-		if (container && obj->get_outermost() == controlled && container->show_gump()) {
+		// A guest's own packs; the host leading a companion, any party
+		// member's (the game master).
+		Actor* holder = obj->get_outermost()->as_actor();
+		if (container && (holder == controlled || (!network_friend_control && holder && holder->is_in_party()))
+			&& container->show_gump()) {
 			effects->remove_text_effects();
 			return;
 		}
 	}
 	Actor* clicked_actor = obj->as_actor();
 	if (!gump && controlled && controlled != main_actor && clicked_actor && clicked_actor->is_in_party()) {
-		// Companion control can inspect only its own paperdoll.  The Avatar
-		// remains the party administrator and retains normal access to all.
-		if (clicked_actor == controlled) {
+		// A guest can inspect only its own paperdoll.  The host (and single
+		// player), leading a companion or not, is the game master: all of them.
+		if (clicked_actor == controlled || !network_friend_control) {
 			effects->remove_text_effects();
 			clicked_actor->show_inventory();
 		} else {

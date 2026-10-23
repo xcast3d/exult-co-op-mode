@@ -374,14 +374,17 @@ void ActionInventory(const int* params) {
 		return open != nullptr;
 	};
 
-	// A controlled companion owns only its paperdoll.  Ignore party-page
-	// cycling and explicit member bindings until control returns to Avatar.
-	if (controlled && controlled != gwin->get_main_actor()) {
-		if (params[0] >= 0 && close_if_open(controlled)) {
-			return;
-		}
-		if (controlled->can_act_charmed()) {
-			controlled->show_inventory();
+	// A guest owns only its companion's paperdoll.  Ignore party-page
+	// cycling and explicit member bindings.  (The host and single player are
+	// the game master: every paperdoll, even while leading a companion.)
+	if (Friend_mode_is_guest()) {
+		if (controlled && controlled != gwin->get_main_actor()) {
+			if (params[0] >= 0 && close_if_open(controlled)) {
+				return;
+			}
+			if (controlled->can_act_charmed()) {
+				controlled->show_inventory();
+			}
 		}
 		Mouse::mouse()->set_speed_cursor();
 		return;

@@ -236,7 +236,7 @@ Class System boxes aren't ticked). See "Class System" in the
   Auto, 2026-10-23), Class AI, Require class
   items (off; no items exist yet).
 - **Skill bar** for a guest's companion; **spell bar** for the Avatar
-  (Great Heal, Fire Blast, Lightning). Mouse only so far.
+  (Telekinesis, Lightning, Time Stop since 2026-10-23). Mouse only so far.
 - **Definitions** per companion (Iolo, Shamino, Jaana, Dupre, Spark): id,
   name, icon (a spellbook picture), cooldown (60 s), range and whether it
   is drawn, type, target, unlock level (1, 4, 8), effect, words.

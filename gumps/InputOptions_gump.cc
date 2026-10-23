@@ -313,7 +313,7 @@ const char* TargetingOptions_gump::label(int setting) {
 			"E: decor (dishes, papers):",
 			"E: furniture (chairs, candles):",
 			"E: doors, hidden walls, lamps:",
-			"E: levers and switches:",
+			"E: usable (levers, buckets):",
 			"E: signs, plaques, graves:"};
 	return labels[setting];
 }

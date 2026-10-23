@@ -175,6 +175,8 @@ bool Friend_mode_guest_use_item(Game_object* item);
 bool Friend_mode_guest_activate(Game_object* item);
 // Guest: crosshair click for a key or lockpick target (nullptr on Escape).
 Game_object* Friend_mode_pick_item_target();
+// The thing E has picked (a container, a loose item, a lever), or null.
+Game_object* Friend_mode_object_target();
 // Guest in combat mode: ask the host to have our companion attack 'obj'.
 // False if it isn't a foe (a door, say), so the usual click rules apply.
 bool Friend_mode_guest_attack(Game_object* obj);

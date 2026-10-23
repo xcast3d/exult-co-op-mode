@@ -971,21 +971,30 @@ The Avatar's spell bar (host, and single player):
 the party (since 2026-10-23 F9 brings Iolo, Shamino, Dupre, Jaana and Spark,
 F8 Sentri, Julia, Katrina and Tseramed, sending the other group away; at
 most seven companions), raises companions to level 7 (every skill open) and
-the Avatar to level 5 (Great Heal), and puts a bag with 20 of each reagent in the Avatar's
+the Avatar to level 8 (Time Stop is 8th circle; was 5), and puts a bag with 20 of each reagent in the Avatar's
 inventory (U7 only counts what the caster carries), puts every spell in
 the Avatar's spellbook (a new book in that bag if the Avatar has none), and
-fills the Avatar's mana. Each spell still needs the level of its circle
-(Fire Blast 2, Lightning 4, Great Heal 5), as in U7.
+fills the Avatar's mana (magic raised to 8 if lower). Each spell still
+needs the level of its circle (Telekinesis 2, Lightning 4, Time Stop 8), as
+in U7.
 
-- [ ] Three slots: Great Heal, Fire Blast, Lightning, greyed with the
-      reason on a click ("You don't know Lightning", "not enough mana...",
-      "No spellbook") as the Avatar's book and mana allow.
+- [ ] Three slots (2026-10-23): 1 Telekinesis, 2 Lightning, 3 Time Stop,
+      greyed with the reason on a click ("You don't know Lightning", "not
+      enough mana...", "No spellbook") as the Avatar's book and mana allow.
+      After F9 all three are usable.
 - [ ] The mouse over a slot shows its name above the bar.
-- [ ] Fire Blast with a Q pick: cast at the pick with no crosshair, mana
-      and reagents used as from the book.
-- [ ] Fire Blast with no pick: the usual crosshair.
-- [ ] Great Heal heals the Avatar, or the party member picked with Q (out
-      of combat Q offers the party).
+- [ ] Lightning with a Q pick: cast at the pick with no crosshair, mana
+      and reagents used as from the book; with no pick, the crosshair.
+- [ ] Telekinesis with an E pick (a lever, a chest): used from afar with
+      no crosshair; with no E pick the Q pick; with neither, the crosshair
+      (no crash: bar clicks run on the next frame, 2026-10-23).
+- [ ] Lightning on a creature: combat comes on, and once the cast is over
+      the Avatar fights it too (it stood still before, 2026-10-23).
+- [ ] Ctrl+1, Ctrl+2, Ctrl+3 use slots 1 to 3, as clicks do; on a guest,
+      its companion's skills; with no bar, a red X.
+- [ ] Time Stop: no target asked; everyone but the Avatar freezes, as in
+      U7. Check what a guest sees (its companion frozen too) and that it
+      wears off on both machines.
 
 A guest's skill bar (Iolo, Shamino, Jaana, Dupre or Spark):
 
@@ -1549,3 +1558,13 @@ Built, not tested.
   doesn't see a creature's health go down.
 - Doors whose script swaps to a shape that isn't flagged as a door.
 - Sounds for changes made on the other machine.
+
+## Game master's inventories (2026-10-23)
+
+- [ ] Host leading a companion (Shift+Tab): I and Shift+I still open the
+      next member's paperdoll or backpack, one per press, as without
+      leading; 1-8, Shift+1-8 and double-clicking another member or a bag
+      in its pack open them too.
+- [ ] Single player: the same as the host.
+- [ ] Guest: I and Shift+I open only its companion's; double-clicking
+      another member gives the red X.

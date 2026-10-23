@@ -12,7 +12,12 @@ are our own lists, in `Friend_thing_group_of` (exult.cc), made from
 `tools/friend-mode/pickup_items.py`, which lists the 234 shapes that can be
 picked up. Heavy furniture (tables, stools, benches, beds) can't be picked
 up at all, so E never offers it. Containers, bodies and signs are offered
-anywhere within reach; everything else within 6 tiles.
+anywhere on screen; loose things, doors, lamps and levers within 18 tiles
+(2026-10-23; were 6, then the whole screen offered shutters at its edges, then 12).
+All need a path that walls don't block, as Exult's picking up does (so a
+thing just inside an open shutter can be offered). Something under a roof
+is hidden unless it reaches the roof: a lamp post under a house's eave
+stands outside (2026-10-23; it was never offered).
 
 Q and E start again at the nearest once you have moved; standing still,
 they go on to the next, then "No target", then round again.
@@ -24,7 +29,7 @@ they go on to the next, then "No target", then round again.
 | Decor | off | takes | anything not in another group |
 | Furniture | off | uses (Shift: picks up) | the list below |
 | Doors, hidden walls, lamps | off | uses | doors, secret walls (828, 845), shutters, sconces, curtains, lamp posts. Off by default: with it on, E finds secret walls, which Black Gate means to be found by looking |
-| Levers and switches | on | uses | levers (787), switches (788) |
+| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture). Decor is what has no use (2026-10-23) |
 | Signs, plaques, graves | on | reads | sign (379), plaque (820), tombstone (715); picture signs (360, 361) have nothing to read |
 
 **Loot (besides weapons, armour and ammunition):** pocketwatch, cloth map,
@@ -39,14 +44,14 @@ reagent, Rune, blackrock, lead, iron ore, betting marker, Gargoyle jewelry,
 amulet, Prism.
 
 **Furniture:** light sources (lit, unlit and spent: candles and the like),
-chair, podium, cannon, powder keg, Iron Maiden, the Rack, easel,
+chair, podium, cannon, powder keg, Iron Maiden, the Rack,
 anvil, cradle and baby in a cradle, cauldron, rocking horse.
 
 **Decor (everything else):** debris, small rock, top, iron bars, banner,
 cooking and eating utensils, kite, garbage, broken dish, cup, bale of wool,
 spindle of thread, dough, desk items, sack of wheat, jar, glass item, cannon
 ball, log saw, plate, baby, stuffed toy, alchemist's apparatus, music box,
-small orrery, orrery viewer, bucket, stone chips, diaper, artist's equipment,
+small orrery, orrery viewer, stone chips, diaper,
 pitcher, cloth, kitchen items, thumbscrews, test tubes, pieces of wood, pot,
 bee stinger, tongs, horseshoe, plant, haystack. Also the pool of water
 (893, Black Gate's fountains): it can't be picked up, but E offers it within
