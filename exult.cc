@@ -1052,12 +1052,14 @@ static void Friend_mode_lead_next() {
 	Friend_mode_lead(next == order.end() ? nullptr : *next);
 }
 
+static void Friend_mode_guest_request_companion(int wanted);
+
 // Shift+click at (x, y), game coordinates: on a face in Exult's status bars
 // (Face_stats), lead that one.  True if it was a face.
 static bool Friend_mode_shift_click_face(int x, int y) {
 	Gump_manager* gumps = gwin->get_gump_man();
 	Gump*         gump  = gumps->find_gump(x, y);
-	if (Friend_mode_is_guest() || !dynamic_cast<Face_stats*>(gump)) {
+	if (!dynamic_cast<Face_stats*>(gump)) {
 		return false;
 	}
 	int gx = x;
@@ -1065,6 +1067,14 @@ static bool Friend_mode_shift_click_face(int x, int y) {
 	gumps->map_game_to_gump(gump, x, y, gx, gy);
 	Container_game_object* found = gump->find_actor(gx, gy);
 	Actor*                 actor = found ? found->as_actor() : nullptr;
+	if (actor && Friend_mode_is_guest()) {
+		// A guest: play that companion, if it is free (as Shift+Tab, asked
+		// for by name).  Its own face and the Avatar's do nothing.
+		if (friend_session.connected() && actor != gwin->get_main_actor() && actor != gwin->get_controlled_actor()) {
+			Friend_mode_guest_request_companion(actor->get_npc_num());
+		}
+		return true;
+	}
 	return actor && Friend_mode_lead_actor(actor);
 }
 
@@ -3437,6 +3447,7 @@ static int Friend_how_many(Game_object* obj, bool shift) {
 // again and again empties a chest.
 static std::vector<Game_object*> Friend_window_candidates();
 static void Friend_mode_pick_thing(Game_object* obj, bool in_window);
+static void Friend_mode_pick_when_open(Game_object* container);
 
 // After a take: the thing now at the taken one's place in the open
 // windows' list ('index'), or the one before it if that was the last, so
@@ -3724,6 +3735,9 @@ static bool Friend_mode_space(bool shift, bool alt) {
 							 && ((group != Friend_thing_group::loot && group != Friend_thing_group::decor)
 								 || Friend_is_usable_thing(obj));
 	if (use && !((shift || alt) && obj->is_dragable())) {
+		if (group == Friend_thing_group::box && obj->as_container()) {
+			Friend_mode_pick_when_open(obj);    // Its first thing, once it opens.
+		}
 		gwin->double_clicked_object(obj);
 		return true;
 	}
@@ -3834,9 +3848,61 @@ static std::string Friend_space_hint() {
 	}
 }
 
+// The newest open container window (the list runs oldest to newest), or
+// null.
+static Gump* Friend_newest_window() {
+	Gump* newest = nullptr;
+	for (Gump* gump : *gwin->get_gump_man()) {
+		if (gump && gump->get_container() && !gump->is_persistent()) {
+			newest = gump;
+		}
+	}
+	return newest;
+}
+
+// The things in 'gump' in reading order, as they show: rows top to bottom,
+// each left to right.  Items' positions are their shapes' hot spots, so
+// where each is drawn is used instead, and tops within a few pixels of a
+// row's first are that row (a loose grid isn't exactly level).
+// Paperdolls keep their spots' order.
+static std::vector<Game_object*> Friend_window_reading_order(Gump* gump) {
+	std::vector<Game_object*> inside;
+	Object_iterator           next(gump->get_container()->get_objects());
+	while (Game_object* obj = next.get_next()) {
+		if (!obj->get_flag(Obj_flags::invisible)) {
+			inside.push_back(obj);
+		}
+	}
+	if (gump->get_container()->as_actor()) {
+		std::stable_sort(inside.begin(), inside.end(), [](const Game_object* a, const Game_object* b) {
+			return a->get_ty() != b->get_ty() ? a->get_ty() < b->get_ty() : a->get_tx() < b->get_tx();
+		});
+		return inside;
+	}
+	constexpr int row_slack = 8;    // Pixels.
+	std::stable_sort(inside.begin(), inside.end(), [gump](const Game_object* a, const Game_object* b) {
+		return gump->get_shape_rect(a).y < gump->get_shape_rect(b).y;
+	});
+	std::vector<Game_object*> ordered;
+	for (std::size_t first = 0; first < inside.size();) {
+		const int   top = gump->get_shape_rect(inside[first]).y;
+		std::size_t end = first + 1;
+		while (end < inside.size() && gump->get_shape_rect(inside[end]).y - top <= row_slack) {
+			++end;
+		}
+		std::stable_sort(inside.begin() + first, inside.begin() + end,
+						 [gump](const Game_object* a, const Game_object* b) {
+							 return gump->get_shape_rect(a).x < gump->get_shape_rect(b).x;
+						 });
+		ordered.insert(ordered.end(), inside.begin() + first, inside.begin() + end);
+		first = end;
+	}
+	return ordered;
+}
+
 // E: things.  With a container window open (a chest, a body, a pack, a
-// paperdoll), what is in the open windows, the newest window first, top to
-// bottom and left to right.  Otherwise things in the world within reach,
+// paperdoll), what is in the open windows, the newest window first, top
+// left to bottom right as they show (Friend_window_reading_order).  Otherwise things in the world within reach,
 // nearest first: containers and bodies, and loose things within 6 tiles
 // (not one in the next building).  Shift+E the previous; past the last the
 // pick clears.  See Friend_mode_space for what Space does with them.
@@ -3849,16 +3915,7 @@ static std::vector<Game_object*> Friend_window_candidates() {
 	}
 	std::vector<Game_object*> things;
 	for (Gump* gump : windows) {
-		std::vector<Game_object*> inside;
-		Object_iterator           next(gump->get_container()->get_objects());
-		while (Game_object* obj = next.get_next()) {
-			if (!obj->get_flag(Obj_flags::invisible)) {
-				inside.push_back(obj);
-			}
-		}
-		std::stable_sort(inside.begin(), inside.end(), [](const Game_object* a, const Game_object* b) {
-			return a->get_ty() != b->get_ty() ? a->get_ty() < b->get_ty() : a->get_tx() < b->get_tx();
-		});
+		const std::vector<Game_object*> inside = Friend_window_reading_order(gump);
 		things.insert(things.end(), inside.begin(), inside.end());
 	}
 	return things;
@@ -3898,11 +3955,75 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 }
 
 // Make 'obj' the E pick, saying so near the top.
+static Gump* friend_object_window = nullptr;    // The newest window when a thing in one was picked.
+
 static void Friend_mode_pick_thing(Game_object* obj, bool in_window) {
 	friend_object_target    = weak_from_obj(obj);
 	friend_object_in_window = in_window;
+	friend_object_window    = in_window ? Friend_newest_window() : nullptr;
 	friend_confirm_action   = Friend_confirm::none;
 	Friend_mode_target_notice("Targeting " + Friend_thing_name(obj), true);
+}
+
+// Space opened a container or body on the map: once its window shows, its
+// top left thing is the pick, so Shift+Space then takes everything.  A
+// guest's window may take a moment; a locked one never comes.
+static Game_object_weak friend_open_pick;
+static uint32           friend_open_pick_until = 0;    // Ticks.
+
+static void Friend_mode_pick_when_open(Game_object* container) {
+	friend_open_pick       = weak_from_obj(container);
+	friend_open_pick_until = SDL_GetTicks() + 2000;
+}
+
+// Escape: clear Q's or E's pick, if there is one (and say so).  True if
+// there was; Escape then goes no further (windows, the game menu).  A pick
+// inside a window is cleared and the windows close in the same press.
+static bool Friend_mode_escape_clears_pick() {
+	friend_open_pick.reset();
+	friend_confirm_action = Friend_confirm::none;
+	if (gwin->get_action_target()) {
+		Friend_mode_clear_target();
+		return true;
+	}
+	if (friend_object_target.lock()) {
+		friend_object_target.reset();
+		if (friend_object_in_window) {
+			return false;    // Exult's Escape closes the windows.
+		}
+		Friend_mode_target_notice("No target");
+		return true;
+	}
+	return false;
+}
+
+// Every frame.
+static void Friend_mode_check_open_pick() {
+	const Game_object_shared container = friend_open_pick.lock();
+	if (!container) {
+		return;
+	}
+	if (static_cast<sint32>(SDL_GetTicks() - friend_open_pick_until) > 0) {
+		friend_open_pick.reset();
+		return;
+	}
+	Gump* window = nullptr;
+	for (Gump* gump : *gwin->get_gump_man()) {
+		if (gump && gump->get_container() == container.get()) {
+			window = gump;
+		}
+	}
+	if (!window) {
+		return;
+	}
+	friend_open_pick.reset();
+	const std::vector<Game_object*> inside = Friend_window_reading_order(window);
+	if (inside.empty()) {
+		friend_object_target.reset();
+		Friend_mode_target_notice("Empty");
+	} else {
+		Friend_mode_pick_thing(inside.front(), true);
+	}
 }
 
 // Backpacks.  Shift+1 to Shift+8 open one party member's backpack (Shift+1
@@ -4017,7 +4138,10 @@ static void Friend_mode_cycle_object(int step) {
 		things                   = Friend_object_candidates(own);
 	}
 	const Game_object_shared picked  = friend_object_target.lock();
-	const bool               moved   = Friend_cycle_moved(own) && !in_window;
+	// In windows, start again at the newest one's top left once another
+	// window has opened since the pick (the pick may be in an older one).
+	const bool moved_on = Friend_cycle_moved(own);
+	const bool moved    = in_window ? friend_object_window != Friend_newest_window() : moved_on;
 	const auto current = moved ? things.end() : std::find(things.begin(), things.end(), picked.get());
 	const int                count   = static_cast<int>(things.size());
 	int                      index   = step < 0 ? count - 1 : 0;
@@ -5168,7 +5292,7 @@ static std::string Friend_mode_hold_button_label() {
 	if (!friend_session.connected() || !gwin->has_network_friend_control()) {
 		return {};
 	}
-	return friend_following ? "Take over" : "Follow";
+	return friend_following ? "Stop" : "Follow";    // "Take over" didn't fit.
 }
 
 // What the button does, near the top with its key, as the Space hint is.
@@ -5914,6 +6038,20 @@ bool Friend_mode_open_to_coop() {
 static bool friend_world_reloaded = false;    // Host loaded a save.
 static bool friend_picker_requested = false;    // Guest pressed Tab; roster on its way.
 static bool friend_cycle_requested = false;    // Guest: Shift+Tab waits for the host's list.
+static int  friend_cycle_wanted    = -1;       // Guest: the companion asked for (Shift+click), or -1 for the next.
+
+// Guest: ask the host for what is free now, then take 'wanted' (an NPC
+// number, -1 for the next after ours); the main loop takes the answer.
+static void Friend_mode_guest_request_companion(int wanted) {
+	if (gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
+		Mouse::mouse()->flash_shape(Mouse::redx);
+	} else if (!friend_cycle_requested && !friend_picker_requested) {
+		friend_cycle_requested = true;
+		friend_cycle_wanted    = wanted;
+		friend_session.take_roster_update();    // Wait for the fresh list.
+		friend_session.send_blob(Friend_mode_session::Blob_kind::roster_request, {1});
+	}
+}
 static bool friend_spectate_requested = false;    // Guest chose Spectate itself.
 // Guest spectating: the player companion the view follows (X cycles), or
 // -1 for the Avatar.
@@ -8986,7 +9124,17 @@ static void Handle_events() {
                                                     static_cast<uint32>(guest_assigned_actor));
 				uint32                     next   = 0;
 				bool                       found  = false;
-				if (mine == roster.end()) {
+				if (friend_cycle_wanted >= 0) {
+					// Shift+click on a face: that one, if it is free.
+					const uint32 wanted = static_cast<uint32>(friend_cycle_wanted);
+					found = std::find(roster.begin(), roster.end(), wanted) != roster.end();
+					next  = wanted;
+					if (!found) {
+						Actor*            npc  = gwin->get_npc(friend_cycle_wanted);
+						const std::string name = npc ? npc->get_npc_name() : std::string("That companion");
+						Friend_mode_notice(name + (npc && gwin->is_remote_friend(npc) ? " is another player's" : " isn't free"));
+					}
+				} else if (mine == roster.end()) {
 					found = !roster.empty();    // Spectating: the first free one.
 					next  = found ? roster.front() : 0;
 				} else if (roster.size() > 1) {
@@ -8995,9 +9143,10 @@ static void Handle_events() {
 				}
 				if (found) {
 					friend_session.request_actor(next);
-				} else {
+				} else if (friend_cycle_wanted < 0) {
 					Friend_mode_notice("No other companion is free");
 				}
+				friend_cycle_wanted = -1;
 			}
 			// The picker waits out a host conversation (a companion can leave
 			// the party in one).
@@ -9336,6 +9485,7 @@ static void Handle_events() {
 			friend_wasd_dy = dy;
 		}
 		Friend_mode_check_target();
+		Friend_mode_check_open_pick();
 
 		// handle delayed showing of clicked items (wait for possible dblclick)
 		if (show_items_clicked && ticks > show_items_time) {
@@ -9715,6 +9865,11 @@ static void Handle_event(SDL_Event& event) {
 			return;
 		}
 	}
+	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE
+		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI | SDL_KMOD_SHIFT))
+		&& !friend_chat_active && !Notebook_gump::get_instance() && Friend_mode_escape_clears_pick()) {
+		return;    // Escape: the pick first; then windows, then the menu.
+	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_Q
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
 		&& !Notebook_gump::get_instance()) {
@@ -9780,13 +9935,7 @@ static void Handle_event(SDL_Event& event) {
 		// Shift+Tab on a guest: the next free companion (never the Avatar,
 		// another player's, or the one the host leads).  Asks the host for
 		// what is free now; the main loop takes the answer.
-		if (gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
-			Mouse::mouse()->flash_shape(Mouse::redx);
-		} else if (!friend_cycle_requested && !friend_picker_requested) {
-			friend_cycle_requested = true;
-			friend_session.take_roster_update();    // Wait for the fresh list.
-			friend_session.send_blob(Friend_mode_session::Blob_kind::roster_request, {1});
-		}
+		Friend_mode_guest_request_companion(-1);
 		return;
 	}
 	if (!Friend_mode_is_guest() && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN

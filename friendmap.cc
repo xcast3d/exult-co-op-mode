@@ -119,7 +119,7 @@ int         button_layer = -1;
 bool        button_shown = false;
 std::string button_drawn;               // The label it has.
 int         button_rect[4] = {0, 0, 0, 0};    // On screen: x, y, w, h.
-constexpr int button_w = 46;            // Game pixels, before the HUD's scale ("Take over" fits).
+constexpr int button_w = 46;            // Game pixels, before the HUD's scale ("Follow" fits).
 constexpr int button_h = 13;
 
 void hide_corner_map() {

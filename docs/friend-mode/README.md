@@ -81,6 +81,19 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Feedback round, 2026-10-23: batch G built and tested (no protocol
+change).** After a full live test ([the feedback
+round](feedback-2026-10-23.md)): the guest's hold button says "Stop" (was
+"Take over", clipped); E in windows goes top left to bottom right as items
+show, and starts again in a newly opened window; Space opening a container
+picks its first item (so E, Space, Shift+Space takes all); Escape clears
+the pick before closing windows or opening the menu (a pick in a window
+clears and closes it in one press); Shift+click on a face
+on a guest takes that companion. Next: batch H (a guest's attack from
+peace, R to run instead of Caps Lock, the skill bar beside the vertical
+status bar) and I (F9 and F8 companion groups, leaving players'
+companions alone).
+
 **Feedback round, 2026-10-22: batch A built and tested (no protocol
 change).** Unlock levels 1, 4, 7 (were 1, 3, 6); Iolo's Song of Peace
 first; Sentri's Master's Strike a lunge (range 4, darting beside the pick);

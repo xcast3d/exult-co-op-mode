@@ -62,62 +62,62 @@ Start both without the Friend Mode options:
 `./exult --bg --nocrc` (host) and
 `./exult --bg --nocrc -c .friend-mode-local/guest.cfg` (guest).
 
-- [ ] Host title menu: "Co-Op Mode" shows below Journey Onward.
-- [ ] Host: Co-Op Mode, then Host a Game: back at the main menu, the line
+- [x] Host title menu: "Co-Op Mode" shows below Journey Onward.
+- [x] Host: Co-Op Mode, then Host a Game: back at the main menu, the line
       reads "Co-Op Mode: Hosting".
-- [ ] Host: Co-Op Mode again: it offers Stop Hosting; Back and Escape
+- [x] Host: Co-Op Mode again: it offers Stop Hosting; Back and Escape
       return to the main menu without quitting.
-- [ ] Host: Journey Onward: "Co-Op Mode is open on port 1992".
-- [ ] Guest: Co-Op Mode, then Join a Game: player name and address, then
+- [x] Host: Journey Onward: "Co-Op Mode is open on port 1992".
+- [x] Guest: Co-Op Mode, then Join a Game: player name and address, then
       the host's world downloads and the companion picker shows.
-- [ ] Without hosting, start a game, press Escape: "Open to Co-Op" is
+- [x] Without hosting, start a game, press Escape: "Open to Co-Op" is
       there. Pick it: the menu closes and "Co-Op Mode is open on port
       1992" shows; a guest can then join. Escape again: the button is gone.
-- [ ] On the guest, the Escape menu has no "Open to Co-Op".
+- [x] On the guest, the Escape menu has no "Open to Co-Op".
 
 ## Join
 
-- [ ] Guest: **Connect to Host** asks for a player name and address.
-- [ ] Guest: "Connecting to host", "Waiting for the host's world", then
+- [x] Guest: **Connect to Host** asks for a player name and address.
+- [x] Guest: "Connecting to host", "Waiting for the host's world", then
       "Downloading the host's world".
-- [ ] Guest: the test kit is there, matching the host.
-- [ ] Host: "<name> has joined", then "<name> enters the world as <companion>".
-- [ ] Guest: the companion picker lists the party companions; pick one.
-- [ ] Guest: "Joined <host>'s world".
+- [x] Guest: the test kit is there, matching the host.
+- [x] Host: "<name> has joined", then "<name> enters the world as <companion>".
+- [x] Guest: the companion picker lists the party companions; pick one.
+- [x] Guest: "Joined <host>'s world".
 
 ## Chat and names
 
-- [ ] Each side: Enter, type, Enter. The text appears over the speaker in both
+- [x] Each side: Enter, type, Enter. The text appears over the speaker in both
       windows, wrapped, and stacks if you send a few quickly.
-- [ ] Guest: clicking the host's character shows "Avatar (<host name>)".
-- [ ] Host: clicking the guest's companion shows "<companion> (<guest name>)".
+- [x] Guest: clicking the host's character shows "Avatar (<host name>)".
+- [x] Host: clicking the guest's companion shows "<companion> (<guest name>)".
 
 ## Movement and leash
 
-- [ ] Guest: walk away from the Avatar. Past one screen: "Straying from the
+- [x] Guest: walk away from the Avatar. Past one screen: "Straying from the
       Avatar" and a green edge arrow pointing back.
-- [ ] Guest: keep going. The companion stops: "You must return to the Avatar".
-- [ ] Host: walk the Avatar away from the guest. Guest: "The Avatar needs you",
+- [x] Guest: keep going. The companion stops: "You must return to the Avatar".
+- [x] Host: walk the Avatar away from the guest. Guest: "The Avatar needs you",
       then about 5 seconds later "You are beckoned by the Avatar" next to the
       Avatar.
 
 ## Doors
 
-- [ ] Host opens and closes each door; the guest sees both changes.
-- [ ] Guest opens and closes each door from a normal double-click distance;
+- [x] Host opens and closes each door; the guest sees both changes.
+- [x] Guest opens and closes each door from a normal double-click distance;
       both windows match.
-- [ ] Guest tries a locked door (not in the kit; find one in town): "Locked",
+- [x] Guest tries a locked door (not in the kit; find one in town): "Locked",
       nothing changes.
 
 ## Shutters, lights and the lever
 
 For each of: shutters, lamp post, sconce, light source, lever.
 
-- [ ] Host toggles it; the guest sees it, including the light at night.
-- [ ] Guest toggles it on and off; both windows match.
+- [x] Host toggles it; the guest sees it, including the light at night.
+- [x] Guest toggles it on and off; both windows match.
 - [ ] At night, the guest's view brightens around a lit lamp near the guest's
       companion (lighting is measured from whoever the view follows).
-- [ ] Lever: the guest's companion walks to it, not the Avatar.
+- [x] Lever: the guest's companion walks to it, not the Avatar.
 
 ## Secret walls
 
@@ -133,22 +133,22 @@ which have no state to sync.
 
 ## Items from the host (W3)
 
-- [ ] Host takes the food out of the kit's bag; the guest's bag empties too.
-- [ ] Host drops an item on the floor; it appears on the guest.
-- [ ] Host moves gold from the chest to the floor; the chest contents and the
+- [x] Host takes the food out of the kit's bag; the guest's bag empties too.
+- [x] Host drops an item on the floor; it appears on the guest.
+- [x] Host moves gold from the chest to the floor; the chest contents and the
       floor match on the guest.
-- [ ] Guest has the chest open while the host changes it; the guest's chest
+- [x] Guest has the chest open while the host changes it; the guest's chest
       window stays open and shows the new contents.
 
 ## Food, potions, keys and lockpicks
 
-- [ ] Guest takes food from the supplies bag and double-clicks it: the
+- [x] Guest takes food from the supplies bag and double-clicks it: the
       guest's own companion eats and remarks on it, on both screens, and one
       food goes away on both sides. The host log names who ate ("used shape
       377 on <name>").
-- [ ] Guest drinks a few potions; each one is used up on both sides and its
+- [x] Guest drinks a few potions; each one is used up on both sides and its
       message shows.
-- [ ] Guest drinks a poison potion: on both screens the companion shows as
+- [x] Guest drinks a poison potion: on both screens the companion shows as
       poisoned and flashes red as it loses health.
 - [ ] Guest double-clicks the quality-77 key, then clicks the locked chest:
       it unlocks on both sides, and both screens show "Unlocked".
@@ -1414,6 +1414,31 @@ Built, not tested.
 - [ ] Pick someone outside, they walk indoors: Space says "Can't see ...".
 - [ ] E outside doesn't offer a chest inside a building.
 - [ ] In a dungeon Q still offers everyone on screen.
+
+## Feedback round 2026-10-23, batch G
+
+- [ ] Guest: the button under the minimap reads "Follow", then "Stop"
+      (whole word); hovering says "Take over your companion", "Shortcut: Y".
+- [ ] Open a chest with items in two or three loose rows: E goes left to
+      right along the top row first, then the next row; Shift+E backwards.
+- [ ] With your backpack open and its item picked, open a chest: the next E
+      starts at the chest's top left, not in the backpack.
+- [ ] E to a chest on the map, Space: the window opens with its top left
+      item picked; Shift+Space takes everything.
+- [ ] Space on an empty chest or body: "Empty", no pick.
+- [ ] Space on a locked chest: no window, the chest stays picked.
+- [ ] A guest opening a chest with Space: the first item is picked too.
+- [ ] Q a person, Escape: "No target", no menu. Escape again: the game
+      menu (or the windows close first, if any are open).
+- [ ] In combat, attacking a Q pick, Escape: the attack stops.
+- [ ] E an item in a window, Escape: the pick clears and the window
+      closes in one press.
+- [ ] While chatting, Escape still only cancels the chat line.
+- [ ] Guest: Shift+click a free companion's face: you play it now.
+- [ ] Guest: Shift+click another player's companion: "<name> is another
+      player's"; the one the host leads or one held: "<name> isn't free".
+- [ ] Guest: Shift+click your own face or the Avatar's: nothing happens.
+- [ ] Host: Shift+click on a face still leads that companion.
 
 ## Leaving
 

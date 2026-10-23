@@ -52,7 +52,9 @@ guest does, use its skill bar, and have the party follow it.
   "Leading the Avatar").
 - **Shift+click on a face** in Exult's status bars leads that one directly,
   the Avatar's face too (2026-10-21). A guest's companion says "Iolo is
-  another player's"; one asleep or paralyzed, "can't be led now".
+  another player's"; one asleep or paralyzed, "can't be led now". On a
+  guest (2026-10-23) it takes that companion if it is free, as Shift+Tab
+  does for the next one.
 - The camera, roofs, night lighting, the Target System (Q, E, Space) and
   the minimap follow whoever you lead; most of them already follow the
   controlled actor.

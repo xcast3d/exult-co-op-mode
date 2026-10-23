@@ -439,6 +439,11 @@ upstream.
     It all moves items the way a drag and drop does
     (`Game_window::move_object`, drag.cc: weight, theft, eggs, guests'
     lift and move to the host), so guests need nothing new.
+    Changed 2026-10-23 ([feedback round](friend-mode/feedback-2026-10-23.md),
+    batch G): E in windows goes in reading order as items show, starting
+    again in a newly opened window; Space opening a container picks its
+    first item; Escape clears the pick before closing windows or opening
+    the game menu.
   - **Target System options page and groups** (built 2026-10-19).
     Game menu → **Target System**, next to Game Input (the "Targeting"
     switch moved there): Enable (the rest hides when off), the range
