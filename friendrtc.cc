@@ -198,6 +198,11 @@ rtc::Configuration config_from(const json& ice) {
 	if (!stun) {
 		config.iceServers.emplace_back(fallback_stun);
 	}
+	// Testing the relay: FRIEND_RTC_RELAY_ONLY=1 allows only TURN paths, so
+	// a link that opens has gone through it.
+	if (const char* relay_only = std::getenv("FRIEND_RTC_RELAY_ONLY"); relay_only && *relay_only == '1') {
+		config.iceTransportPolicy = rtc::TransportPolicy::Relay;
+	}
 	return config;
 }
 
@@ -344,14 +349,25 @@ struct Channel_state {
 void watch_channel(const std::shared_ptr<rtc::DataChannel>& dc, const std::weak_ptr<Channel_state>& weak) {
 	dc->onOpen([weak]() {
 		if (auto state = weak.lock()) {
-			std::shared_ptr<rtc::WebSocket> lobby;
+			std::shared_ptr<rtc::WebSocket>      lobby;
+			std::shared_ptr<rtc::PeerConnection> pc;
 			{
 				const std::lock_guard<std::mutex> lock(state->mutex);
 				state->open = true;
 				lobby       = std::move(state->lobby);    // Done with the lobby.
+				pc          = state->pc;
 			}
 			if (lobby) {
 				lobby->close();
+			}
+			// Which way the link went: straight between the players, or
+			// through the TURN relay (when the lobby offers one).
+			rtc::Candidate local;
+			rtc::Candidate remote;
+			if (pc && pc->getSelectedCandidatePair(&local, &remote)) {
+				const bool relayed = local.type() == rtc::Candidate::Type::Relayed
+									 || remote.type() == rtc::Candidate::Type::Relayed;
+				std::cout << "Friend Mode: link open " << (relayed ? "through the relay" : "directly") << std::endl;
 			}
 		}
 	});

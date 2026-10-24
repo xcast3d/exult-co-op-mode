@@ -135,15 +135,32 @@ int main(int argc, char** argv) {
 		  lost.connection_problem().find("No game") != std::string::npos);
 
 	// A password: no answer and a wrong one are refused, the right one
-	// gets in (over TCP, where a password matters most).
+	// gets in (over TCP, where a password matters most).  Refusals by code
+	// too: the guest must hear why, not just see the channel close.
 	host.set_password("moonglow");
-	for (const std::string& tried : {std::string(), std::string("wrong")}) {
-		Friend_mode_session refused;
-		refused.set_password(tried);
-		refused.start_guest("127.0.0.1", port, game_code, lobby);
-		run_until({&host, &refused}, [&] { return !refused.peer_open(); }, 10);
-		check("password " + (tried.empty() ? std::string("missing") : tried) + " is refused",
-			  refused.rejected_password() && !refused.connected());
+	for (const std::string& where : {std::string("127.0.0.1"), code}) {
+		for (const std::string& tried : {std::string(), std::string("wrong")}) {
+			Friend_mode_session refused;
+			refused.set_password(tried);
+			refused.start_guest(where, port, game_code, lobby);
+			run_until({&host, &refused}, [&] { return !refused.peer_open(); }, 25);
+			check("password " + (tried.empty() ? std::string("missing") : tried) + " is refused ("
+						  + (where == code ? "by code" : "by address") + ")",
+				  refused.rejected_password() && !refused.connected());
+		}
+	}
+	{
+		Friend_mode_session by_code;
+		by_code.set_local_player_name("Jaana's player");
+		by_code.set_password("moonglow");
+		by_code.start_guest(code, port, game_code, lobby);
+		int coded = 0;
+		check("the right password gets in (by code)",
+			  run_until({&host, &by_code}, [&] { return by_code.connected() && host.take_peer_joined(&coded); }, 25));
+		if (!by_code.connected()) {
+			std::cout << "     rejected_password=" << by_code.rejected_password()
+					  << " problem=" << by_code.connection_problem() << std::endl;
+		}
 	}
 	Friend_mode_session with_password;
 	with_password.set_local_player_name("Dupre's player");

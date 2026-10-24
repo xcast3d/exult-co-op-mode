@@ -86,6 +86,15 @@ but each job has `if: ${{ github.repository_owner == 'exult' }}` (some had
 it already), so they are skipped here and cost nothing. When merging from
 upstream, keep that line on any job upstream adds or changes.
 
+### Signing
+
+Builds are unsigned for now, so Windows shows "Windows protected your PC"
+(More info → Run anyway). Decided 2026-10-24: once the repository is
+public, apply to the [SignPath Foundation](https://signpath.org/) (free
+code signing for open-source projects, signing builds from public CI) and
+add its step to this workflow. Signing names the publisher; SmartScreen's
+warning can still show until a signed build has some downloads behind it.
+
 ### Other options
 
 - **A Windows PC or VM with MSYS2.** Follow Exult's `README.windows` (its

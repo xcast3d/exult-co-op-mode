@@ -118,7 +118,9 @@ WebSocket, JSON text messages.
 | Lobby → anyone | `{type:"error", message}` | "No game with that code", "The game is full", "Too much" |
 
 `ice` is the list of STUN (and TURN) servers to give WebRTC. `data` is
-whatever the game sends; the lobby only passes it on.
+whatever the game sends; the lobby only passes it on. To build a lobby of
+your own, the full contract (code shape, message order, `ice`, `/ip`) is
+in [running your own lobby](lobby-protocol.md).
 
 Limits, so a public lobby can't be flooded: 8 guests per code, 16 KB a
 message, 240 messages a minute per connection, a guest's lobby connection
@@ -178,8 +180,12 @@ the live lobby:
 node test/smoke.mjs wss://u7-multiplayer-lobby.xcast3d.com
 ```
 
-**TURN, later and optional:** create a TURN key in the Cloudflare dashboard
-(Calls → TURN), check its pricing, then store it as two secrets:
+**TURN (the relay):** needed when two homes can't link directly. First
+real test (2026-10-24, a Mac and a Windows PC behind an AT&T gateway):
+both reached the lobby and paired, but the direct link failed with STUN
+alone. Create a TURN key in the Cloudflare dashboard (Realtime → TURN),
+then store its two values as Worker secrets, in the dashboard (the
+Worker's Settings → Variables and Secrets, type Secret) or with:
 
 ```bash
 npx wrangler secret put TURN_KEY_ID
@@ -189,9 +195,25 @@ npx wrangler secret put TURN_KEY_ID
 npx wrangler secret put TURN_KEY_API_TOKEN
 ```
 
-To check: the TURN credentials call (`…/credentials/generate-ice-servers`)
-against Cloudflare's current API documentation before turning it on;
-without the secrets the lobby gives STUN only.
+Checked 2026-10-24: the lobby's credentials call
+(`POST …/turn/keys/<id>/credentials/generate-ice-servers`, Bearer token,
+`{"ttl": seconds}`, answer `{iceServers: [...]}`) matches Cloudflare's
+documentation. Credentials last a game's 12 hours and aren't revoked when
+the code closes: a host can close the code and keep playing with guests
+already in, whose relayed links need them. Pricing: $0.05 per GB relayed,
+after 1,000 GB a month free (shared with Cloudflare's SFU). Without the
+secrets the lobby gives STUN only.
+
+In the game: libdatachannel's ICE library (libjuice) relays over **UDP
+only**, through the first two UDP TURN addresses in the list; Cloudflare's
+TCP and TLS ones are skipped with a warning. A network that blocks
+outgoing UDP would need libnice instead. The log says which way a link
+went (`link open directly` or `through the relay`), and
+`FRIEND_RTC_RELAY_ONLY=1` allows only the relay, to test it:
+
+```bash
+FRIEND_RTC_RELAY_ONLY=1 /tmp/rtc_session_test
+```
 
 ## Trying it locally
 
