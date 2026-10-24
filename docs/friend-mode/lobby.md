@@ -6,10 +6,16 @@ Status: **deployed 2026-10-20** at `wss://u7-multiplayer-lobby.xcast3d.com`
 gets a code, the guest types it, and they connect over a WebRTC data
 channel. TURN is not set up.
 
-**Hardened 2026-10-23, not yet redeployed:** the Worker in the repo has
-four-digit codes and the security changes below; the deployed one still
-gives two-digit codes (`RAVEN-42`). The game takes both, so redeploying
-(`npx wrangler deploy` in `tools/lobby`) can happen any time.
+**Hardened and redeployed 2026-10-23:** four-digit codes and the security
+changes below; the smoke test (18 checks) and the session test pass
+against the live lobby. A redeploy drops every open lobby connection, so a
+host running at that moment loses its code ("The lobby closed the code")
+and has to host again; games already connected carry on.
+
+**Planned (user, 2026-10-23, not now): less text on screen.** The code
+notices are too long for the top line. Move this into a menu instead:
+Co-Op Mode → IP | Lobby Code, and a password, with the code shown there
+rather than spelled out over the game.
 
 ## What it is, in plain words
 
