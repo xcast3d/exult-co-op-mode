@@ -1260,6 +1260,46 @@ Usecode_value Usecode_internal::add_items_to_buyer(
 	return result;
 }
 
+/*
+ *  Friend Mode: whether 'funcid' calls 'intrinsic' itself, by walking its
+ *  code for CALLIS and CALLI (0x38, 0x39) with that number.  Only the code
+ *  after the data and externs is looked at; the operands of other
+ *  instructions aren't decoded, which is enough for Black Gate's spells
+ *  (checked against a full disassembly: the same 36 ask for a target).
+ */
+bool Usecode_internal::friend_calls_intrinsic(int funcid, int intrinsic) {
+	const Usecode_function* fun = find_function(funcid);
+	if (!fun || !fun->code) {
+		return false;
+	}
+	const unsigned char* code = fun->code;
+	const unsigned char* end  = code + fun->len;
+	const int            word = fun->extended ? 4 : 2;
+	auto                 read = [word](const unsigned char* at) {
+        int value = at[0] | (at[1] << 8);
+        if (word == 4) {
+            value |= (at[2] << 16) | (at[3] << 24);
+        }
+        return value;
+	};
+	if (end - code < word) {
+		return false;
+	}
+	const unsigned char* at = code + word + read(code);    // Past the data.
+	if (at + 6 > end) {
+		return false;
+	}
+	at += 4;    // Arguments, locals.
+	const int externs = at[0] | (at[1] << 8);
+	at += 2 + externs * 2;
+	for (; at + 2 < end; ++at) {
+		if ((at[0] == 0x38 || at[0] == 0x39) && at[1] == (intrinsic & 0xff) && at[2] == ((intrinsic >> 8) & 0xff)) {
+			return true;
+		}
+	}
+	return false;
+}
+
 bool Usecode_internal::friend_party_trade(
 		const std::vector<Party_trade_item>& removes, const std::vector<Party_trade_item>& adds, Actor* buyer) {
 	Usecode_value all(-357);

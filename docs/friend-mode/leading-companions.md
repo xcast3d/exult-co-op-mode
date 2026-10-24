@@ -54,7 +54,10 @@ guest does, use its skill bar, and have the party follow it.
   the Avatar's face too (2026-10-21). A guest's companion says "Iolo is
   another player's"; one asleep or paralyzed, "can't be led now". On a
   guest (2026-10-23) it takes that companion if it is free, as Shift+Tab
-  does for the next one.
+  does for the next one. Hovering a face says who it is in the context
+  notice near the top ("Iolo", "Iolo (Marc)" for another player's), with
+  "Switch Character (Shift+Click)" under it, except on the one played now
+  and, on a guest, the Avatar (2026-10-23).
 - The camera, roofs, night lighting, the Target System (Q, E, Space) and
   the minimap follow whoever you lead; most of them already follow the
   controlled actor.

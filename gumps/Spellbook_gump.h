@@ -29,6 +29,14 @@ int sign(T val) {
 	return (T(0) < val) - (val < T(0));
 }
 
+class Gump_button;
+class Shape_frame;
+
+// Friend Mode's spell bar: the spell a spellbook's spell button casts (-1
+// for any other button), and a spell's picture in the book.
+int          Spellbook_button_spell(const Gump_button* button);
+Shape_frame* Spellbook_spell_picture(int spell);
+
 /*
  *  Abstract base class for spellbook, spell-scrolls:
  */

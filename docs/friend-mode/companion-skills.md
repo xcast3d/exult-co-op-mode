@@ -66,15 +66,15 @@ used; a click uses it and the reason shows near the top when it can't
 ("Restoration: 23 seconds", "Needs a hostile", "Not yet: level 3").
 
 - A guest's bar holds its companion's skills.
-- The host's bar holds the Avatar's spells: slots 1, 2 and 3 are
-  Telekinesis, Lightning and Time Stop (2026-10-23; were Great Heal, Fire
-  Blast and Lightning), each greyed while the Avatar doesn't know it or lacks
+- The host's bar holds the Avatar's spells: three slots the player fills
+  by dragging spells from the spellbook (below; 2026-10-23, was a fixed
+  Telekinesis, Lightning and Time Stop, before that Great Heal, Fire Blast
+  and Lightning), each greyed while the Avatar doesn't know it or lacks
   the mana, reagents or level. A click casts through the spellbook's own
   code (mana, reagents, words of power as in U7); a spell that wants a
   target takes the Target System's pick instead of the crosshair:
-  Lightning the Q pick, Telekinesis the E pick (a lever, a chest, an
-  item), else the Q pick; the crosshair only with no pick. Time Stop needs
-  none. A slot clicked is used on the next frame, not inside the click: a
+  a spell that asks for one takes the Q or E pick, the crosshair only
+  with no pick; any other just casts. A slot clicked is used on the next frame, not inside the click: a
   crosshair inside it crashed Exult (2026-10-23). A spell at a foe starts
   the Avatar's fight with it once the cast is over (fighting at once left
   the Avatar standing while the rest of the party fought).
@@ -189,9 +189,13 @@ Exult's own button style (as on the options pages) with the skill's name in
 the tiny font, a tooltip pinned to the hovered slot (black, white letters:
 name, what it does, why not), gone as the mouse leaves,
 the seconds left in the corner, darker while unusable; flush with the edge
-it is on; a row, or a column at the left or right side. The mouse over a
-slot puts its name and what it does in the notice line ("Restoration:
-Heals everyone in the circle"). Pictures for skills may come later.
+it is on; a row, or a column at the left or right side. Since 2026-10-23
+there is no tooltip box: the mouse over a slot puts its name in the notice
+near the top, and under it, in the smaller letters of the Space hint, "Use
+Skill (Ctrl+1)" or "Use Spell (Ctrl+2)" ("Locked", "Not Learned"; an empty
+slot of the Avatar's says "Empty Slot", then "Drag a spell here from
+spellbook"). The Avatar's slots are the spellbook's picture of the spell,
+on Exult's button a pixel larger all round.
 
 **Fighting by the bar** (2026-10-20): an offensive skill or spell (an
 attack or hold on the pick) on a hostile turns combat mode on; in combat
@@ -466,6 +470,67 @@ of the parts that could be [offered to Exult](upstreaming.md).
 Exult already has a bookmark (one spell per book) and casts the bookmarked
 spell when the Avatar fights with a spellbook readied; the bar is the same
 idea with more slots and a target.
+
+### Spells dragged onto the bar (decided and built 2026-10-23, not tested)
+
+Like Ultima Online's spell shortcuts: the player drags a spell from the
+open spellbook onto a slot of the Avatar's bar, and the slot casts it from
+then on. It replaces the fixed Telekinesis, Lightning and Time Stop, which
+not everyone wants. The Avatar only: the companions' bars keep their
+skills.
+
+Decided with the user:
+
+- **Three slots,** as the companions' bars, on Ctrl+1 to Ctrl+3.
+- **Kept with the save game:** each playthrough has its own bar, and
+  loading an old save brings back its spells. (A small file in gamedat,
+  added to the files Exult saves; read on load, empty when missing.)
+- **A new game starts empty:** an empty slot shows a dimmed frame and the
+  tooltip "Drag a spell here".
+- **Dragging:** a spell from the book onto a slot puts it there, replacing
+  what was there; a slot dragged onto another swaps them; a slot dragged
+  off the bar onto the game view clears it. The spell's picture follows
+  the mouse while dragging. A plain click on a spell in the book still
+  sets the bookmark, and a double-click still casts.
+
+Built as below: the drag in `Dragging_info` (drag.cc: `drag_spell`, the
+picture in the dragged item's layer, `Friend_class_drag_spell` and
+`Friend_class_drop_spell`), the file `FRIENDBARDAT`
+(`<GAMEDAT>/friendbar.dat`, three spell numbers, -1 empty) in gamedat.cc's
+save and clear lists (saved only when present, so older saves load with
+an empty bar), the 72 names in `spell_names`, and
+`Usecode_machine::friend_calls_intrinsic` for "asks for a target". A slot
+shows the spellbook's picture of its spell on Exult's button; an empty one
+is a dark button with "Empty" in it; hovering it says "Empty Slot" near the top, then "Drag a
+spell here from spellbook".
+
+How, in the code (the plan):
+
+- The drag starts on the book's `Spell_button` (gumps/Spellbook_gump.cc);
+  Exult's drag already holds a pushed button (`Dragging_info::button`).
+  On the release, `Dragging_info::drop` asks the Class System whether the
+  mouse is over a slot of the bar (a hook such as
+  `Friend_class_drop_spell(spell, x, y)`), before the button's own click.
+  Slot to slot and slot off the bar are the bar's own buttons.
+- Casting stays as today: the spellbook's code (mana, reagents, words of
+  power), the click on the next frame, and the Target System's pick in
+  place of the crosshair.
+- **Aiming, layered on the Target System** (the user's call, 2026-10-23;
+  a table of all 72 spells was dropped): a spell that asks for a target
+  gets the current pick, Q's or E's (they clear each other, so there is
+  one at most); with no pick, the crosshair. A spell that asks for none
+  (Time Stop, Mass Might) just casts, with no crosshair and no asking,
+  whatever is picked: the pick only answers a crosshair. Since the
+  bar can't tell a heal from a bolt, a pick of a peaceful person (not the
+  party, not a creature) asks once ("Lightning on Finnigan? Again"),
+  whatever the spell, and the Avatar takes up the fight after the cast
+  only on a hostile pick. Whether a spell asks for a target is read from
+  its own script (does it call `click_on_item`?) when the game loads, not
+  a list written by hand, so an untargeted spell never asks.
+- Greyed as today: not in the book ("Not Learned"), no mana, reagents or
+  level. A slot could also show how many casts the reagents allow, as the
+  spellbook does.
+- Host and single player only; nothing new on the wire.
 
 ## Keys
 

@@ -206,7 +206,23 @@ public:
 	void unpush(MouseButton button) override {
 		ignore_unused_variable_warning(button);
 	}
+
+	int get_spell() const {
+		return spell;
+	}
 };
+
+int Spellbook_button_spell(const Gump_button* button) {
+	const auto* spell = dynamic_cast<const Spell_button*>(button);
+	return spell ? spell->get_spell() : -1;
+}
+
+Shape_frame* Spellbook_spell_picture(int spell) {
+	if (spell < 0 || spell >= 9 * 8) {
+		return nullptr;
+	}
+	return ShapeID(SPELLS + spell % 8, spell / 8, SF_GUMPS_VGA).get_shape();
+}
 
 /*
  *  Handle click.

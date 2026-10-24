@@ -978,10 +978,26 @@ fills the Avatar's mana (magic raised to 8 if lower). Each spell still
 needs the level of its circle (Telekinesis 2, Lightning 4, Time Stop 8), as
 in U7.
 
-- [ ] Three slots (2026-10-23): 1 Telekinesis, 2 Lightning, 3 Time Stop,
-      greyed with the reason on a click ("You don't know Lightning", "not
+- [ ] Three slots (2026-10-23), empty in a new game or an older save:
+      dark; hovering says "Empty Slot" near the top, "Drag a spell here
+      from spellbook" under it; a click or Ctrl+1 says so. Hovering a spell
+      or skill: its name, then "Use Spell (Ctrl+1)" / "Use Skill (Ctrl+1)";
+      no tooltip box over the bar.
+- [ ] Drag a spell from the open spellbook: its picture follows the mouse;
+      dropped on a slot, the slot shows it ("Lightning on slot 2").
+      Dropped anywhere else, nothing changes. A plain click in the book
+      still sets the bookmark, a double-click still casts.
+- [ ] Drag a slot onto another: they swap. Drag a slot off the bar onto
+      the game view: "... taken off the bar", the slot is empty. A plain
+      click on a slot still casts.
+- [ ] Save, change the bar, load the save: the bar is as saved. A new
+      game: empty.
+- [ ] A spell with a target (Lightning, Heal, Telekinesis) takes the Q or
+      E pick, else the crosshair; one without (Time Stop, Mass Might) just
+      casts, pick or not. A peaceful person picked asks first ("... on
+      Finnigan? Again"); the party and creatures don't.
+- [ ] Greyed with the reason on a click ("You don't know Lightning", "not
       enough mana...", "No spellbook") as the Avatar's book and mana allow.
-      After F9 all three are usable.
 - [ ] The mouse over a slot shows its name above the bar.
 - [ ] Lightning with a Q pick: cast at the pick with no crosshair, mana
       and reagents used as from the book; with no pick, the crosshair.
@@ -1568,3 +1584,11 @@ Built, not tested.
 - [ ] Single player: the same as the host.
 - [ ] Guest: I and Shift+I open only its companion's; double-clicking
       another member gives the red X.
+
+## Context notice (2026-10-23)
+
+- [ ] One notice at a time near the top: a Q or E pick, the hold button's
+      hover and the bar's hover each replace the last, then fade.
+- [ ] Hovering a face in the status bar: "Iolo", then "Switch Character
+      (Shift+Click)"; the one played now shows only its name; on a guest
+      the Avatar too. Another player's: "Iolo (Marc)".

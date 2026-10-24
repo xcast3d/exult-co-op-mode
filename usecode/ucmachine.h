@@ -217,6 +217,10 @@ public:
 	virtual bool friend_party_trade(
 			const std::vector<Party_trade_item>& removes, const std::vector<Party_trade_item>& adds, Actor* buyer)
 			= 0;
+	// Friend Mode's spell bar: whether function 'funcid' calls intrinsic
+	// 'intrinsic' itself (a spell that asks for a target calls
+	// click_on_item).
+	virtual bool friend_calls_intrinsic(int funcid, int intrinsic) = 0;
 	Conversation* get_conversation() const {
 		return conv;
 	}

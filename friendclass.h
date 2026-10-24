@@ -63,6 +63,14 @@ void Friend_class_frame();
 // click does.  False if there is no bar or no such slot.
 bool Friend_class_use_slot(int index);
 
+class Gump_button;
+// The Avatar's spell bar, dragging (drag.cc): the spell a drag from this
+// button carries (a spellbook's spell, or a slot of the bar), else -1; and
+// its drop at game point (x, y): onto a slot puts it there, slot to slot
+// swaps, a slot off the bar clears it.
+int  Friend_class_drag_spell(Gump_button* button);
+void Friend_class_drop_spell(Gump_button* button, int spell, int x, int y);
+
 // A new world (load, a guest's download): cooldowns and bonuses start over.
 void Friend_class_world_loaded();
 
@@ -108,6 +116,8 @@ Actor* Friend_class_guardian(const Actor* target, Game_object* attacker);
 // What friendclass.cc needs from exult.cc.
 Friend_mode_session& Friend_mode_get_session();
 void                 Friend_mode_class_notice(const std::string& text);
+// The notice near the top with a second line under it, as the Space hint.
+void Friend_mode_class_hint(const std::string& text, const std::string& hint);
 // Hostile: evil or chaotic, outside the party, alive, someone 'own' may fight.
 bool Friend_mode_is_hostile(const Actor* own, const Actor* foe);
 // A guest may fight it: a creature (animals, monsters), or a hostile NPC;

@@ -51,6 +51,8 @@
 #include "ammoinf.h"
 #include "vgafile.h"
 #include "Flex.h"
+#include "Spellbook_gump.h"
+#include "fnames.h"
 #include "spellbook.h"
 #include "ucmachine.h"
 #include "ucsched.h"
@@ -466,15 +468,12 @@ constexpr int shape_powder_keg = 704;    // Julia's Flashbang flies as one (and 
 // Keyring mod's lists are in another order): the spellbook's pictures, used
 // as icons, and the Avatar's spell bar.  Skills never run a spell's script.
 constexpr int spell_fireworks    = 3;
-constexpr int spell_fire_blast   = 18;
 constexpr int spell_mass_cure    = 20;
 constexpr int spell_protection   = 21;
-constexpr int spell_telekinesis  = 22;
 constexpr int spell_heal         = 25;
 constexpr int spell_paralyze     = 28;
 constexpr int spell_protect_all  = 27;
 constexpr int spell_sleep        = 31;
-constexpr int spell_lightning    = 33;
 constexpr int spell_dance        = 41;
 constexpr int spell_great_heal   = 44;
 constexpr int spell_invisibility = 45;
@@ -482,7 +481,6 @@ constexpr int spell_cause_fear   = 48;
 constexpr int spell_death_bolt   = 57;
 constexpr int spell_mass_might   = 62;
 constexpr int spell_swordstrike  = 70;
-constexpr int spell_time_stop    = 71;
 constexpr int spell_curse        = 24;
 constexpr int spell_mass_curse   = 35;
 constexpr int spell_explosion    = 43;
@@ -2374,57 +2372,87 @@ void Take_event(const std::vector<unsigned char>& data) {
  *  The bars.
  */
 
-// The Avatar's spell bar: chosen spells, cast in one click (2026-10-23:
-// slots 1, 2 and 3 are Telekinesis, Lightning and Time Stop; were Great
-// Heal, Fire Blast and Lightning).
-const std::array<int, 3> avatar_spells = {spell_telekinesis, spell_lightning, spell_time_stop};
+// The Avatar's spell bar (2026-10-23): three slots the player fills by
+// dragging spells from the spellbook (Ultima Online style), kept with the
+// save game; -1 is an empty slot.  Was a fixed set (Great Heal, Fire
+// Blast, Lightning, then Telekinesis, Lightning, Time Stop).
+constexpr int      avatar_slot_count = 3;
+std::array<int, 3> avatar_slots      = {-1, -1, -1};
+constexpr int      first_spell_usecode = 0x640;    // Spell n's script.
+constexpr int      click_on_item_intrinsic = 0x33;
+
+// Black Gate's spells by number (circle * 8 + place), checked against the
+// words of power in each spell's script (0x640 + number).
+const std::array<const char*, 72> spell_names = {
+		"Awaken", "Weather", "Douse", "Fireworks", "Glimmer", "Help", "Ignite", "Thunder",
+		"Create Food", "Cure", "Detect Trap", "Great Douse", "Great Ignite", "Light", "Locate", "Mass Awaken",
+		"Destroy Trap", "Enchant", "Fire Blast", "Great Light", "Mass Cure", "Protection", "Telekinesis", "Wizard Eye",
+		"Curse", "Heal", "Swarm", "Protect All", "Paralyze", "Peer", "Poison", "Sleep",
+		"Conjure", "Lightning", "Mark", "Mass Curse", "Recall", "Reveal", "Seance", "Unlock Magic",
+		"Charm", "Dance", "Dispel Field", "Explosion", "Great Heal", "Invisibility", "Fire Field", "Mass Sleep",
+		"Cause Fear", "Clone", "Fire Ring", "Flame Strike", "Magic Storm", "Poison Field", "Sleep Field", "Tremor",
+		"Create Gold", "Death Bolt", "Delayed Blast", "Energy Field", "Energy Mist", "Mass Charm", "Mass Might", "Restoration",
+		"Armageddon", "Death Vortex", "Mass Death", "Invisibility All", "Resurrect", "Summon", "Swordstrike", "Time Stop",
+};
 
 const char* Spell_name(int spell) {
-	switch (spell) {
-	case spell_great_heal:
-		return "Great Heal";
-	case spell_fire_blast:
-		return "Fire Blast";
-	case spell_lightning:
-		return "Lightning";
-	case spell_telekinesis:
-		return "Telekinesis";
-	case spell_time_stop:
-		return "Time Stop";
-	default:
-		return "Spell";
+	return spell >= 0 && spell < static_cast<int>(spell_names.size()) ? spell_names[spell] : "Spell";
+}
+
+// Whether a spell asks for a target: its script calls click_on_item (read
+// from the script that runs, once; Black Gate's 36 such spells).  It then
+// takes the Target System's pick, or brings up the crosshair; any other
+// just casts.
+bool Spell_wants_target(int spell) {
+	static std::array<signed char, 72> known = [] {
+		std::array<signed char, 72> all{};
+		all.fill(-1);
+		return all;
+	}();
+	if (spell < 0 || spell >= static_cast<int>(known.size())) {
+		return false;
 	}
+	if (known[spell] < 0) {
+		Usecode_machine* uc = Gwin()->get_usecode();
+		known[spell]        = !GAME_BG || !uc || uc->friend_calls_intrinsic(first_spell_usecode + spell, click_on_item_intrinsic);
+	}
+	return known[spell] > 0;
 }
 
 const char* Spell_description(int spell) {
-	switch (spell) {
-	case spell_great_heal:
-		return "Heals fully: the Avatar, or the party member picked";
-	case spell_fire_blast:
-		return "A bolt of fire at the pick";
-	case spell_lightning:
-		return "Lightning at the pick";
-	case spell_telekinesis:
-		return "Uses what is picked (E, else Q) from afar";
-	case spell_time_stop:
-		return "Stops time for a while: all but the Avatar freeze";
-	default:
-		return "";
+	return Spell_wants_target(spell) ? "At the Q or E pick, else the crosshair" : "Cast at once";
+}
+
+// Kept in gamedat, so Exult saves it with the game (gamedat.cc's lists).
+void Save_avatar_slots() {
+	if (Is_guest()) {
+		return;
+	}
+	auto out = U7open_out(FRIENDBARDAT);
+	if (!out) {
+		return;
+	}
+	for (const int spell : avatar_slots) {
+		*out << spell << '\n';
 	}
 }
 
-bool Spell_heals(int spell) {
-	return spell == spell_great_heal;
-}
-
-// Aimed at a thing (E's pick), not a person.
-bool Spell_on_thing(int spell) {
-	return spell == spell_telekinesis;
-}
-
-// Asks for no target at all.
-bool Spell_untargeted(int spell) {
-	return spell == spell_time_stop;
+void Load_avatar_slots() {
+	avatar_slots.fill(-1);
+	if (Is_guest() || !U7exists(FRIENDBARDAT)) {
+		return;
+	}
+	auto in = U7open_in(FRIENDBARDAT);
+	if (!in) {
+		return;
+	}
+	for (int& spell : avatar_slots) {
+		int value = -1;
+		if (!(*in >> value)) {
+			break;
+		}
+		spell = value >= 0 && value < static_cast<int>(spell_names.size()) ? value : -1;
+	}
 }
 
 Spellbook_object* Avatar_spellbook() {
@@ -2452,6 +2480,7 @@ struct Bar_slot {
 	int  seconds = 0;    // Recharging.
 	int  level   = 0;    // Locked until this level.
 	bool unlearned = false;    // A spell the Avatar doesn't know.
+	bool empty     = false;    // An empty slot of the Avatar's bar.
 	std::string name;
 	std::string why;     // Why not usable.
 	std::string description;
@@ -2486,8 +2515,16 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 	}
 	if (actor == Gwin()->get_main_actor()) {
 		Spellbook_object* book = Avatar_spellbook();
-		for (const int spell : avatar_spells) {
+		for (const int spell : avatar_slots) {
 			Bar_slot slot;
+			if (spell < 0) {
+				slot.empty       = true;
+				slot.name        = "Empty Slot";
+				slot.why         = "Drag a spell here from spellbook";
+				slot.description = slot.why;
+				slots.push_back(slot);
+				continue;
+			}
 			slot.spell = spell;
 			slot.icon  = spell;
 			slot.name  = Spell_name(spell);
@@ -2602,6 +2639,10 @@ void Use_slot(const Bar_slot& slot, int index) {
 	if (!actor) {
 		return;
 	}
+	if (slot.empty) {
+		Friend_mode_class_notice(slot.why);
+		return;
+	}
 	if (slot.spell >= 0) {
 		// The Avatar's spell, through the spellbook (mana, reagents, words
 		// of power); the Target System's pick answers the crosshair.
@@ -2610,26 +2651,37 @@ void Use_slot(const Bar_slot& slot, int index) {
 			Friend_mode_class_notice(slot.why);
 			return;
 		}
-		Actor*       pick = gwin->get_action_target();
-		Game_object* aim  = nullptr;
-		if (Spell_heals(slot.spell)) {
-			aim = pick && (pick->is_in_party() || pick == actor) ? pick : actor;
-		} else if (Spell_on_thing(slot.spell)) {
-			// E's pick, else Q's; the crosshair only with neither.
-			aim = Friend_mode_object_target();
-			if (!aim) {
-				aim = pick;
+		// A spell that asks for a target takes the Target System's pick, Q's
+		// or E's (they clear each other); with none, the crosshair.  Any
+		// other just casts.  The bar can't tell a heal from a bolt, so a
+		// peaceful person picked asks first, whatever the spell.
+		Actor*       pick    = gwin->get_action_target();
+		Game_object* aim     = nullptr;
+		bool         hostile = false;
+		if (Spell_wants_target(slot.spell)) {
+			aim = pick ? static_cast<Game_object*>(pick) : Friend_mode_object_target();
+			if (pick && pick != actor && !pick->is_in_party()) {
+				hostile             = Friend_mode_is_hostile(actor, pick);
+				const bool creature = pick->get_npc_num() < 0;
+				if (!hostile && !creature && !gwin->in_combat()) {
+					const bool confirmed
+							= confirm_slot == index && confirm_pick.lock().get() == pick && Now() < confirm_until;
+					if (!confirmed) {
+						confirm_slot  = index;
+						confirm_pick  = weak_from_obj(pick);
+						confirm_until = Now() + 4000;
+						Friend_mode_class_notice(slot.name + " on " + pick->get_name() + "? Again");
+						return;
+					}
+				}
+				confirm_slot = -1;
+				if (hostile && !gwin->in_combat()) {
+					gwin->toggle_combat();
+				}
 			}
-		} else if (Spell_untargeted(slot.spell)) {
-			aim = nullptr;
-		} else if (pick && !pick->is_in_party()) {
-			if (!Ready_to_fight(actor, pick, slot.name, index)) {
-				return;
-			}
-			aim = pick;
 		}
 		book->do_spell(actor, slot.spell, false, false, aim);
-		if (aim && aim != actor && aim->as_actor() && !Spell_heals(slot.spell) && !Spell_on_thing(slot.spell)) {
+		if (hostile) {
 			// And fight it, as Space would, once the cast is over: fighting
 			// at once left the Avatar standing (2026-10-23), the spell's
 			// script and casting frames outlasting the attack.
@@ -2776,11 +2828,23 @@ int Icon_frame(int skill_id) {
 	return -1;
 }
 
+// The bar shows the Avatar's spells: its slots are the size of the
+// spellbook's spell pictures (2026-10-23), not the skills' icons.
+bool avatar_bar = false;
+
 int Slot_w() {
+	if (avatar_bar) {
+		const Shape_frame* spell = Spellbook_spell_picture(0);
+		return spell ? spell->get_width() + 2 : name_slot_w;    // A pixel of button round it.
+	}
 	return Bar_icons() ? skill_icon_size : name_slot_w;
 }
 
 int Slot_h() {
+	if (avatar_bar) {
+		const Shape_frame* spell = Spellbook_spell_picture(0);
+		return spell ? spell->get_height() + 2 : name_slot_h;
+	}
 	return Bar_icons() ? Slot_w() : name_slot_h;
 }
 
@@ -2827,6 +2891,10 @@ public:
 		return index;
 	}
 
+	const Gump_Base* get_parent() const {
+		return parent;
+	}
+
 	void paint() override;
 };
 
@@ -2848,7 +2916,6 @@ class Skill_bar : public Gump {
 	int                   slots_x  = 0;    // Where the slots start in the gump.
 	int                   slots_y  = 0;
 	int                   style    = -1;    // The icon style the buttons were made for.
-	std::shared_ptr<Font> tip_font;
 
 public:
 	Skill_bar() : Gump(nullptr, 0, 0, 0, SF_GUMPS_VGA) {}
@@ -2917,8 +2984,9 @@ public:
 	void update(std::vector<Bar_slot> fresh) {
 		const bool now_vertical = Friend_class_bar_position == friend_bar_left_center
 								  || Friend_class_bar_position == friend_bar_right_center;
+		const bool now_avatar = !fresh.empty() && (fresh.front().spell >= 0 || fresh.front().empty);
 		const bool same_skills
-				= fresh.size() == slots.size() && now_vertical == vertical
+				= now_avatar == avatar_bar && fresh.size() == slots.size() && now_vertical == vertical
 				  && std::equal(fresh.begin(), fresh.end(), slots.begin(), [](const Bar_slot& a, const Bar_slot& b) {
 						 return a.skill == b.skill && a.spell == b.spell;
 					 });
@@ -2929,6 +2997,7 @@ public:
 									 });
 		const Tip_side side = Tip_for(Friend_class_bar_position);
 		slots               = std::move(fresh);
+		avatar_bar          = now_avatar;
 		vertical            = now_vertical;
 		if (!same_skills || side != tip_side || style != Friend_class_icon_style) {
 			tip_side = side;
@@ -2967,42 +3036,14 @@ private:
 		return vertical ? std::max(1, n * Slot_h() + (n - 1) * slot_gap) : Slot_h();
 	}
 
-	// A tooltip's lines: the name (decided 2026-10-20; the rest made it too
-	// big; clicking an unusable slot still says why), and "Locked" or "Not
-	// Learned" for one that isn't open yet (2026-10-21: no level on the slot).
-	std::vector<std::string> tip_lines(const Bar_slot& slot) const {
-		if (slot.level > 0) {
-			return {slot.name, "Locked"};
-		}
-		if (slot.unlearned) {
-			return {slot.name, "Not Learned"};
-		}
-		return {slot.name};
-	}
-
 	void make_buttons() {
-		tip_font = fontManager.get_font("MENU_FONT");
-		// The band: as big as the biggest tooltip.
-		tip_w = 0;
-		tip_h = 0;
-		if (tip_font) {
-			const int lh = tip_font->get_text_height() + 2;
-			for (const auto& each : slots) {
-				const auto lines = tip_lines(each);
-				for (const std::string& line : lines) {
-					tip_w = std::max(tip_w, tip_font->get_text_width(line.c_str()) + 8);
-				}
-				tip_h = std::max(tip_h, static_cast<int>(lines.size()) * lh + 6);
-			}
-		}
+		// No tooltip band (2026-10-23): hovering a slot says what it is in
+		// the notice near the top instead (Hover_hint).
 		const bool row = tip_side == Tip_side::above || tip_side == Tip_side::below;
-		if (row) {
-			tip_w = std::max(tip_w, slots_w());
-		} else {
-			tip_h = std::max(tip_h, slots_h());
-		}
-		slots_x = tip_side == Tip_side::left ? tip_w + 2 : (row ? (tip_w - slots_w()) / 2 : 0);
-		slots_y = tip_side == Tip_side::above ? tip_h + 2 : (row ? 0 : (tip_h - slots_h()) / 2);
+		tip_w          = row ? slots_w() : 0;
+		tip_h          = row ? 0 : slots_h();
+		slots_x        = 0;
+		slots_y        = 0;
 		buttons.clear();
 		for (size_t i = 0; i < slots.size(); ++i) {
 			const int step = static_cast<int>(i) * ((vertical ? Slot_h() : Slot_w()) + slot_gap);
@@ -3017,8 +3058,8 @@ private:
 		Image_window* iwin   = Gwin()->get_win();
 		const bool    row    = tip_side == Tip_side::above || tip_side == Tip_side::below;
 		// The whole gump: the slots and the tooltip's band.
-		const int     w      = row ? tip_w : slots_w() + 2 + tip_w;
-		const int     h      = row ? slots_h() + 2 + tip_h : tip_h;
+		const int     w      = row ? tip_w : slots_w();
+		const int     h      = row ? slots_h() : tip_h;
 		const int     left   = iwin->get_start_x();
 		const int     top    = iwin->get_start_y();
 		const int     right  = iwin->get_end_x();
@@ -3124,7 +3165,31 @@ void Skill_button::paint() {
 	int py = 0;
 	local_to_screen(px, py);
 	Image_buffer8* buf = Gwin()->get_win()->get_ib8();
-	if (picture) {
+	if (each->spell >= 0 || each->empty) {
+		// The Avatar's spells: the spellbook's picture of the spell on
+		// Exult's button, a pixel larger all round so its border shows
+		// (dimmed while it can't be cast); an empty slot is the button
+		// alone, dark.
+		Shape_frame* spell = each->empty ? nullptr : Spellbook_spell_picture(each->spell);
+		Recolor(!spell || !each->usable ? 143 : (hovered ? 138 : 140));
+		Basic_button::paint();
+		// "Empty" in the middle, in the small light letters of the cooldown
+		// seconds, which show on the dark button (2026-10-23).
+		if (!spell) {
+			Shape_manager* sman  = Shape_manager::get_instance();
+			const char*    empty = "Empty";
+			sman->paint_text(0, empty, px + (slot_w - sman->get_text_width(0, empty)) / 2,
+							 py + (slot_h - sman->get_text_height(0)) / 2);
+		}
+		if (spell) {
+			const int fx = px + 1 + spell->get_xleft();
+			const int fy = py + 1 + spell->get_yabove();
+			spell->paint_rle(buf, fx, fy);
+			if (!each->usable) {
+				spell->paint_rle_transformed(buf, fx, fy, Shape_manager::get_instance()->get_xform(8));
+			}
+		}
+	} else if (picture) {
 		// The picture alone, its top left at the slot's; dimmed (only its
 		// own pixels, as Exult greys the screen) while it can't be used.
 		const int fx = px + picture->get_xleft();
@@ -3161,43 +3226,27 @@ void Skill_bar::paint() {
 	for (auto& button : buttons) {
 		button->paint();
 	}
-	const Bar_slot* each = slot(hovered);
-	if (!each || !tip_font) {
-		return;
+}
+
+// The mouse came onto a slot: its name near the top, and under it what a
+// click does with its key: "Use Spell (Ctrl+1)", "Use Skill (Ctrl+2)", or
+// why it can't ("Locked", "Not Learned"); an empty one "Empty Slot", then
+// "Drag a spell here from spellbook".
+void Hover_hint(const Bar_slot& slot, int index) {
+	std::string hint;
+	if (slot.empty) {
+		hint = slot.why;    // "Drag a spell here from spellbook".
+	} else if (slot.level > 0) {
+		hint = "Locked";
+	} else if (slot.unlearned) {
+		hint = "Not Learned";
+	} else {
+		hint = slot.spell >= 0 ? "Use Spell" : "Use Skill";
+		if (index < 3) {
+			hint += " (Ctrl+" + std::to_string(index + 1) + ")";
+		}
 	}
-	// The tooltip, pinned to the hovered slot: black, white letters.
-	const auto lines = tip_lines(*each);
-	const int  lh    = tip_font->get_text_height() + 2;
-	int        bw    = 0;
-	for (const std::string& line : lines) {
-		bw = std::max(bw, tip_font->get_text_width(line.c_str()) + 8);
-	}
-	const int bh   = static_cast<int>(lines.size()) * lh + 6;
-	const int step = hovered * ((vertical ? Slot_h() : Slot_w()) + slot_gap);
-	int       tx   = 0;
-	int       ty   = 0;
-	switch (tip_side) {
-	case Tip_side::above:
-	case Tip_side::below:
-		tx = std::clamp(slots_x + step + Slot_w() / 2 - bw / 2, 0, std::max(0, tip_w - bw));
-		ty = tip_side == Tip_side::above ? tip_h - bh : slots_h() + 2;
-		break;
-	case Tip_side::right:
-	case Tip_side::left:
-		tx = tip_side == Tip_side::right ? slots_w() + 2 : tip_w - bw;
-		ty = std::clamp(slots_y + step + Slot_h() / 2 - bh / 2, 0, std::max(0, tip_h - bh));
-		break;
-	}
-	int sx = tx;
-	int sy = ty;
-	local_to_screen(sx, sy);
-	Image_buffer8* buf = Gwin()->get_win()->get_ib8();
-	buf->draw_box(sx, sy, bw, bh, 1, 0, 15);
-	int ly = sy + 3;
-	for (const std::string& line : lines) {
-		tip_font->draw_text(buf, sx + 4, ly, line.c_str());
-		ly += lh;
-	}
+	Friend_mode_class_hint(slot.name, hint);
 }
 
 // Show, refresh or hide this machine's bar.
@@ -3248,6 +3297,11 @@ void Update_bar() {
 			if (auto* button = dynamic_cast<Skill_button*>(the_bar->on_button(lx, ly))) {
 				hovered = button->get_index();
 			}
+		}
+	}
+	if (hovered != the_bar->get_hovered()) {
+		if (const Bar_slot* slot = the_bar->slot(hovered)) {
+			Hover_hint(*slot, hovered);
 		}
 	}
 	the_bar->set_hovered(hovered);
@@ -4028,6 +4082,68 @@ void Friend_class_options() {
 	Gwin()->get_gump_man()->do_modal_gump(&options, Mouse::hand);
 }
 
+int Friend_class_drag_spell(Gump_button* button) {
+	Game_window* gwin = Gwin();
+	if (Is_guest() || !the_bar || Bar_actor() != gwin->get_main_actor()) {
+		return -1;    // Only the Avatar's bar takes spells.
+	}
+	const int spell = Spellbook_button_spell(button);
+	if (spell >= 0) {
+		return spell;
+	}
+	const auto* slot = dynamic_cast<const Skill_button*>(button);
+	if (!slot || slot->get_parent() != static_cast<const Gump_Base*>(the_bar)) {
+		return -1;
+	}
+	const Bar_slot* each = the_bar->slot(slot->get_index());
+	return each ? each->spell : -1;
+}
+
+// The Avatar's slot under game point (x, y), or -1; 'on_bar' says whether
+// the point is on the bar at all.
+static int Avatar_slot_at(int x, int y, bool& on_bar) {
+	Gump_manager* gumps = Gwin()->get_gump_man();
+	on_bar              = the_bar && gumps->find_gump(x, y) == the_bar;
+	if (!on_bar) {
+		return -1;
+	}
+	int gx = x;
+	int gy = y;
+	gumps->map_game_to_gump(the_bar, x, y, gx, gy);
+	const auto* slot = dynamic_cast<const Skill_button*>(the_bar->on_button(gx, gy));
+	return slot && slot->get_index() < avatar_slot_count ? slot->get_index() : -1;
+}
+
+void Friend_class_drop_spell(Gump_button* button, int spell, int x, int y) {
+	if (Is_guest() || !the_bar) {
+		return;
+	}
+	const auto* source = dynamic_cast<const Skill_button*>(button);
+	const int   from   = source && source->get_parent() == static_cast<const Gump_Base*>(the_bar) ? source->get_index() : -1;
+	bool        on_bar = false;
+	const int   to     = Avatar_slot_at(x, y, on_bar);
+	if (from < 0) {    // From the spellbook: onto a slot, or nothing.
+		if (to < 0) {
+			return;
+		}
+		avatar_slots[to] = spell;
+		Friend_mode_class_notice(std::string(Spell_name(spell)) + " on slot " + std::to_string(to + 1));
+	} else if (to >= 0) {    // Slot to slot: swap.
+		if (to == from) {
+			return;
+		}
+		std::swap(avatar_slots[from], avatar_slots[to]);
+	} else if (!on_bar) {    // Off the bar: cleared.
+		avatar_slots[from] = -1;
+		Friend_mode_class_notice(std::string(Spell_name(spell)) + " taken off the bar");
+	} else {
+		return;
+	}
+	cout << "Friend Class: Avatar's bar now " << avatar_slots[0] << ' ' << avatar_slots[1] << ' ' << avatar_slots[2]
+		 << endl;
+	Save_avatar_slots();
+}
+
 bool Friend_class_use_slot(int index) {
 	if (!the_bar || !the_bar->slot(index)) {
 		return false;
@@ -4083,6 +4199,7 @@ void Friend_class_hide_overlays() {
 }
 
 void Friend_class_world_loaded() {
+	Load_avatar_slots();
 	cooldowns.clear();
 	global_waits.clear();
 	timed_flags.clear();

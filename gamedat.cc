@@ -231,6 +231,7 @@ void Game_window::restore_gamedat(const char* fname    // Name of savegame file.
 	U7remove(GEXULTVER);
 	U7remove(KEYRINGDAT);
 	U7remove(NOTEBOOKXML);
+	U7remove(FRIENDBARDAT);
 
 	cout.flush();
 
@@ -344,7 +345,7 @@ void Game_window::save_gamedat(
 	// First map outputs IREG's directly to
 	// gamedat flex, while all others have a flex
 	// of their own contained in gamedat flex.
-	size_t count = savefiles.size() + 12 * 12 + 2;
+	size_t count = savefiles.size() + 12 * 12 + 2 + 1;    // + Friend Mode's bar.
 	for (auto* map : maps) {
 		if (map) {
 			count++;
@@ -368,6 +369,9 @@ void Game_window::save_gamedat(
 
 	for (const auto* savefile : savefiles) {
 		Savefile(flex, savefile);
+	}
+	if (U7exists(FRIENDBARDAT)) {    // Friend Mode's bar, if any.
+		Savefile(flex, FRIENDBARDAT);
 	}
 	// Now the Ireg's.
 	for (auto* map : maps) {
@@ -902,6 +906,7 @@ bool Game_window::restore_gamedat_zip(const char* fname    // Name of savegame f
 	U7remove(GEXULTVER);
 	U7remove(KEYRINGDAT);
 	U7remove(NOTEBOOKXML);
+	U7remove(FRIENDBARDAT);
 
 	cout.flush();
 
@@ -1147,6 +1152,9 @@ bool Game_window::save_gamedat_zip(
 		for (const auto* savefile : savefiles) {
 			Save_level1(zipfile, savefile);
 		}
+		if (U7exists(FRIENDBARDAT)) {    // Friend Mode's bar, if any.
+			Save_level1(zipfile, FRIENDBARDAT);
+		}
 
 		// Now the Ireg's.
 		for (auto* map : maps) {
@@ -1170,6 +1178,9 @@ bool Game_window::save_gamedat_zip(
 
 		for (const char* savefilename : savefiles) {
 			Save_level2(zipfile, savefilename);
+		}
+		if (U7exists(FRIENDBARDAT)) {    // Friend Mode's bar, if any.
+			Save_level2(zipfile, FRIENDBARDAT);
 		}
 
 		// Now the Ireg's.

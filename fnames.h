@@ -151,6 +151,8 @@
 #define GNEWGAMEVER "<GAMEDAT>/newgame.ver"
 #define KEYRINGDAT  "<GAMEDAT>/keyring.dat"
 #define NOTEBOOKXML "<GAMEDAT>/notebook.xml"
+// Friend Mode: the Avatar's spell bar (saved with the game when present).
+#define FRIENDBARDAT "<GAMEDAT>/friendbar.dat"
 
 #define TEXTMSGS       "<STATIC>/textmsg.txt"
 #define PATCH_TEXTMSGS "<PATCH>/textmsg.txt"

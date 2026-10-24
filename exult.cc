@@ -2917,14 +2917,25 @@ static std::string friend_hint_shown;            // The hint line showing, if an
 static uint32      friend_hint_at      = 0;      // When it was set (it fades with the notice).
 static bool        friend_hint_changed = false;
 
-static void Friend_mode_target_notice(const std::string& text, bool hint = false) {
+// The context notice near the top (targeting, the hold button, hovering
+// the skill bar): one at a time, each replacing the last, whatever its kind,
+// then fading as notices do (2026-10-23; they stacked).
+static std::string friend_context_line;
+
+static void Friend_mode_context_line(const std::string& text) {
+	const std::string last = friend_context_line;
 	friend_notices.erase(std::remove_if(friend_notices.begin(), friend_notices.end(),
-								 [](const Friend_log_line& line) {
-									 return line.text.rfind("Targeting ", 0) == 0
+								 [&last](const Friend_log_line& line) {
+									 return (!last.empty() && line.text == last) || line.text.rfind("Targeting ", 0) == 0
 											|| line.text.rfind("Attacking ", 0) == 0 || line.text.rfind("No target", 0) == 0;
 								 }),
 						 friend_notices.end());
+	friend_context_line = text;
 	Friend_mode_top_line(text);
+}
+
+static void Friend_mode_target_notice(const std::string& text, bool hint = false) {
+	Friend_mode_context_line(text);
 	friend_hint_shown   = hint ? Friend_space_hint() : std::string();
 	friend_hint_at      = static_cast<uint32>(SDL_GetTicks());
 	friend_hint_changed = true;
@@ -4332,6 +4343,48 @@ void Friend_mode_class_notice(const std::string& text) {
 	}
 }
 
+void Friend_mode_class_hint(const std::string& text, const std::string& hint) {
+	Friend_mode_context_line(text);    // Replaces any context notice.
+	friend_hint_shown   = hint;
+	friend_hint_at      = static_cast<uint32>(SDL_GetTicks());
+	friend_hint_changed = true;
+}
+
+// Every frame: the mouse came onto a face in the status bar.  The context
+// notice says who it is ("Iolo", or "Iolo (Marc)" for another player's)
+// and, under it, "Switch Character (Shift+Click)" where Shift+click would
+// take or lead that one (Friend_mode_shift_click_face): not the one this
+// machine plays now, and on a guest not the Avatar.
+static Game_object_weak friend_face_hovered;
+
+static void Friend_mode_face_hover_frame() {
+	Gump_manager* gumps = gwin->get_gump_man();
+	Actor*        actor = nullptr;
+	if (!gumps->modal_gump_mode() && gwin->get_main_actor()) {
+		const int x    = Mouse::mouse()->get_mousex();
+		const int y    = Mouse::mouse()->get_mousey();
+		Gump*     gump = gumps->find_gump(x, y);
+		if (dynamic_cast<Face_stats*>(gump)) {
+			int gx = x;
+			int gy = y;
+			gumps->map_game_to_gump(gump, x, y, gx, gy);
+			Container_game_object* found = gump->find_actor(gx, gy);
+			actor                        = found ? found->as_actor() : nullptr;
+		}
+	}
+	if (actor == friend_face_hovered.lock().get()) {
+		return;
+	}
+	friend_face_hovered = weak_from_obj(actor);
+	if (!actor) {
+		return;
+	}
+	const bool switchable = actor != gwin->get_controlled_actor()
+							&& !(Friend_mode_is_guest() && actor == gwin->get_main_actor());
+	Friend_mode_class_hint(Friend_mode_display_name(actor, actor->get_npc_name()),
+						   switchable ? "Switch Character (Shift+Click)" : "");
+}
+
 bool Friend_mode_is_hostile(const Actor* own, const Actor* foe) {
 	return Friend_is_hostile_target(own, foe);
 }
@@ -5378,7 +5431,7 @@ static void Friend_mode_hold_button_hint() {
 	} else {
 		what = friend_following ? "Take over your companion" : "Follow the Avatar";
 	}
-	Friend_mode_top_line(what);
+	Friend_mode_context_line(what);
 	friend_hint_shown   = "Shortcut: Y";
 	friend_hint_at      = static_cast<uint32>(SDL_GetTicks());
 	friend_hint_changed = true;
@@ -9657,6 +9710,7 @@ static void Handle_events() {
 			Combat::resume();    // Paused before co-op began: no pausing in co-op.
 		}
 		Friend_class_frame();
+		Friend_mode_face_hover_frame();
 		if (!Friend_mode_is_guest()) {
 			Friend_mode_hold_frame();
 			Friend_mode_lead_watch_frame();

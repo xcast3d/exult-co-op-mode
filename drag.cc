@@ -25,12 +25,14 @@
 #include "drag.h"
 
 #include "exult.h"
+#include "friendclass.h"
 
 #include "Audio.h"
 #include "Dynamic_container_gump.h"
 #include "Gump.h"
 #include "Gump_button.h"
 #include "Gump_manager.h"
+#include "Spellbook_gump.h"
 #include "actors.h"
 #include "barge.h"
 #include "cheat.h"
@@ -45,6 +47,7 @@
 #include "paths.h"
 #include "ucmachine.h"
 
+#include <cstdlib>
 #include <iostream> /* Debugging */
 
 using std::cout;
@@ -295,6 +298,29 @@ bool Dragging_info::moved(
 		mouse_widget->mouse_drag(wx, wy);
 		return true;
 	}
+	if (button && !obj && !gump) {
+		// Friend Mode: a spell dragged to or from the Avatar's bar; its
+		// picture follows the mouse once it has moved a few pixels.
+		if (drag_spell < 0) {
+			const int spell = Friend_class_drag_spell(button);
+			if (spell < 0 || (std::abs(x - mousex) < 4 && std::abs(y - mousey) < 4)) {
+				return false;
+			}
+			drag_picture = Spellbook_spell_picture(spell);
+			if (!drag_picture) {
+				return false;
+			}
+			drag_spell = spell;
+			paintx     = mousex - drag_picture->get_width() / 2 + drag_picture->get_xleft();
+			painty     = mousey - drag_picture->get_height() / 2 + drag_picture->get_yabove();
+		}
+		paintx += x - mousex;
+		painty += y - mousey;
+		mousex = x;
+		mousey = y;
+		gwin->set_painted();
+		return true;
+	}
 	if (!obj && !gump) {
 		return false;
 	}
@@ -342,7 +368,7 @@ void Dragging_info::free_item_layer() {
  *  match the mouse-pointer layer.
  */
 void Dragging_info::paint_obj_to_layer() {
-	Shape_frame* frame = obj->get_shape();
+	Shape_frame* frame = obj ? obj->get_shape() : drag_picture;
 	if (!frame) {
 		return;
 	}
@@ -379,7 +405,9 @@ void Dragging_info::paint_obj_to_layer() {
 	lbuf->fill8(255);    // Fully transparent.
 	Image_buffer8* prev = gwin->push_render_target(lbuf);
 	// Paint the shape at its origin within the layer buffer.
-	if (obj->get_flag(Obj_flags::invisible)) {
+	if (!obj) {
+		frame->paint_rle(lbuf, xleft, yabove);    // A spell's picture.
+	} else if (obj->get_flag(Obj_flags::invisible)) {
 		obj->paint_invisible(xleft, yabove);
 	} else {
 		obj->paint_shape(xleft, yabove);
@@ -438,6 +466,12 @@ void Dragging_info::paint_obj_to_layer() {
  */
 
 void Dragging_info::paint() {
+	if (drag_picture && !obj) {
+		if (!dropping) {
+			paint_obj_to_layer();    // A spell, to or from the Avatar's bar.
+		}
+		return;
+	}
 	if (!rect.w) {    // Not moved enough yet?
 		return;
 	}
@@ -504,7 +538,12 @@ bool Dragging_info::drop(
 		gwin->paint();
 		return true;
 	}
-	if (button) {
+	if (button && drag_spell >= 0) {
+		// Friend Mode: a spell dropped on (or dragged off) the Avatar's bar.
+		button->unpush(Gump::MouseButton::Left);
+		Friend_class_drop_spell(button, drag_spell, x, y);
+		handled = true;
+	} else if (button) {
 		button->unpush(Gump::MouseButton::Left);
 		int bx = x;
 		int by = y;
