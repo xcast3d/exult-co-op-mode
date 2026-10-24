@@ -90,6 +90,24 @@ extern int save_compression;
  *  Write files from flex assuming first 13 characters of
  *  each flex object are an 8.3 filename.
  */
+// A name inside a save stays inside gamedat: no "..", no absolute path,
+// no other drive or separator (a save from someone else, such as a Co-Op
+// host's world, could otherwise write anywhere this user can).
+static bool Safe_saved_name(const char* name, bool allow_slash) {
+	if (!name || !*name || *name == '/') {
+		return false;
+	}
+	for (const char* c = name; *c; ++c) {
+		if (*c == '\\' || *c == ':' || (*c == '/' && !allow_slash)) {
+			return false;
+		}
+		if (c[0] == '.' && c[1] == '.') {
+			return false;
+		}
+	}
+	return true;
+}
+
 void Game_window::restore_flex_files(IDataSource& in, const char* basepath) {
 	in.seek(0x54);    // Get to where file count sits.
 	const size_t numfiles = in.read4();
@@ -116,8 +134,16 @@ void Game_window::restore_flex_files(IDataSource& in, const char* basepath) {
 		len -= 13;
 		in.seek(location);    // Get to it.
 		char fname[50];       // Set up name.
+		if (baselen + 14 > sizeof(fname)) {
+			continue;
+		}
 		strcpy(fname, basepath);
 		in.read(&fname[baselen], 13);
+		fname[baselen + 13] = 0;    // Thirteen bytes need not end in a zero.
+		if (!Safe_saved_name(&fname[baselen], false)) {
+			std::cerr << "Skipped a file with an unsafe name in a saved game" << endl;
+			continue;
+		}
 		size_t namelen = strlen(fname);
 		// Watch for names ending in '.'.
 		if (fname[namelen - 1] == '.') {
@@ -818,6 +844,7 @@ bool Game_window::Restore_level2(unzFile& unzipfile, const char* dirname, int di
 		if (*oname2 == 0) {
 			break;
 		}
+		const bool safe = Safe_saved_name(oname2, false);
 
 		// Get file length.
 		unsigned char size_buffer[4];
@@ -827,6 +854,10 @@ bool Game_window::Restore_level2(unzFile& unzipfile, const char* dirname, int di
 		}
 		const unsigned char* ptr  = size_buffer;
 		const int            size = little_endian::Read4(ptr);
+		if (size < 0) {
+			std::cerr << "Bad file size in a saved game" << std::endl;
+			return false;
+		}
 
 		if (size) {
 			// Watch for names ending in '.'.
@@ -841,6 +872,10 @@ bool Game_window::Restore_level2(unzFile& unzipfile, const char* dirname, int di
 			if (unzReadCurrentFile(unzipfile, filebuf.data(), filebuf.size()) != size) {
 				std::cerr << "Couldn't read for buf" << std::endl;
 				return false;
+			}
+			if (!safe) {
+				std::cerr << "Skipped a file with an unsafe name in a saved game" << std::endl;
+				continue;
 			}
 
 			// Then write it out.
@@ -936,6 +971,11 @@ bool Game_window::restore_gamedat_zip(const char* fname    // Name of savegame f
 		// Get file length.
 		const int len = file_info.uncompressed_size;
 		if (len <= 0) {
+			continue;
+		}
+		// Only a map directory ("map01/...") may hold a slash.
+		if (!Safe_saved_name(oname2, true)) {
+			std::cerr << "Skipped a file with an unsafe name in a saved game" << endl;
 			continue;
 		}
 

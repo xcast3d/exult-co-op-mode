@@ -629,7 +629,8 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 	bool fadeout  = true;
 	bool exitmenu = false;
 	bool coop_menu      = false;    // Showing the Co-Op Mode choices.
-	int  coop_selection = 0;        // Kept while the Co-Op list is rebuilt.
+	bool host_menu      = false;    // Showing Host Game's settings.
+	int  coop_selection = 0;        // The entry to select when a Co-Op list is rebuilt.
 	// Co-Op Mode entries are text, in the Exult menu's fonts.
 	const char* exult_fonts = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
 	if (!fontManager.get_font("CREDITS_FONT")) {
@@ -669,16 +670,16 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 				auto* entry = new MenuTextEntry(font, font, "Connect to Host", centerx, menuy + offset);
 				entry->set_id(7);
 				menu->add_entry(entry);
-			} else if (coop_menu) {
-				// Hosting: how guests join, what to give them (a click
-				// copies it), the password; then Join and Back.
-				add_coop_entry(Friend_mode_hosting() ? "STOP HOSTING" : "HOST A GAME", 9, offset);
+			} else if (host_menu) {
+				// Host Game: how guests join and the password, then into
+				// the game (the code comes once it has started).
 				add_coop_entry(Friend_mode_coop_by_lobby() ? "TYPE: LOBBY CODE" : "TYPE: IP ADDRESS", 11, offset);
-				if (Friend_mode_hosting()) {
-					add_coop_entry(Friend_mode_coop_details(), 12, offset);
-				}
 				add_coop_entry(Friend_mode_has_password() ? "PASSWORD: SET" : "PASSWORD: NONE", 13, offset);
-				add_coop_entry("JOIN A GAME", 7, offset);
+				add_coop_entry("JOURNEY ONWARD", 9, offset);
+				add_coop_entry("BACK", 12, offset);
+			} else if (coop_menu) {
+				add_coop_entry("HOST GAME", 14, offset);
+				add_coop_entry("JOIN GAME", 7, offset);
 				add_coop_entry("BACK", 10, offset);
 			} else {
 				for (size_t i = 0; i < menuchoices.size(); i++) {
@@ -714,13 +715,7 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 				}
 			}
 			}
-			menu->set_selection(friend_guest || coop_menu ? std::min(coop_selection, menu->get_count() - 1) : 2);
-			if (coop_menu && Friend_mode_hosting()) {
-				// Show the lobby code as soon as it comes.
-				menu->set_refresh([shown = Friend_mode_coop_details()]() {
-					return Friend_mode_coop_details() != shown;
-				});
-			}
+			menu->set_selection(friend_guest || coop_menu || host_menu ? coop_selection : 2);
 		}
 
 		bool created = false;
@@ -746,30 +741,38 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 		}
 
 		int choice = menu->handle_events(gwin);
-		if (choice == -1 && coop_menu) {
+		if (choice == -1 && host_menu) {
+			choice = 12;    // Escape: back to the Co-Op choices.
+		} else if (choice == -1 && coop_menu) {
 			choice = 10;    // Escape leaves the Co-Op choices.
 		}
-		if (coop_menu) {
-			coop_selection = menu->get_selection();
-		}
+		coop_selection = 0;
 		switch (choice) {
-		case MenuList::refresh_choice:    // The Co-Op details changed.
+		case 14:    // Host Game: its settings.
+			host_menu = true;
+			coop_menu = false;
+			clear_menu_area();
+			delete menu;
+			menu = nullptr;
+			break;
+		case 12:    // Back from Host Game.
+			host_menu      = false;
+			coop_menu      = true;
 			clear_menu_area();
 			delete menu;
 			menu = nullptr;
 			break;
 		case 11:    // Lobby code or IP address.
 			Friend_mode_set_coop_by_lobby(!Friend_mode_coop_by_lobby());
+			coop_selection = 0;
 			clear_menu_area();
 			delete menu;
 			menu = nullptr;
 			break;
-		case 12:    // The code or address: copy it.
-			Friend_mode_copy_coop_details();
-			break;
 		case 13:    // Password: its own screen.
 			menu_scene.reset();
 			Friend_mode_edit_password();
+			coop_selection = 1;
 			delete menu;
 			menu = nullptr;
 			break;
@@ -860,17 +863,23 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			fadeout  = true;
 			break;
 		case 8:    // Co-Op Mode: host or join.
-			coop_menu      = true;
-			coop_selection = 0;
+			coop_menu = true;
 			clear_menu_area();    // The lists are different lengths.
 			delete menu;
 			menu = nullptr;
 			break;
-		case 9:    // Host a Game / Stop Hosting: stay to see the code.
-			Friend_mode_set_hosting(!Friend_mode_hosting());
-			clear_menu_area();
-			delete menu;
-			menu = nullptr;
+		case 9:    // Journey Onward, hosting: as Journey Onward, open to Co-Op.
+			Friend_mode_set_hosting(true);
+			menu_scene.reset();
+			created = gwin->init_gamedat(false);
+			if (!created) {
+				Friend_mode_set_hosting(false);
+				show_journey_failed();
+				break;
+			}
+			exitmenu = true;
+			fadeout  = true;
+			play     = true;
 			break;
 		case 10:    // Back from the Co-Op choices.
 			coop_menu = false;
@@ -882,6 +891,7 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			Friend_mode_set_hosting(false);
 			menu_scene.reset();
 			if (!Friend_mode_collect_connection_details() || !Friend_mode_download_world()) {
+				coop_selection = coop_menu ? 1 : 0;    // Back on Join Game.
 				delete menu;
 				menu = nullptr;
 				break;

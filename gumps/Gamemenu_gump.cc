@@ -42,7 +42,9 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "items.h"
 #include "mouse.h"
 
+#include <algorithm>
 #include <string>
+#include <vector>
 
 using std::string;
 
@@ -84,31 +86,41 @@ public:
 using Gamemenu_button = CallbackTextButton<Gamemenu_gump>;
 
 namespace {
-// Co-Op Mode in the game menu: how guests join, what to give them, and
-// whether new players can join now.  The password is set on the title
-// menu's Co-Op Mode (it needs typing).
+// Co-Op Mode in the game menu: hosting on or off, how guests join, what to
+// give them, whether new players can join now, and the password (a box
+// to click and type in, like the chat line).
 class Coop_options_gump : public Modal_gump {
-	enum button_ids { id_ok, id_open, id_type, id_copy, id_joining, id_count };
+	enum button_ids { id_ok, id_hosting, id_type, id_joining, id_copy, id_count };
 
-	enum rows { row_hosting, row_type, row_details, row_joining, row_password, row_count };
+	// The settings, then one row each for the code, or the IP and port.
+	enum rows { row_hosting, row_type, row_joining, row_password, row_details };
+
+	static constexpr int width       = 190;
+	static constexpr int field_x     = 92;    // The password box, from the left.
+	static constexpr int field_width = 90;
 
 	std::array<std::unique_ptr<Gump_button>, id_count> buttons;
+	std::vector<std::string>                           details;
+	bool                                               editing = false;    // Typing a password.
+	std::string                                        password;
 
 	using Button = CallbackTextButton<Coop_options_gump>;
 	using Toggle = CallbackToggleTextButton<Coop_options_gump>;
 
 	bool shown(int id) const {
-		const bool hosting = Friend_mode_hosting();
+		const bool hosting = Friend_mode_coop_hosting_now();
 		switch (id) {
-		case id_open:
-			return !hosting;
-		case id_copy:
-			return hosting;
 		case id_joining:
 			return hosting;
+		case id_copy:
+			return hosting && !details.empty();
 		default:
 			return true;
 		}
+	}
+
+	void set_hosting(int state) {
+		Friend_mode_set_coop_hosting(state == 1);
 	}
 
 	void set_type(int state) {
@@ -119,34 +131,104 @@ class Coop_options_gump : public Modal_gump {
 		Friend_mode_set_coop_joining_open(state == 1);
 	}
 
-	void open_now() {
-		Friend_mode_open_to_coop();
-	}
-
 	void copy() {
 		Friend_mode_copy_coop_details();
 	}
 
+	int detail_rows() const {
+		return std::max<int>(1, static_cast<int>(details.size()));
+	}
+
+	// OK and the background follow the number of detail rows.
+	void layout() {
+		const int ok_row = row_details + detail_rows() + 1;
+		SetProceduralBackground(TileRect(0, 0, width, yForRow(ok_row + 1)), -1, false);
+		buttons[id_ok]->set_pos((width - 50) / 2, yForRow(ok_row));
+		buttons[id_copy]->set_pos(width - 40 - label_margin, yForRow(row_details));
+	}
+
+	TileRect password_box() const {
+		return TileRect(x + field_x, y + yForRow(row_password) - 1, field_width, 11);
+	}
+
+	void start_editing() {
+		editing  = true;
+		password = Friend_mode_current_password();
+		SDL_StartTextInput(gwin->get_win()->get_screen_window());
+		paint();
+	}
+
+	void stop_editing(bool keep) {
+		if (!editing) {
+			return;
+		}
+		editing = false;
+		SDL_StopTextInput(gwin->get_win()->get_screen_window());
+		if (keep) {
+			Friend_mode_set_password(password);
+		}
+		paint();
+	}
+
 public:
 	Coop_options_gump() : Modal_gump(nullptr, -1) {
-		SetProceduralBackground(TileRect(0, 0, 190, yForRow(row_count + 2)), -1);
-		buttons[id_ok]   = std::make_unique<Button>(this, &Coop_options_gump::close, GumpStrings::OK(), 70,
-                                                  yForRow(row_count + 1), 50);
-		buttons[id_open] = std::make_unique<Button>(this, &Coop_options_gump::open_now, "Open to Co-Op",
-				get_button_pos_for_label("Hosting:"), yForRow(row_hosting), 80);
-		buttons[id_type] = std::make_unique<Toggle>(this, &Coop_options_gump::set_type,
-				std::vector<std::string>{"Lobby code", "IP address"}, Friend_mode_coop_by_lobby() ? 0 : 1,
-				get_button_pos_for_label("Type:"), yForRow(row_type), 80);
-		buttons[id_copy] = std::make_unique<Button>(this, &Coop_options_gump::copy, "Copy",
-				get_button_pos_for_label("Type:"), yForRow(row_details), 40);
+		details = Friend_mode_coop_detail_rows();
+		SetProceduralBackground(TileRect(0, 0, width, yForRow(row_details + 3)), -1);
+		buttons[id_ok]      = std::make_unique<Button>(this, &Coop_options_gump::close, GumpStrings::OK(), 0, 0, 50);
+		buttons[id_hosting] = std::make_unique<Toggle>(this, &Coop_options_gump::set_hosting,
+				std::vector<std::string>{"Off", "On"}, Friend_mode_coop_hosting_now() ? 1 : 0, field_x,
+				yForRow(row_hosting), field_width);
+		buttons[id_type]    = std::make_unique<Toggle>(this, &Coop_options_gump::set_type,
+                std::vector<std::string>{"Lobby code", "IP address"}, Friend_mode_coop_by_lobby() ? 0 : 1, field_x,
+                yForRow(row_type), field_width);
 		buttons[id_joining] = std::make_unique<Toggle>(this, &Coop_options_gump::set_joining,
-				std::vector<std::string>{"Closed", "Open"}, Friend_mode_coop_joining_open() ? 1 : 0,
-				get_button_pos_for_label("New players:"), yForRow(row_joining), 80);
-		RightAlignWidgets(tcb::span(buttons.data() + id_open, id_count - id_open));
+				std::vector<std::string>{"Closed", "Open"}, Friend_mode_coop_joining_open() ? 1 : 0, field_x,
+				yForRow(row_joining), field_width);
+		buttons[id_copy]    = std::make_unique<Button>(this, &Coop_options_gump::copy, "Copy", 0, 0, 40);
+		layout();
+		set_pos();    // Centred.
 	}
 
 	void close() override {
+		stop_editing(true);
 		done = true;
+	}
+
+	bool mouse_down(int mx, int my, MouseButton button) override {
+		if (button == MouseButton::Left && password_box().has_point(mx, my)) {
+			if (!editing) {
+				start_editing();
+			}
+			return true;
+		}
+		if (editing) {
+			stop_editing(true);    // A click elsewhere keeps what was typed.
+		}
+		return Modal_gump::mouse_down(mx, my, button);
+	}
+
+	bool key_down(SDL_Keycode chr, SDL_Keycode unicode) override {
+		if (!editing) {
+			return Modal_gump::key_down(chr, unicode);
+		}
+		if (chr == SDLK_RETURN || chr == SDLK_KP_ENTER) {
+			stop_editing(true);
+		} else if (chr == SDLK_ESCAPE) {
+			stop_editing(false);
+		} else if (chr == SDLK_BACKSPACE) {
+			if (!password.empty()) {
+				password.pop_back();
+				paint();
+			}
+		} else if (unicode >= ' ' && unicode < 127 && password.size() < 32) {
+			// With text input on, SDL sends a key and the text for each
+			// character: take the text only.
+			if (chr == SDLK_UNKNOWN || !SDL_TextInputActive(gwin->get_win()->get_screen_window())) {
+				password.push_back(static_cast<char>(unicode));
+				paint();
+			}
+		}
+		return true;
 	}
 
 	Gump_button* on_button(int mx, int my) override {
@@ -171,28 +253,39 @@ public:
 		auto           label = [&](int row, const std::string& text) {
             font->paint_text(iwin->get_ib8(), text.c_str(), x + label_margin, y + yForRow(row) + 1);
 		};
-		label(row_hosting, Friend_mode_hosting() ? "Hosting: on" : "Hosting:");
+		label(row_hosting, "Hosting:");
 		label(row_type, "Type:");
-		label(row_details, Friend_mode_coop_details());
-		if (Friend_mode_hosting()) {
+		if (Friend_mode_coop_hosting_now()) {
 			label(row_joining, "New players:");
 		}
-		label(row_password, Friend_mode_has_password() ? "Password: set (title menu)" : "Password: none (title menu)");
+		label(row_password, "Password:");
+		const TileRect box = password_box();
+		iwin->get_ib8()->draw_box(box.x, box.y, box.w, box.h, 1, editing ? 138 : 142, editing ? 15 : 0);
+		const std::string shown_password
+				= editing ? std::string(password.size(), '*')
+						  : (Friend_mode_has_password() ? std::string("Set (click)") : std::string("None (click)"));
+		font->paint_text(iwin->get_ib8(), shown_password.c_str(), box.x + 3, box.y + 2);
+		if (editing) {
+			iwin->get_ib8()->fill8(
+					15, 1, box.h - 4, box.x + 4 + font->get_text_width(shown_password.c_str()), box.y + 2);
+		}
+		for (std::size_t i = 0; i < details.size(); ++i) {
+			label(row_details + static_cast<int>(i), details[i]);
+		}
 		gwin->set_painted();
 	}
 
-	// The code arrives a moment after opening: keep the page current.
+	// The code (or the internet address) arrives a moment after opening,
+	// and the rows change with the type: keep the page current.
 	bool run() override {
-		const std::string details = Friend_mode_coop_details();
-		if (details != last_details) {
-			last_details = details;
+		auto now = Friend_mode_coop_detail_rows();
+		if (now != details) {
+			details = std::move(now);
+			layout();
 			return true;    // Paint again.
 		}
 		return Modal_gump::run();
 	}
-
-private:
-	std::string last_details;
 };
 }    // namespace
 

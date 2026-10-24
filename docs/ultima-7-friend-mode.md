@@ -291,7 +291,10 @@ guest types in.
 - [x] Optional session password; WebRTC also encrypts the connection.
       Built 2026-10-23 with the Co-Op menu (Lobby code or IP, the code or
       address to share, close to new players) and a kick X in the Tab list;
-      see [the lobby](friend-mode/lobby.md).
+      see [the lobby](friend-mode/lobby.md). Security sweep 2026-10-24 (a
+      host could write files outside a guest's game folder, now fixed;
+      limits on half-open connections, password guessing and renaming):
+      see [security](friend-mode/security.md).
 - [x] Windows build ([Windows build plan](friend-mode/windows-build.md));
       Mac and Windows have played together.
 - [ ] Mac/Windows compatibility testing and builds for release.

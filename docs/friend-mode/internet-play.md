@@ -65,10 +65,11 @@ which adds lag (the Tailscale menu shows "direct" or "relay"). Lobby codes
 
 By lobby code, the connection is encrypted (WebRTC's DTLS), and the code
 is the only way in: anyone who has it can join while you host. By
-address, there is no password and no encryption. While you host, anyone who finds
-the open port can join a free companion, and the chat and world travel in
-plain text. Host only while playing, and close Exult afterwards (or remove
-the port forward).
+address, nothing is encrypted: while you host, anyone who finds the open
+port can try to join, and the chat and world travel in plain text. Set a
+password (Co-Op Mode, in the title menu or Escape menu) when hosting by IP,
+host only while playing, and turn Hosting off (or remove the port forward)
+afterwards. Details: [security](security.md).
 
 ## Expected rough edges
 

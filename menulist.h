@@ -19,7 +19,6 @@
 #ifndef MENULIST_H
 #define MENULIST_H
 
-#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -177,18 +176,8 @@ private:
 	int                                      selection  = 0;
 	bool                                     has_cancel = false;
 	int                                      cancel_id  = 0;
-	std::function<bool()>                    refresh;
 
 public:
-	// Friend Mode: asked between frames; true ends handle_events with
-	// refresh_choice, so the caller can rebuild the menu (a Co-Op code
-	// arrived).
-	static constexpr int refresh_choice = -2;
-
-	void set_refresh(std::function<bool()> check) {
-		refresh = std::move(check);
-	}
-
 	int add_entry(MenuObject* entry) {
 		entries.emplace_back(entry);
 		return entries.size() - 1;
@@ -199,10 +188,6 @@ public:
 
 	int get_selection() {
 		return selection;
-	}
-
-	int get_count() const {
-		return static_cast<int>(entries.size());
 	}
 
 	void set_selection(int sel);

@@ -159,9 +159,55 @@ int main(int argc, char** argv) {
 	run_until({&host, &again}, [&] { return !again.peer_open(); }, 10);
 	check("a kicked name is turned away", again.was_kicked());
 
-	// Closing the lobby ends the code; opening again gives a new one.
+	// Guessing: after five wrong passwords in a minute, even the right one
+	// waits.
+	for (int i = 0; i < 5; ++i) {
+		Friend_mode_session guess;
+		guess.set_password("guess" + std::to_string(i));
+		guess.start_guest("127.0.0.1", port, game_code, lobby);
+		run_until({&host, &guess}, [&] { return !guess.peer_open(); }, 10);
+	}
+	Friend_mode_session right_too_soon;
+	right_too_soon.set_local_player_name("Spark's player");
+	right_too_soon.set_password("moonglow");
+	right_too_soon.start_guest("127.0.0.1", port, game_code, lobby);
+	run_until({&host, &right_too_soon}, [&] { return !right_too_soon.peer_open() || right_too_soon.connected(); }, 10);
+	check("after five wrong passwords, guessing waits a minute",
+		  right_too_soon.rejected_password() && !right_too_soon.connected());
+
+	// Connections that never say hello: at most four held, then closed.
+	std::vector<std::unique_ptr<Friend_connection>> silent;
+	for (int i = 0; i < 6; ++i) {
+		silent.push_back(Friend_tcp_connect("127.0.0.1", port, 2000));
+	}
+	run_until({&host}, [] { return false; }, 1);
+	auto dropped = [&] {
+		int count = 0;
+		for (auto& each : silent) {
+			unsigned char byte;
+			count += each && each->read(&byte, 1) < 0 ? 1 : 0;
+		}
+		return count;
+	};
+	check("only four silent connections are held", dropped() == 2);
+	run_until({&host}, [] { return false; }, 16);
+	check("silent connections close after 15 seconds", dropped() == 6);
+
+	// Closing the lobby ends the code.
 	host.close_lobby();
 	check("closing the lobby ends the code", host.lobby_code().empty() && !host.lobby_open());
+
+	// Stopping hosting: guests are told, and the host is left with none.
+	// (No password now: guessing still waits from above.)
+	host.set_password("");
+	Friend_mode_session last;
+	last.set_local_player_name("Jaana's player");
+	last.set_password("moonglow");
+	last.start_guest("127.0.0.1", port, game_code, lobby);
+	run_until({&host, &last}, [&] { return last.connected(); }, 10);
+	host.end_hosting();
+	run_until({&host, &last}, [&] { return !last.peer_open() && !host.has_peers(); }, 10);
+	check("stopping hosting tells guests and closes", last.host_stopped() && !host.has_peers() && !host.tcp_open());
 
 	std::cout << (failures ? std::to_string(failures) + " failed" : "all passed") << std::endl;
 	host.stop();

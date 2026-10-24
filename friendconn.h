@@ -55,6 +55,14 @@ public:
 	virtual std::string problem() const = 0;
 };
 
+// This computer's internet (IPv4) address as the lobby sees it, for hosts
+// who share an IP (with port forwarding): asked for once in the
+// background; empty until it arrives, or when it can't be had.
+void        Friend_ask_public_ip(const std::string& lobby_url);
+std::string Friend_public_ip();
+// True once the answer is in (it may still be empty).
+bool        Friend_public_ip_done();
+
 // A word and a number, such as "MOONGLOW-42": a lobby code, not an address.
 bool Friend_is_lobby_code(const std::string& text);
 // Open a code through the lobby at 'lobby_url'; null (with 'problem' saying

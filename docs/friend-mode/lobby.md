@@ -23,31 +23,41 @@ ping is off (`pingInterval` 0) and the host sends `{type:"keepalive"}`
 every 30 s instead, which the lobby ignores. (The lobby itself keeps a
 quiet connection open: checked for 5 minutes.)
 
-**The Co-Op menu (built 2026-10-23, protocol 36)**, instead of long text
-over the game:
+**The Co-Op menu (built 2026-10-23, cleaned up 2026-10-24 after the
+user's test; protocol 36):**
 
-- **Title menu → Co-Op Mode:** Host a Game / Stop Hosting; **Type: Lobby
-  code / IP address** (`config/friend/join_by`); once hosting, the code
-  (asked for right away, so it shows before the game starts) or this
-  computer's address and port, which a click copies; **Password: none /
-  set** (`config/friend/password`, typed on its own screen); Join a Game;
-  Back.
+- **Title menu → Co-Op Mode:** HOST GAME, JOIN GAME, BACK.
+  - **HOST GAME:** TYPE: LOBBY CODE / IP ADDRESS (`config/friend/join_by`),
+    PASSWORD: NONE / SET (typed on its own screen,
+    `config/friend/password`), JOURNEY ONWARD (loads the game as Journey
+    Onward does, open to Co-Op), BACK. The code is given once the game has
+    started.
+  - **JOIN GAME:** Your Name, Code/IP, Password (never saved), then JOIN
+    GAME and BACK as the menu's own text entries. Click a field or use Tab;
+    Enter joins, Esc goes back.
 - **In the game:** one short line at the top, "Open to Code YEW-8890" or
-  "Open on port 1992", nothing in the chat log. **Escape → Co-Op Mode**:
-  hosting (Open to Co-Op), Type, the code or address with Copy, **New
-  players: Open / Closed** (closing keeps players already in; opening
-  again gives a new code), and whether a password is set.
+  "Open on port 1992", nothing in the chat log. **Escape → Co-Op Mode:**
+  - **Hosting: Off / On.** Off stops hosting completely: guests are told
+    ("The host stopped hosting") and their companions return to the party.
+  - **Type:** Lobby code or IP address. **New players:** Open or Closed
+    (closing keeps players already in; opening again gives a new code).
+  - **Password:** a box to click and type in, like the chat line (Enter or
+    a click elsewhere saves it, Esc cancels).
+  - **The code**, or by IP: **IP** (the internet IPv4 address, which the
+    lobby reports: two certificate-checked lookups were tried, IPv4 is
+    what port forwarding uses, so IPv6 was dropped), **Home network** and
+    **Port**, on rows of their own. **Copy** copies the code or the IP.
 - **One way in at a time:** by lobby code the host doesn't also listen on
   port 1992; by IP there is no code.
-- **Password:** Join a Game has a Password field (never saved). The host
-  sends a random number; the guest answers with the first 8 bytes of
-  SHA-1 over it, the game and the password, so the password never goes
-  over the connection. Missing or wrong: "This game needs a password" /
-  "Wrong password".
+- **Password:** the host sends a random number; the guest answers with the
+  first 8 bytes of SHA-1 over it, the game and the password, so the
+  password never goes over the connection. Missing or wrong: "This game
+  needs a password" / "Wrong password".
 - **Kick:** hold Tab; the host has an X by each guest, asks, then removes
   them ("The host removed you"). That name can't rejoin until hosting
   starts over.
-- The session test checks password and kick too (22 checks, passed).
+- The session test checks all of this (26 checks); see
+  [security](security.md) for the limits.
 
 **Idea, not started (user, 2026-10-23): Private / Public.** Public games
 listed on `u7-multiplayer-lobby.xcast3d.com` (and maybe in Join a Game) to
@@ -117,58 +127,11 @@ codes end when the host leaves or after 12 hours.
 
 ## Security
 
-Anyone on the internet can reach the lobby, so (2026-10-23):
-
-**In the Worker** (`tools/lobby/src/index.js`):
-
-- **Codes are hard to guess:** a word and four digits (32 x 9000 =
-  288,000), from `crypto.getRandomValues` (`Math.random` before). Joining
-  is rate limited per address (`JOIN_LIMITER`, 20 a minute), so guessing a
-  live code from one address takes days; opening games too
-  (`HOST_LIMITER`, 10 a minute), which also keeps TURN credentials (when
-  set up) from being handed out in bulk. The limits are Cloudflare's
-  Workers Rate Limiting, set in `wrangler.toml`.
-- **Only real codes reach a Durable Object:** anything that isn't a word, a
-  dash and two to four digits is refused at once ("No game with that
-  code").
-- **Signals are checked:** only `{sdp, kind: offer|answer}` and
-  `{candidate, mid}` with text fields are passed on, rebuilt without any
-  other fields.
-- **Browsers are turned away:** a request with an `Origin` header (every
-  browser sends one; the game doesn't) gets 403, so a web page can't use
-  the lobby on a visitor's behalf.
-- **Idle guests can't fill a game:** a guest's lobby connection ends after
-  60 seconds.
-- **No secrets in the repo:** TURN keys are Worker secrets.
-
-**In the game** (`friendrtc.cc`):
-
-- **The lobby's certificate is checked**, always: `wss://` only, and
-  without a list of certificate authorities the connection is refused,
-  never made unchecked (tested with a broken list: "Could not reach the
-  lobby").
-- **The game is encrypted** by WebRTC (DTLS) between the two machines; the
-  lobby only sees the offers and candidates (which include each side's
-  addresses).
-- **Limits on what a peer can make us hold:** lobby messages over 64 KB are
-  refused, and a peer that sends more than 64 MB we haven't read yet is
-  cut off.
-- Everything from the lobby is checked before use (bad JSON or fields are
-  ignored).
-
-**What it doesn't protect against** (worth knowing, not fixed):
-
-- **Anyone with the code can join** while you host; there is no password
-  yet (the optional session password is a Phase 8 item). Codes end when
-  you stop hosting.
-- **The lobby is trusted to pass the offers honestly.** A lobby that was
-  taken over could put itself in the middle. The fix, if wanted later:
-  show a short check (from each side's DTLS fingerprint) both players can
-  compare.
-- **Each side's addresses** (local and public) go to the other through the
-  lobby, as in any WebRTC call.
-- A lobby someone points their own copy at (`lobby_url`) is theirs to
-  secure.
+Anyone on the internet can reach the lobby. What it and the game protect,
+the sweep of 2026-10-24 and what is still open: [security](security.md).
+In short: hard-to-guess codes with rate limits, checked signals, no
+browsers, certificates always checked, encryption between the players, no
+secrets in the repo.
 
 ## Deploying (the host's one-time step)
 

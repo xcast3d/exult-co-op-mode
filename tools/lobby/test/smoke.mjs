@@ -124,6 +124,8 @@ try {
 		req.end();
 	});
 	check("browsers are turned away", status === 403);
+	const asked = await fetch(base.replace(/^ws/, "http") + "/ip");
+	check("the caller's own address is given", asked.ok && (await asked.text()).endsWith("\n"));
 
 	// A guest leaving is told to the host.
 	guest2.close();

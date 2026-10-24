@@ -8,6 +8,9 @@
  *   wss://<lobby>/host        A host opens a game.  First message from the
  *                             lobby: {type:"code", code, ice}.
  *   wss://<lobby>/join/CODE   A guest joins.  First: {type:"joined", id, ice}.
+ *   https://<lobby>/ip        The caller's own internet address (plain text),
+ *                             for hosts who share an IP.  The game asks over
+ *                             IPv4, the address port forwarding uses.
  *
  * Then, as JSON text messages:
  *   guest -> lobby  {type:"signal", data}           Passed to the host as
@@ -170,11 +173,21 @@ export default {
 				headers: { "Content-Type": "text/plain" },
 			});
 		}
-		if (request.headers.get("Upgrade") !== "websocket") {
-			return new Response("Expected a WebSocket", { status: 426 });
-		}
 		if (request.headers.get("Origin")) {
 			return new Response("Not for browsers", { status: 403 });
+		}
+		if (url.pathname === "/ip" && request.method === "GET") {
+			// Only ever the caller's own address, which Cloudflare already
+			// knows; no Durable Object involved.
+			if (!(await allowed(env.JOIN_LIMITER, request))) {
+				return new Response("Too many tries from this address; wait a minute", { status: 429 });
+			}
+			return new Response(`${request.headers.get("CF-Connecting-IP") || ""}\n`, {
+				headers: { "Content-Type": "text/plain", "Cache-Control": "no-store" },
+			});
+		}
+		if (request.headers.get("Upgrade") !== "websocket") {
+			return new Response("Expected a WebSocket", { status: 426 });
 		}
 		if (url.pathname === "/host") {
 			if (!(await allowed(env.HOST_LIMITER, request))) {

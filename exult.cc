@@ -6160,19 +6160,8 @@ bool Friend_mode_has_password() {
 	return !Friend_mode_password().empty();
 }
 
-// Hosting chosen on the title menu: by lobby, the code is asked for now,
-// so the menu can show it; the game takes this lobby when it starts.
-static std::unique_ptr<Friend_lobby_host> friend_early_lobby;
-static std::string                        friend_early_problem;
-static bool                               friend_joining_closed = false;    // Host closed the way in.
-
-static void Friend_mode_open_early_lobby() {
-	friend_early_lobby.reset();
-	friend_early_problem.clear();
-	if (arg_friend_host && Friend_mode_coop_by_lobby() && friend_session.mode() == Friend_mode_session::Mode::off) {
-		friend_early_lobby = Friend_rtc_host(Friend_mode_lobby_url(), friend_early_problem);
-	}
-}
+static bool friend_joining_closed = false;    // Host closed the way in.
+static bool friend_stopping_host  = false;    // Host: guests are being told; then off.
 
 void Friend_mode_set_hosting(bool on) {
 	arg_friend_host = on;
@@ -6180,7 +6169,17 @@ void Friend_mode_set_hosting(bool on) {
 		arg_friend_join.clear();
 	}
 	friend_joining_closed = false;
-	Friend_mode_open_early_lobby();
+}
+
+// Host: the password guests must give (empty for none), kept in exult.cfg
+// on this computer only.  Takes effect for the next guest.
+void Friend_mode_set_password(const std::string& password) {
+	config->set("config/friend/password", password, true);
+	friend_session.set_password(password);
+}
+
+std::string Friend_mode_current_password() {
+	return Friend_mode_password();
 }
 
 static std::string friend_lobby_code_shown;       // Host: the code last announced.
@@ -6196,11 +6195,10 @@ static bool Friend_mode_start_hosting() {
 	friend_lobby_code_shown.clear();
 	friend_lobby_problem_shown.clear();
 	friend_joining_closed = false;
+	friend_stopping_host  = false;
 	const bool by_lobby   = Friend_mode_coop_by_lobby();
-	const bool started    = by_lobby ? friend_session.start_host(0, Game::Get_unique_gamecode(),
-																   Friend_mode_lobby_url(), std::move(friend_early_lobby))
+	const bool started    = by_lobby ? friend_session.start_host(0, Game::Get_unique_gamecode(), Friend_mode_lobby_url())
 									 : friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode());
-	friend_early_lobby.reset();
 	if (!started) {
 		arg_friend_host = false;
 		const std::string problem = friend_session.lobby_problem();
@@ -6209,20 +6207,45 @@ static bool Friend_mode_start_hosting() {
 		return false;
 	}
 	if (!by_lobby) {
+		Friend_ask_public_ip(Friend_mode_lobby_url());
 		Friend_mode_notice("Open on port " + std::to_string(arg_friend_port));
 	}
 	return true;
 }
 
-std::string Friend_mode_lobby_code() {
-	if (friend_session.mode() == Friend_mode_session::Mode::host) {
-		return friend_session.lobby_code();
+// Host: stop hosting altogether.  Guests are told and leave (their
+// companions go back to the party); the session ends once they have
+// (Friend_mode_finish_stopping, from the main loop).
+static void Friend_mode_stop_hosting() {
+	if (friend_session.mode() != Friend_mode_session::Mode::host || friend_stopping_host) {
+		return;
 	}
-	return friend_early_lobby ? friend_early_lobby->code() : std::string();
+	friend_stopping_host = true;
+	friend_session.end_hosting();
+	Friend_mode_notice("Co-Op Mode is off");
+}
+
+static void Friend_mode_finish_stopping() {
+	if (!friend_stopping_host || friend_session.has_peers()) {
+		return;
+	}
+	friend_session.stop();
+	friend_stopping_host = false;
+	arg_friend_host      = false;
+	friend_rejoin_holds.clear();
+	friend_lobby_code_shown.clear();
+	friend_lobby_problem_shown.clear();
+}
+
+std::string Friend_mode_lobby_code() {
+	return friend_session.mode() == Friend_mode_session::Mode::host ? friend_session.lobby_code() : std::string();
 }
 
 // Host: one short line when the code arrives, or when there is none.
 static void Friend_mode_watch_lobby() {
+	if (friend_stopping_host) {
+		return;
+	}
 	const std::string code = friend_session.lobby_code();
 	if (!code.empty() && code != friend_lobby_code_shown) {
 		friend_lobby_code_shown = code;
@@ -6238,52 +6261,54 @@ static void Friend_mode_watch_lobby() {
 	}
 }
 
-// What guests need, for the Co-Op menus: the code, or this computer's
-// address and port.
-std::string Friend_mode_coop_details() {
-	const bool hosting_now = friend_session.mode() == Friend_mode_session::Mode::host;
+// What guests need, one line each, for the game menu's Co-Op page: the
+// code, or the internet and home-network addresses and the port.
+std::vector<std::string> Friend_mode_coop_detail_rows() {
+	const bool hosting_now = friend_session.mode() == Friend_mode_session::Mode::host && !friend_stopping_host;
+	if (!hosting_now) {
+		return {};
+	}
+	if (friend_joining_closed) {
+		return {"Closed to new players"};
+	}
 	if (Friend_mode_coop_by_lobby()) {
-		if (!arg_friend_host) {
-			return "Code: given when you host";
-		}
-		if (friend_joining_closed) {
-			return "Closed to new players";
-		}
-		const std::string code = Friend_mode_lobby_code();
+		const std::string code = friend_session.lobby_code();
 		if (!code.empty()) {
-			return "Code: " + code;
+			return {"Code: " + code};
 		}
-		const std::string problem = hosting_now ? friend_session.lobby_problem() : friend_early_problem;
-		if (!problem.empty()) {
-			return "No code: " + problem;
-		}
-		if (!hosting_now && friend_early_lobby && !friend_early_lobby->problem().empty()) {
-			return "No code: " + friend_early_lobby->problem();
-		}
-		return hosting_now || friend_early_lobby ? "Code: getting one..." : "Code: when the game starts";
+		const std::string problem = friend_session.lobby_problem();
+		return {problem.empty() ? std::string("Code: getting one...") : "No code: " + problem};
 	}
-	if (arg_friend_host && friend_joining_closed) {
-		return "Closed to new players";
+	// The internet (IPv4) address: what port forwarding uses.
+	const std::string ipv4      = Friend_public_ip();
+	const auto        addresses = Friend_local_addresses();
+	std::vector<std::string> rows;
+	rows.push_back("IP: "
+				   + (!ipv4.empty()               ? ipv4
+					  : Friend_public_ip_done() ? std::string("unknown (no lobby?)")
+												: std::string("finding...")));
+	if (!addresses.empty()) {
+		rows.push_back("Home network: " + addresses.front());
 	}
-	const auto addresses = Friend_local_addresses();
-	return "IP: " + (addresses.empty() ? std::string("this computer's address") : addresses.front()) + ", port "
-		   + std::to_string(arg_friend_port);
+	rows.push_back("Port: " + std::to_string(arg_friend_port));
+	return rows;
 }
 
-// Copy the code or the address, for pasting into a message.
+// Copy the code or the internet address, for pasting into a message.
 void Friend_mode_copy_coop_details() {
 	std::string text;
 	if (Friend_mode_coop_by_lobby()) {
 		text = Friend_mode_lobby_code();
 	} else {
-		const auto addresses = Friend_local_addresses();
-		text                 = addresses.empty() ? std::string() : addresses.front();
+		text = Friend_public_ip();
+		if (text.empty()) {
+			const auto addresses = Friend_local_addresses();
+			text                 = addresses.empty() ? std::string() : addresses.front();
+		}
 	}
 	if (!text.empty()) {
 		SDL_SetClipboardText(text.c_str());
-		if (friend_session.mode() == Friend_mode_session::Mode::host) {
-			Friend_mode_notice("Copied " + text);
-		}
+		Friend_mode_notice("Copied " + text);
 	}
 }
 
@@ -6291,23 +6316,23 @@ void Friend_mode_copy_coop_details() {
 // opens; players already in stay.
 void Friend_mode_set_coop_by_lobby(bool by_lobby) {
 	config->set("config/friend/join_by", by_lobby ? "lobby" : "ip", true);
-	if (friend_session.mode() == Friend_mode_session::Mode::host) {
-		friend_lobby_code_shown.clear();
-		friend_lobby_problem_shown.clear();
-		if (friend_joining_closed) {
-			return;
-		}
-		if (by_lobby) {
-			friend_session.close_tcp();
-			friend_session.open_lobby(Friend_mode_lobby_url());
-		} else {
-			friend_session.close_lobby();
-			if (friend_session.open_tcp(arg_friend_port)) {
-				Friend_mode_notice("Open on port " + std::to_string(arg_friend_port));
-			}
-		}
+	if (friend_session.mode() != Friend_mode_session::Mode::host || friend_stopping_host) {
+		return;
+	}
+	friend_lobby_code_shown.clear();
+	friend_lobby_problem_shown.clear();
+	if (friend_joining_closed) {
+		return;
+	}
+	if (by_lobby) {
+		friend_session.close_tcp();
+		friend_session.open_lobby(Friend_mode_lobby_url());
 	} else {
-		Friend_mode_open_early_lobby();
+		friend_session.close_lobby();
+		Friend_ask_public_ip(Friend_mode_lobby_url());
+		if (friend_session.open_tcp(arg_friend_port)) {
+			Friend_mode_notice("Open on port " + std::to_string(arg_friend_port));
+		}
 	}
 }
 
@@ -6319,11 +6344,7 @@ bool Friend_mode_coop_joining_open() {
 // lobby code).
 void Friend_mode_set_coop_joining_open(bool open) {
 	friend_joining_closed = !open;
-	if (friend_session.mode() != Friend_mode_session::Mode::host) {
-		Friend_mode_open_early_lobby();
-		if (!open) {
-			friend_early_lobby.reset();
-		}
+	if (friend_session.mode() != Friend_mode_session::Mode::host || friend_stopping_host) {
 		return;
 	}
 	friend_lobby_code_shown.clear();
@@ -6339,9 +6360,22 @@ void Friend_mode_set_coop_joining_open(bool open) {
 	}
 }
 
+// The game menu's Hosting toggle.
+bool Friend_mode_coop_hosting_now() {
+	return friend_session.mode() == Friend_mode_session::Mode::host && !friend_stopping_host;
+}
+
+void Friend_mode_set_coop_hosting(bool on) {
+	if (on) {
+		Friend_mode_open_to_coop();
+	} else {
+		Friend_mode_stop_hosting();
+	}
+}
+
 bool Friend_mode_open_to_coop() {
 	if (friend_session.mode() != Friend_mode_session::Mode::off) {
-		return false;    // Already hosting, or a guest.
+		return false;    // Already hosting (or stopping), or a guest.
 	}
 	arg_friend_host = true;
 	return Friend_mode_start_hosting();
@@ -7289,40 +7323,102 @@ bool Friend_mode_collect_connection_details() {
 	// The password isn't kept: typed again each time (empty for none).
 	std::array<std::string, 3> values{friend_player_name.empty() ? last_name : friend_player_name,
 			arg_friend_join.empty() ? last_host : arg_friend_join, friend_join_password};
-	int active = 0;
+	int         active = 0;
 	SDL_Window* window = gwin->get_win()->get_screen_window();
 	SDL_StartTextInput(window);
+	// Fields, then Join Game and Back as the title menu's own text entries
+	// (its fonts: plain, and lit under the mouse); game-view coordinates.
+	const std::array<const char*, 3> labels{"Your Name", "Code/IP", "Password"};
+	auto entry_font = fontManager.get_font("CREDITS_FONT");
+	auto entry_lit  = fontManager.get_font("HOT_FONT");
+	if (!entry_font || !entry_lit) {
+		entry_font = entry_lit = font;
+	}
+	const std::array<const char*, 2> entries{"JOIN GAME", "BACK"};
+	auto field_box = [&](int i) {
+		const int top = std::max(20, gwin->get_height() / 4);
+		return TileRect(gwin->get_width() / 2 - 25, top + 24 + i * 36, 145, 20);
+	};
+	auto entry_box = [&](int i) {
+		const int top = std::max(20, gwin->get_height() / 4);
+		const int w   = entry_font->get_text_width(entries[i]);
+		const int h   = entry_font->get_text_height();
+		return TileRect(gwin->get_width() / 2 - w / 2, top + 24 + 3 * 36 + 6 + i * (h + 3), w, h);
+	};
+	int hovered = -1;    // The entry under the mouse.
+	auto join = [&]() {
+		if (values[0].empty() || values[1].empty()) {
+			return false;
+		}
+		friend_player_name   = values[0];
+		arg_friend_join      = values[1];
+		friend_join_password = values[2];
+		config->set("config/friend/player_name", friend_player_name, false);
+		config->set("config/friend/last_host", arg_friend_join, true);
+		SDL_StopTextInput(window);
+		return true;
+	};
 	for (;;) {
 		gwin->clear_screen(false);
-		Image_buffer8* buffer = gwin->get_win()->get_ib8();
-		const int centerx = gwin->get_width() / 2;
-		const int top = std::max(20, gwin->get_height() / 4);
-		font->center_text(buffer, centerx, top, "Connect to Host");
-		const std::array<const char*, 3> labels{"Player name", "Code or address", "Password"};
+		Image_buffer8* buffer  = gwin->get_win()->get_ib8();
+		const int      centerx = gwin->get_width() / 2;
+		const int      top     = std::max(20, gwin->get_height() / 4);
+		font->center_text(buffer, centerx, top, "Join a Game");
 		for (int i = 0; i < 3; ++i) {
-			const int y = top + 28 + i * 36;
-			font->draw_text(buffer, centerx - 120, y, labels[i]);
-			const uint8 background = i == active ? 138 : 142;
-			buffer->draw_box(centerx - 25, y - 4, 145, 20, 1, background, i == active ? 15 : 0);
+			const TileRect box = field_box(i);
+			font->draw_text(buffer, centerx - 120, box.y + 4, labels[i]);
+			buffer->draw_box(box.x, box.y, box.w, box.h, 1, i == active ? 138 : 142, i == active ? 15 : 0);
 			const std::string shown = i == 2 ? std::string(values[i].size(), '*') : values[i];
-			font->draw_text(buffer, centerx - 18, y, shown.c_str());
+			font->draw_text(buffer, box.x + 7, box.y + 4, shown.c_str());
 			if (i == active) {
-				const int cursor_x = centerx - 18 + font->get_text_width(shown.c_str());
-				buffer->fill8(15, 1, font->get_text_height(), cursor_x + 1, y);
+				const int cursor_x = box.x + 7 + font->get_text_width(shown.c_str());
+				buffer->fill8(15, 1, font->get_text_height(), cursor_x + 1, box.y + 4);
 			}
 		}
-		font->center_text(buffer, centerx, top + 126, "A code like MOONGLOW-4271, or an IP address");
-		font->center_text(buffer, centerx, top + 140, "Password only if the host set one");
-		font->center_text(buffer, centerx, top + 154, "Tab changes field   Enter connects   Esc cancels");
+		for (int i = 0; i < 2; ++i) {
+			const TileRect box = entry_box(i);
+			(i == hovered ? entry_lit : entry_font)->draw_text(buffer, box.x, box.y, entries[i]);
+		}
+		Mouse::mouse()->show();
 		gwin->show(true);
+		Mouse::mouse()->hide();
 
-		SDL_Event event;
+		SDL_Event     event;
+		SDL_Renderer* renderer = SDL_GetRenderer(window);
 		while (SDL_PollEvent(&event)) {
 			if (event.type == SDL_EVENT_TEXT_INPUT) {
 				const std::size_t limit = active == 0 ? 20 : (active == 1 ? 128 : 32);
 				for (const char* ch = event.text.text; *ch && values[active].size() < limit; ++ch) {
 					if (static_cast<unsigned char>(*ch) >= 32 && static_cast<unsigned char>(*ch) < 127) {
 						values[active].push_back(*ch);
+					}
+				}
+			} else if (event.type == SDL_EVENT_MOUSE_MOTION || event.type == SDL_EVENT_MOUSE_BUTTON_DOWN) {
+				SDL_ConvertEventToRenderCoordinates(renderer, &event);
+				const bool motion = event.type == SDL_EVENT_MOUSE_MOTION;
+				int        gx;
+				int        gy;
+				gwin->get_win()->screen_to_game(motion ? event.motion.x : event.button.x,
+						motion ? event.motion.y : event.button.y, gwin->get_fastmouse(), gx, gy);
+				Mouse::mouse()->move(gx, gy);
+				hovered = -1;
+				for (int i = 0; i < 2; ++i) {
+					if (entry_box(i).has_point(gx, gy)) {
+						hovered = i;
+					}
+				}
+				if (!motion && event.button.button == 1) {
+					for (int i = 0; i < 3; ++i) {
+						if (field_box(i).has_point(gx, gy)) {
+							active = i;
+						}
+					}
+					if (hovered == 0 && join()) {
+						return true;
+					}
+					if (hovered == 1) {    // Back to the Co-Op choices.
+						SDL_StopTextInput(window);
+						return false;
 					}
 				}
 			} else if (event.type == SDL_EVENT_KEY_DOWN) {
@@ -7336,14 +7432,7 @@ bool Friend_mode_collect_connection_details() {
 					active = (active + 2) % 3;
 				} else if (event.key.key == SDLK_BACKSPACE && !values[active].empty()) {
 					values[active].pop_back();
-				} else if ((event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)
-						   && !values[0].empty() && !values[1].empty()) {
-					friend_player_name   = values[0];
-					arg_friend_join      = values[1];
-					friend_join_password = values[2];
-					config->set("config/friend/player_name", friend_player_name, false);
-					config->set("config/friend/last_host", arg_friend_join, true);
-					SDL_StopTextInput(window);
+				} else if ((event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) && join()) {
 					return true;
 				}
 			} else if (event.type == SDL_EVENT_QUIT) {
@@ -9080,6 +9169,7 @@ static void Handle_events() {
 				}
 				friend_guests.erase(left);
 			}
+			Friend_mode_finish_stopping();
 			Friend_mode_end_emotes();
 			if (friend_session.connected() && friend_world_sent) {
 				const uint32 now = static_cast<uint32>(SDL_GetTicks());
@@ -9556,8 +9646,9 @@ static void Handle_events() {
 				gwin->release_friend_mode_control();
 				guest_assigned_actor = -1;
 				// Exult cannot return to the title menu mid-game, so close.
-				Friend_mode_notice(friend_session.was_kicked() ? "The host removed you. Exult will close."
-															   : "Host disconnected. Exult will close.");
+				Friend_mode_notice(friend_session.was_kicked()     ? "The host removed you. Exult will close."
+								   : friend_session.host_stopped() ? "The host stopped hosting. Exult will close."
+																   : "Host disconnected. Exult will close.");
 				guest_close_at = SDL_GetTicks() + 4000;
 			}
 			if (guest_close_at != 0 && SDL_GetTicks() >= guest_close_at) {

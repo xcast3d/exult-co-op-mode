@@ -47,7 +47,8 @@ Avatar, **F9** and **F8** gather two groups of companions into the party
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md). The Target System's item groups are in
 [targeting groups](targeting-groups.md); a gamepad plan in [controller
-support](controller-plan.md); the Phase 8 [lobby](lobby.md); how the work splits into layers for forks in [branching](branching.md); class skills for companions in [companion skills](companion-skills.md);
+support](controller-plan.md); the Phase 8 [lobby](lobby.md); what is
+protected and what is still open in [security](security.md); how the work splits into layers for forks in [branching](branching.md); class skills for companions in [companion skills](companion-skills.md);
 the host leading a companion in [leading a
 companion](leading-companions.md); what could go to
 upstream Exult in

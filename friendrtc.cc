@@ -54,6 +54,16 @@ bool Friend_is_lobby_code(const std::string& text) {
 
 #ifndef FRIEND_RTC
 
+void Friend_ask_public_ip(const std::string& /*lobby_url*/) {}
+
+std::string Friend_public_ip() {
+	return {};
+}
+
+bool Friend_public_ip_done() {
+	return true;
+}
+
 std::unique_ptr<Friend_lobby_host> Friend_rtc_host(const std::string& /*lobby_url*/, std::string& problem) {
 	problem = "This build has no lobby codes";
 	return nullptr;
@@ -79,8 +89,24 @@ std::unique_ptr<Friend_connection> Friend_rtc_connect(
 #	include <iostream>
 #	include <map>
 #	include <mutex>
+#	include <thread>
 #	include <variant>
 #	include <vector>
+
+#	include <mbedtls/ctr_drbg.h>
+#	include <mbedtls/entropy.h>
+#	include <mbedtls/ssl.h>
+#	include <psa/crypto.h>
+
+#	ifdef _WIN32
+#		include <winsock2.h>
+#		include <ws2tcpip.h>
+#	else
+#		include <netdb.h>
+#		include <sys/socket.h>
+#		include <sys/time.h>
+#		include <unistd.h>
+#	endif
 
 namespace {
 using json  = nlohmann::json;
@@ -173,6 +199,23 @@ rtc::Configuration config_from(const json& ice) {
 	return config;
 }
 
+// The certificate authorities to trust: RTC_CA_FILE, or the system's list.
+std::string ca_certificate_file() {
+	std::vector<std::string> files;
+	if (const char* file = std::getenv("RTC_CA_FILE")) {
+		files.emplace_back(file);
+	}
+	files.emplace_back("/etc/ssl/cert.pem");
+	files.emplace_back("/etc/ssl/certs/ca-certificates.crt");
+	for (const auto& path : files) {
+		if (FILE* file = std::fopen(path.c_str(), "r")) {
+			std::fclose(file);
+			return path;
+		}
+	}
+	return {};
+}
+
 // Mbed TLS has no trusted certificate authorities of its own, so wss://
 // needs a list: RTC_CA_FILE, or the system's (macOS, most Linux).  Windows
 // will need one shipped with the game.  Without one the lobby's
@@ -187,18 +230,9 @@ std::shared_ptr<rtc::WebSocket> lobby_socket() {
 	// nothing arrived for 10 s) closes the connection ("TLS closed").  The
 	// host sends its own keep-alive instead (Rtc_host::accept).
 	config.pingInterval = std::chrono::milliseconds(0);
-	std::vector<std::string>    files;
-	if (const char* file = std::getenv("RTC_CA_FILE")) {
-		files.emplace_back(file);
-	}
-	files.emplace_back("/etc/ssl/cert.pem");
-	files.emplace_back("/etc/ssl/certs/ca-certificates.crt");
-	for (const auto& path : files) {
-		if (FILE* file = std::fopen(path.c_str(), "r")) {
-			std::fclose(file);
-			config.caCertificatePemFile = path;
-			break;
-		}
+	const std::string ca_file = ca_certificate_file();
+	if (!ca_file.empty()) {
+		config.caCertificatePemFile = ca_file;
 	}
 	return std::make_shared<rtc::WebSocket>(config);
 }
@@ -243,6 +277,21 @@ void take_signal(const std::shared_ptr<rtc::PeerConnection>& pc, const json& dat
 	} catch (const std::exception& error) {
 		std::cerr << "Friend Mode: bad signal from the lobby (" << error.what() << ")" << std::endl;
 	}
+}
+
+// Text from the lobby shown to the player ("No game with that code"):
+// printable, and short.
+std::string lobby_text(const json& message, const char* fallback) {
+	std::string text = message.contains("message") && message["message"].is_string()
+							   ? message["message"].get<std::string>()
+							   : std::string(fallback);
+	std::string out;
+	for (const char ch : text) {
+		if (ch >= 32 && ch < 127 && out.size() < 80) {
+			out.push_back(ch);
+		}
+	}
+	return out.empty() ? std::string(fallback) : out;
 }
 
 json parse_lobby(const std::variant<rtc::binary, rtc::string>& message) {
@@ -453,7 +502,11 @@ public:
 		std::weak_ptr<rtc::WebSocket> ws  = lobby;
 		lobby->onMessage([weak, ws](std::variant<rtc::binary, rtc::string> message) {
 			if (auto host = weak.lock()) {
-				take(host, ws, parse_lobby(message));
+				try {
+					take(host, ws, parse_lobby(message));
+				} catch (const std::exception& error) {    // A field of the wrong type.
+					std::cerr << "Friend Mode: ignored a bad lobby message (" << error.what() << ")" << std::endl;
+				}
 			}
 		});
 		lobby->onError([weak](std::string error) {
@@ -538,7 +591,8 @@ private:
 		const std::string type = m.value("type", "");
 		if (type == "code") {
 			const std::lock_guard<std::mutex> lock(host->mutex);
-			host->code    = m.value("code", "");
+			const std::string code = m.value("code", "");
+			host->code             = Friend_is_lobby_code(code) ? code : std::string();    // Shown as it is.
 			host->ice     = m.contains("ice") ? m["ice"] : json::array();
 			host->problem.clear();
 		} else if (type == "guest" && m.contains("id")) {
@@ -602,7 +656,7 @@ private:
 			}
 		} else if (type == "error") {
 			const std::lock_guard<std::mutex> lock(host->mutex);
-			host->problem = m.value("message", "Lobby error");
+			host->problem = lobby_text(m, "Lobby error");
 		}
 	}
 };
@@ -643,12 +697,181 @@ void take_guest(const std::shared_ptr<Channel_state>& state, const std::weak_ptr
 			take_signal(pc, m["data"]);
 		}
 	} else if (type == "error") {
-		state->fail(m.value("message", "Lobby error"));
+		state->fail(lobby_text(m, "Lobby error"));
 	} else if (type == "closed") {
 		state->fail("The host stopped hosting");
 	}
 }
 }    // namespace
+
+namespace {
+std::mutex  public_ip_mutex;
+std::string public_ip;
+bool        public_ip_asked = false;
+bool        public_ip_done  = false;
+
+// GET https://<host>/ip over one address family only, so the lobby sees
+// that address (the system may prefer IPv6 otherwise): a socket of that
+// family, with Mbed TLS checking the lobby's certificate as for wss://.
+// The answer, or empty.
+std::string ask_ip_over(const std::string& host, int family) {
+	addrinfo hints{};
+	hints.ai_family     = family;
+	hints.ai_socktype   = SOCK_STREAM;
+	addrinfo* addresses = nullptr;
+	if (getaddrinfo(host.c_str(), "443", &hints, &addresses) != 0 || !addresses) {
+		return {};    // No address of this family (e.g. no IPv6 here).
+	}
+	int sock = -1;
+	for (addrinfo* current = addresses; current && sock < 0; current = current->ai_next) {
+		sock = static_cast<int>(socket(current->ai_family, current->ai_socktype, current->ai_protocol));
+		if (sock < 0) {
+			continue;
+		}
+#	ifdef _WIN32
+		DWORD wait = 5000;
+#	else
+		timeval wait{5, 0};
+#	endif
+		setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&wait), sizeof(wait));
+		setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&wait), sizeof(wait));
+		if (connect(sock, current->ai_addr, static_cast<socklen_t>(current->ai_addrlen)) != 0) {
+#	ifdef _WIN32
+			closesocket(sock);
+#	else
+			::close(sock);
+#	endif
+			sock = -1;
+		}
+	}
+	freeaddrinfo(addresses);
+	if (sock < 0) {
+		return {};
+	}
+
+	std::string             answer;
+	mbedtls_ssl_context     ssl;
+	mbedtls_ssl_config      conf;
+	mbedtls_x509_crt        cas;
+	mbedtls_entropy_context entropy;
+	mbedtls_ctr_drbg_context random;
+	mbedtls_ssl_init(&ssl);
+	mbedtls_ssl_config_init(&conf);
+	mbedtls_x509_crt_init(&cas);
+	mbedtls_entropy_init(&entropy);
+	mbedtls_ctr_drbg_init(&random);
+	auto send_some = [](void* context, const unsigned char* data, size_t size) -> int {
+		const int sent = static_cast<int>(send(*static_cast<int*>(context), reinterpret_cast<const char*>(data),
+											   static_cast<int>(size), 0));
+		return sent < 0 ? MBEDTLS_ERR_SSL_INTERNAL_ERROR : sent;
+	};
+	auto receive_some = [](void* context, unsigned char* data, size_t size) -> int {
+		const int got = static_cast<int>(recv(*static_cast<int*>(context), reinterpret_cast<char*>(data),
+											  static_cast<int>(size), 0));
+		return got < 0 ? MBEDTLS_ERR_SSL_INTERNAL_ERROR : got;
+	};
+	const std::string ca_file = ca_certificate_file();
+	const bool ready = psa_crypto_init() == PSA_SUCCESS && !ca_file.empty()
+					   && mbedtls_x509_crt_parse_file(&cas, ca_file.c_str()) >= 0
+					   && mbedtls_ctr_drbg_seed(&random, mbedtls_entropy_func, &entropy, nullptr, 0) == 0
+					   && mbedtls_ssl_config_defaults(&conf, MBEDTLS_SSL_IS_CLIENT, MBEDTLS_SSL_TRANSPORT_STREAM,
+														 MBEDTLS_SSL_PRESET_DEFAULT)
+								  == 0;
+	if (ready) {
+		mbedtls_ssl_conf_authmode(&conf, MBEDTLS_SSL_VERIFY_REQUIRED);    // Always checked.
+		mbedtls_ssl_conf_ca_chain(&conf, &cas, nullptr);
+		mbedtls_ssl_conf_rng(&conf, mbedtls_ctr_drbg_random, &random);
+	}
+	if (ready && mbedtls_ssl_setup(&ssl, &conf) == 0 && mbedtls_ssl_set_hostname(&ssl, host.c_str()) == 0) {
+		mbedtls_ssl_set_bio(&ssl, &sock, send_some, receive_some, nullptr);
+		int result;
+		while ((result = mbedtls_ssl_handshake(&ssl)) == MBEDTLS_ERR_SSL_WANT_READ
+			   || result == MBEDTLS_ERR_SSL_WANT_WRITE) {}
+		const std::string request = "GET /ip HTTP/1.1\r\nHost: " + host
+									+ "\r\nUser-Agent: Exult-Friend-Mode\r\nConnection: close\r\n\r\n";
+		if (result == 0
+			&& mbedtls_ssl_write(&ssl, reinterpret_cast<const unsigned char*>(request.data()), request.size())
+					   == static_cast<int>(request.size())) {
+			std::string   response;
+			unsigned char buffer[1024];
+			for (;;) {
+				const int got = mbedtls_ssl_read(&ssl, buffer, sizeof(buffer));
+				if (got == MBEDTLS_ERR_SSL_WANT_READ || got == MBEDTLS_ERR_SSL_WANT_WRITE
+					|| got == MBEDTLS_ERR_SSL_RECEIVED_NEW_SESSION_TICKET) {
+					continue;
+				}
+				if (got <= 0 || response.size() > 4096) {
+					break;
+				}
+				response.append(reinterpret_cast<const char*>(buffer), static_cast<std::size_t>(got));
+			}
+			// "HTTP/1.1 200 ...", headers, a blank line, then the address.
+			const auto body = response.find("\r\n\r\n");
+			if (response.rfind("HTTP/1.1 200", 0) == 0 && body != std::string::npos) {
+				std::string ip = response.substr(body + 4);
+				while (!ip.empty() && std::isspace(static_cast<unsigned char>(ip.back()))) {
+					ip.pop_back();
+				}
+				// An address is digits, dots, colons and hex letters only.
+				const bool ok = !ip.empty() && ip.size() <= 45
+								&& std::all_of(ip.begin(), ip.end(), [](char ch) {
+									   return std::isxdigit(static_cast<unsigned char>(ch)) || ch == '.' || ch == ':';
+								   });
+				if (ok && (ip.find(':') != std::string::npos) == (family == AF_INET6)) {
+					answer = ip;
+				}
+			}
+		}
+		mbedtls_ssl_close_notify(&ssl);
+	}
+	mbedtls_ssl_free(&ssl);
+	mbedtls_ssl_config_free(&conf);
+	mbedtls_x509_crt_free(&cas);
+	mbedtls_ctr_drbg_free(&random);
+	mbedtls_entropy_free(&entropy);
+#	ifdef _WIN32
+	closesocket(sock);
+#	else
+	::close(sock);
+#	endif
+	return answer;
+}
+}    // namespace
+
+void Friend_ask_public_ip(const std::string& lobby_url) {
+	std::string problem;
+	std::string url = lobby_base(lobby_url, problem);
+	if (url.rfind("wss://", 0) != 0) {
+		return;    // Only from a real (wss://) lobby.
+	}
+	{
+		const std::lock_guard<std::mutex> lock(public_ip_mutex);
+		if (public_ip_asked) {
+			return;
+		}
+		public_ip_asked = true;
+	}
+	std::string host = url.substr(6);
+	host             = host.substr(0, host.find_first_of("/:"));
+	// In the background: a few seconds at most, then gone.  IPv4: the
+	// address port forwarding uses.
+	std::thread([host]() {
+		const std::string ipv4 = ask_ip_over(host, AF_INET);
+		const std::lock_guard<std::mutex> lock(public_ip_mutex);
+		public_ip      = ipv4;
+		public_ip_done = true;
+	}).detach();
+}
+
+bool Friend_public_ip_done() {
+	const std::lock_guard<std::mutex> lock(public_ip_mutex);
+	return public_ip_done;
+}
+
+std::string Friend_public_ip() {
+	const std::lock_guard<std::mutex> lock(public_ip_mutex);
+	return public_ip;
+}
 
 std::unique_ptr<Friend_lobby_host> Friend_rtc_host(const std::string& lobby_url, std::string& problem) {
 	try {
@@ -681,7 +904,11 @@ std::unique_ptr<Friend_connection> Friend_rtc_connect(
 		std::weak_ptr<rtc::WebSocket> weak_ws = ws;
 		ws->onMessage([weak, weak_ws](std::variant<rtc::binary, rtc::string> message) {
 			if (auto channel = weak.lock()) {
-				take_guest(channel, weak_ws, parse_lobby(message));
+				try {
+					take_guest(channel, weak_ws, parse_lobby(message));
+				} catch (const std::exception& error) {    // A field of the wrong type.
+					std::cerr << "Friend Mode: ignored a bad lobby message (" << error.what() << ")" << std::endl;
+				}
 			}
 		});
 		ws->onError([weak](std::string error) {

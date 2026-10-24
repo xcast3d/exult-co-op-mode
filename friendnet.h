@@ -73,6 +73,13 @@ public:
 	// Host: remove a guest.  They are told, and their name can't join again
 	// until hosting starts over.
 	void kick(int player);
+	// Host: stop hosting.  The ways in close, every guest is told and
+	// closed; take_peer_left() reports each, then stop() once
+	// has_peers() is false.
+	void end_hosting();
+	bool has_peers() const {
+		return !peers.empty();
+	}
 	// Guest: why the connection closed or never opened, when known.
 	const std::string& connection_problem() const {
 		return link_problem;
@@ -84,6 +91,10 @@ public:
 	// Guest: the host removed us.
 	bool was_kicked() const {
 		return kicked;
+	}
+	// Guest: the host stopped hosting.
+	bool host_stopped() const {
+		return hosting_ended;
 	}
 	void set_local_player_name(const std::string& name) {
 		local_player_name = name;
@@ -281,6 +292,7 @@ private:
 		// Host: kicked; closed once the notice has had time to go out.
 		bool                                   kicking = false;
 		std::chrono::steady_clock::time_point  kick_close;
+		std::chrono::steady_clock::time_point  opened;    // Host: when it connected.
 		bool                                   joined             = false;    // Name arrived.
 		std::string                            name;
 		// Text arriving in chunks.
@@ -314,7 +326,9 @@ private:
 	std::string                       session_password;
 	bool                              password_rejection = false;
 	bool                              kicked             = false;
+	bool                              hosting_ended      = false;
 	std::set<std::string>             kicked_names;
+	std::deque<std::chrono::steady_clock::time_point> password_failures;    // Host: the last minute's.
 	std::vector<std::unique_ptr<Peer>> peers;
 	int                               next_player = 1;
 	int                               guest_limit = 12;
