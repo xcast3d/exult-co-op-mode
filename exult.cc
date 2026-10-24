@@ -66,6 +66,7 @@
 #include "friendclass.h"
 #include "friendmap.h"
 #include "spellbook.h"
+#include "friendconn.h"
 #include "friendnet.h"
 #include "game.h"
 #include "gamemap.h"
@@ -6141,19 +6142,70 @@ void Friend_mode_set_hosting(bool on) {
 	}
 }
 
+// The lobby that hands out codes (tools/lobby); "off" (or empty) for none.
+static std::string Friend_mode_lobby_url() {
+	std::string url;
+	config->value("config/friend/lobby_url", url, "wss://u7-multiplayer-lobby.xcast3d.com");
+	return url == "off" ? std::string() : url;
+}
+
+static std::string friend_lobby_code_shown;       // Host: the code last announced.
+static std::string friend_lobby_problem_shown;    // Host: the lobby problem last announced.
+
 static bool Friend_mode_start_hosting() {
 	friend_player_name = gwin->get_main_actor()->get_name();
 	if (friend_player_name.empty()) {
 		friend_player_name = "Host";
 	}
 	friend_session.set_local_player_name(friend_player_name);
-	if (!friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode())) {
+	friend_lobby_code_shown.clear();
+	friend_lobby_problem_shown.clear();
+	const std::string lobby_url = Friend_mode_lobby_url();
+	if (!friend_session.start_host(arg_friend_port, Game::Get_unique_gamecode(), lobby_url)) {
 		arg_friend_host = false;
 		Friend_mode_notice("Could not open Co-Op Mode on port " + std::to_string(arg_friend_port));
 		return false;
 	}
-	Friend_mode_notice("Co-Op Mode is open on port " + std::to_string(arg_friend_port));
+	Friend_mode_notice(lobby_url.empty() ? "Co-Op Mode is open on port " + std::to_string(arg_friend_port)
+										 : "Co-Op Mode is open; getting a code from the lobby");
 	return true;
+}
+
+std::string Friend_mode_lobby_code() {
+	return friend_session.mode() == Friend_mode_session::Mode::host ? friend_session.lobby_code() : std::string();
+}
+
+// Host: say the lobby code when it arrives (and in the chat log, to look up
+// later), and say so when the lobby fails; joining by address still works.
+static void Friend_mode_watch_lobby() {
+	const std::string code = friend_session.lobby_code();
+	if (!code.empty() && code != friend_lobby_code_shown) {
+		friend_lobby_code_shown = code;
+		friend_lobby_problem_shown.clear();
+		Friend_mode_notice("Co-Op code: " + code);
+		Friend_mode_log("Co-Op code: " + code + " (guests type it in Join a Game; also port "
+						+ std::to_string(arg_friend_port) + ")");
+		return;
+	}
+	const std::string problem = friend_session.lobby_problem();
+	if (code.empty() && !problem.empty() && problem != friend_lobby_problem_shown) {
+		friend_lobby_problem_shown = problem;
+		friend_lobby_code_shown.clear();
+		Friend_mode_notice("No Co-Op code: " + problem);
+		Friend_mode_log("No Co-Op code (" + problem + "); guests can still join by address, port "
+						+ std::to_string(arg_friend_port));
+	}
+}
+
+void Friend_mode_show_lobby_code() {
+	const std::string code = Friend_mode_lobby_code();
+	if (code.empty()) {
+		const std::string problem = friend_session.lobby_problem();
+		Friend_mode_notice(problem.empty() ? "Waiting for a code from the lobby" : "No Co-Op code: " + problem);
+		return;
+	}
+	SDL_SetClipboardText(code.c_str());
+	Friend_mode_notice("Co-Op code: " + code + " (copied)");
 }
 
 bool Friend_mode_open_to_coop() {
@@ -6368,8 +6420,11 @@ void Friend_mode_background_poll() {
 
 bool Friend_mode_download_world() {
 	friend_session.set_local_player_name(friend_player_name.empty() ? "Player" : friend_player_name);
-	if (!friend_session.start_guest(arg_friend_join, arg_friend_port, Game::Get_unique_gamecode())) {
-		Friend_mode_show_status("Could not connect to host", arg_friend_join);
+	const bool by_code = Friend_is_lobby_code(arg_friend_join);
+	if (!friend_session.start_guest(
+				arg_friend_join, arg_friend_port, Game::Get_unique_gamecode(), Friend_mode_lobby_url())) {
+		Friend_mode_show_status("Could not connect to host",
+				friend_session.connection_problem().empty() ? arg_friend_join : friend_session.connection_problem());
 		SDL_Delay(2500);
 		return false;
 	}
@@ -6399,6 +6454,13 @@ bool Friend_mode_download_world() {
 			U7remove(friend_world_file);
 			return true;
 		}
+		if (!friend_session.peer_open() && !friend_session.connection_problem().empty()) {
+			// Through the lobby: what went wrong ("No game with that code").
+			Friend_mode_show_status("Could not connect to host", friend_session.connection_problem());
+			SDL_Delay(3000);
+			friend_session.stop();
+			return false;
+		}
 		if (!friend_session.peer_open() || SDL_GetTicks() > deadline) {
 			Friend_mode_show_status(
 					friend_session.rejected_full() ? "The host's game is full"
@@ -6414,7 +6476,9 @@ bool Friend_mode_download_world() {
 		if (remaining > 0) {
 			Friend_mode_show_status("Downloading the host's world", std::to_string(remaining / 1024) + " KB to go");
 		} else {
-			Friend_mode_show_status(friend_session.connected() ? "Waiting for the host's world" : "Connecting to host",
+			Friend_mode_show_status(friend_session.connected() ? "Waiting for the host's world"
+									: by_code                    ? "Connecting through the lobby"
+																 : "Connecting to host",
 					friend_session.connected() ? "The host may be in a menu" : arg_friend_join);
 		}
 		SDL_Event event;
@@ -6989,7 +7053,7 @@ bool Friend_mode_collect_connection_details() {
 		const int centerx = gwin->get_width() / 2;
 		const int top = std::max(20, gwin->get_height() / 4);
 		font->center_text(buffer, centerx, top, "Connect to Host");
-		const std::array<const char*, 2> labels{"Player name", "Host address"};
+		const std::array<const char*, 2> labels{"Player name", "Code or address"};
 		for (int i = 0; i < 2; ++i) {
 			const int y = top + 28 + i * 36;
 			font->draw_text(buffer, centerx - 120, y, labels[i]);
@@ -7001,6 +7065,7 @@ bool Friend_mode_collect_connection_details() {
 				buffer->fill8(15, 1, font->get_text_height(), cursor_x + 1, y);
 			}
 		}
+		font->center_text(buffer, centerx, top + 90, "A code like MOONGLOW-4271, or an IP address");
 		font->center_text(buffer, centerx, top + 104, "Tab changes field");
 		font->center_text(buffer, centerx, top + 118, "Enter connects   Esc cancels");
 		gwin->show(true);
@@ -8446,7 +8511,8 @@ static void Init() {
 		// Normally already connected from the title menu while downloading
 		// the host's world.
 		friend_session.set_local_player_name(friend_player_name.empty() ? "Player" : friend_player_name);
-		friend_session.start_guest(arg_friend_join, arg_friend_port, Game::Get_unique_gamecode());
+		friend_session.start_guest(
+				arg_friend_join, arg_friend_port, Game::Get_unique_gamecode(), Friend_mode_lobby_url());
 	}
 										// Get scale factor for mouse.
 #ifdef USE_EXULTSTUDIO
@@ -8684,6 +8750,7 @@ static void Handle_events() {
 		Friend_mode_take_chats();
 		Friend_mode_take_suggestions();
 		if (arg_friend_host) {
+			Friend_mode_watch_lobby();
 			if (friend_host_paused_sent) {    // Back from a menu or dialog.
 				if (friend_session.connected()) {
 					friend_session.send_host_paused(false);

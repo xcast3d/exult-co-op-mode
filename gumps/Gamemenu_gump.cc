@@ -121,6 +121,10 @@ void Gamemenu_gump::createButtons() {
 	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest() && !Friend_mode_hosting()) {
 		buttons[id_open_coop] = std::make_unique<Gamemenu_button>(
 				this, &Gamemenu_gump::open_coop, "Open to Co-Op", margin, yForRow(y++), preferred_button_width, 11);
+	} else if (!gwin->is_in_exult_menu() && Friend_mode_hosting()) {
+		const std::string code = Friend_mode_lobby_code();
+		buttons[id_open_coop]  = std::make_unique<Gamemenu_button>(this, &Gamemenu_gump::show_coop_code,
+				 code.empty() ? "Co-Op Code" : "Code: " + code, margin, yForRow(y++), preferred_button_width, 11);
 	}
 #if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
 	if (!gwin->is_in_exult_menu()) {
@@ -209,6 +213,11 @@ void Gamemenu_gump::game_engine_options() {
 void Gamemenu_gump::open_coop() {
 	done = true;    // Close the menu; the notice says how it went.
 	Friend_mode_open_to_coop();
+}
+
+void Gamemenu_gump::show_coop_code() {
+	done = true;    // Close the menu; the notice shows the code.
+	Friend_mode_show_lobby_code();
 }
 
 void Gamemenu_gump::input_options() {

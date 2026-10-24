@@ -47,6 +47,10 @@ bool Friend_mode_hosting();
 bool Friend_mode_take_all(Container_game_object* from, Game_object* asker, const std::string& ask);
 void Friend_mode_set_hosting(bool on);
 bool Friend_mode_open_to_coop();
+// Host: the lobby code guests type (empty until the lobby answers).
+std::string Friend_mode_lobby_code();
+// Host: say the code again (or why there is none) and copy it.
+void Friend_mode_show_lobby_code();
 // Friend Mode connection identity is collected before the guest world loads.
 bool Friend_mode_collect_connection_details();
 // Guest item moves, mirroring a drag on the host: picking up lifts the item

@@ -94,29 +94,54 @@ Friend_mode_session::~Friend_mode_session() {
 	stop();
 }
 
-bool Friend_mode_session::start_host(int port, uint32 game_code) {
+bool Friend_mode_session::start_host(int port, uint32 game_code, const std::string& lobby_url) {
 	stop();
 	connection_lost = false;
 	local_game_code = game_code;
 	listener        = Friend_tcp_listen(port);
 	if (!listener) {
 		std::cerr << "Friend Mode: could not listen on port " << port << std::endl;
+	}
+	lobby_failure.clear();
+	if (!lobby_url.empty()) {
+		lobby = Friend_rtc_host(lobby_url, lobby_failure);
+	}
+	if (!listener && !lobby) {
 		return false;
 	}
 	session_mode = Mode::host;
-	std::cout << "Friend Mode: host listening on port " << port << std::endl;
+	if (listener) {
+		std::cout << "Friend Mode: host listening on port " << port << std::endl;
+	}
+	if (lobby) {
+		std::cout << "Friend Mode: asking " << lobby_url << " for a code" << std::endl;
+	}
 	return true;
 }
 
-bool Friend_mode_session::start_guest(const std::string& address, int port, uint32 game_code) {
+bool Friend_mode_session::start_guest(
+		const std::string& address, int port, uint32 game_code, const std::string& lobby_url) {
 	stop();
 	connection_lost = false;
 	full_rejection  = false;
+	link_problem.clear();
 	local_game_code = game_code;
-	auto link       = Friend_tcp_connect(address, port, 5000);
-	if (!link) {
-		std::cerr << "Friend Mode: could not connect to " << address << ':' << port << std::endl;
-		return false;
+	std::unique_ptr<Friend_connection> link;
+	if (Friend_is_lobby_code(address)) {
+		// Through the lobby: it opens in the background, and the hello waits
+		// in the outgoing queue until then.
+		link = Friend_rtc_connect(lobby_url, address, 20000, link_problem);
+		if (!link) {
+			std::cerr << "Friend Mode: " << link_problem << std::endl;
+			return false;
+		}
+		std::cout << "Friend Mode: joining " << address << " through " << lobby_url << std::endl;
+	} else {
+		link = Friend_tcp_connect(address, port, 5000);
+		if (!link) {
+			std::cerr << "Friend Mode: could not connect to " << address << ':' << port << std::endl;
+			return false;
+		}
 	}
 	auto peer    = std::make_unique<Peer>();
 	peer->player = host_player;
@@ -127,6 +152,14 @@ bool Friend_mode_session::start_guest(const std::string& address, int port, uint
 	deliver(everyone);
 	std::cout << "Friend Mode: connected to host; validating session" << std::endl;
 	return true;
+}
+
+std::string Friend_mode_session::lobby_code() const {
+	return lobby ? lobby->code() : std::string();
+}
+
+std::string Friend_mode_session::lobby_problem() const {
+	return lobby ? lobby->problem() : lobby_failure;
 }
 
 Friend_mode_session::Peer* Friend_mode_session::host_peer() const {
@@ -951,15 +984,20 @@ void Friend_mode_session::receive(Peer& peer) {
 }
 
 void Friend_mode_session::poll() {
-	if (session_mode == Mode::host && listener) {
-		while (auto link = listener->accept()) {
-			// Its player number comes with the handshake: port probes that
-			// never send a hello don't use one up.
-			auto peer    = std::make_unique<Peer>();
-			peer->player = -2;
-			peer->link   = std::move(link);
-			std::cout << "Friend Mode: guest connected; validating session" << std::endl;
-			peers.push_back(std::move(peer));
+	if (session_mode == Mode::host) {
+		for (Friend_listener* source : {listener.get(), static_cast<Friend_listener*>(lobby.get())}) {
+			if (!source) {
+				continue;
+			}
+			while (auto link = source->accept()) {
+				// Its player number comes with the handshake: port probes that
+				// never send a hello don't use one up.
+				auto peer    = std::make_unique<Peer>();
+				peer->player = -2;
+				peer->link   = std::move(link);
+				std::cout << "Friend Mode: guest connected; validating session" << std::endl;
+				peers.push_back(std::move(peer));
+			}
 		}
 	}
 	for (auto& peer : peers) {
@@ -1000,6 +1038,9 @@ void Friend_mode_session::poll() {
 void Friend_mode_session::close_peer(Peer& peer) {
 	if (peer.link) {
 		peer.link->close();
+		if (session_mode == Mode::guest) {
+			link_problem = peer.link->problem();
+		}
 		peer.link.reset();
 	}
 	peer.outgoing.clear();
@@ -1016,6 +1057,7 @@ void Friend_mode_session::stop() {
 	}
 	peers.clear();
 	listener.reset();
+	lobby.reset();
 	staged.clear();
 	suggestions.clear();
 	next_player     = 1;

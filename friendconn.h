@@ -2,8 +2,8 @@
  * Friend Mode connections: one small interface between the session's
  * messages and the transport that carries them.
  *
- * A connection is a reliable, ordered byte stream (TCP today; a WebRTC data
- * channel later), read and written without blocking.  The session keeps its
+ * A connection is a reliable, ordered byte stream (TCP, or a WebRTC data
+ * channel met through the lobby), read and written without blocking.  The session keeps its
  * own framing on top, so a new transport only has to move bytes.
  */
 #ifndef FRIENDCONN_H
@@ -21,6 +21,11 @@ public:
 	// Bytes read (0 when nothing has arrived yet), or -1 once closed.
 	virtual int  read(unsigned char* data, std::size_t size) = 0;
 	virtual void close()                                     = 0;
+	// Why it closed or never opened, when the transport knows ("No game
+	// with that code"); empty otherwise.
+	virtual std::string problem() const {
+		return {};
+	}
 };
 
 class Friend_listener {
@@ -34,5 +39,27 @@ public:
 std::unique_ptr<Friend_listener> Friend_tcp_listen(int port);
 // TCP to a host name or address, giving up after 'timeout_ms' per address.
 std::unique_ptr<Friend_connection> Friend_tcp_connect(const std::string& address, int port, int timeout_ms);
+
+// The host's side of the lobby (friendrtc.cc): a code from the lobby, and
+// guests who typed it, once their data channel is open.
+class Friend_lobby_host : public Friend_listener {
+public:
+	// The code to give guests; empty until the lobby answers (or after it
+	// went away).
+	virtual std::string code() const = 0;
+	// Why there is no code, when something went wrong.
+	virtual std::string problem() const = 0;
+};
+
+// A word and a number, such as "MOONGLOW-42": a lobby code, not an address.
+bool Friend_is_lobby_code(const std::string& text);
+// Open a code through the lobby at 'lobby_url'; null (with 'problem' saying
+// why) when this build has no WebRTC or the address is refused.
+std::unique_ptr<Friend_lobby_host> Friend_rtc_host(const std::string& lobby_url, std::string& problem);
+// Join by code.  Returns at once: the connection reads and writes nothing
+// until its channel opens, and closes (with a problem()) if that fails or
+// takes longer than 'timeout_ms'.
+std::unique_ptr<Friend_connection> Friend_rtc_connect(
+		const std::string& lobby_url, const std::string& code, int timeout_ms, std::string& problem);
 
 #endif

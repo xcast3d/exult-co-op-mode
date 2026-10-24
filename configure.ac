@@ -443,6 +443,35 @@ else
 fi
 
 # ---------------------------------------------------------------------
+# Friend Mode lobby codes (WebRTC): the static libdatachannel and Mbed TLS
+# that tools/friend-mode/build-rtc.sh builds into third_party/build/.
+# Without them Exult still builds, and Co-Op Mode joins by address only.
+# ---------------------------------------------------------------------
+
+AC_ARG_WITH(friend-rtc, AS_HELP_STRING([--with-friend-rtc=DIR], [Friend Mode WebRTC libraries (build-rtc.sh's output) @<:@default third_party/build/<system>-<cpu>@:>@]),,with_friend_rtc=auto)
+FRIEND_RTC_CPPFLAGS=""
+FRIEND_RTC_LIBS=""
+if test "x$with_friend_rtc" != xno; then
+	friend_rtc_dir="$with_friend_rtc"
+	if test "x$friend_rtc_dir" = xauto -o "x$friend_rtc_dir" = xyes; then
+		friend_rtc_dir="`cd "$srcdir" && pwd`/third_party/build/`uname -s | tr '[[:upper:]]' '[[:lower:]]'`-`uname -m`"
+	fi
+	AC_MSG_CHECKING([for Friend Mode WebRTC libraries in $friend_rtc_dir])
+	if test -f "$friend_rtc_dir/lib/libdatachannel.a"; then
+		AC_MSG_RESULT(yes)
+		FRIEND_RTC_CPPFLAGS="-DFRIEND_RTC -DRTC_STATIC -isystem $friend_rtc_dir/include"
+		FRIEND_RTC_LIBS="$friend_rtc_dir/lib/libdatachannel.a $friend_rtc_dir/lib/libjuice.a $friend_rtc_dir/lib/libusrsctp.a $friend_rtc_dir/lib/libmbedtls.a $friend_rtc_dir/lib/libmbedx509.a $friend_rtc_dir/lib/libmbedcrypto.a $friend_rtc_dir/lib/libeverest.a $friend_rtc_dir/lib/libp256m.a"
+	else
+		AC_MSG_RESULT([no (run tools/friend-mode/build-rtc.sh for lobby codes)])
+		if test "x$with_friend_rtc" != xauto; then
+			AC_MSG_ERROR([Friend Mode WebRTC libraries not found in $friend_rtc_dir])
+		fi
+	fi
+fi
+AC_SUBST(FRIEND_RTC_CPPFLAGS)
+AC_SUBST(FRIEND_RTC_LIBS)
+
+# ---------------------------------------------------------------------
 # Statically link libraries?
 # ---------------------------------------------------------------------
 

@@ -411,6 +411,7 @@ for /f "tokens=* delims=" %%u in ('git ls-remote --get-url') do echo #define GIT
     <ClCompile Include="..\..\friendclass.cc" />
     <ClCompile Include="..\..\friendmap.cc" />
     <ClCompile Include="..\..\friendnet.cc" />
+    <ClCompile Include="..\..\friendrtc.cc" />
     <ClCompile Include="..\..\friendtcp.cc" />
     <ClCompile Include="..\..\files\crc.cc" />
     <ClCompile Include="..\..\files\Flat.cc" />

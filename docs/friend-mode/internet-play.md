@@ -1,5 +1,12 @@
 # Playing over the internet
 
+**The easy way (Mac build, 2026-10-23): a lobby code.** When you host,
+the game shows a code such as `MOONGLOW-4271` (also in the chat log, and on
+the Escape menu's Code button, which copies it). The guest types it in
+**Join a Game** instead of an address. No port forwarding; see
+[the lobby](lobby.md). Everything below is for joining by address, which
+still works for LAN play, Tailscale, and when the lobby is down.
+
 Co-Op Mode has been tested on one Mac, and once on a Windows PC. Nothing in it is tied to
 the local machine, though: the host listens on every network address, and
 **Join a Game** takes an IP address or a host name. So a friend outside your
@@ -56,7 +63,9 @@ which adds lag (the Tailscale menu shows "direct" or "relay"). Lobby codes
 
 ## Security
 
-There is no password and no encryption. While you host, anyone who finds
+By lobby code, the connection is encrypted (WebRTC's DTLS), and the code
+is the only way in: anyone who has it can join while you host. By
+address, there is no password and no encryption. While you host, anyone who finds
 the open port can join a free companion, and the chat and world travel in
 plain text. Host only while playing, and close Exult afterwards (or remove
 the port forward).

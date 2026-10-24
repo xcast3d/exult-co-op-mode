@@ -12,9 +12,10 @@ the first proof of concept changes only the local controller and camera target.
 Phases 0 to 7 are built, and so is most of Phase 9 (WASD, the Target
 System) and the Class System; the brief's [roadmap](../ultima-7-friend-mode.md#roadmap)
 keeps the boxes. Next is **Phase 8**, the last step before a release:
-WebRTC data channels in Exult behind `Friend_connection` (the lobby is
-deployed and the libdatachannel spike passed), a TURN relay fallback, an
-optional session password, and Mac and Windows builds for release. Still
+lobby codes over WebRTC are built on the Mac (`friendrtc.cc`, see
+[the lobby](lobby.md)) and need a hand test; then a TURN relay fallback,
+the Windows side, an optional session password, and Mac and Windows builds
+for release. Still
 waiting for more testers: Phase 6's three-player exit test and two people
 grabbing the same item.
 
@@ -1168,5 +1169,5 @@ replicated to guests.
 - A guest whose host disconnects sees a notice and Exult closes after a few
   seconds: Exult can't tear a game down and go back to the title menu in one
   process (the host's Main Menu button restarts Exult instead).
-- Joining is by address only until Phase 8's lobby codes; over the internet
-  that means port forwarding or Tailscale.
+- Lobby codes (Phase 8) work on the Mac build only so far; the Windows
+  build joins by address (port forwarding or Tailscale over the internet).

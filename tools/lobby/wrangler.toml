@@ -18,6 +18,19 @@ class_name = "Lobby"
 tag = "v1"
 new_sqlite_classes = ["Lobby"]
 
+# Per-address rate limits (Workers Rate Limiting): opening games, and
+# joining (which is what someone guessing codes would do).  The period is
+# 10 or 60 seconds; namespace_id is any number unique to this account.
+[[ratelimits]]
+name = "HOST_LIMITER"
+namespace_id = "7101"
+simple = { limit = 10, period = 60 }
+
+[[ratelimits]]
+name = "JOIN_LIMITER"
+namespace_id = "7102"
+simple = { limit = 20, period = 60 }
+
 # Optional TURN relay (Cloudflare Calls TURN), as secrets, never in the
 # repo or the game:
 #   npx wrangler secret put TURN_KEY_ID

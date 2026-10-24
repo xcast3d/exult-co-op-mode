@@ -79,6 +79,7 @@ public:
 	void targeting_options();    // Friend Mode: Q, E and Space.
 	void class_options();        // Friend Mode: companion skills.
 	void open_coop();    // Start hosting Co-Op Mode in this game.
+	void show_coop_code();    // Hosting: show (and copy) the lobby code.
 
 	static void  do_exult_menu();
 	Gump_button* on_button(int mx, int my) override;

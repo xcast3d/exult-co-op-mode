@@ -271,14 +271,22 @@ guest types in.
       2026-10-20 in `tools/lobby/` (Cloudflare Worker, tested locally), for
       `u7-multiplayer-lobby.xcast3d.com`; deployed the same day. See
       [the lobby](friend-mode/lobby.md).
-- [ ] Native WebRTC data channels (for example libdatachannel), reliable and
-      ordered, which matches today's TCP stream. Send the world download in
-      pieces.
-      Spike passed 2026-10-20: libdatachannel builds on the Mac, and two
-      programs met through the lobby and passed ordered messages and 256 KB
-      intact (see [the lobby](friend-mode/lobby.md)).
+- [x] Native WebRTC data channels (libdatachannel with Mbed TLS), reliable
+      and ordered, which matches today's TCP stream; the world download goes
+      in 16 KB pieces. Built 2026-10-23 in `friendrtc.cc` behind
+      `Friend_connection`: the host gets a code from the lobby (shown on
+      screen, in the chat log, and on the Escape menu's Code button), and
+      **Join a Game** takes a code or an address. Checked on one Mac through
+      the deployed lobby with the session test
+      (`tools/friend-mode/rtc-session-test/`): connected in about 1.2 s,
+      300 KB intact, chat and steps both ways. Still to try by hand in the
+      game, then on two networks.
 - [ ] A relay (TURN) fallback for the networks where a direct connection fails.
-- [ ] Keep direct address entry for LAN play and debugging.
+- [x] Keep direct address entry for LAN play and debugging: the host always
+      listens on TCP 1992 as well, and an address in Join a Game uses it.
+- [ ] Windows: lobby codes in the Windows build (a recursive submodule
+      checkout, `build-rtc.sh` under MSYS2, and a CA bundle shipped with the
+      game); today's Windows build joins by address only.
 - [ ] Optional session password; WebRTC also encrypts the connection.
 - [x] Windows build ([Windows build plan](friend-mode/windows-build.md));
       Mac and Windows have played together.
@@ -751,9 +759,9 @@ replicate, saves with players in them) were answered while building Phases
 ## Next steps
 
 1. **Lobby codes over WebRTC** (Phase 8), the last step before an
-   official release: `friendrtc.cc` behind `Friend_connection`,
-   libdatachannel in the Mac and Windows builds, TURN fallback, then
-   release builds and packaging.
+   official release: built on the Mac (`friendrtc.cc`); next a hand test in
+   the game, redeploying the hardened lobby, two networks, the Windows
+   build, TURN fallback, then release builds and packaging.
 2. **A test with more players:** Phase 6's three-player exit test, two
    people grabbing the same item, four players, and guests' movement over
    a real internet connection.

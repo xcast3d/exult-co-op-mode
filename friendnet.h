@@ -19,6 +19,7 @@
 
 class Friend_connection;
 class Friend_listener;
+class Friend_lobby_host;
 
 class Friend_mode_session {
 public:
@@ -40,8 +41,19 @@ public:
 	Friend_mode_session();
 	~Friend_mode_session();
 
-	bool start_host(int port, uint32 game_code);
-	bool start_guest(const std::string& address, int port, uint32 game_code);
+	// The host listens on 'port' (TCP) and, with a lobby URL, opens a lobby
+	// code too.  A guest's 'address' is a host name or IP (TCP), or a lobby
+	// code (WebRTC through 'lobby_url').
+	bool start_host(int port, uint32 game_code, const std::string& lobby_url = {});
+	bool start_guest(const std::string& address, int port, uint32 game_code, const std::string& lobby_url = {});
+	// Host: the lobby code for guests (empty until the lobby answers), and
+	// why there is none when something went wrong.
+	std::string lobby_code() const;
+	std::string lobby_problem() const;
+	// Guest: why the connection closed or never opened, when known.
+	const std::string& connection_problem() const {
+		return link_problem;
+	}
 	void set_local_player_name(const std::string& name) {
 		local_player_name = name;
 	}
@@ -259,6 +271,9 @@ private:
 
 	Mode                              session_mode = Mode::off;
 	std::unique_ptr<Friend_listener>  listener;
+	std::unique_ptr<Friend_lobby_host> lobby;
+	std::string                       link_problem;
+	std::string                       lobby_failure;    // Why the lobby never opened.
 	std::vector<std::unique_ptr<Peer>> peers;
 	int                               next_player = 1;
 	int                               guest_limit = 12;

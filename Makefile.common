@@ -17,6 +17,7 @@ MAIN_OBJS:=actions.o \
 	friendclass.o \
 	friendmap.o \
 	friendnet.o \
+	friendrtc.o \
 	friendtcp.o \
 	game.o \
 	gameclk.o \

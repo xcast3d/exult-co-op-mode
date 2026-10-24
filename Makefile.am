@@ -70,6 +70,7 @@ EXULTSOURCES =	\
 	friendmap.h	\
 	friendnet.cc	\
 	friendnet.h	\
+	friendrtc.cc	\
 	friendtcp.cc	\
 	game.cc		\
 	game.h		\
@@ -157,7 +158,8 @@ EXULTLIBS = \
 EXULTLIBADD = \
 	$(EXULTLIBS) $(PNG_LIBS) \
 	$(SDL_LIBS) $(SYSLIBS) $(x_libraries) $(ICON_FILE) \
-	$(ZLIB_LIBS) $(OGG_LIBS) $(MT32EMU_LIBS) $(FLUID_LIBS) $(ALSA_LIBS)
+	$(ZLIB_LIBS) $(OGG_LIBS) $(MT32EMU_LIBS) $(FLUID_LIBS) $(ALSA_LIBS) \
+	$(FRIEND_RTC_LIBS)
 
 EXULTDEPENDENCIES = $(ICON_FILE) $(EXULTLIBS)
 
@@ -179,7 +181,7 @@ exult_DEPENDENCIES = $(EXULTDEPENDENCIES)
 
 # Workaround for automake issue with using the same sources for both a library and an executable.
 # See https://www.gnu.org/software/automake/manual/html_node/Objects-created-both-with-libtool-and-without.html
-exult_CPPFLAGS = $(AM_CPPFLAGS)
+exult_CPPFLAGS = $(AM_CPPFLAGS) $(FRIEND_RTC_CPPFLAGS)
 else # !BUILD_EXULT
 bin_PROGRAMS =
 endif

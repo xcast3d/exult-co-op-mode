@@ -18,9 +18,21 @@
  *   lobby -> guest  {type:"closed"} when the host leaves.
  *   lobby -> anyone {type:"error", message}
  *
- * 'data' is whatever the game sends (SDP and candidates); the lobby only
- * passes it on.  'ice' is the STUN (and, when configured, TURN) servers to
- * use.  See docs/friend-mode/lobby.md.
+ * 'data' is an SDP ({sdp, kind}) or a candidate ({candidate, mid}); the
+ * lobby checks its shape and passes it on.  'ice' is the STUN (and, when
+ * configured, TURN) servers to use.  See docs/friend-mode/lobby.md.
+ *
+ * Security (anyone on the internet can reach this):
+ * - Codes come from crypto.getRandomValues, a word and four digits
+ *   (32 x 9000), and the rate limits below make guessing one slow.
+ * - Per address: opening games and joining are rate limited (the
+ *   HOST_LIMITER and JOIN_LIMITER bindings in wrangler.toml).
+ * - Per connection: 16 KB a message, 240 a minute; a guest's lobby
+ *   connection ends after 60 s (it needs a few to connect); codes end when
+ *   the host leaves or after 12 hours.
+ * - Browsers are turned away (the game sends no Origin header), so a web
+ *   page can't use the lobby on a visitor's behalf.
+ * - No secrets in the repo: TURN keys are Worker secrets.
  */
 
 const PROTOCOL = 1;    // The lobby's own messages (not the game's).
@@ -34,6 +46,9 @@ const WORDS = [
 ];
 
 const MAX_GUESTS = 8;               // One per companion, and a few watching.
+const GUEST_SECONDS = 60;           // A guest's lobby connection, at most.
+const MAX_CODE_LENGTH = 32;
+const CODE_PATTERN = /^[A-Z]{2,12}-[0-9]{2,4}$/;   // Four digits now; two in older codes.
 const MAX_MESSAGE_BYTES = 16 * 1024;  // An SDP is a few kilobytes.
 const MAX_MESSAGES_PER_MINUTE = 240;  // Per socket: candidates come in bursts.
 const GAME_HOURS = 12;              // A code lasts this long at most.
@@ -46,14 +61,65 @@ function json(ws, message) {
 	}
 }
 
+// A random number below 'n', from the system's secure random source.
+function randomBelow(n) {
+	const values = new Uint32Array(1);
+	const limit = Math.floor(0x100000000 / n) * n;    // No bias toward low numbers.
+	do {
+		crypto.getRandomValues(values);
+	} while (values[0] >= limit);
+	return values[0] % n;
+}
+
 function newCode() {
-	const word = WORDS[Math.floor(Math.random() * WORDS.length)];
-	const number = 10 + Math.floor(Math.random() * 90);
+	const word = WORDS[randomBelow(WORDS.length)];
+	const number = 1000 + randomBelow(9000);
 	return `${word}-${number}`;
 }
 
+// The code as typed (any case, a space or a dash), or null if it can't be one.
 function normalCode(code) {
-	return decodeURIComponent(code || "").trim().toUpperCase().replace(/\s+/g, "-");
+	let text;
+	try {
+		text = decodeURIComponent(code || "");
+	} catch {
+		return null;
+	}
+	if (text.length > MAX_CODE_LENGTH) {
+		return null;
+	}
+	text = text.trim().toUpperCase().replace(/[\s-]+/g, "-");
+	return CODE_PATTERN.test(text) ? text : null;
+}
+
+// True when this address may go on; false when it is over its rate limit.
+// Without the binding (wrangler dev, older wrangler) there is no limit.
+async function allowed(limiter, request) {
+	if (!limiter) {
+		return true;
+	}
+	const address = request.headers.get("CF-Connecting-IP") || "unknown";
+	try {
+		const { success } = await limiter.limit({ key: address });
+		return success;
+	} catch {
+		return true;
+	}
+}
+
+// A signal's 'data', as the game sends it, or null.
+function signalData(data) {
+	if (!data || typeof data !== "object" || Array.isArray(data)) {
+		return null;
+	}
+	const text = (value) => typeof value === "string" && value.length <= MAX_MESSAGE_BYTES;
+	if (text(data.sdp) && (data.kind === "offer" || data.kind === "answer")) {
+		return { sdp: data.sdp, kind: data.kind };
+	}
+	if (text(data.candidate) && text(data.mid)) {
+		return { candidate: data.candidate, mid: data.mid };
+	}
+	return null;
 }
 
 // STUN always; TURN when the Worker has a TURN key (secrets TURN_KEY_ID and
@@ -87,6 +153,15 @@ async function iceServers(env) {
 	return servers;
 }
 
+// "No game with that code", without waking a Durable Object for it.
+function noGame() {
+	const [client, server] = Object.values(new WebSocketPair());
+	server.accept();
+	json(server, { type: "error", message: "No game with that code" });
+	server.close(1000, "No such game");
+	return new Response(null, { status: 101, webSocket: client });
+}
+
 export default {
 	async fetch(request, env) {
 		const url = new URL(request.url);
@@ -98,7 +173,13 @@ export default {
 		if (request.headers.get("Upgrade") !== "websocket") {
 			return new Response("Expected a WebSocket", { status: 426 });
 		}
+		if (request.headers.get("Origin")) {
+			return new Response("Not for browsers", { status: 403 });
+		}
 		if (url.pathname === "/host") {
+			if (!(await allowed(env.HOST_LIMITER, request))) {
+				return new Response("Too many games from this address; wait a minute", { status: 429 });
+			}
 			// A free code: a few tries, in case one is taken.
 			for (let tries = 0; tries < 8; ++tries) {
 				const code = newCode();
@@ -112,7 +193,13 @@ export default {
 		}
 		const join = url.pathname.match(/^\/join\/([^/]+)$/);
 		if (join) {
+			if (!(await allowed(env.JOIN_LIMITER, request))) {
+				return new Response("Too many tries from this address; wait a minute", { status: 429 });
+			}
 			const code = normalCode(join[1]);
+			if (!code) {
+				return noGame();
+			}
 			const lobby = env.LOBBY.get(env.LOBBY.idFromName(code));
 			return lobby.fetch(`https://lobby/join?code=${encodeURIComponent(code)}`, request);
 		}
@@ -156,8 +243,9 @@ export class Lobby {
 		this.ice = await iceServers(this.env);
 		json(ws, { type: "code", code, ice: this.ice, protocol: PROTOCOL });
 		this.watch(ws, (message) => {
-			if (message.type === "signal" && this.guests.has(message.to)) {
-				json(this.guests.get(message.to), { type: "signal", data: message.data });
+			const data = signalData(message.data);
+			if (message.type === "signal" && data && this.guests.has(message.to)) {
+				json(this.guests.get(message.to), { type: "signal", data });
 			} else if (message.type === "kick" && this.guests.has(message.to)) {
 				this.guests.get(message.to).close(1000, "Removed by the host");
 			}
@@ -185,13 +273,21 @@ export class Lobby {
 		}
 		const id = this.nextGuest++;
 		this.guests.set(id, ws);
+		// Long enough to connect; then the slot is free again, so codes
+		// passed around can't fill a game with idle lobby connections.
+		const timer = setTimeout(() => {
+			json(ws, { type: "error", message: "Took too long to connect" });
+			ws.close(1000, "Too long");
+		}, GUEST_SECONDS * 1000);
 		json(ws, { type: "joined", id, ice: this.ice, protocol: PROTOCOL });
 		json(this.host, { type: "guest", id });
 		this.watch(ws, (message) => {
-			if (message.type === "signal" && this.host) {
-				json(this.host, { type: "signal", from: id, data: message.data });
+			const data = signalData(message.data);
+			if (message.type === "signal" && data && this.host) {
+				json(this.host, { type: "signal", from: id, data });
 			}
 		}, () => {
+			clearTimeout(timer);
 			this.guests.delete(id);
 			if (this.host) {
 				json(this.host, { type: "left", id });

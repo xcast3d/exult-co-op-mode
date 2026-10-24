@@ -60,7 +60,7 @@ try {
 	// The host opens a game and gets a code.
 	const host = await open("/host");
 	const { code, ice } = await host.next("code");
-	check(`host gets a code (${code})`, /^[A-Z]+-\d\d$/.test(code));
+	check(`host gets a code (${code})`, /^[A-Z]+-\d{4}$/.test(code));
 	check("host gets STUN servers", Array.isArray(ice) && JSON.stringify(ice).includes("stun:"));
 
 	// A guest joins with the code, typed in lower case with a space.
@@ -71,24 +71,31 @@ try {
 	const told = await host.next("guest");
 	check("host is told of the guest", told.id === joined.id);
 
-	// Offer, answer and a candidate pass through untouched.
-	const offer = { sdp: "v=0 offer from guest", type: "offer" };
+	// Offer, answer and a candidate pass through, as the game sends them.
+	const offer = { sdp: "v=0 offer from guest", kind: "offer" };
 	send(guest, { type: "signal", data: offer });
 	const atHost = await host.next("signal");
 	check("guest's offer reaches the host", atHost.from === 1 && atHost.data.sdp === offer.sdp);
-	send(host, { type: "signal", to: 1, data: { sdp: "v=0 answer", type: "answer" } });
+	send(host, { type: "signal", to: 1, data: { sdp: "v=0 answer", kind: "answer" } });
 	const atGuest = await guest.next("signal");
-	check("host's answer reaches the guest", atGuest.data.type === "answer");
-	send(host, { type: "signal", to: 1, data: { candidate: "candidate:1 1 udp 1 1.2.3.4 5 typ host" } });
+	check("host's answer reaches the guest", atGuest.data.kind === "answer");
+	send(host, { type: "signal", to: 1, data: { candidate: "candidate:1 1 udp 1 1.2.3.4 5 typ host", mid: "0" } });
 	check("candidates pass too", (await guest.next("signal")).data.candidate.startsWith("candidate:"));
+
+	// Anything else is dropped, and extra fields are stripped.
+	send(guest, { type: "signal", data: { note: "not a signal" } });
+	send(guest, { type: "signal", data: { sdp: "v=0", kind: "offer", extra: "dropped" } });
+	const cleaned = await host.next("signal");
+	check("other signals are dropped, extra fields stripped", cleaned.data.sdp === "v=0" && !("extra" in cleaned.data)
+		&& !("note" in cleaned.data));
 
 	// A second guest gets its own number; the first never hears its signals.
 	const guest2 = await open("/join/" + code);
 	const joined2 = await guest2.next("joined");
 	check("second guest gets its own id", joined2.id === 2);
 	await host.next("guest");
-	send(host, { type: "signal", to: 2, data: { note: "for two" } });
-	check("signals go to the right guest", (await guest2.next("signal")).data.note === "for two");
+	send(host, { type: "signal", to: 2, data: { sdp: "for two", kind: "answer" } });
+	check("signals go to the right guest", (await guest2.next("signal")).data.sdp === "for two");
 	let leaked = false;
 	try {
 		await guest.next("signal", 300);
@@ -99,8 +106,24 @@ try {
 	check("the other guest doesn't get it", !leaked);
 
 	// A wrong code.
-	const lost = await open("/join/NOWHERE-00");
+	const lost = await open("/join/NOWHERE-0000");
 	check("a wrong code is refused", (await lost.next("error")).message.includes("No game"));
+	const odd = await open("/join/" + encodeURIComponent("%E0%A4%A"));
+	check("a code that can't be one is refused", (await odd.next("error")).message.includes("No game"));
+	// A browser's handshake carries an Origin; fetch won't send Upgrade, so
+	// by hand.
+	const { request } = await import(base.startsWith("wss") ? "node:https" : "node:http");
+	const status = await new Promise((resolve) => {
+		const req = request(base.replace(/^ws/, "http") + "/host", {
+			headers: { Connection: "Upgrade", Upgrade: "websocket", Origin: "https://example.com",
+				"Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==" },
+		});
+		req.on("response", (res) => resolve(res.statusCode));
+		req.on("upgrade", () => resolve(101));
+		req.on("error", () => resolve(0));
+		req.end();
+	});
+	check("browsers are turned away", status === 403);
 
 	// A guest leaving is told to the host.
 	guest2.close();
