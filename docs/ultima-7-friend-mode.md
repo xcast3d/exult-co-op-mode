@@ -279,8 +279,9 @@ guest types in.
       **Join a Game** takes a code or an address. Checked on one Mac through
       the deployed lobby with the session test
       (`tools/friend-mode/rtc-session-test/`): connected in about 1.2 s,
-      300 KB intact, chat and steps both ways. Still to try by hand in the
-      game, then on two networks.
+      300 KB intact, chat and steps both ways. Tested by hand the same day:
+      host and guest on one Mac joined by code through the live lobby and
+      played exactly as over TCP. Still to try on two networks.
 - [ ] A relay (TURN) fallback for the networks where a direct connection fails.
 - [x] Keep direct address entry for LAN play and debugging: the host always
       listens on TCP 1992 as well, and an address in Join a Game uses it.
@@ -759,9 +760,10 @@ replicate, saves with players in them) were answered while building Phases
 ## Next steps
 
 1. **Lobby codes over WebRTC** (Phase 8), the last step before an
-   official release: built on the Mac (`friendrtc.cc`); next a hand test in
-   the game, redeploying the hardened lobby, two networks, the Windows
-   build, TURN fallback, then release builds and packaging.
+   official release: built and hand-tested on the Mac (`friendrtc.cc`),
+   hardened lobby redeployed; next the Co-Op menu (Lobby or IP, password,
+   close the lobby, kick), two networks, the Windows build, TURN fallback,
+   then release builds and packaging.
 2. **A test with more players:** Phase 6's three-player exit test, two
    people grabbing the same item, four players, and guests' movement over
    a real internet connection.

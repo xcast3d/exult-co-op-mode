@@ -12,10 +12,24 @@ against the live lobby. A redeploy drops every open lobby connection, so a
 host running at that moment loses its code ("The lobby closed the code")
 and has to host again; games already connected carry on.
 
-**Planned (user, 2026-10-23, not now): less text on screen.** The code
-notices are too long for the top line. Move this into a menu instead:
-Co-Op Mode → IP | Lobby Code, and a password, with the code shown there
-rather than spelled out over the game.
+**Tested by hand 2026-10-23:** host and guest on one Mac, joined by code
+through the live lobby; movement, chat and the world download (186 KB)
+work exactly as over TCP.
+
+**Fixed the same day: codes died after 10 seconds.** libdatachannel's own
+WebSocket ping (sent after 10 quiet seconds) closes the connection when it
+runs over Mbed TLS ("TLS closed"), so the lobby saw the host leave. Its
+ping is off (`pingInterval` 0) and the host sends `{type:"keepalive"}`
+every 30 s instead, which the lobby ignores. (The lobby itself keeps a
+quiet connection open: checked for 5 minutes.)
+
+**Planned next (user, 2026-10-23): the Co-Op menu**, instead of long text
+over the game:
+
+- Type: **Lobby** or **IP**.
+- Lobby: shows the lobby code. IP: shows the address to share.
+- **Password**, optional.
+- Host: **close the lobby** and **kick players**.
 
 ## What it is, in plain words
 

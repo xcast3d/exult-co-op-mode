@@ -183,6 +183,10 @@ std::shared_ptr<rtc::WebSocket> lobby_socket() {
 	config.disableTlsVerification = false;
 	config.maxMessageSize         = lobby_message_limit;
 	config.connectionTimeout      = std::chrono::seconds(10);
+	// No WebSocket pings: with Mbed TLS, libdatachannel's ping (sent when
+	// nothing arrived for 10 s) closes the connection ("TLS closed").  The
+	// host sends its own keep-alive instead (Rtc_host::accept).
+	config.pingInterval = std::chrono::milliseconds(0);
 	std::vector<std::string>    files;
 	if (const char* file = std::getenv("RTC_CA_FILE")) {
 		files.emplace_back(file);
@@ -492,6 +496,14 @@ public:
 	}
 
 	std::unique_ptr<Friend_connection> accept() override {
+		// A small message now and then, so nothing between here and the
+		// lobby takes the quiet connection for a dead one; the lobby
+		// ignores it.  The game polls this every frame.
+		const auto now = Clock::now();
+		if (now - last_keepalive > std::chrono::seconds(30)) {
+			last_keepalive = now;
+			send_json(lobby, {{"type", "keepalive"}});
+		}
 		std::shared_ptr<Channel_state> channel;
 		{
 			const std::lock_guard<std::mutex> lock(state->mutex);
@@ -517,6 +529,7 @@ public:
 private:
 	std::shared_ptr<Host_state>     state;
 	std::shared_ptr<rtc::WebSocket> lobby;
+	Clock::time_point               last_keepalive = Clock::now();
 
 	static void take(const std::shared_ptr<Host_state>& host, const std::weak_ptr<rtc::WebSocket>& ws, const json& m) {
 		if (!m.is_object()) {
