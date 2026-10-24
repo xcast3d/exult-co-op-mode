@@ -36,11 +36,38 @@ jobs:
             mingw-w64-ucrt-x86_64-libogg mingw-w64-ucrt-x86_64-libvorbis
             mingw-w64-ucrt-x86_64-munt-mt32emu mingw-w64-ucrt-x86_64-libpng
             mingw-w64-ucrt-x86_64-zlib mingw-w64-ucrt-x86_64-freetype
+            mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-ca-certificates
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          # libdatachannel and Mbed TLS (and their own submodules) for lobby codes.
+          submodules: recursive
+      # The WebRTC libraries change only with their pinned submodules, the
+      # build script or the Mbed TLS settings, so they are cached on those.
+      - name: Lobby libraries key
+        id: rtc-key
+        run: |
+          echo "key=friend-rtc-ucrt64-$( (git submodule status --recursive third_party; cat tools/friend-mode/build-rtc.sh tools/friend-mode/mbedtls_friend_config.h) | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+      - name: Restore lobby libraries
+        id: rtc-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            third_party/build/windows/lib
+            third_party/build/windows/include
+          key: ${{ steps.rtc-key.outputs.key }}
+      - name: Build lobby libraries
+        if: steps.rtc-cache.outputs.cache-hit != 'true'
+        env:
+          RTC_PREFIX: ${{ github.workspace }}/third_party/build/windows
+          CMAKE_GENERATOR: Ninja
+        run: tools/friend-mode/build-rtc.sh
       - name: Build Exult
         run: |
+          test -f third_party/build/windows/lib/libdatachannel.a
           make -j 4 -f Makefile.mingw U7PATH=out/Exult install
+          test -f out/Exult/data/friend/cacert.pem
           out/Exult/Exult.exe --version
       - name: Add notes
         run: |

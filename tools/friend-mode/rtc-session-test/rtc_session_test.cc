@@ -21,6 +21,12 @@
 #include <thread>
 #include <vector>
 
+// friendrtc.cc looks for a shipped certificate list in <DATA>; this program
+// has no game data, so that path names nothing and the system's list is used.
+std::string get_system_path(const std::string& path) {
+	return path;
+}
+
 namespace {
 int failures = 0;
 

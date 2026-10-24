@@ -400,6 +400,21 @@ CXXFLAGS:=-MMD -std=c++17 -fdiagnostics-color=always $(ARCHFLAGS) $(ARCHTYPE) $(
 LDFLAGS:=$(ARCHFLAGS) $(ARCHTYPE)
 LIBS:=-lmingw32 $(SDL_LIBS) $(ZIP_LIBS) -lpng $(OGG_LIBS) $(FLUIDSYNTH_LIBS) $(TIMIDITY_LIBS) $(MT32EMU_LIBS) -ldsound -luuid -lole32 -lwinmm -lws2_32 -lDbghelp $(SUBSYSTEM) $(MTHREADS)
 
+# Friend Mode lobby codes (WebRTC): the static libdatachannel and Mbed TLS
+# that tools/friend-mode/build-rtc.sh builds (RTC_PREFIX=<this dir>).
+# Without them Exult still builds, joining by address only.
+FRIEND_RTC_DIR:=third_party/build/windows
+ifneq ($(wildcard $(FRIEND_RTC_DIR)/lib/libdatachannel.a),)
+FRIEND_RTC_CPPFLAGS:=-DFRIEND_RTC -DRTC_STATIC -isystem $(FRIEND_RTC_DIR)/include
+FRIEND_RTC_LIBS:=$(addprefix $(FRIEND_RTC_DIR)/lib/,libdatachannel.a libjuice.a libusrsctp.a libmbedtls.a libmbedx509.a libmbedcrypto.a libeverest.a libp256m.a) \
+	-liphlpapi -lbcrypt -lws2_32
+LIBS:=$(FRIEND_RTC_LIBS) $(LIBS)
+endif
+# Mbed TLS has no certificate authorities of its own and Windows has no PEM
+# list, so the lobby's certificate is checked against this one (MSYS2's
+# ca-certificates, Mozilla's list); friendrtc.cc looks for it in <DATA>/friend.
+FRIEND_CA_FILE:=$(MSYSTEM_PREFIX)/etc/ssl/certs/ca-bundle.crt
+
 EXEC:=Exult.exe
 EXEEXT:=.exe
 LIBEXT:=.dll
@@ -523,6 +538,7 @@ CPPFLAGS:=$(strip -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"data\" \
 ifneq ($(ANDROID_CFLAGS),)
 CPPFLAGS += $(ANDROID_CFLAGS)
 endif
+CPPFLAGS += $(FRIEND_RTC_CPPFLAGS)
 
 PLUGIN_CPPFLAGS:=$(strip -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"data\" \
 	-DNOMINMAX=1 -D_USE_MATH_DEFINES -DHAVE_NETDB_H=0 $(SYSFLAGS) \
@@ -606,6 +622,7 @@ install: $(EXEC)
 	cp data/exult_si.flx $(U7PATH)/data
 	mkdir -p $(U7PATH)/data/friend/skills
 	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
+	if [ -f "$(FRIEND_CA_FILE)" ]; then cp "$(FRIEND_CA_FILE)" $(U7PATH)/data/friend/cacert.pem; fi
 
 debug: $(EXEC)
 	mkdir -p $(U7PATH)
@@ -617,6 +634,7 @@ debug: $(EXEC)
 	cp data/exult_si.flx $(U7PATH)/data
 	mkdir -p $(U7PATH)/data/friend/skills
 	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
+	if [ -f "$(FRIEND_CA_FILE)" ]; then cp "$(FRIEND_CA_FILE)" $(U7PATH)/data/friend/cacert.pem; fi
 
 mods: tools
 	for mod in $(MODS); do \

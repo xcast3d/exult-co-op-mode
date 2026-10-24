@@ -98,6 +98,8 @@ std::unique_ptr<Friend_connection> Friend_rtc_connect(
 #	include <mbedtls/ssl.h>
 #	include <psa/crypto.h>
 
+#	include "utils.h"
+
 #	ifdef _WIN32
 #		include <winsock2.h>
 #		include <ws2tcpip.h>
@@ -199,14 +201,20 @@ rtc::Configuration config_from(const json& ice) {
 	return config;
 }
 
-// The certificate authorities to trust: RTC_CA_FILE, or the system's list.
+// The certificate authorities to trust: RTC_CA_FILE, the list shipped with
+// the game (<DATA>/friend/cacert.pem, Windows), or the system's list.  Not
+// the Unix paths on Windows: there "/etc/ssl" is C:\etc\ssl, which any user
+// can create.
 std::string ca_certificate_file() {
 	std::vector<std::string> files;
 	if (const char* file = std::getenv("RTC_CA_FILE")) {
 		files.emplace_back(file);
 	}
+	files.emplace_back(get_system_path("<DATA>/friend/cacert.pem"));
+#	ifndef _WIN32
 	files.emplace_back("/etc/ssl/cert.pem");
 	files.emplace_back("/etc/ssl/certs/ca-certificates.crt");
+#	endif
 	for (const auto& path : files) {
 		if (FILE* file = std::fopen(path.c_str(), "r")) {
 			std::fclose(file);
@@ -217,8 +225,8 @@ std::string ca_certificate_file() {
 }
 
 // Mbed TLS has no trusted certificate authorities of its own, so wss://
-// needs a list: RTC_CA_FILE, or the system's (macOS, most Linux).  Windows
-// will need one shipped with the game.  Without one the lobby's
+// needs a list: RTC_CA_FILE, the system's (macOS, most Linux), or on
+// Windows the one shipped with the game.  Without one the lobby's
 // certificate can't be checked, and the connection is refused (never made
 // unchecked).
 std::shared_ptr<rtc::WebSocket> lobby_socket() {

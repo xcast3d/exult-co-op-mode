@@ -301,16 +301,13 @@ tools/friend-mode/rtc-session-test/build.sh
   Passed 2026-10-23 through the deployed lobby: connected in about 1.2 s,
   300 KB intact, chat and a step both ways, by code and by address.
 
-**Windows, still to do** (the GitHub workflow is unchanged, so the Windows
-build joins by address only):
-
-1. Check out submodules: `actions/checkout` with `submodules: recursive`.
-2. Install `mingw-w64-ucrt-x86_64-cmake` and run
-   `tools/friend-mode/build-rtc.sh` under MSYS2 before Exult (it may need
-   `-G "MSYS Makefiles"` and `nproc`).
-3. `Makefile.mingw` (via `Makefile.common`, which already lists
-   `friendrtc.o`): add `-DFRIEND_RTC -DRTC_STATIC -isystem <prefix>/include`
-   and the eight static libraries, plus `-lws2_32 -liphlpapi -lbcrypt`.
-4. Ship a CA bundle (Mozilla's, as curl publishes it) next to `Exult.exe`
-   and point `RTC_CA_FILE` (or a setting) at it: Windows has no
-   `/etc/ssl/cert.pem`, and without a bundle the lobby is refused.
+**Windows (added 2026-10-24, not yet run on GitHub):** the
+`friend-mode-windows` workflow checks out the submodules, builds the
+libraries with `build-rtc.sh` under MSYS2 (Ninja, cached between runs on
+the submodule commits and the script), and `Makefile.mingw` links them when
+`third_party/build/windows/lib/libdatachannel.a` exists (otherwise joining
+by address only, as before). Windows has no PEM list of certificate
+authorities, so the install copies MSYS2's `ca-certificates` bundle
+(Mozilla's list) to `data/friend/cacert.pem`, and `friendrtc.cc` looks
+there after `RTC_CA_FILE`; on Windows it never reads the Unix paths
+(`/etc/ssl` would be `C:\etc\ssl`, which any user can create).
