@@ -49,8 +49,17 @@ void Friend_mode_set_hosting(bool on);
 bool Friend_mode_open_to_coop();
 // Host: the lobby code guests type (empty until the lobby answers).
 std::string Friend_mode_lobby_code();
-// Host: say the code again (or why there is none) and copy it.
-void Friend_mode_show_lobby_code();
+// Co-Op settings, for the title menu's Co-Op Mode and the game menu's
+// Co-Op page: lobby code or IP address, the code or address to share,
+// whether new players can join, and the password.
+bool        Friend_mode_coop_by_lobby();
+void        Friend_mode_set_coop_by_lobby(bool by_lobby);
+std::string Friend_mode_coop_details();
+void        Friend_mode_copy_coop_details();
+bool        Friend_mode_coop_joining_open();
+void        Friend_mode_set_coop_joining_open(bool open);
+bool        Friend_mode_has_password();
+bool        Friend_mode_edit_password();    // Title menu: its own screen.
 // Friend Mode connection identity is collected before the guest world loads.
 bool Friend_mode_collect_connection_details();
 // Guest item moves, mirroring a drag on the host: picking up lifts the item

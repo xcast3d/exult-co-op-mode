@@ -12,6 +12,7 @@
 #include <cstddef>
 #include <memory>
 #include <string>
+#include <vector>
 
 class Friend_connection {
 public:
@@ -39,6 +40,9 @@ public:
 std::unique_ptr<Friend_listener> Friend_tcp_listen(int port);
 // TCP to a host name or address, giving up after 'timeout_ms' per address.
 std::unique_ptr<Friend_connection> Friend_tcp_connect(const std::string& address, int port, int timeout_ms);
+// This computer's IPv4 addresses others could use (home network first,
+// then Tailscale's 100.x), without the loopback one.
+std::vector<std::string> Friend_local_addresses();
 
 // The host's side of the lobby (friendrtc.cc): a code from the lobby, and
 // guests who typed it, once their data channel is open.

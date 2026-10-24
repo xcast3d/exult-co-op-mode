@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "File_gump.h"
 #include "GameDisplayOptions_gump.h"
 #include "GameEngineOptions_gump.h"
+#include "Gump_ToggleButton.h"
 #include "Gump_button.h"
 #include "Gump_manager.h"
 #include "InputOptions_gump.h"
@@ -82,6 +83,119 @@ public:
 
 using Gamemenu_button = CallbackTextButton<Gamemenu_gump>;
 
+namespace {
+// Co-Op Mode in the game menu: how guests join, what to give them, and
+// whether new players can join now.  The password is set on the title
+// menu's Co-Op Mode (it needs typing).
+class Coop_options_gump : public Modal_gump {
+	enum button_ids { id_ok, id_open, id_type, id_copy, id_joining, id_count };
+
+	enum rows { row_hosting, row_type, row_details, row_joining, row_password, row_count };
+
+	std::array<std::unique_ptr<Gump_button>, id_count> buttons;
+
+	using Button = CallbackTextButton<Coop_options_gump>;
+	using Toggle = CallbackToggleTextButton<Coop_options_gump>;
+
+	bool shown(int id) const {
+		const bool hosting = Friend_mode_hosting();
+		switch (id) {
+		case id_open:
+			return !hosting;
+		case id_copy:
+			return hosting;
+		case id_joining:
+			return hosting;
+		default:
+			return true;
+		}
+	}
+
+	void set_type(int state) {
+		Friend_mode_set_coop_by_lobby(state == 0);
+	}
+
+	void set_joining(int state) {
+		Friend_mode_set_coop_joining_open(state == 1);
+	}
+
+	void open_now() {
+		Friend_mode_open_to_coop();
+	}
+
+	void copy() {
+		Friend_mode_copy_coop_details();
+	}
+
+public:
+	Coop_options_gump() : Modal_gump(nullptr, -1) {
+		SetProceduralBackground(TileRect(0, 0, 190, yForRow(row_count + 2)), -1);
+		buttons[id_ok]   = std::make_unique<Button>(this, &Coop_options_gump::close, GumpStrings::OK(), 70,
+                                                  yForRow(row_count + 1), 50);
+		buttons[id_open] = std::make_unique<Button>(this, &Coop_options_gump::open_now, "Open to Co-Op",
+				get_button_pos_for_label("Hosting:"), yForRow(row_hosting), 80);
+		buttons[id_type] = std::make_unique<Toggle>(this, &Coop_options_gump::set_type,
+				std::vector<std::string>{"Lobby code", "IP address"}, Friend_mode_coop_by_lobby() ? 0 : 1,
+				get_button_pos_for_label("Type:"), yForRow(row_type), 80);
+		buttons[id_copy] = std::make_unique<Button>(this, &Coop_options_gump::copy, "Copy",
+				get_button_pos_for_label("Type:"), yForRow(row_details), 40);
+		buttons[id_joining] = std::make_unique<Toggle>(this, &Coop_options_gump::set_joining,
+				std::vector<std::string>{"Closed", "Open"}, Friend_mode_coop_joining_open() ? 1 : 0,
+				get_button_pos_for_label("New players:"), yForRow(row_joining), 80);
+		RightAlignWidgets(tcb::span(buttons.data() + id_open, id_count - id_open));
+	}
+
+	void close() override {
+		done = true;
+	}
+
+	Gump_button* on_button(int mx, int my) override {
+		for (int id = 0; id < id_count; ++id) {
+			auto& btn   = buttons[id];
+			auto  found = btn && shown(id) ? btn->on_button(mx, my) : nullptr;
+			if (found) {
+				return found;
+			}
+		}
+		return Modal_gump::on_button(mx, my);
+	}
+
+	void paint() override {
+		Modal_gump::paint();
+		for (int id = 0; id < id_count; ++id) {
+			if (buttons[id] && shown(id)) {
+				buttons[id]->paint();
+			}
+		}
+		Image_window8* iwin  = gwin->get_win();
+		auto           label = [&](int row, const std::string& text) {
+            font->paint_text(iwin->get_ib8(), text.c_str(), x + label_margin, y + yForRow(row) + 1);
+		};
+		label(row_hosting, Friend_mode_hosting() ? "Hosting: on" : "Hosting:");
+		label(row_type, "Type:");
+		label(row_details, Friend_mode_coop_details());
+		if (Friend_mode_hosting()) {
+			label(row_joining, "New players:");
+		}
+		label(row_password, Friend_mode_has_password() ? "Password: set (title menu)" : "Password: none (title menu)");
+		gwin->set_painted();
+	}
+
+	// The code arrives a moment after opening: keep the page current.
+	bool run() override {
+		const std::string details = Friend_mode_coop_details();
+		if (details != last_details) {
+			last_details = details;
+			return true;    // Paint again.
+		}
+		return Modal_gump::run();
+	}
+
+private:
+	std::string last_details;
+};
+}    // namespace
+
 Gamemenu_gump::Gamemenu_gump() : Modal_gump(nullptr, -1) {
 	createButtons();
 }
@@ -118,13 +232,9 @@ void Gamemenu_gump::createButtons() {
 			this, &Gamemenu_gump::targeting_options, "Target System", margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_class_system] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::class_options, "Class System", margin, yForRow(y++), preferred_button_width, 11);
-	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest() && !Friend_mode_hosting()) {
+	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest()) {
 		buttons[id_open_coop] = std::make_unique<Gamemenu_button>(
-				this, &Gamemenu_gump::open_coop, "Open to Co-Op", margin, yForRow(y++), preferred_button_width, 11);
-	} else if (!gwin->is_in_exult_menu() && Friend_mode_hosting()) {
-		const std::string code = Friend_mode_lobby_code();
-		buttons[id_open_coop]  = std::make_unique<Gamemenu_button>(this, &Gamemenu_gump::show_coop_code,
-				 code.empty() ? "Co-Op Code" : "Code: " + code, margin, yForRow(y++), preferred_button_width, 11);
+				this, &Gamemenu_gump::open_coop, "Co-Op Mode", margin, yForRow(y++), preferred_button_width, 11);
 	}
 #if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
 	if (!gwin->is_in_exult_menu()) {
@@ -211,13 +321,8 @@ void Gamemenu_gump::game_engine_options() {
 }
 
 void Gamemenu_gump::open_coop() {
-	done = true;    // Close the menu; the notice says how it went.
-	Friend_mode_open_to_coop();
-}
-
-void Gamemenu_gump::show_coop_code() {
-	done = true;    // Close the menu; the notice shows the code.
-	Friend_mode_show_lobby_code();
+	Coop_options_gump coop;
+	gumpman->do_modal_gump(&coop, Mouse::hand);
 }
 
 void Gamemenu_gump::input_options() {

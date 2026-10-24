@@ -5,13 +5,15 @@
 #include "friendnet.h"
 
 #include "friendconn.h"
+#include "sha1/sha1.h"
 
 #include <algorithm>
 #include <cstring>
 #include <iostream>
+#include <random>
 
 namespace {
-constexpr unsigned short protocol_version = 35;
+constexpr unsigned short protocol_version = 36;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -47,9 +49,16 @@ constexpr unsigned char  host_paused_packet = 39;
 // (byte 7), length and two values, then 12 bytes per chunk.
 constexpr unsigned char  text_begin_packet = 40;
 constexpr unsigned char  text_chunk_packet = 41;
+// The host asks for the password (a random number in bytes 12-19); the
+// guest answers with a proof made from it and the password (bytes 12-19),
+// so the password itself never goes over the connection.
+constexpr unsigned char  password_packet        = 42;
+constexpr unsigned char  password_answer_packet = 43;
+constexpr unsigned char  kicked_packet          = 44;
 constexpr std::size_t    text_chunk_size   = 12;
 constexpr uint32         reject_mismatch   = 1;
 constexpr uint32         reject_full       = 2;
+constexpr uint32         reject_password   = 3;
 constexpr uint32         max_blob_size = 16 * 1024 * 1024;
 constexpr std::size_t    blob_chunk_size = 16 * 1024;
 
@@ -94,36 +103,73 @@ Friend_mode_session::~Friend_mode_session() {
 	stop();
 }
 
-bool Friend_mode_session::start_host(int port, uint32 game_code, const std::string& lobby_url) {
+bool Friend_mode_session::start_host(
+		int port, uint32 game_code, const std::string& lobby_url, std::unique_ptr<Friend_lobby_host> opened) {
 	stop();
 	connection_lost = false;
 	local_game_code = game_code;
-	listener        = Friend_tcp_listen(port);
-	if (!listener) {
-		std::cerr << "Friend Mode: could not listen on port " << port << std::endl;
+	if (port > 0) {
+		open_tcp(port);
 	}
 	lobby_failure.clear();
-	if (!lobby_url.empty()) {
-		lobby = Friend_rtc_host(lobby_url, lobby_failure);
+	if (opened) {
+		lobby = std::move(opened);
+	} else if (!lobby_url.empty()) {
+		open_lobby(lobby_url);
 	}
 	if (!listener && !lobby) {
 		return false;
 	}
 	session_mode = Mode::host;
-	if (listener) {
+	return true;
+}
+
+bool Friend_mode_session::open_tcp(int port) {
+	if (!listener) {
+		listener = Friend_tcp_listen(port);
+		if (!listener) {
+			std::cerr << "Friend Mode: could not listen on port " << port << std::endl;
+			return false;
+		}
 		std::cout << "Friend Mode: host listening on port " << port << std::endl;
 	}
-	if (lobby) {
+	return true;
+}
+
+void Friend_mode_session::close_tcp() {
+	if (listener) {
+		std::cout << "Friend Mode: no longer listening for guests" << std::endl;
+	}
+	listener.reset();
+}
+
+bool Friend_mode_session::open_lobby(const std::string& lobby_url) {
+	if (!lobby) {
+		lobby_failure.clear();
+		lobby = Friend_rtc_host(lobby_url, lobby_failure);
+		if (!lobby) {
+			return false;
+		}
 		std::cout << "Friend Mode: asking " << lobby_url << " for a code" << std::endl;
 	}
 	return true;
 }
 
+void Friend_mode_session::close_lobby() {
+	if (lobby) {
+		std::cout << "Friend Mode: lobby code closed" << std::endl;
+	}
+	lobby.reset();
+	lobby_failure.clear();
+}
+
 bool Friend_mode_session::start_guest(
 		const std::string& address, int port, uint32 game_code, const std::string& lobby_url) {
 	stop();
-	connection_lost = false;
-	full_rejection  = false;
+	connection_lost    = false;
+	full_rejection     = false;
+	password_rejection = false;
+	kicked             = false;
 	link_problem.clear();
 	local_game_code = game_code;
 	std::unique_ptr<Friend_connection> link;
@@ -160,6 +206,49 @@ std::string Friend_mode_session::lobby_code() const {
 
 std::string Friend_mode_session::lobby_problem() const {
 	return lobby ? lobby->problem() : lobby_failure;
+}
+
+void Friend_mode_session::accept_guest(Peer& peer) {
+	peer.handshake_complete = true;
+	peer.player             = next_player++;
+	unsigned char* accepted = stage_packet(accepted_packet);
+	write_u32(accepted + 12, static_cast<uint32>(peer.player));
+	peer.outgoing.insert(peer.outgoing.end(), staged.begin(), staged.end());
+	staged.clear();
+	send_identity(peer);
+	std::cout << "Friend Mode: guest accepted as player " << peer.player << std::endl;
+}
+
+// The first 8 bytes of SHA-1 over the host's number, the game and the
+// password: what a guest answers with, and what the host expects.
+std::array<unsigned char, 8> Friend_mode_session::password_proof(const std::array<unsigned char, 8>& nonce) const {
+	std::vector<unsigned char> input(nonce.begin(), nonce.end());
+	unsigned char              game[4];
+	write_u32(game, local_game_code);
+	input.insert(input.end(), game, game + 4);
+	input.insert(input.end(), session_password.begin(), session_password.end());
+	const auto                   hash = sha1::calc(input.data(), static_cast<int>(input.size()));
+	std::array<unsigned char, 8> proof{};
+	std::copy_n(hash.begin(), proof.size(), proof.begin());
+	return proof;
+}
+
+void Friend_mode_session::kick(int player) {
+	if (session_mode != Mode::host) {
+		return;
+	}
+	for (auto& peer : peers) {
+		if (peer->player == player && peer->link && !peer->kicking) {
+			if (!peer->name.empty()) {
+				kicked_names.insert(peer->name);
+			}
+			stage_packet(kicked_packet);
+			deliver(player);
+			peer->kicking    = true;
+			peer->kick_close = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+			std::cout << "Friend Mode: removing player " << player << std::endl;
+		}
+	}
 }
 
 Friend_mode_session::Peer* Friend_mode_session::host_peer() const {
@@ -681,7 +770,15 @@ void Friend_mode_session::handle_text(Peer& peer) {
 	const bool host = session_mode == Mode::host;
 	switch (peer.text_kind) {
 	case Text_kind::identity:
-		peer.name   = printable(peer.text);
+		peer.name = printable(peer.text);
+		if (host && kicked_names.count(peer.name)) {
+			std::cout << "Friend Mode: " << peer.name << " was removed earlier; turned away" << std::endl;
+			stage_packet(kicked_packet);
+			deliver(peer.player);
+			peer.kicking    = true;
+			peer.kick_close = std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+			break;
+		}
 		peer.joined = true;
 		joined_players.push_back(peer.player);
 		std::cout << "Friend Mode: connected player " << peer.name << std::endl;
@@ -754,15 +851,19 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 	if (host && type == hello_packet && valid_header) {
 		const bool matches = version == protocol_version && game == local_game_code;
 		const auto guests  = static_cast<int>(guest_players().size());
-		if (matches && guests < guest_limit) {
-			peer.handshake_complete = true;
-			peer.player             = next_player++;
-			unsigned char* accepted = stage_packet(accepted_packet);
-			write_u32(accepted + 12, static_cast<uint32>(peer.player));
+		if (matches && guests < guest_limit && !session_password.empty()) {
+			// First the password: ask, with a number only this try uses.
+			std::random_device random;
+			for (auto& byte : peer.nonce) {
+				byte = static_cast<unsigned char>(random());
+			}
+			peer.awaiting_password = true;
+			unsigned char* ask     = stage_packet(password_packet);
+			std::memcpy(ask + 12, peer.nonce.data(), peer.nonce.size());
 			peer.outgoing.insert(peer.outgoing.end(), staged.begin(), staged.end());
 			staged.clear();
-			send_identity(peer);
-			std::cout << "Friend Mode: guest accepted as player " << peer.player << std::endl;
+		} else if (matches && guests < guest_limit) {
+			accept_guest(peer);
 		} else {
 			// The packet carries our protocol version: an older guest reads
 			// only the type.
@@ -774,14 +875,42 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 					  << ')' << std::endl;
 			close_peer(peer);
 		}
+	} else if (host && valid && type == password_answer_packet && peer.awaiting_password) {
+		peer.awaiting_password = false;
+		const auto want        = password_proof(peer.nonce);
+		if (std::memcmp(buffer + 12, want.data(), want.size()) == 0
+			&& static_cast<int>(guest_players().size()) < guest_limit) {
+			accept_guest(peer);
+		} else {
+			write_u32(stage_packet(rejected_packet) + 12, reject_password);
+			peer.outgoing.insert(peer.outgoing.end(), staged.begin(), staged.end());
+			staged.clear();
+			flush(peer);
+			std::cerr << "Friend Mode: guest rejected (wrong password)" << std::endl;
+			close_peer(peer);
+		}
+	} else if (guest && valid && type == password_packet && game == local_game_code) {
+		std::array<unsigned char, 8> nonce{};
+		std::memcpy(nonce.data(), buffer + 12, nonce.size());
+		const auto     proof  = password_proof(nonce);
+		unsigned char* answer = stage_packet(password_answer_packet);
+		std::memcpy(answer + 12, proof.data(), proof.size());
+		peer.outgoing.insert(peer.outgoing.end(), staged.begin(), staged.end());
+		staged.clear();
+	} else if (guest && valid && type == kicked_packet) {
+		kicked = true;
+		std::cout << "Friend Mode: the host removed us" << std::endl;
+		close_peer(peer);
 	} else if (guest && valid && type == accepted_packet && game == local_game_code) {
 		peer.handshake_complete = true;
 		local_player_id         = static_cast<int>(second);
 		send_identity(peer);
 		std::cout << "Friend Mode: session accepted by host as player " << local_player_id << std::endl;
 	} else if (guest && valid_header && type == rejected_packet) {
-		full_rejection = version == protocol_version && second == reject_full;
-		std::cerr << "Friend Mode: the host refused us" << (full_rejection ? " (game full)" : "") << std::endl;
+		full_rejection     = version == protocol_version && second == reject_full;
+		password_rejection = version == protocol_version && second == reject_password;
+		std::cerr << "Friend Mode: the host refused us"
+				  << (full_rejection ? " (game full)" : password_rejection ? " (password)" : "") << std::endl;
 		close_peer(peer);
 	} else if (ready && type == blob_packet) {
 		const uint32 length = game;
@@ -1000,8 +1129,16 @@ void Friend_mode_session::poll() {
 			}
 		}
 	}
+	const auto now = std::chrono::steady_clock::now();
 	for (auto& peer : peers) {
 		flush(*peer);
+		if (peer->kicking) {
+			// Kicked: read nothing more; close once the notice went out.
+			if (peer->link && (peer->outgoing.empty() || now > peer->kick_close)) {
+				close_peer(*peer);
+			}
+			continue;
+		}
 		receive(*peer);
 	}
 	// Forget closed connections, and anything they sent that is still unread.
@@ -1058,6 +1195,7 @@ void Friend_mode_session::stop() {
 	peers.clear();
 	listener.reset();
 	lobby.reset();
+	kicked_names.clear();
 	staged.clear();
 	suggestions.clear();
 	next_player     = 1;

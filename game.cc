@@ -54,7 +54,9 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <array>
+#include <cctype>
 #include <cstdlib>
 #include <cstring>
 #include <optional>
@@ -626,7 +628,8 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 	bool play     = false;
 	bool fadeout  = true;
 	bool exitmenu = false;
-	bool coop_menu = false;    // Showing the Co-Op Mode choices.
+	bool coop_menu      = false;    // Showing the Co-Op Mode choices.
+	int  coop_selection = 0;        // Kept while the Co-Op list is rebuilt.
 	// Co-Op Mode entries are text, in the Exult menu's fonts.
 	const char* exult_fonts = BUNDLE_CHECK(BUNDLE_EXULT_FLX, EXULT_FLX);
 	if (!fontManager.get_font("CREDITS_FONT")) {
@@ -642,8 +645,12 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 		ibuf->fill8(0, gwin->get_width(), gwin->get_height() - menuy, 0, menuy);
 		gwin->show(true);
 	};
-	auto add_coop_entry = [&](const char* text, int id, int& offset) {
-		auto* entry = new MenuTextEntry(coop_font_on, coop_font, text, centerx, menuy + offset);
+	auto add_coop_entry = [&](const std::string& label, int id, int& offset) {
+		std::string text = label;
+		for (char& ch : text) {
+			ch = static_cast<char>(std::toupper(static_cast<unsigned char>(ch)));
+		}
+		auto* entry = new MenuTextEntry(coop_font_on, coop_font, text.c_str(), centerx, menuy + offset);
 		entry->set_id(id);
 		menu->add_entry(entry);
 		offset += coop_font->get_text_height() + 3;
@@ -663,7 +670,14 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 				entry->set_id(7);
 				menu->add_entry(entry);
 			} else if (coop_menu) {
+				// Hosting: how guests join, what to give them (a click
+				// copies it), the password; then Join and Back.
 				add_coop_entry(Friend_mode_hosting() ? "STOP HOSTING" : "HOST A GAME", 9, offset);
+				add_coop_entry(Friend_mode_coop_by_lobby() ? "TYPE: LOBBY CODE" : "TYPE: IP ADDRESS", 11, offset);
+				if (Friend_mode_hosting()) {
+					add_coop_entry(Friend_mode_coop_details(), 12, offset);
+				}
+				add_coop_entry(Friend_mode_has_password() ? "PASSWORD: SET" : "PASSWORD: NONE", 13, offset);
 				add_coop_entry("JOIN A GAME", 7, offset);
 				add_coop_entry("BACK", 10, offset);
 			} else {
@@ -700,7 +714,13 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 				}
 			}
 			}
-			menu->set_selection(friend_guest || coop_menu ? 0 : 2);
+			menu->set_selection(friend_guest || coop_menu ? std::min(coop_selection, menu->get_count() - 1) : 2);
+			if (coop_menu && Friend_mode_hosting()) {
+				// Show the lobby code as soon as it comes.
+				menu->set_refresh([shown = Friend_mode_coop_details()]() {
+					return Friend_mode_coop_details() != shown;
+				});
+			}
 		}
 
 		bool created = false;
@@ -729,7 +749,30 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 		if (choice == -1 && coop_menu) {
 			choice = 10;    // Escape leaves the Co-Op choices.
 		}
+		if (coop_menu) {
+			coop_selection = menu->get_selection();
+		}
 		switch (choice) {
+		case MenuList::refresh_choice:    // The Co-Op details changed.
+			clear_menu_area();
+			delete menu;
+			menu = nullptr;
+			break;
+		case 11:    // Lobby code or IP address.
+			Friend_mode_set_coop_by_lobby(!Friend_mode_coop_by_lobby());
+			clear_menu_area();
+			delete menu;
+			menu = nullptr;
+			break;
+		case 12:    // The code or address: copy it.
+			Friend_mode_copy_coop_details();
+			break;
+		case 13:    // Password: its own screen.
+			menu_scene.reset();
+			Friend_mode_edit_password();
+			delete menu;
+			menu = nullptr;
+			break;
 		case -1:    // Exit
 #if defined(SDL_PLATFORM_IOS) || defined(ANDROID)
 			break;
@@ -817,14 +860,18 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			fadeout  = true;
 			break;
 		case 8:    // Co-Op Mode: host or join.
-			coop_menu = true;
+			coop_menu      = true;
+			coop_selection = 0;
 			clear_menu_area();    // The lists are different lengths.
 			delete menu;
 			menu = nullptr;
 			break;
-		case 9:    // Host a Game / Stop Hosting: then start or load as usual.
+		case 9:    // Host a Game / Stop Hosting: stay to see the code.
 			Friend_mode_set_hosting(!Friend_mode_hosting());
-			[[fallthrough]];
+			clear_menu_area();
+			delete menu;
+			menu = nullptr;
+			break;
 		case 10:    // Back from the Co-Op choices.
 			coop_menu = false;
 			clear_menu_area();

@@ -11,9 +11,11 @@
 #include "common_types.h"
 
 #include <array>
+#include <chrono>
 #include <cstddef>
 #include <deque>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -41,18 +43,47 @@ public:
 	Friend_mode_session();
 	~Friend_mode_session();
 
-	// The host listens on 'port' (TCP) and, with a lobby URL, opens a lobby
-	// code too.  A guest's 'address' is a host name or IP (TCP), or a lobby
-	// code (WebRTC through 'lobby_url').
-	bool start_host(int port, uint32 game_code, const std::string& lobby_url = {});
+	// The host is open by IP (TCP on 'port', 0 for none) or by lobby code
+	// (through 'lobby_url', or the lobby already 'opened' on the title
+	// menu, empty for none).  A guest's 'address' is a host name or IP
+	// (TCP), or a lobby code (WebRTC through 'lobby_url').
+	bool start_host(int port, uint32 game_code, const std::string& lobby_url = {},
+			std::unique_ptr<Friend_lobby_host> opened = nullptr);
 	bool start_guest(const std::string& address, int port, uint32 game_code, const std::string& lobby_url = {});
+	// Host: open or close each way in; players already in stay.
+	bool open_tcp(int port);
+	void close_tcp();
+	bool tcp_open() const {
+		return listener != nullptr;
+	}
+	bool open_lobby(const std::string& lobby_url);
+	void close_lobby();
+	bool lobby_open() const {
+		return lobby != nullptr;
+	}
 	// Host: the lobby code for guests (empty until the lobby answers), and
 	// why there is none when something went wrong.
 	std::string lobby_code() const;
 	std::string lobby_problem() const;
+	// Host: guests must give this to join (empty for none).  Guest: the
+	// password to give when the host asks.
+	void set_password(const std::string& password) {
+		session_password = password;
+	}
+	// Host: remove a guest.  They are told, and their name can't join again
+	// until hosting starts over.
+	void kick(int player);
 	// Guest: why the connection closed or never opened, when known.
 	const std::string& connection_problem() const {
 		return link_problem;
+	}
+	// Guest: the host wanted a password and ours was missing or wrong.
+	bool rejected_password() const {
+		return password_rejection;
+	}
+	// Guest: the host removed us.
+	bool was_kicked() const {
+		return kicked;
 	}
 	void set_local_player_name(const std::string& name) {
 		local_player_name = name;
@@ -244,6 +275,12 @@ private:
 		std::size_t                            sent     = 0;
 		std::deque<std::vector<unsigned char>> outgoing;
 		bool                                   handshake_complete = false;
+		// Host: waiting for the answer to the password question.
+		bool                                   awaiting_password = false;
+		std::array<unsigned char, 8>           nonce{};
+		// Host: kicked; closed once the notice has had time to go out.
+		bool                                   kicking = false;
+		std::chrono::steady_clock::time_point  kick_close;
 		bool                                   joined             = false;    // Name arrived.
 		std::string                            name;
 		// Text arriving in chunks.
@@ -274,6 +311,10 @@ private:
 	std::unique_ptr<Friend_lobby_host> lobby;
 	std::string                       link_problem;
 	std::string                       lobby_failure;    // Why the lobby never opened.
+	std::string                       session_password;
+	bool                              password_rejection = false;
+	bool                              kicked             = false;
+	std::set<std::string>             kicked_names;
 	std::vector<std::unique_ptr<Peer>> peers;
 	int                               next_player = 1;
 	int                               guest_limit = 12;
@@ -353,6 +394,8 @@ private:
 	void           flush(Peer& peer);
 	void           receive(Peer& peer);
 	void           close_peer(Peer& peer);
+	void           accept_guest(Peer& peer);
+	std::array<unsigned char, 8> password_proof(const std::array<unsigned char, 8>& nonce) const;
 	Peer*          host_peer() const;
 };
 

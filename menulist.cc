@@ -316,6 +316,9 @@ int MenuList::handle_events(Game_window* gwin) {
 	bool exit_loop = false;
 	do {
 		Delay();
+		if (refresh && refresh()) {
+			return refresh_choice;
+		}
 		const bool mouse_visible = Mouse::mouse()->is_onscreen();
 		if (mouse_visible) {
 			Mouse::mouse()->hide();

@@ -23,13 +23,38 @@ ping is off (`pingInterval` 0) and the host sends `{type:"keepalive"}`
 every 30 s instead, which the lobby ignores. (The lobby itself keeps a
 quiet connection open: checked for 5 minutes.)
 
-**Planned next (user, 2026-10-23): the Co-Op menu**, instead of long text
+**The Co-Op menu (built 2026-10-23, protocol 36)**, instead of long text
 over the game:
 
-- Type: **Lobby** or **IP**.
-- Lobby: shows the lobby code. IP: shows the address to share.
-- **Password**, optional.
-- Host: **close the lobby** and **kick players**.
+- **Title menu → Co-Op Mode:** Host a Game / Stop Hosting; **Type: Lobby
+  code / IP address** (`config/friend/join_by`); once hosting, the code
+  (asked for right away, so it shows before the game starts) or this
+  computer's address and port, which a click copies; **Password: none /
+  set** (`config/friend/password`, typed on its own screen); Join a Game;
+  Back.
+- **In the game:** one short line at the top, "Open to Code YEW-8890" or
+  "Open on port 1992", nothing in the chat log. **Escape → Co-Op Mode**:
+  hosting (Open to Co-Op), Type, the code or address with Copy, **New
+  players: Open / Closed** (closing keeps players already in; opening
+  again gives a new code), and whether a password is set.
+- **One way in at a time:** by lobby code the host doesn't also listen on
+  port 1992; by IP there is no code.
+- **Password:** Join a Game has a Password field (never saved). The host
+  sends a random number; the guest answers with the first 8 bytes of
+  SHA-1 over it, the game and the password, so the password never goes
+  over the connection. Missing or wrong: "This game needs a password" /
+  "Wrong password".
+- **Kick:** hold Tab; the host has an X by each guest, asks, then removes
+  them ("The host removed you"). That name can't rejoin until hosting
+  starts over.
+- The session test checks password and kick too (22 checks, passed).
+
+**Idea, not started (user, 2026-10-23): Private / Public.** Public games
+listed on `u7-multiplayer-lobby.xcast3d.com` (and maybe in Join a Game) to
+join without a code. Needs an acceptance step first (we don't control
+those games), ideally the host allowing each joiner, cleaned and
+length-limited listing text, listings that expire, and a check of the
+storage cost.
 
 ## What it is, in plain words
 

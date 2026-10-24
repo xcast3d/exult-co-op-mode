@@ -288,7 +288,10 @@ guest types in.
 - [ ] Windows: lobby codes in the Windows build (a recursive submodule
       checkout, `build-rtc.sh` under MSYS2, and a CA bundle shipped with the
       game); today's Windows build joins by address only.
-- [ ] Optional session password; WebRTC also encrypts the connection.
+- [x] Optional session password; WebRTC also encrypts the connection.
+      Built 2026-10-23 with the Co-Op menu (Lobby code or IP, the code or
+      address to share, close to new players) and a kick X in the Tab list;
+      see [the lobby](friend-mode/lobby.md).
 - [x] Windows build ([Windows build plan](friend-mode/windows-build.md));
       Mac and Windows have played together.
 - [ ] Mac/Windows compatibility testing and builds for release.

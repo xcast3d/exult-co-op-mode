@@ -128,6 +128,41 @@ int main(int argc, char** argv) {
 	check("a wrong code says so (" + lost.connection_problem() + ")",
 		  lost.connection_problem().find("No game") != std::string::npos);
 
+	// A password: no answer and a wrong one are refused, the right one
+	// gets in (over TCP, where a password matters most).
+	host.set_password("moonglow");
+	for (const std::string& tried : {std::string(), std::string("wrong")}) {
+		Friend_mode_session refused;
+		refused.set_password(tried);
+		refused.start_guest("127.0.0.1", port, game_code, lobby);
+		run_until({&host, &refused}, [&] { return !refused.peer_open(); }, 10);
+		check("password " + (tried.empty() ? std::string("missing") : tried) + " is refused",
+			  refused.rejected_password() && !refused.connected());
+	}
+	Friend_mode_session with_password;
+	with_password.set_local_player_name("Dupre's player");
+	with_password.set_password("moonglow");
+	with_password.start_guest("127.0.0.1", port, game_code, lobby);
+	int player = 0;
+	check("the right password gets in",
+		  run_until({&host, &with_password},
+					[&] { return with_password.connected() && host.take_peer_joined(&player); }, 10));
+
+	// Kick: told, closed, and the same name can't come back.
+	host.kick(player);
+	run_until({&host, &with_password}, [&] { return !with_password.peer_open(); }, 10);
+	check("a kicked guest is told", with_password.was_kicked());
+	Friend_mode_session again;
+	again.set_local_player_name("Dupre's player");
+	again.set_password("moonglow");
+	again.start_guest("127.0.0.1", port, game_code, lobby);
+	run_until({&host, &again}, [&] { return !again.peer_open(); }, 10);
+	check("a kicked name is turned away", again.was_kicked());
+
+	// Closing the lobby ends the code; opening again gives a new one.
+	host.close_lobby();
+	check("closing the lobby ends the code", host.lobby_code().empty() && !host.lobby_open());
+
 	std::cout << (failures ? std::to_string(failures) + " failed" : "all passed") << std::endl;
 	host.stop();
 	return failures ? 1 : 0;

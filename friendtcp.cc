@@ -7,6 +7,7 @@
 
 #include "friendconn.h"
 
+#include <algorithm>
 #include <cerrno>
 #include <cstdlib>
 #include <iostream>
@@ -15,8 +16,10 @@
 #	include <winsock2.h>
 #	include <ws2tcpip.h>
 #else
+#	include <arpa/inet.h>
 #	include <csignal>
 #	include <fcntl.h>
+#	include <ifaddrs.h>
 #	include <netdb.h>
 #	include <netinet/in.h>
 #	include <netinet/tcp.h>
@@ -191,6 +194,49 @@ private:
 	int socket;
 };
 }    // namespace
+
+std::vector<std::string> Friend_local_addresses() {
+	std::vector<std::string> found;
+	auto                     add = [&found](const in_addr& address) {
+        char text[INET_ADDRSTRLEN] = {};
+        if (inet_ntop(AF_INET, &address, text, sizeof(text)) && std::string(text).rfind("127.", 0) != 0
+            && std::find(found.begin(), found.end(), text) == found.end()) {
+            found.emplace_back(text);
+        }
+	};
+#ifdef _WIN32
+	if (!start_sockets()) {
+		return found;
+	}
+	char name[256] = {};
+	if (gethostname(name, sizeof(name)) == 0) {
+		addrinfo hints{};
+		hints.ai_family     = AF_INET;
+		addrinfo* addresses = nullptr;
+		if (getaddrinfo(name, nullptr, &hints, &addresses) == 0) {
+			for (addrinfo* current = addresses; current; current = current->ai_next) {
+				add(reinterpret_cast<sockaddr_in*>(current->ai_addr)->sin_addr);
+			}
+			freeaddrinfo(addresses);
+		}
+	}
+#else
+	ifaddrs* interfaces = nullptr;
+	if (getifaddrs(&interfaces) == 0) {
+		for (ifaddrs* current = interfaces; current; current = current->ifa_next) {
+			if (current->ifa_addr && current->ifa_addr->sa_family == AF_INET) {
+				add(reinterpret_cast<sockaddr_in*>(current->ifa_addr)->sin_addr);
+			}
+		}
+		freeifaddrs(interfaces);
+	}
+#endif
+	// Tailscale (100.64.0.0/10) after the home network's.
+	std::stable_partition(found.begin(), found.end(), [](const std::string& address) {
+		return address.rfind("100.", 0) != 0;
+	});
+	return found;
+}
 
 std::unique_ptr<Friend_listener> Friend_tcp_listen(int port) {
 	if (!start_sockets()) {
