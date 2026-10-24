@@ -13,10 +13,19 @@ routes = [
 name = "LOBBY"
 class_name = "Lobby"
 
+# Each internet address's open codes (at most 3 at once).
+[[durable_objects.bindings]]
+name = "HOSTS"
+class_name = "Hosts"
+
 # SQLite-backed Durable Objects work on Workers' free plan.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Lobby"]
+
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["Hosts"]
 
 # Per-address rate limits (Workers Rate Limiting): opening games, and
 # joining (which is what someone guessing codes would do).  The period is

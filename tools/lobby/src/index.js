@@ -3,7 +3,9 @@
  * connection details (offers, answers, ICE candidates) between a host and
  * its guests, then steps aside.  It never carries game traffic.
  *
- * One Durable Object per code holds the host's WebSocket and its guests'.
+ * One Durable Object per code holds the host's WebSocket and its guests',
+ * hibernating between messages (so an open code costs almost nothing while
+ * nothing is said); one more per internet address counts its open codes.
  *
  *   wss://<lobby>/host        A host opens a game.  First message from the
  *                             lobby: {type:"code", code, ice}.
@@ -30,6 +32,7 @@
  *   (32 x 9000), and the rate limits below make guessing one slow.
  * - Per address: opening games and joining are rate limited (the
  *   HOST_LIMITER and JOIN_LIMITER bindings in wrangler.toml).
+ * - Per address: at most 3 codes open at once (the Hosts object).
  * - Per connection: 16 KB a message, 240 a minute; a guest's lobby
  *   connection ends after 60 s (it needs a few to connect); codes end when
  *   the host leaves or after 12 hours.
@@ -55,6 +58,11 @@ const CODE_PATTERN = /^[A-Z]{2,12}-[0-9]{2,4}$/;   // Four digits now; two in ol
 const MAX_MESSAGE_BYTES = 16 * 1024;  // An SDP is a few kilobytes.
 const MAX_MESSAGES_PER_MINUTE = 240;  // Per socket: candidates come in bursts.
 const GAME_HOURS = 12;              // A code lasts this long at most.
+const CODES_PER_ADDRESS = 3;        // Open at once, from one internet address.
+// The host's keep-alive, answered without waking the object (see
+// friendrtc.cc: the game sends exactly this).
+const KEEPALIVE = '{"type":"keepalive"}';
+const KEEPALIVE_ANSWER = '{"type":"keepalive_ok"}';
 
 function json(ws, message) {
 	try {
@@ -193,14 +201,23 @@ export default {
 			if (!(await allowed(env.HOST_LIMITER, request))) {
 				return new Response("Too many games from this address; wait a minute", { status: 429 });
 			}
+			const address = request.headers.get("CF-Connecting-IP") || "unknown";
 			// A free code: a few tries, in case one is taken.
 			for (let tries = 0; tries < 8; ++tries) {
 				const code = newCode();
 				const lobby = env.LOBBY.get(env.LOBBY.idFromName(code));
 				const probe = await lobby.fetch(`https://lobby/taken?code=${code}`);
-				if ((await probe.text()) === "free") {
-					return lobby.fetch(`https://lobby/host?code=${code}`, request);
+				if ((await probe.text()) !== "free") {
+					continue;
 				}
+				// Count it against this address (at most CODES_PER_ADDRESS).
+				const hosts = env.HOSTS.get(env.HOSTS.idFromName(address));
+				const room = await hosts.fetch(`https://hosts/open?code=${code}`);
+				if ((await room.text()) !== "ok") {
+					return new Response("Too many games open from this address", { status: 429 });
+				}
+				const params = new URLSearchParams({ code, address });
+				return lobby.fetch(`https://lobby/host?${params}`, request);
 			}
 			return new Response("No free code; try again", { status: 503 });
 		}
@@ -220,129 +237,257 @@ export default {
 	},
 };
 
-// One game: its host and guests.
+// One game: its host and guests.  Hibernating: the object sleeps between
+// messages and forgets its memory, so what it needs is kept in storage
+// (the code, the ICE servers, when it ends) and with each connection (who
+// it is, its message count).  A sleeping object wakes in milliseconds when
+// a message comes.
 export class Lobby {
 	constructor(state, env) {
 		this.state = state;
 		this.env = env;
-		this.code = null;
-		this.host = null;          // WebSocket.
-		this.guests = new Map();   // id -> WebSocket.
-		this.nextGuest = 1;
-		this.ice = null;
-		this.expires = 0;
+		this.state.setWebSocketAutoResponse(new WebSocketRequestResponsePair(KEEPALIVE, KEEPALIVE_ANSWER));
+	}
+
+	host() {
+		return this.state.getWebSockets("host")[0] || null;
+	}
+
+	guest(id) {
+		return this.state.getWebSockets(`guest-${id}`)[0] || null;
+	}
+
+	guests() {
+		return this.state.getWebSockets("guest");
+	}
+
+	async game() {
+		return (await this.state.storage.get("game")) || null;
 	}
 
 	async fetch(request) {
 		const url = new URL(request.url);
+		const game = await this.game();
 		if (url.pathname === "/taken") {
-			return new Response(this.host && Date.now() < this.expires ? "taken" : "free");
+			return new Response(this.host() && game && Date.now() < game.expires ? "taken" : "free");
 		}
-		const pair = new WebSocketPair();
-		const [client, server] = Object.values(pair);
-		server.accept();
+		const [client, server] = Object.values(new WebSocketPair());
 		if (url.pathname === "/host") {
-			await this.openGame(server, url.searchParams.get("code"));
+			await this.openGame(server, url.searchParams.get("code"), url.searchParams.get("address"));
 		} else {
-			this.addGuest(server);
+			await this.addGuest(server, game);
 		}
 		return new Response(null, { status: 101, webSocket: client });
 	}
 
-	async openGame(ws, code) {
-		this.code = code;
-		this.host = ws;
-		this.expires = Date.now() + GAME_HOURS * 3600 * 1000;
-		this.ice = await iceServers(this.env);
-		json(ws, { type: "code", code, ice: this.ice, protocol: PROTOCOL });
-		this.watch(ws, (message) => {
-			const data = signalData(message.data);
-			if (message.type === "signal" && data && this.guests.has(message.to)) {
-				json(this.guests.get(message.to), { type: "signal", data });
-			} else if (message.type === "kick" && this.guests.has(message.to)) {
-				this.guests.get(message.to).close(1000, "Removed by the host");
-			}
-		}, () => {
-			// The host left: the game and its code are gone.
-			this.host = null;
-			for (const guest of this.guests.values()) {
-				json(guest, { type: "closed" });
-				guest.close(1000, "The host left");
-			}
-			this.guests.clear();
-		});
+	async openGame(ws, code, address) {
+		const game = {
+			code,
+			address,
+			expires: Date.now() + GAME_HOURS * 3600 * 1000,
+			ice: await iceServers(this.env),
+			nextGuest: 1,
+		};
+		await this.state.storage.put("game", game);
+		this.state.acceptWebSocket(ws, ["host"]);
+		ws.serializeAttachment({ role: "host", windowStart: Date.now(), count: 0 });
+		json(ws, { type: "code", code, ice: game.ice, protocol: PROTOCOL });
 	}
 
-	addGuest(ws) {
-		if (!this.host || Date.now() >= this.expires) {
-			json(ws, { type: "error", message: "No game with that code" });
-			ws.close(1000, "No such game");
+	async addGuest(ws, game) {
+		const refuse = (message, reason) => {
+			ws.accept();
+			json(ws, { type: "error", message });
+			ws.close(1000, reason);
+		};
+		const host = this.host();
+		if (!host || !game || Date.now() >= game.expires) {
+			refuse("No game with that code", "No such game");
 			return;
 		}
-		if (this.guests.size >= MAX_GUESTS) {
-			json(ws, { type: "error", message: "The game is full" });
-			ws.close(1000, "Full");
+		if (this.guests().length >= MAX_GUESTS) {
+			refuse("The game is full", "Full");
 			return;
 		}
-		const id = this.nextGuest++;
-		this.guests.set(id, ws);
+		const id = game.nextGuest++;
+		await this.state.storage.put("game", game);
+		this.state.acceptWebSocket(ws, ["guest", `guest-${id}`]);
+		const until = Date.now() + GUEST_SECONDS * 1000;
+		ws.serializeAttachment({ role: "guest", id, until, windowStart: Date.now(), count: 0 });
 		// Long enough to connect; then the slot is free again, so codes
 		// passed around can't fill a game with idle lobby connections.
-		const timer = setTimeout(() => {
-			json(ws, { type: "error", message: "Took too long to connect" });
-			ws.close(1000, "Too long");
-		}, GUEST_SECONDS * 1000);
-		json(ws, { type: "joined", id, ice: this.ice, protocol: PROTOCOL });
-		json(this.host, { type: "guest", id });
-		this.watch(ws, (message) => {
-			const data = signalData(message.data);
-			if (message.type === "signal" && data && this.host) {
-				json(this.host, { type: "signal", from: id, data });
-			}
-		}, () => {
-			clearTimeout(timer);
-			this.guests.delete(id);
-			if (this.host) {
-				json(this.host, { type: "left", id });
-			}
-		});
+		const alarm = await this.state.storage.getAlarm();
+		if (!alarm || alarm > until) {
+			await this.state.storage.setAlarm(until);
+		}
+		json(ws, { type: "joined", id, ice: game.ice, protocol: PROTOCOL });
+		json(host, { type: "guest", id });
 	}
 
-	// Messages in, with size and rate limits; 'gone' once it closes.
-	watch(ws, onMessage, gone) {
-		let windowStart = Date.now();
-		let count = 0;
-		let closed = false;
-		const finish = () => {
-			if (!closed) {
-				closed = true;
-				gone();
+	// Guests that took too long: closed, and the next alarm set.
+	async alarm() {
+		const now = Date.now();
+		let next = 0;
+		for (const ws of this.guests()) {
+			const who = ws.deserializeAttachment() || {};
+			if (who.until <= now) {
+				json(ws, { type: "error", message: "Took too long to connect" });
+				this.closeGuest(ws, who, "Too long");
+			} else if (!next || who.until < next) {
+				next = who.until;
 			}
-		};
-		ws.addEventListener("message", (event) => {
-			const now = Date.now();
-			if (now - windowStart > 60000) {
-				windowStart = now;
-				count = 0;
+		}
+		if (next) {
+			await this.state.storage.setAlarm(next);
+		}
+	}
+
+	// Messages in, with size and rate limits.
+	async webSocketMessage(ws, data) {
+		const who = ws.deserializeAttachment() || {};
+		const now = Date.now();
+		if (now - who.windowStart > 60000) {
+			who.windowStart = now;
+			who.count = 0;
+		}
+		who.count = (who.count || 0) + 1;
+		ws.serializeAttachment(who);
+		if (who.count > MAX_MESSAGES_PER_MINUTE || typeof data !== "string" || data.length > MAX_MESSAGE_BYTES) {
+			json(ws, { type: "error", message: "Too much" });
+			ws.close(1008, "Too much");
+			await this.gone(ws, who);
+			return;
+		}
+		let message;
+		try {
+			message = JSON.parse(data);
+		} catch {
+			return;
+		}
+		if (!message || typeof message !== "object") {
+			return;
+		}
+		const signal = signalData(message.data);
+		if (who.role === "host") {
+			const guest = Number.isInteger(message.to) ? this.guest(message.to) : null;
+			if (message.type === "signal" && signal && guest) {
+				json(guest, { type: "signal", data: signal });
+			} else if (message.type === "kick" && guest) {
+				this.closeGuest(guest, guest.deserializeAttachment() || {}, "Removed by the host");
 			}
-			if (++count > MAX_MESSAGES_PER_MINUTE || typeof event.data !== "string"
-				|| event.data.length > MAX_MESSAGE_BYTES) {
-				json(ws, { type: "error", message: "Too much" });
-				ws.close(1008, "Too much");
-				finish();
-				return;
+		} else if (who.role === "guest") {
+			const host = this.host();
+			if (message.type === "signal" && signal && host) {
+				json(host, { type: "signal", from: who.id, data: signal });
 			}
-			let message;
-			try {
-				message = JSON.parse(event.data);
-			} catch {
-				return;
+		}
+	}
+
+	async webSocketClose(ws, code) {
+		try {
+			ws.close(code === 1005 ? 1000 : code, "Closed");    // Finish the closing handshake.
+		} catch {
+			// Already closed.
+		}
+		await this.gone(ws, ws.deserializeAttachment() || {});
+	}
+
+	async webSocketError(ws) {
+		await this.gone(ws, ws.deserializeAttachment() || {});
+	}
+
+	// Close a guest from here, telling the host once.
+	closeGuest(ws, who, reason) {
+		if (who.gone) {
+			return;
+		}
+		who.gone = true;
+		ws.serializeAttachment(who);
+		ws.close(1000, reason);
+		this.guestGone(who.id);
+	}
+
+	guestGone(id) {
+		const host = this.host();
+		if (host) {
+			json(host, { type: "left", id });
+		}
+	}
+
+	// A connection ended.  The host leaving ends the game and its code.
+	async gone(ws, who) {
+		if (who.gone) {
+			return;    // Already handled (closed by us, then the close event).
+		}
+		who.gone = true;
+		try {
+			ws.serializeAttachment(who);
+		} catch {
+			// Closed already.
+		}
+		if (who.role === "guest") {
+			this.guestGone(who.id);
+			return;
+		}
+		if (who.role !== "host") {
+			return;
+		}
+		for (const guest of this.guests()) {
+			json(guest, { type: "closed" });
+			guest.close(1000, "The host left");
+		}
+		const game = await this.game();
+		await this.state.storage.deleteAll();
+		if (game && game.address) {
+			const hosts = this.env.HOSTS.get(this.env.HOSTS.idFromName(game.address));
+			await hosts.fetch(`https://hosts/close?code=${encodeURIComponent(game.code)}`);
+		}
+	}
+}
+
+// One internet address: its open codes (and when each would end anyway),
+// so one address can't hold more than CODES_PER_ADDRESS at once.
+export class Hosts {
+	constructor(state, env) {
+		this.state = state;
+		this.env = env;
+	}
+
+	async fetch(request) {
+		const url = new URL(request.url);
+		const code = url.searchParams.get("code") || "";
+		const now = Date.now();
+		const open = (await this.state.storage.get("open")) || {};
+		for (const [each, expires] of Object.entries(open)) {
+			if (expires <= now) {
+				delete open[each];
 			}
-			if (message && typeof message === "object") {
-				onMessage(message);
+		}
+		if (url.pathname === "/open") {
+			if (Object.keys(open).length >= CODES_PER_ADDRESS) {
+				// Codes whose host went without a goodbye (a lobby
+				// redeploy, say) don't count: ask each.
+				for (const each of Object.keys(open)) {
+					const lobby = this.env.LOBBY.get(this.env.LOBBY.idFromName(each));
+					const probe = await lobby.fetch(`https://lobby/taken?code=${each}`);
+					if ((await probe.text()) === "free") {
+						delete open[each];
+					}
+				}
 			}
-		});
-		ws.addEventListener("close", finish);
-		ws.addEventListener("error", finish);
+			if (Object.keys(open).length >= CODES_PER_ADDRESS) {
+				await this.state.storage.put("open", open);
+				return new Response("full");
+			}
+			open[code] = now + GAME_HOURS * 3600 * 1000;
+		} else if (url.pathname === "/close") {
+			delete open[code];
+		}
+		if (Object.keys(open).length) {
+			await this.state.storage.put("open", open);
+		} else {
+			await this.state.storage.deleteAll();
+		}
+		return new Response("ok");
 	}
 }

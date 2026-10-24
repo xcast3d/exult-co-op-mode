@@ -121,7 +121,10 @@ player identity are not worth more work for a co-op game among friends.
 
 ### Next
 
-- **Lobby: hibernation and a cap on codes.** Each open code is a Durable
+- **Lobby: hibernation and a cap on codes** (built and deployed
+  2026-10-24: 22 smoke checks and the session test pass against the live
+  lobby, a quiet code held through its sleep, and a guest that never
+  connects is let go at 60 s). Each open code is a Durable
   Object, and today it is billed the whole time the host is connected
   (`server.accept()`). Cloudflare's free plan gives 100,000 requests and
   13,000 GB-s of duration a day (reset at 00:00 UTC); at 128 MB an object

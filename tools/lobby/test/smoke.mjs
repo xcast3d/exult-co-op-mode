@@ -127,6 +127,28 @@ try {
 	const asked = await fetch(base.replace(/^ws/, "http") + "/ip");
 	check("the caller's own address is given", asked.ok && (await asked.text()).endsWith("\n"));
 
+	// The host's keep-alive is answered (without waking the game).
+	host.send('{"type":"keepalive"}');
+	check("the keep-alive is answered", (await host.next("keepalive_ok")).type === "keepalive_ok");
+
+	// At most three codes open from one address: this host and two more,
+	// then a fourth is refused until one closes.
+	const more = [await open("/host"), await open("/host")];
+	await Promise.all(more.map((ws) => ws.next("code")));
+	const fourth = await new Promise((resolve) => {
+		const ws = new WebSocket(base + "/host");
+		ws.addEventListener("open", () => resolve(ws));
+		ws.addEventListener("error", () => resolve(null));
+	});
+	check("a fourth code from one address is refused", fourth === null);
+	more[0].close();
+	await more[0].closed;
+	await new Promise((r) => setTimeout(r, 300));
+	const again = await open("/host");
+	check("closing one makes room again", typeof (await again.next("code")).code === "string");
+	again.close();
+	more[1].close();
+
 	// A guest leaving is told to the host.
 	guest2.close();
 	check("host is told when a guest leaves", (await host.next("left")).id === 2);
