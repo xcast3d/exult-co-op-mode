@@ -28,7 +28,7 @@ they go on to the next, then "No target", then round again.
 | Loot | on | takes into the pack | everything the game calls a weapon, armour or ammunition, plus the list below |
 | Decor | off | takes | anything not in another group |
 | Furniture | off | uses (Shift: picks up) | the list below |
-| Doors, hidden walls, lamps | off | uses | doors, secret walls (828, 845), shutters, sconces, curtains, lamp posts. Off by default: with it on, E finds secret walls, which Black Gate means to be found by looking |
+| Doors, hidden walls, lamps | on | uses | doors, secret walls (828, 845), shutters, sconces, curtains, lamp posts. On by default since 2026-10-24 (was off: with it on, E finds secret walls, which Black Gate means to be found by looking) |
 | Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture). Decor is what has no use (2026-10-23) |
 | Signs, plaques, graves | on | reads | sign (379), plaque (820), tombstone (715); picture signs (360, 361) have nothing to read |
 

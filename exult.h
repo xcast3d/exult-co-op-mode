@@ -75,7 +75,7 @@ void Friend_mode_note_drag_put_back();
 // (a dropped stack that merged into another is left detached).
 void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container, bool whole);
 
-// Game Input option "WASD movement" (config/gameplay/wasd_movement, off by
+// Game Input option "WASD movement" (config/gameplay/wasd_movement, on by
 // default): W, A, S and D walk (two at once diagonally), and Shift with one
 // of them does what the key alone did (Shift+W the watch, Shift+S Save).
 extern bool Friend_wasd_movement;
@@ -174,6 +174,9 @@ bool Friend_mode_lead_talk_to_merchant(Actor* npc);
 bool Friend_mode_is_held(const Actor* actor);
 // Guest: ask the host to use a door or other guest-usable object.
 void Friend_mode_request_object_use(Game_object* object);
+// A door opened by walking into it (WASD, arrow keys) closes once the
+// walker is through and the doorway is clear (gamewin.cc); every frame.
+void Friend_close_door_behind();
 // Items guests may use: food, potions, the bucket and pools of water on
 // their own companion; keys and lockpicks on a door or chest they pick; the
 // gavel on anything in reach.  'frame' matters for some shapes (the gavel

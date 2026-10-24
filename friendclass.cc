@@ -73,7 +73,7 @@
 using std::cout;
 using std::endl;
 
-bool Friend_class_enabled       = false;
+bool Friend_class_enabled       = true;
 int  Friend_class_bar_position  = friend_bar_above_status;
 bool Friend_class_show_ranges   = true;
 int  Friend_class_icon_style    = friend_icons_parchment;
@@ -4043,7 +4043,7 @@ int Friend_hud_bottom_y() {
 }
 
 void Friend_class_load_settings() {
-	config->value("config/friend/class/enabled", Friend_class_enabled, false);
+	config->value("config/friend/class/enabled", Friend_class_enabled, true);
 	config->value("config/friend/class/bar_position", Friend_class_bar_position, friend_bar_above_status);
 	config->value("config/friend/class/show_ranges", Friend_class_show_ranges, true);
 	config->value("config/friend/class/ai", Friend_class_ai, true);

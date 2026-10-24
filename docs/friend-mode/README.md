@@ -233,7 +233,7 @@ Class System boxes aren't ticked). See "Class System" in the
   draws at the HUD's scale like the shortcut bar), and an `aim` argument
   for `Spellbook_object::do_spell` (the spell bar's pick answers the
   crosshair).
-- **Game menu → Class System:** Enable (off), Skill bar position (above the
+- **Game menu → Class System:** Enable (on by default since 2026-10-24), Skill bar position (above the
   status bar, four corners), Show skill ranges, Skills on a foe (Ask /
   Auto, 2026-10-23), Class AI, Require class
   items (off; no items exist yet).
@@ -358,7 +358,7 @@ Planned as Phase 10, after the Phase 8 release (see the brief's roadmap).
   Avatar picks. New text message `Text_kind::suggestion`; the host now
   reads guests' messages while waiting for a click (`Get_click`), since
   its main loop is not running during a conversation.
-- **WASD movement** (Game Input → "WASD movement", off by default, kept
+- **WASD movement** (Game Input → "WASD movement", on by default since 2026-10-24, kept
   in the config). W, A, S, D walk like the arrow keys, two at once
   diagonally; Shift with one of them does what the key alone did
   (Shift+W the watch, Shift+S Save/Restore). Guests walk through the

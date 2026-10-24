@@ -21,7 +21,7 @@
 #include <algorithm>
 #include <array>
 
-bool Friend_minimap_enabled = false;
+bool Friend_minimap_enabled = true;
 bool Friend_minimap_large   = false;
 
 namespace {

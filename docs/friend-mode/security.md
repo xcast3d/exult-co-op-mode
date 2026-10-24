@@ -165,8 +165,9 @@ player identity are not worth more work for a co-op game among friends.
 - **By IP, nothing is encrypted:** chat and the world travel as plain
   text, and someone watching could try passwords offline against what they
   saw (a long password helps). Lobby codes are encrypted.
-- **The host's password is kept as plain text** in `exult.cfg` on the
-  host's computer.
+- **The host's password is never saved** (since 2026-10-24): it lasts
+  while Exult runs, so each session starts with none. A password saved in
+  `exult.cfg` by an older build is erased at startup.
 - **A name is not an identity:** a kicked player can come back under
   another name (unless there is a password). An IP address wouldn't do
   better: a VPN changes it, and it would block people sharing one home

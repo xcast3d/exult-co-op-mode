@@ -28,8 +28,8 @@ user's test; protocol 36):**
 
 - **Title menu → Co-Op Mode:** HOST GAME, JOIN GAME, BACK.
   - **HOST GAME:** TYPE: LOBBY CODE / IP ADDRESS (`config/friend/join_by`),
-    PASSWORD: NONE / SET (typed on its own screen,
-    `config/friend/password`), JOURNEY ONWARD (loads the game as Journey
+    PASSWORD: NONE / SET (typed on its own screen; kept only while Exult
+    runs, never saved), JOURNEY ONWARD (loads the game as Journey
     Onward does, open to Co-Op), BACK. The code is given once the game has
     started.
   - **JOIN GAME:** Your Name, Code/IP, Password (never saved), then JOIN

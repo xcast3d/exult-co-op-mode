@@ -6030,7 +6030,7 @@ bool Friend_mode_is_guest() {
 
 // Keyboard play options (exult.h): WASD movement (Game Input) and the
 // Target System (its own options page).  Each machine keeps its own.
-bool                            Friend_wasd_movement  = false;
+bool                            Friend_wasd_movement  = true;
 bool                            Friend_running        = false;
 bool                            Friend_keyboard_targeting = true;
 bool                            Friend_targeting_circle      = true;
@@ -6038,7 +6038,7 @@ bool                            Friend_targeting_party       = true;
 bool                            Friend_targeting_loot        = true;
 bool                            Friend_targeting_decor       = false;
 bool                            Friend_targeting_furniture   = false;
-bool                            Friend_targeting_interactive = false;
+bool                            Friend_targeting_interactive = true;
 bool                            Friend_targeting_levers      = true;
 bool                            Friend_targeting_signs       = true;
 bool                            Friend_sort_key              = true;
@@ -6052,7 +6052,7 @@ void Friend_targeting_load_settings() {
 	config->value("config/gameplay/targeting/loot", Friend_targeting_loot, true);
 	config->value("config/gameplay/targeting/decor", Friend_targeting_decor, false);
 	config->value("config/gameplay/targeting/furniture", Friend_targeting_furniture, false);
-	config->value("config/gameplay/targeting/doors_and_lamps", Friend_targeting_interactive, false);
+	config->value("config/gameplay/targeting/doors_and_lamps", Friend_targeting_interactive, true);
 	config->value("config/gameplay/targeting/levers", Friend_targeting_levers, true);
 	config->value("config/gameplay/targeting/signs", Friend_targeting_signs, true);
 	config->value("config/gameplay/smart_placement", Gump::smart_placement, true);
@@ -6150,10 +6150,21 @@ bool Friend_mode_coop_by_lobby() {
 	return type != "ip" && !Friend_mode_lobby_url().empty();
 }
 
+// Host: the password guests must give (empty for none), for as long as
+// Exult runs; never saved, so a new session starts without one.
+static std::string friend_host_password;
+
 static std::string Friend_mode_password() {
-	std::string password;
-	config->value("config/friend/password", password, "");
-	return password;
+	return friend_host_password;
+}
+
+// Older builds kept the host's password in exult.cfg: drop it.
+static void Friend_mode_forget_saved_password() {
+	std::string saved;
+	config->value("config/friend/password", saved, "");
+	if (!saved.empty()) {
+		config->remove("config/friend/password", true);
+	}
 }
 
 bool Friend_mode_has_password() {
@@ -6171,10 +6182,9 @@ void Friend_mode_set_hosting(bool on) {
 	friend_joining_closed = false;
 }
 
-// Host: the password guests must give (empty for none), kept in exult.cfg
-// on this computer only.  Takes effect for the next guest.
+// Host: set the password; takes effect for the next guest.
 void Friend_mode_set_password(const std::string& password) {
-	config->set("config/friend/password", password, true);
+	friend_host_password = password;
 	friend_session.set_password(password);
 }
 
@@ -6435,6 +6445,63 @@ void Friend_mode_note_world_loaded() {
 // Temporary save used to hand the host's live world to a joining guest.
 static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
 
+// Guest: our own game in progress (<GAMEDAT>), kept aside while the host's
+// world is there and put back the next time Exult starts (a guest's
+// session ends with Exult closing, or a crash).  A plain copy of the
+// folder, made under another name and then renamed, so a half-made copy
+// is never taken for a whole one; the copy goes only once it is back.
+static std::filesystem::path Friend_own_world_dir(bool part = false) {
+	return std::filesystem::path(get_system_path("<SAVEGAME>"))
+		   / (part ? "friend_own_gamedat.part" : "friend_own_gamedat");
+}
+
+static bool Friend_mode_keep_own_world() {
+	namespace fs = std::filesystem;
+	const fs::path  gamedat = get_system_path("<GAMEDAT>");
+	std::error_code error;
+	if (fs::exists(Friend_own_world_dir(), error)) {
+		return true;    // Kept already (the host loaded another world).
+	}
+	if (!fs::exists(gamedat / "identity", error)) {
+		return true;    // No game of our own yet.
+	}
+	fs::remove_all(Friend_own_world_dir(true), error);
+	error.clear();
+	fs::copy(gamedat, Friend_own_world_dir(true), fs::copy_options::recursive, error);
+	if (!error) {
+		fs::rename(Friend_own_world_dir(true), Friend_own_world_dir(), error);
+	}
+	if (error) {
+		cerr << "Friend Mode: could not keep our own game (" << error.message() << ")" << endl;
+		std::error_code ignored;
+		fs::remove_all(Friend_own_world_dir(true), ignored);
+		return false;
+	}
+	cout << "Friend Mode: kept our own game while in the host's world" << endl;
+	return true;
+}
+
+// At start: put back our own game after a session as a guest.
+static void Friend_mode_restore_own_world() {
+	namespace fs = std::filesystem;
+	std::error_code error;
+	fs::remove_all(Friend_own_world_dir(true), error);    // Half made: ours was never replaced.
+	if (!fs::exists(Friend_own_world_dir(), error)) {
+		return;
+	}
+	const fs::path gamedat = get_system_path("<GAMEDAT>");
+	fs::remove_all(gamedat, error);
+	error.clear();
+	fs::copy(Friend_own_world_dir(), gamedat, fs::copy_options::recursive, error);
+	if (error) {
+		cerr << "Friend Mode: could not put back our own game (" << error.message() << "); trying again next time"
+			 << endl;
+		return;
+	}
+	fs::remove_all(Friend_own_world_dir(), error);
+	cout << "Friend Mode: put back our own game after a Co-Op session" << endl;
+}
+
 // Guest: the host loaded a save mid-game; load the same world.
 static bool Friend_mode_load_world(const std::vector<unsigned char>& data) {
 	{
@@ -6615,6 +6682,13 @@ bool Friend_mode_download_world() {
 			out->write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
 			out.reset();
 			cout << "Friend Mode: received world (" << data.size() << " bytes)" << endl;
+			if (!Friend_mode_keep_own_world()) {
+				U7remove(friend_world_file);
+				Friend_mode_show_status("Could not keep your own game", "Nothing was changed; check free disk space");
+				SDL_Delay(3000);
+				friend_session.stop();
+				return false;
+			}
 			cheat.disable_for_friend_guest();    // The host's world: no cheats.
 			gwin->restore_gamedat(friend_world_file);
 			U7remove(friend_world_file);
@@ -7277,7 +7351,7 @@ bool Friend_mode_edit_password() {
 		font->draw_text(buffer, centerx - 18, y, shown.c_str());
 		buffer->fill8(15, 1, font->get_text_height(), centerx - 17 + font->get_text_width(shown.c_str()), y);
 		font->center_text(buffer, centerx, top + 54, "Guests type it to join. Empty for none.");
-		font->center_text(buffer, centerx, top + 68, "Enter saves   Esc cancels");
+		font->center_text(buffer, centerx, top + 68, "Enter sets   Esc cancels");
 		gwin->show(true);
 
 		SDL_Event event;
@@ -7296,7 +7370,7 @@ bool Friend_mode_edit_password() {
 				if (event.key.key == SDLK_BACKSPACE && !password.empty()) {
 					password.pop_back();
 				} else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER) {
-					config->set("config/friend/password", password, true);
+					friend_host_password = password;
 					SDL_StopTextInput(window);
 					return true;
 				}
@@ -8465,6 +8539,7 @@ bool Handle_device_connection_event(void* userdata, SDL_Event* event) {
  *  Initialize and create main window.
  */
 static void Init() {
+	Friend_mode_forget_saved_password();
 	const Uint32 init_flags = SDL_INIT_VIDEO | SDL_INIT_GAMEPAD;
 	// Let SDL3 choose its own audio/video drivers until proved otherwise.
 	// Remove SDL_HINT_AUDIO_DRIVER set as "DirectSound"
@@ -8771,6 +8846,7 @@ static void Init() {
 		}
 #endif
 		Game::create_game(newgame);
+		Friend_mode_restore_own_world();    // After a session as a guest.
 		Audio* audio = Audio::get_ptr();
 		audio->Init_sfx();
 		MyMidiPlayer* midi = audio->get_midi();
@@ -8780,7 +8856,7 @@ static void Init() {
 		// Skip splash screen?
 		bool skip_splash;
 		config->value("config/gameplay/skip_splash", skip_splash);
-		config->value("config/gameplay/wasd_movement", Friend_wasd_movement);
+		config->value("config/gameplay/wasd_movement", Friend_wasd_movement, true);
 		config->value("config/gameplay/running", Friend_running);
 		Friend_targeting_load_settings();
 		Friend_class_load_settings();
@@ -10011,6 +10087,7 @@ static void Handle_events() {
 			friend_wasd_dx = dx;
 			friend_wasd_dy = dy;
 		}
+		Friend_close_door_behind();
 		Friend_mode_check_target();
 		Friend_mode_check_open_pick();
 

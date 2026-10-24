@@ -370,7 +370,7 @@ Game_window::Game_window(
 	config->value("config/gameplay/combat/health_bars", str, "no");
 	Combat::health_bars = (str == "yes");
 	config->set("config/gameplay/combat/health_bars", str, false);
-	config->value("config/gameplay/minimap", str, "no");    // Friend Mode corner minimap.
+	config->value("config/gameplay/minimap", str, "yes");    // Friend Mode corner minimap.
 	Friend_minimap_enabled = (str == "yes");
 	config->set("config/gameplay/minimap", str, false);
 	config->value("config/gameplay/minimap_size", str, "small");
@@ -2055,6 +2055,85 @@ Gump* Game_window::get_dragging_gump() {
  *  'tile' has a closed door (opened now, asked for, or locked).
  */
 
+// A door opened by walking into it (WASD, arrow keys): closed again once
+// the walker is through it, as a mouse walk does (Path_walking_actor_action).
+namespace {
+struct Door_behind {
+	Game_object_weak door;
+	Game_object_weak walker;
+	Tile_coord       tile;          // The door's tile when closed.
+	TileRect         foot;          // Its footprint when closed.
+	bool             horizontal = false;
+	int              side       = 0;    // The walker's side when it opened: -1 or 1.
+	uint32           opened     = 0;
+};
+
+Door_behind door_behind;
+
+// Which side of the door a tile is on: -1 or 1, or 0 in the doorway.
+int Door_side(const Door_behind& d, const Tile_coord& t) {
+	const int at    = d.horizontal ? t.ty : t.tx;
+	const int start = d.horizontal ? d.foot.y : d.foot.x;
+	const int size  = d.horizontal ? d.foot.h : d.foot.w;
+	return at < start ? -1 : (at >= start + size ? 1 : 0);
+}
+
+// Toggle a door as NPCs do: quality 0, so only the door's own toggle runs;
+// a guest asks the host.
+void Toggle_door(Game_window* gwin, Actor* actor, Game_object* door) {
+	if (gwin->has_network_friend_control() && actor != gwin->get_main_actor()) {
+		Friend_mode_request_object_use(door);
+		return;
+	}
+	const int savequal = door->get_quality();
+	door->set_quality(0);
+	door->activate();
+	door->set_quality(savequal);
+}
+}    // namespace
+
+void Friend_close_door_behind() {
+	if (!door_behind.side) {
+		return;
+	}
+	auto   walker = door_behind.walker.lock();
+	Actor* actor  = walker ? walker->as_actor() : nullptr;
+	if (!actor || SDL_GetTicks() - door_behind.opened > 20000
+		|| actor->get_tile().distance_2d(door_behind.tile) > 8) {
+		door_behind = Door_behind();    // Gone the other way, or away.
+		return;
+	}
+	if (Door_side(door_behind, actor->get_tile()) != -door_behind.side) {
+		return;    // Not through yet.
+	}
+	// Not on anyone standing in the doorway.
+	Actor_vector near;
+	Game_object::find_nearby_actors(near, door_behind.tile, c_any_shapenum, 4);
+	for (const auto* other : near) {
+		const Tile_coord t = other->get_tile();
+		if (!other->is_dead() && door_behind.foot.has_point(t.tx, t.ty)) {
+			return;
+		}
+	}
+	Game_object_shared door = door_behind.door.lock();
+	if (!door) {
+		// A guest's world may have been refreshed from the host's: the
+		// open door nearest where it was.
+		Game_object_vector found;
+		Game_object::find_nearby(found, door_behind.tile, c_any_shapenum, 2, 0);
+		for (auto* obj : found) {
+			if (obj->get_info().is_door() && !obj->is_closed_door() && !obj->get_owner()) {
+				door = obj->shared_from_this();
+				break;
+			}
+		}
+	}
+	door_behind = Door_behind();
+	if (door && door->get_info().is_door() && !door->is_closed_door()) {
+		Toggle_door(Game_window::get_instance(), actor, door.get());
+	}
+}
+
 static bool Open_door_ahead(Game_window* gwin, Actor* actor, const Tile_coord& tile) {
 	Game_object* door = Game_object::find_door(tile);
 	if (!door || !door->is_closed_door()) {
@@ -2074,15 +2153,15 @@ static bool Open_door_ahead(Game_window* gwin, Actor* actor, const Tile_coord& t
 		gwin->get_effects()->add_text("Locked", door);
 		return true;
 	}
-	if (gwin->has_network_friend_control() && actor != gwin->get_main_actor()) {
-		Friend_mode_request_object_use(door);
-		return true;
-	}
-	// As NPCs open doors: quality 0, so only the door's own toggle runs.
-	const int savequal = door->get_quality();
-	door->set_quality(0);
-	door->activate();
-	door->set_quality(savequal);
+	// Remember it, to close it behind the walker.
+	door_behind.door       = weak_from_obj(door);
+	door_behind.walker     = weak_from_obj(actor);
+	door_behind.tile       = door->get_tile();
+	door_behind.foot       = door->get_footprint();
+	door_behind.horizontal = door_behind.foot.w > door_behind.foot.h;
+	door_behind.side       = Door_side(door_behind, actor->get_tile());
+	door_behind.opened     = now;
+	Toggle_door(gwin, actor, door);
 	return true;
 }
 
