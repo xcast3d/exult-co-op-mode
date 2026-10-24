@@ -978,8 +978,8 @@ fills the Avatar's mana (magic raised to 8 if lower). Each spell still
 needs the level of its circle (Telekinesis 2, Lightning 4, Time Stop 8), as
 in U7.
 
-- [ ] Three slots (2026-10-23), empty in a new game or an older save:
-      dark; hovering says "Empty Slot" near the top, "Drag a spell here
+- [ ] Three slots (2026-10-23), empty in a new game or an older save,
+      "Empty" on them in small letters; hovering says "Empty Slot" near the top, "Drag a spell here
       from spellbook" under it; a click or Ctrl+1 says so. Hovering a spell
       or skill: its name, then "Use Spell (Ctrl+1)" / "Use Skill (Ctrl+1)";
       no tooltip box over the bar.

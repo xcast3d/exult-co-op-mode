@@ -501,7 +501,7 @@ save and clear lists (saved only when present, so older saves load with
 an empty bar), the 72 names in `spell_names`, and
 `Usecode_machine::friend_calls_intrinsic` for "asks for a target". A slot
 shows the spellbook's picture of its spell on Exult's button; an empty one
-is a dark button with "Empty" in it; hovering it says "Empty Slot" near the top, then "Drag a
+is a plain button with "Empty" on it in small letters; hovering it says "Empty Slot" near the top, then "Drag a
 spell here from spellbook".
 
 How, in the code (the plan):

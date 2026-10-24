@@ -3169,17 +3169,17 @@ void Skill_button::paint() {
 		// The Avatar's spells: the spellbook's picture of the spell on
 		// Exult's button, a pixel larger all round so its border shows
 		// (dimmed while it can't be cast); an empty slot is the button
-		// alone, dark.
+		// with "Empty" on it.
 		Shape_frame* spell = each->empty ? nullptr : Spellbook_spell_picture(each->spell);
-		Recolor(!spell || !each->usable ? 143 : (hovered ? 138 : 140));
+		Recolor(spell && !each->usable ? 143 : (hovered ? 138 : 140));
 		Basic_button::paint();
-		// "Empty" in the middle, in the small light letters of the cooldown
-		// seconds, which show on the dark button (2026-10-23).
-		if (!spell) {
-			Shape_manager* sman  = Shape_manager::get_instance();
-			const char*    empty = "Empty";
-			sman->paint_text(0, empty, px + (slot_w - sman->get_text_width(0, empty)) / 2,
-							 py + (slot_h - sman->get_text_height(0)) / 2);
+		// "Empty" in the middle, in the small black letters of the skills'
+		// name slots, on the button's usual colour (2026-10-23: Exult's
+		// small fonts are black, so the dark button didn't show them).
+		if (!spell && font) {
+			const char* empty = "Empty";
+			font->paint_text(buf, empty, px + (slot_w - font->get_text_width(empty)) / 2,
+							 py + (slot_h - font->get_text_height()) / 2);
 		}
 		if (spell) {
 			const int fx = px + 1 + spell->get_xleft();
