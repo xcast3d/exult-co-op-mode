@@ -972,9 +972,15 @@ After **Connect to Host**, the guest connects from the title menu and asks for
 the host's world. The host writes its live game to a temporary save (the
 normal save code, about 190 KB) and sends it as one variable-length message:
 a header packet with the length, then raw bytes. The guest shows download
-progress, unpacks the save into its gamedat, and loads it, so party, quest
-flags, items, doors and NPCs match the host at the moment of joining. Protocol
-version is now 7.
+progress, unpacks the save, and loads it, so party, quest flags, items, doors
+and NPCs match the host at the moment of joining. Protocol version is now 7.
+
+Since 2026-10-24 the guest unpacks it into a folder of its own beside its
+gamedat (`gamedat.coop`), never into the gamedat itself, so the guest's own
+game in progress is untouched. Only the host keeps the game: a guest can't
+save or load, and makes no crash save. The folder is deleted the next time
+Exult starts (after Quit, Main Menu or a crash), and JOURNEY ONWARD then
+continues the guest's own game.
 
 ### Doors, shutters and lamps
 

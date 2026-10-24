@@ -1258,6 +1258,11 @@ bool Game_window::save_gamedat_zip(
 #endif
 
 void Game_window::MakeEmergencySave(const char* savename) {
+	if (Friend_mode_is_guest()) {
+		// Only the host keeps saves; this is the host's world, not ours.
+		std::cerr << "Friend Mode guest: no emergency save" << std::endl;
+		return;
+	}
 	// Using mostly std::filesystem here insteaf of U7 functions to avoid
 	// repeated looking up paths
 

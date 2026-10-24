@@ -6445,61 +6445,37 @@ void Friend_mode_note_world_loaded() {
 // Temporary save used to hand the host's live world to a joining guest.
 static constexpr const char* friend_world_file = "<SAVEGAME>/friend_join.sav";
 
-// Guest: our own game in progress (<GAMEDAT>), kept aside while the host's
-// world is there and put back the next time Exult starts (a guest's
-// session ends with Exult closing, or a crash).  A plain copy of the
-// folder, made under another name and then renamed, so a half-made copy
-// is never taken for a whole one; the copy goes only once it is back.
-static std::filesystem::path Friend_own_world_dir(bool part = false) {
-	return std::filesystem::path(get_system_path("<SAVEGAME>"))
-		   / (part ? "friend_own_gamedat.part" : "friend_own_gamedat");
+// Guest: the host's world lives in a folder of its own beside ours
+// (<GAMEDAT>.coop), so our own game in progress is never touched.  It is
+// thrown away the next time Exult starts (a guest's session ends with
+// Exult closing or going back to the main menu, or a crash), when <GAMEDAT>
+// is ours again.
+static std::filesystem::path Friend_coop_world_dir() {
+	return std::filesystem::path(get_system_path("<GAMEDAT>") + ".coop");
 }
 
-static bool Friend_mode_keep_own_world() {
+static bool Friend_mode_use_coop_world() {
 	namespace fs = std::filesystem;
-	const fs::path  gamedat = get_system_path("<GAMEDAT>");
+	const fs::path  dir = Friend_coop_world_dir();
 	std::error_code error;
-	if (fs::exists(Friend_own_world_dir(), error)) {
-		return true;    // Kept already (the host loaded another world).
-	}
-	if (!fs::exists(gamedat / "identity", error)) {
-		return true;    // No game of our own yet.
-	}
-	fs::remove_all(Friend_own_world_dir(true), error);
+	fs::remove_all(dir, error);
 	error.clear();
-	fs::copy(gamedat, Friend_own_world_dir(true), fs::copy_options::recursive, error);
-	if (!error) {
-		fs::rename(Friend_own_world_dir(true), Friend_own_world_dir(), error);
-	}
+	fs::create_directories(dir, error);
 	if (error) {
-		cerr << "Friend Mode: could not keep our own game (" << error.message() << ")" << endl;
-		std::error_code ignored;
-		fs::remove_all(Friend_own_world_dir(true), ignored);
+		cerr << "Friend Mode: could not make a folder for the host's world (" << error.message() << ")" << endl;
 		return false;
 	}
-	cout << "Friend Mode: kept our own game while in the host's world" << endl;
+	add_system_path("<GAMEDAT>", dir.string());
+	cout << "Friend Mode: the host's world goes in " << dir.string() << endl;
 	return true;
 }
 
-// At start: put back our own game after a session as a guest.
-static void Friend_mode_restore_own_world() {
-	namespace fs = std::filesystem;
+// At start: throw away the host's world after a session as a guest.
+static void Friend_mode_discard_coop_world() {
 	std::error_code error;
-	fs::remove_all(Friend_own_world_dir(true), error);    // Half made: ours was never replaced.
-	if (!fs::exists(Friend_own_world_dir(), error)) {
-		return;
+	if (std::filesystem::remove_all(Friend_coop_world_dir(), error) > 0) {
+		cout << "Friend Mode: threw away the host's world from the last Co-Op session" << endl;
 	}
-	const fs::path gamedat = get_system_path("<GAMEDAT>");
-	fs::remove_all(gamedat, error);
-	error.clear();
-	fs::copy(Friend_own_world_dir(), gamedat, fs::copy_options::recursive, error);
-	if (error) {
-		cerr << "Friend Mode: could not put back our own game (" << error.message() << "); trying again next time"
-			 << endl;
-		return;
-	}
-	fs::remove_all(Friend_own_world_dir(), error);
-	cout << "Friend Mode: put back our own game after a Co-Op session" << endl;
 }
 
 // Guest: the host loaded a save mid-game; load the same world.
@@ -6682,9 +6658,9 @@ bool Friend_mode_download_world() {
 			out->write(reinterpret_cast<const char*>(data.data()), static_cast<std::streamsize>(data.size()));
 			out.reset();
 			cout << "Friend Mode: received world (" << data.size() << " bytes)" << endl;
-			if (!Friend_mode_keep_own_world()) {
+			if (!Friend_mode_use_coop_world()) {
 				U7remove(friend_world_file);
-				Friend_mode_show_status("Could not keep your own game", "Nothing was changed; check free disk space");
+				Friend_mode_show_status("Could not make room for the host's world", "Check free disk space");
 				SDL_Delay(3000);
 				friend_session.stop();
 				return false;
@@ -8846,7 +8822,7 @@ static void Init() {
 		}
 #endif
 		Game::create_game(newgame);
-		Friend_mode_restore_own_world();    // After a session as a guest.
+		Friend_mode_discard_coop_world();    // After a session as a guest.
 		Audio* audio = Audio::get_ptr();
 		audio->Init_sfx();
 		MyMidiPlayer* midi = audio->get_midi();
