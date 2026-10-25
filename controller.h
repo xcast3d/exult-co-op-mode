@@ -25,7 +25,11 @@
 #	pragma GCC diagnostic pop
 #endif    // __GNUC__
 
+#include <functional>
 #include <string>
+#include <vector>
+
+class Image_buffer8;
 
 enum class Controller_action {
 	none,
@@ -91,6 +95,31 @@ bool Controller_shift_held();
 bool Controller_alt_held();
 // Is the pad pointer showing (the triggers are then mouse buttons)?
 bool Controller_pointer_showing();
+
+// The radial menus (controller-plan.md, step 6): held Square (skills) and
+// Triangle (utilities) open a ring of up to eight entries round the
+// Avatar; the left stick highlights one (the Avatar doesn't walk
+// meanwhile) and letting go of the button uses it.  Let go with the stick
+// centred to cancel.  The game runs on meanwhile.
+struct Controller_ring_entry {
+	std::string name;
+	// The picture, centred on (cx, cy) in 'buf'; none: the plate is blank.
+	std::function<void(Image_buffer8* buf, int cx, int cy)> paint;
+	std::string           corner;           // Small text on the plate (seconds left).
+	bool                  usable = true;    // Dimmed, and does nothing, when not.
+	std::function<void()> use;
+};
+// 'title' shows in the middle until an entry is highlighted.  Entries are
+// read again each frame with 'refresh' (cooldowns), if given.
+void Controller_ring_open(
+		const std::string& title, std::vector<Controller_ring_entry> entries,
+		std::function<std::vector<Controller_ring_entry>()> refresh = {});
+// Letting go of the button: the highlighted entry is used (if usable).
+void Controller_ring_close();
+bool Controller_ring_is_open();
+// Each frame, from the game's overlays: the ring centred on screen point
+// (sx, sy), or hidden.
+void Controller_ring_paint(int sx, int sy);
 
 // The game menu's Controller page: every button and what it does, in the
 // pad's own names (Cross or A...), from the live map.

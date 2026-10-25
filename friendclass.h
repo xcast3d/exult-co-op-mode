@@ -62,6 +62,15 @@ void Friend_class_frame();
 // Ctrl+1 to Ctrl+3: use that slot of the bar shown (0 the first), as a
 // click does.  False if there is no bar or no such slot.
 bool Friend_class_use_slot(int index);
+// Controller support (the skills ring): the bar's slot 'index' as the bar
+// shows it: its name, seconds left recharging (0 when ready), whether it
+// can be used now.  False if there is no bar or no such slot.
+bool Friend_class_slot_info(int index, std::string& name, int& seconds, bool& usable);
+class Image_buffer8;
+// Its picture (a skill's icon, a spell's), centred on (cx, cy) in 'buf',
+// dimmed while it can't be used.  False with no picture (names chosen, an
+// empty slot).
+bool Friend_class_paint_slot(int index, Image_buffer8* buf, int cx, int cy);
 
 class Gump_button;
 // The Avatar's spell bar, dragging (drag.cc): the spell a drag from this

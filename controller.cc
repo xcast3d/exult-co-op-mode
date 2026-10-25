@@ -18,6 +18,8 @@
 #include "ibuf8.h"
 #include "items.h"
 #include "font.h"
+#include "palette.h"
+#include "shapes/vgafile.h"
 #include "mouse.h"
 
 #include <algorithm>
@@ -683,7 +685,9 @@ bool Controller_event(const SDL_Event& event) {
 		if (walking && std::abs(event.gaxis.value) > SDL_JOYSTICK_AXIS_MAX / 4) {
 			Set_last_input(true);
 		}
-		return !walking;    // The left stick walks (Handle_event); the rest is polled.
+		// The left stick walks (Handle_event), but picks in a ring while one
+		// is open; the rest is polled.
+		return !walking || Controller_ring_is_open();
 	}
 	default:
 		return false;
@@ -887,9 +891,9 @@ std::string Describe(const Controller_binding& binding) {
 	case Controller_action::player_list:
 		return "Player list (co-op, held)";
 	case Controller_action::skills_ring:
-		return "Skills ring (held; coming)";
+		return "Skills ring (held)";
 	case Controller_action::utilities_ring:
-		return "Utilities ring (held; coming)";
+		return "Utilities ring (held)";
 	case Controller_action::chat_phrases:
 		return "Chat phrases (coming)";
 	case Controller_action::close_window:
@@ -1057,4 +1061,193 @@ public:
 void Controller_buttons_page() {
 	Controller_buttons_gump page;
 	Game_window::get_instance()->get_gump_man()->do_modal_gump(&page, Mouse::hand);
+}
+
+// The radial menus.
+namespace {
+struct Ring_state {
+	bool                                                open = false;
+	std::string                                         title;
+	std::vector<Controller_ring_entry>                  entries;
+	std::function<std::vector<Controller_ring_entry>()> refresh;
+	int                                                 highlight = -1;
+	int                                                 layer     = -1;
+	std::string                                         painted;    // What the layer shows now.
+	int                                                 dest[4]   = {0, 0, 0, 0};
+};
+
+Ring_state ring;
+
+constexpr int ring_radius = 44;                                   // Centre to a plate's centre.
+constexpr int ring_plate  = 28;                                   // A plate's size (the art: 28x28).
+constexpr int ring_size   = 2 * ring_radius + ring_plate + 4;     // The layer, square.
+
+// Which entry the left stick points at (the first at the top, then
+// clockwise), or -1 near the centre.
+int Ring_pick() {
+	SDL_Gamepad* pad   = Primary_pad();
+	const int    count = static_cast<int>(ring.entries.size());
+	if (!pad || count == 0) {
+		return -1;
+	}
+	const float sx = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX) / static_cast<float>(SDL_JOYSTICK_AXIS_MAX);
+	const float sy = SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY) / static_cast<float>(SDL_JOYSTICK_AXIS_MAX);
+	if (std::sqrt(sx * sx + sy * sy) < 0.5f) {
+		return -1;
+	}
+	constexpr float two_pi = 6.2831853f;
+	float           angle  = std::atan2(sx, -sy);    // 0 at the top, clockwise.
+	if (angle < 0) {
+		angle += two_pi;
+	}
+	return static_cast<int>(std::lround(angle / (two_pi / count))) % count;
+}
+
+void Ring_plate_centre(int index, int count, int& cx, int& cy) {
+	const float angle = 6.2831853f * index / count;
+	cx                = ring_size / 2 + static_cast<int>(std::lround(ring_radius * std::sin(angle)));
+	cy                = ring_size / 2 - static_cast<int>(std::lround(ring_radius * std::cos(angle)));
+}
+
+// A placeholder plate (until the art comes): a dark disc with a black rim,
+// gold and lighter when highlighted.
+void Ring_paint_plate(Image_buffer8* buf, int cx, int cy, bool lit) {
+	Palette*            pal  = Game_window::get_instance()->get_pal();
+	const unsigned char body = static_cast<unsigned char>(lit ? pal->find_color(30, 22, 12) : pal->find_color(14, 10, 6));
+	const unsigned char rim  = static_cast<unsigned char>(lit ? pal->find_color(63, 50, 16) : pal->find_color(34, 26, 14));
+	const int           r    = ring_plate / 2;
+	for (int dy = -r; dy < r; ++dy) {
+		for (int dx = -r; dx < r; ++dx) {
+			const int d = (2 * dx + 1) * (2 * dx + 1) + (2 * dy + 1) * (2 * dy + 1);    // (2 * distance)^2
+			if (d < (2 * r - 4) * (2 * r - 4)) {
+				buf->put_pixel8(body, cx + dx, cy + dy);
+			} else if (d < (2 * r - 1) * (2 * r - 1)) {
+				buf->put_pixel8(lit ? rim : body, cx + dx, cy + dy);
+			} else if (d < (2 * r) * (2 * r) + 2 * r) {
+				buf->put_pixel8(lit ? rim : 0, cx + dx, cy + dy);
+			}
+		}
+	}
+}
+
+// Text with a black outline (the hint line's way), its top left at (x, y).
+void Ring_text(Image_buffer8* buf, const std::shared_ptr<Font>& font, const std::string& text, int x, int y) {
+	unsigned char black[256];
+	std::fill(std::begin(black), std::end(black), static_cast<unsigned char>(0));
+	for (int dy = -1; dy <= 1; ++dy) {
+		for (int dx = -1; dx <= 1; ++dx) {
+			if (dx || dy) {
+				font->draw_text(buf, x + dx, y + dy, text.c_str(), black);
+			}
+		}
+	}
+	font->draw_text(buf, x, y, text.c_str());
+}
+
+void Ring_hide() {
+	Game_window* gwin = Game_window::get_instance();
+	if (ring.layer >= 0 && gwin->get_win()->layer_is_visible(ring.layer)) {
+		gwin->layer_set_visible(ring.layer, false);
+		gwin->set_painted();
+	}
+}
+}    // namespace
+
+void Controller_ring_open(
+		const std::string& title, std::vector<Controller_ring_entry> entries,
+		std::function<std::vector<Controller_ring_entry>()> refresh) {
+	ring.open      = true;
+	ring.title     = title;
+	ring.entries   = std::move(entries);
+	ring.refresh   = std::move(refresh);
+	ring.highlight = -1;
+	ring.painted.clear();
+}
+
+void Controller_ring_close() {
+	if (!ring.open) {
+		return;
+	}
+	ring.open = false;
+	Ring_hide();
+	const int index = ring.highlight;
+	if (index >= 0 && index < static_cast<int>(ring.entries.size()) && ring.entries[index].usable && ring.entries[index].use) {
+		const auto use = ring.entries[index].use;    // It may open another ring.
+		use();
+	}
+}
+
+bool Controller_ring_is_open() {
+	return ring.open;
+}
+
+void Controller_ring_paint(int sx, int sy) {
+	Game_window*  gwin = Game_window::get_instance();
+	Image_window* iwin = gwin->get_win();
+	auto          font = fontManager.get_font("MENU_FONT");
+	if (!ring.open || !font) {
+		Ring_hide();
+		return;
+	}
+	if (ring.refresh) {
+		ring.entries = ring.refresh();
+	}
+	ring.highlight = Ring_pick();
+	// Paint again only when what it shows changed.
+	std::string shows = std::to_string(ring.highlight);
+	for (const auto& entry : ring.entries) {
+		shows += '|' + entry.name + '|' + entry.corner + (entry.usable ? "+" : "-");
+	}
+	if (ring.layer < 0) {
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As the hint line's.
+		ring.layer                 = gwin->create_layer("Radial menu", ring_size, ring_size, 255, 0, text_layer_z);
+		if (ring.layer < 0) {
+			return;
+		}
+		gwin->layer_set_ui_kind(ring.layer, Image_window::UiLayerTextEffects);
+		ring.painted.clear();
+	}
+	if (shows != ring.painted) {
+		Image_buffer8* buf = gwin->get_layer_ibuf(ring.layer);
+		if (!buf) {
+			return;
+		}
+		buf->clear_clip();
+		buf->fill8(255);    // Transparent.
+		Image_buffer8* prev  = gwin->push_render_target(buf);
+		const int      count = static_cast<int>(ring.entries.size());
+		for (int i = 0; i < count; ++i) {
+			const auto& entry = ring.entries[i];
+			int         cx    = 0;
+			int         cy    = 0;
+			Ring_plate_centre(i, count, cx, cy);
+			Ring_paint_plate(buf, cx, cy, i == ring.highlight);
+			if (entry.paint) {
+				// The picture, kept inside its plate.
+				buf->set_clip(cx - ring_plate / 2 + 2, cy - ring_plate / 2 + 2, ring_plate - 4, ring_plate - 4);
+				entry.paint(buf, cx, cy);
+				buf->clear_clip();
+			}
+			if (!entry.corner.empty()) {
+				Ring_text(buf, font, entry.corner, cx + ring_plate / 2 - font->get_text_width(entry.corner.c_str()) - 1,
+						  cy + ring_plate / 2 - font->get_text_height());
+			}
+		}
+		// The highlighted entry's name in the middle (else the ring's title).
+		const std::string name = ring.highlight >= 0 && ring.highlight < count ? ring.entries[ring.highlight].name : ring.title;
+		Ring_text(buf, font, name, (ring_size - font->get_text_width(name.c_str())) / 2,
+				  (ring_size - font->get_text_height()) / 2);
+		gwin->pop_render_target(prev);
+		gwin->layer_set_dirty(ring.layer);
+		ring.painted = shows;
+	}
+	const float f       = iwin->get_ui_scale_factor(Image_window::UiLayerTextEffects);
+	const int   d       = static_cast<int>(ring_size * f);
+	const int   dest[4] = {sx - d / 2, sy - d / 2, d, d};
+	if (!std::equal(dest, dest + 4, ring.dest) || !iwin->layer_is_visible(ring.layer)) {
+		std::copy(dest, dest + 4, ring.dest);
+		gwin->layer_set_dest(ring.layer, dest[0], dest[1], dest[2], dest[3]);
+		gwin->layer_set_visible(ring.layer, true);
+		gwin->set_painted();
+	}
 }

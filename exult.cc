@@ -63,6 +63,7 @@
 #include "fnames.h"
 #include "font.h"
 #include "controller.h"
+#include "shapeinf/gumpinf.h"
 #include "font_map.h"
 #include "friendclass.h"
 #include "friendmap.h"
@@ -8654,6 +8655,86 @@ static void Friend_mode_toggle_running() {
 	Friend_mode_notice(Friend_running ? "Running" : "Walking");
 }
 
+// Controller support: the radial menus' entries (controller-plan.md, step
+// 6).  Skills: the bar's slots as it shows them (a companion's skills, or
+// the Avatar's spells).
+static std::vector<Controller_ring_entry> Controller_skill_entries() {
+	std::vector<Controller_ring_entry> entries;
+	for (int i = 0; i < 8; ++i) {
+		std::string name;
+		int         seconds = 0;
+		bool        usable  = false;
+		if (!Friend_class_slot_info(i, name, seconds, usable)) {
+			break;
+		}
+		Controller_ring_entry entry;
+		entry.name   = name;
+		entry.corner = seconds > 0 ? std::to_string(seconds) : std::string();
+		entry.paint  = [i](Image_buffer8* buf, int cx, int cy) {
+			Friend_class_paint_slot(i, buf, cx, cy);
+		};
+		// Used even when it can't be (the picture is dimmed): the bar says why.
+		entry.use = [i]() {
+			Friend_class_use_slot(i);
+		};
+		entries.push_back(std::move(entry));
+	}
+	return entries;
+}
+
+// A shape's frame as a ring picture, centred.
+static std::function<void(Image_buffer8*, int, int)> Controller_shape_picture(int shape, int frame, ShapeFile file) {
+	return [shape, frame, file](Image_buffer8* buf, int cx, int cy) {
+		ShapeID      id(shape, frame, file);
+		Shape_frame* picture = id.get_shape();
+		if (picture) {
+			picture->paint_rle(buf, cx - picture->get_width() / 2 + picture->get_xleft(),
+							   cy - picture->get_height() / 2 + picture->get_yabove());
+		}
+	};
+}
+
+// The shortcut bar's picture for its slot (the game's own icons).
+static std::function<void(Image_buffer8*, int, int)> Controller_bar_picture(int slot) {
+	const Shortcutbar_icon_info* icon = Gump_info::get_shortcutbar_icon(slot);
+	if (!icon || !icon->normal.valid) {
+		return {};
+	}
+	return Controller_shape_picture(icon->normal.shape, icon->normal.frame, icon->normal.get_shapefile());
+}
+
+// Utilities: always the same order, so it becomes muscle memory.
+static std::vector<Controller_ring_entry> Controller_utility_entries() {
+	auto action = [](const char* name) {
+		return [name]() {
+			keybinder->DoActionByName(name, 0, true);
+		};
+	};
+	auto item = [](int shape, int frame) {
+		return [shape, frame]() {
+			gwin->activate_item(shape, frame);
+		};
+	};
+	std::vector<Controller_ring_entry> entries;
+	entries.push_back({"Eat", Controller_bar_picture(8), {}, true, action("USEFOOD")});
+	entries.push_back({"Watch", Controller_shape_picture(159, 0, SF_SHAPES_VGA), {}, true, item(159, c_any_framenum)});
+	entries.push_back({"Map", Controller_bar_picture(2), {}, true, item(178, 0)});
+	entries.push_back({"Journal", Controller_bar_picture(6), {}, true, action("NOTEBOOK")});
+	entries.push_back({"Lockpick", Controller_shape_picture(627, 7, SF_SHAPES_VGA), {}, true, item(627, c_any_framenum)});
+	entries.push_back({"Keys", Controller_bar_picture(5), {}, true, action("TRY_KEYS")});
+	// Y: no picture in the game for it yet (a plate with its name).
+	const std::string follow = !Friend_mode_is_guest() ? (friend_holding ? "Party follows" : "Party holds")
+													   : (friend_following ? "Take over" : "Follow Avatar");
+	entries.push_back({follow, {}, {}, true, []() {
+						   if (!Friend_mode_is_guest() || friend_session.connected()) {
+							   Friend_mode_hold_or_follow();
+						   }
+					   }});
+	// Until the chat quick phrases have their place here.
+	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, true, item(761, c_any_framenum)});
+	return entries;
+}
+
 // Controller support: what a pad's button does (controller.cc keeps the
 // map; docs/friend-mode/controller-plan.md).  The same calls as the keys,
 // with the held triggers as Shift and Alt.
@@ -8665,6 +8746,30 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 			friend_player_list_shown = shown;
 			gwin->set_all_dirty();
 		}
+		return;
+	}
+	if (binding.action == Controller_action::skills_ring || binding.action == Controller_action::utilities_ring) {
+		// Held: the ring opens; let go: the highlighted entry is used.
+		if (!down) {
+			Controller_ring_close();
+			return;
+		}
+		if (friend_chat_active || Notebook_gump::get_instance() || Controller_ring_is_open()) {
+			return;
+		}
+		if (binding.action == Controller_action::skills_ring) {
+			std::vector<Controller_ring_entry> skills = Controller_skill_entries();
+			if (skills.empty()) {
+				Friend_mode_notice("No skill bar (Game menu, Class System)");
+				return;
+			}
+			Controller_ring_open("Skills", std::move(skills), Controller_skill_entries);
+		} else {
+			Controller_ring_open("Utilities", Controller_utility_entries(), Controller_utility_entries);
+		}
+		gwin->stop_actor();    // The left stick picks now; the Avatar stands.
+		joy_aim_x = 0;
+		joy_aim_y = 0;
 		return;
 	}
 	if (!down || friend_chat_active) {
@@ -8708,12 +8813,6 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 		if (!notebook && gwin->get_main_actor()) {
 			Friend_mode_backpack_key(-1);
 		}
-		break;
-	case Controller_action::skills_ring:
-		Friend_mode_notice("Skills ring: not built yet");
-		break;
-	case Controller_action::utilities_ring:
-		Friend_mode_notice("Utilities ring: not built yet");
 		break;
 	case Controller_action::chat_phrases:
 		Friend_mode_notice("Chat phrases: not built yet");
@@ -10484,6 +10583,13 @@ static void Handle_events() {
 		Friend_mode_paint_chat_input();
 		Friend_mode_paint_chat_log();
 		Friend_mode_paint_player_list();
+		{
+			// Controller support: a radial menu, round the Avatar.
+			int ring_x;
+			int ring_y;
+			gwin->get_win()->game_to_screen(gwin->get_width() / 2, gwin->get_height() / 2, false, ring_x, ring_y);
+			Controller_ring_paint(ring_x, ring_y);
+		}
 
 		if (!gwin->show() &&          // Blit to screen if necessary.
 			Mouse::mouse_update) {    // If not, did mouse change?

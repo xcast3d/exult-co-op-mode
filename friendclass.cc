@@ -4163,6 +4163,42 @@ bool Friend_class_use_slot(int index) {
 	return true;
 }
 
+bool Friend_class_slot_info(int index, std::string& name, int& seconds, bool& usable) {
+	const Bar_slot* slot = the_bar ? the_bar->slot(index) : nullptr;
+	if (!slot) {
+		return false;
+	}
+	name    = slot->name;
+	seconds = slot->level <= 0 ? slot->seconds : 0;
+	usable  = slot->usable;
+	return true;
+}
+
+bool Friend_class_paint_slot(int index, Image_buffer8* buf, int cx, int cy) {
+	const Bar_slot* slot = the_bar ? the_bar->slot(index) : nullptr;
+	if (!slot || slot->empty) {
+		return false;
+	}
+	Shape_frame* picture = nullptr;
+	if (slot->spell >= 0) {
+		picture = Spellbook_spell_picture(slot->spell);
+	} else if (Shape_file* icons = Bar_icons(); icons && slot->skill >= 0) {
+		const int frame = Icon_frame(slot->skill);
+		picture         = frame >= 0 && frame < icons->get_num_frames() ? icons->get_frame(frame) : nullptr;
+	}
+	if (!picture) {
+		return false;
+	}
+	// Its top left placed so the picture's box is centred.
+	const int fx = cx - picture->get_width() / 2 + picture->get_xleft();
+	const int fy = cy - picture->get_height() / 2 + picture->get_yabove();
+	picture->paint_rle(buf, fx, fy);
+	if (!slot->usable) {
+		picture->paint_rle_transformed(buf, fx, fy, Shape_manager::get_instance()->get_xform(8));
+	}
+	return true;
+}
+
 void Friend_class_frame() {
 	Game_window* gwin = Gwin();
 	if (!gwin->get_main_actor()) {
