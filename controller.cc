@@ -73,8 +73,8 @@ constexpr std::array<std::pair<int, const char*>, 16> default_map{{
 		{left_trigger, "SHIFT"},
 		{right_trigger, "ALT"},
 		{SDL_GAMEPAD_BUTTON_SOUTH, "TARGET_ACT"},
-		{SDL_GAMEPAD_BUTTON_WEST, "TOGGLE_COMBAT"},
-		{SDL_GAMEPAD_BUTTON_EAST, "SKILLS_RING"},
+		{SDL_GAMEPAD_BUTTON_WEST, "SKILLS_RING"},
+		{SDL_GAMEPAD_BUTTON_EAST, "CLOSE_WINDOW"},
 		{SDL_GAMEPAD_BUTTON_NORTH, "UTILITIES_RING"},
 		{SDL_GAMEPAD_BUTTON_DPAD_UP, "NEXT_CHARACTER"},
 		{SDL_GAMEPAD_BUTTON_DPAD_LEFT, "INVENTORY"},    // The paperdoll (I).
@@ -82,7 +82,7 @@ constexpr std::array<std::pair<int, const char*>, 16> default_map{{
 		{SDL_GAMEPAD_BUTTON_DPAD_DOWN, "STATS"},
 		{SDL_GAMEPAD_BUTTON_BACK, "PLAYER_LIST"},
 		{SDL_GAMEPAD_BUTTON_START, "CLOSE_OR_MENU"},
-		{SDL_GAMEPAD_BUTTON_RIGHT_STICK, "NONE"},    // Suggested: CHAT_PHRASES.
+		{SDL_GAMEPAD_BUTTON_RIGHT_STICK, "TOGGLE_COMBAT"},
 }};
 
 struct Action_name {
@@ -90,7 +90,7 @@ struct Action_name {
 	const char*       name;
 };
 
-constexpr std::array<Action_name, 13> action_names{{
+constexpr std::array<Action_name, 14> action_names{{
 		{Controller_action::none, "NONE"},
 		{Controller_action::shift, "SHIFT"},
 		{Controller_action::alt, "ALT"},
@@ -104,6 +104,7 @@ constexpr std::array<Action_name, 13> action_names{{
 		{Controller_action::skills_ring, "SKILLS_RING"},
 		{Controller_action::utilities_ring, "UTILITIES_RING"},
 		{Controller_action::chat_phrases, "CHAT_PHRASES"},
+		{Controller_action::close_window, "CLOSE_WINDOW"},
 }};
 
 // A held trigger is one of these from its press to its release, whatever
@@ -134,8 +135,9 @@ struct State {
 	bool   centre_next = true;    // Start in the centre when it next shows.
 	float  px = 0, py = 0;
 	float  seen_x = -1, seen_y = -1;    // Where the mouse was last seen (ours or real).
-	Uint64 last_activity = 0;
-	Uint64 last_tick     = 0;
+	Uint64 last_activity    = 0;
+	Uint64 pointer_activity = 0;    // The right stick or a trigger click, last.
+	Uint64 last_tick        = 0;
 
 	std::array<Trigger_use, 2> trigger{Trigger_use::off, Trigger_use::off};
 
@@ -296,7 +298,8 @@ void Trigger_changed(int which, bool down) {
 	if (down) {
 		Set_last_input(true);
 		if (modifier && state.showing) {
-			use = Trigger_use::mouse;    // LT the left button, RT the right.
+			use                    = Trigger_use::mouse;    // LT the left button, RT the right.
+			state.pointer_activity = SDL_GetTicks();
 			Push_mouse_button(binding.action == Controller_action::shift ? SDL_BUTTON_LEFT : SDL_BUTTON_RIGHT, true);
 		} else if (modifier) {
 			use = Trigger_use::modifier;
@@ -362,6 +365,7 @@ void Controller_tick() {
 	constexpr float dead_zone = 0.15f;
 	if (length > dead_zone) {
 		Set_last_input(true);
+		state.pointer_activity = now;
 		if (!state.showing) {
 			state.showing = true;
 			int w         = 0;
@@ -389,7 +393,9 @@ void Controller_tick() {
 		if (pixels > 0.f) {
 			Warp_pointer(window, state.px + sx * pixels, state.py + sy * pixels);
 		}
-	} else if (state.showing && now - state.last_activity > static_cast<Uint64>(state.hide_ms)) {
+	} else if (state.showing && now - state.pointer_activity > static_cast<Uint64>(state.hide_ms)) {
+		// Only the pointer's own use counts: walking or targeting meanwhile
+		// doesn't keep it up.  It comes back in the centre.
 		Hide_pointer();
 	}
 }
@@ -633,6 +639,10 @@ bool Controller_event(const SDL_Event& event) {
 }
 
 void Controller_screen_event(SDL_Event& event, bool menu) {
+	if (event.type == SDL_EVENT_KEY_DOWN) {
+		Set_last_input(false);    // The keyboard, in these screens too.
+		return;
+	}
 	// The left stick: pushed past half way, a press of the D-pad that way
 	// (back under a third lets go).
 	if (event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION && state.enabled && Is_primary(event.gaxis.which)

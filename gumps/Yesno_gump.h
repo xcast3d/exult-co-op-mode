@@ -51,6 +51,7 @@ public:
 
 	// Paint it and its contents.
 	void paint() override;
+	void focus_widgets(std::vector<Gump_widget*>& list) override;    // Controller support.
 	// Handle events:
 	bool        key_down(SDL_Keycode chr, SDL_Keycode unicode) override;    // Character typed.
 	static bool ask(

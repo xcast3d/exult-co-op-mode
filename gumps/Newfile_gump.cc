@@ -931,6 +931,12 @@ bool Newfile_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
 		step_selection(chr == SDLK_UP ? -1 : 1);
 		return true;
 	}
+	// On the pad, left and right move along the buttons too (the list is
+	// up and down, the buttons across); on the keyboard they move the
+	// cursor in the name.
+	if ((chr == SDLK_LEFT || chr == SDLK_RIGHT) && focus_on_open) {
+		chr = chr == SDLK_LEFT ? SDLK_PAGEUP : SDLK_PAGEDOWN;
+	}
 	if (chr == SDLK_PAGEUP || chr == SDLK_PAGEDOWN
 		|| ((chr == SDLK_RETURN || chr == SDLK_KP_ENTER) && focus_shown())) {
 		return Modal_gump::key_down(chr, unicode);

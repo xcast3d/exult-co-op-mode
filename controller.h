@@ -41,6 +41,7 @@ enum class Controller_action {
 	skills_ring,       // Held: the skills radial (step 6, not built yet).
 	utilities_ring,    // Held: the utilities radial (step 6, not built yet).
 	chat_phrases,      // Chat quick phrases (step 9, not built yet).
+	close_window,      // The newest window shuts; with none, the pick clears.
 	key_binding        // One of Exult's key actions, by name.
 };
 

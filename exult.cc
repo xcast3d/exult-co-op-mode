@@ -8714,6 +8714,23 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 	case Controller_action::chat_phrases:
 		Friend_mode_notice("Chat phrases: not built yet");
 		break;
+	case Controller_action::close_window: {
+		// The newest window (a pack, a paperdoll, stats...) shuts; with
+		// none open, the pick clears.
+		Gump* newest = nullptr;
+		for (Gump* gump : *gwin->get_gump_man()) {
+			if (gump && !gump->is_persistent() && !gump->is_hud() && !gump->is_modal()) {
+				newest = gump;
+			}
+		}
+		if (newest) {
+			gwin->get_gump_man()->close_gump(newest);
+			gwin->set_all_dirty();
+		} else if (Friend_keyboard_targeting && !notebook) {
+			Friend_mode_escape_clears_pick();
+		}
+		break;
+	}
 	case Controller_action::key_binding:
 		// Start, as Escape: the pick first; then windows, then the menu.
 		if (binding.name == "CLOSE_OR_MENU" && Friend_keyboard_targeting && !notebook
@@ -10329,8 +10346,10 @@ static void Handle_events() {
 			joy_aim_y = 0;
 		}
 		if (joy_aim_x != 0 || joy_aim_y != 0) {
-			// Calculate the player speed
-			const int speed = 200 * gwin->get_std_delay() / static_cast<int>(joy_speed_factor);
+			// Calculate the player speed: by the push, but no faster than
+			// the keys go (R's run or walk, slower in combat).
+			const int speed = std::max(
+					200 * gwin->get_std_delay() / static_cast<int>(joy_speed_factor), get_walking_speed(nullptr));
 
 			// [re]start moving
 			gwin->start_actor(joy_aim_x, joy_aim_y, speed);

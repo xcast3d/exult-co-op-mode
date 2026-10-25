@@ -100,7 +100,16 @@ void Yesno_gump::paint() {
 	// Paint text.
 	fontManager.get_font(fontname)->paint_text_box(
 			gwin->get_win()->get_ib8(), text.c_str(), x + object_area.x, y + object_area.y, object_area.w, object_area.h, 2);
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
+}
+
+void Yesno_gump::focus_widgets(std::vector<Gump_widget*>& list) {
+	for (Gump_widget* elem : elems) {
+		if (dynamic_cast<Yesno_button*>(elem)) {
+			list.push_back(elem);
+		}
+	}
 }
 
 /*
@@ -108,7 +117,14 @@ void Yesno_gump::paint() {
  */
 
 bool Yesno_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
-	ignore_unused_variable_warning(unicode);
+	// Controller support (and the keyboard): left and right move the
+	// highlight between Yes and No; Return presses the highlighted one.
+	if (chr == SDLK_LEFT || chr == SDLK_RIGHT) {
+		return Modal_gump::key_down(chr == SDLK_LEFT ? SDLK_UP : SDLK_DOWN, unicode);
+	}
+	if ((chr == SDLK_RETURN || chr == SDLK_KP_ENTER) && focus_shown()) {
+		return Modal_gump::key_down(chr, unicode);
+	}
 	if (chr == SDLK_Y || chr == SDLK_RETURN) {
 		set_answer(1);
 	} else if (chr == SDLK_N || chr == SDLK_ESCAPE) {
