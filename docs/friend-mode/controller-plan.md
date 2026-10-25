@@ -189,6 +189,12 @@ From playing with a PS4 pad, after the menus and prompts were in:
     crosshair and the map too (it closes them; in a conversation it says
     bye). The left half of the ring couldn't be picked (the stick's angle
     wrapped wrongly: left and down-left picked the top-left entry). (Done.)
+14. **Hold / Follow in the utilities ring has no picture.** Either art
+    for it (see Art: "Follow the Avatar"), or take it out of the ring:
+    D-pad up held already does it, and the ring's place could go to the
+    chat quick phrases. (To decide.)
+15. **The skill bar hides while the pad is in use** (the skills ring
+    shows its slots; it comes back with the mouse or a key). (Done.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
