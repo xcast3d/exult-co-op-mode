@@ -47,6 +47,8 @@ void ActionCombatPause(const int* params);
 void ActionTarget(const int* params);
 void ActionInventory(const int* params);
 void ActionTryKeys(const int* params);
+class Game_object;
+bool Try_keys_on(Game_object* obj);    // The party's keys on it; false if none fits.
 void ActionStats(const int* params);
 void ActionCombatStats(const int* params);
 void ActionFaceStats(const int* params);

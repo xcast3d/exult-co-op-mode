@@ -106,7 +106,7 @@ struct Controller_ring_entry {
 	// The picture, centred on (cx, cy) in 'buf'; none: the plate is blank.
 	std::function<void(Image_buffer8* buf, int cx, int cy)> paint;
 	std::string           corner;           // Small text on the plate (seconds left).
-	bool                  usable = true;    // Dimmed, and does nothing, when not.
+	bool                  usable = true;    // Dimmed when not (its use then says why).
 	std::function<void()> use;
 };
 // 'title' shows in the middle until an entry is highlighted.  Entries are
@@ -130,7 +130,7 @@ void Controller_buttons_page();
 // become the keys those screens already take.  'menu' (the title menu and
 // the game's windows): the D-pad the arrows, south Return, east and Start
 // Escape, the shoulders Page Up / Down.  Otherwise (Get_click: signs,
-// conversations, "click to continue"): south Space, Start Escape, the
+// conversations, the crosshair, the map): south Space, east and Start Escape, the
 // shoulders and D-pad up / down E and Shift+E (the conversation highlight),
 // D-pad left / right the arrows.  The left stick, pushed, as the D-pad.
 // Rewrites 'event' in place; others are left alone.

@@ -450,17 +450,26 @@ void ActionTryKeys(const int* params) {
 	if (!obj) {
 		return;
 	}
-	const int qual = obj->get_quality();    // Key quality should match.
+	if (!Try_keys_on(obj)) {
+		Mouse::mouse()->flash_shape(Mouse::redx);    // Nothing matched.
+	}
+}
+
+// The party's keys on 'obj' (a door, a chest): the first unlocked key of
+// its quality is used on it.  False if none matched.  Controller support:
+// the utilities ring uses the Target System's pick, with no crosshair.
+bool Try_keys_on(Game_object* obj) {
+	Game_window* gwin = Game_window::get_instance();
+	const int    qual = obj->get_quality();    // Key quality should match.
 	if (Friend_mode_is_guest()) {
 		// Only the guest's own keys, and the host turns them.
 		Actor*             own = gwin->get_controlled_actor();
 		Game_object_vector keys;
 		if (gwin->has_network_friend_control() && own && own->get_objects(keys, 641, qual, c_any_framenum)) {
 			Friend_mode_request_item_use(keys[0], obj);
-		} else {
-			Mouse::mouse()->flash_shape(Mouse::redx);
+			return true;
 		}
-		return;
+		return false;
 	}
 	Actor*    party[10];                    // Get ->party members.
 	const int party_cnt = gwin->get_party(&party[0], 1);
@@ -478,12 +487,12 @@ void ActionTryKeys(const int* params) {
 					ucmachine->intercept_click_on_item(obj);
 					keys[0]->activate();
 					ucmachine->restore_intercept(oldtarg, oldtile);
-					return;
+					return true;
 				}
 			}
 		}
 	}
-	Mouse::mouse()->flash_shape(Mouse::redx);    // Nothing matched.
+	return false;
 }
 
 //  { ActionStats, 1, "Show stats", normal_keys, NONE },

@@ -8749,29 +8749,64 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 	auto has = [](int shape, int frame = c_any_framenum) {
 		return is_party_item(shape, frame) != nullptr;
 	};
+	// Used on the Target System's pick (E), with no crosshair: the item's
+	// "on what?" answered with it.
+	auto on_pick = [](int shape) {
+		return [shape]() {
+			Game_object* pick = Friend_mode_object_target();
+			if (!pick) {
+				Friend_mode_target_notice("Select a target first");
+				return;
+			}
+			Usecode_machine* usecode = gwin->get_usecode();
+			Game_object*     old_target;
+			Tile_coord*      old_tile;
+			usecode->save_intercept(old_target, old_tile);
+			usecode->intercept_click_on_item(pick);
+			gwin->activate_item(shape);
+			usecode->restore_intercept(old_target, old_tile);
+		};
+	};
+	// Unavailable: say why, at the top, where the pick's line shows.
+	auto or_say = [](bool available, const char* why, std::function<void()> use) {
+		return [available, why, use]() {
+			if (available) {
+				use();
+			} else {
+				Friend_mode_target_notice(why);
+			}
+		};
+	};
 	std::vector<Controller_ring_entry> entries;
-	entries.push_back({"Eat", Controller_bar_picture(8), {}, has(377) || has(616), []() {
-						   if (!Controller_feed_hungriest()) {
-							   Friend_mode_notice("No food");
-						   }
-					   }});
-	entries.push_back(
-			{"Watch", Controller_shape_picture(159, 0, SF_SHAPES_VGA), {}, has(159), item(159, c_any_framenum)});
-	entries.push_back({"Map", Controller_bar_picture(2), {}, has(178, 0), item(178, 0)});
+	const bool food = has(377) || has(616);
+	entries.push_back({"Eat", Controller_bar_picture(8), {}, food, or_say(food, "No food", []() {
+						   Controller_feed_hungriest();
+					   })});
+	entries.push_back({"Watch", Controller_shape_picture(159, 0, SF_SHAPES_VGA), {}, has(159),
+					   or_say(has(159), "No watch", item(159, c_any_framenum))});
+	entries.push_back({"Map", Controller_bar_picture(2), {}, has(178, 0), or_say(has(178, 0), "No map", item(178, 0))});
 	entries.push_back({"Journal", Controller_bar_picture(6), {}, true, action("NOTEBOOK")});
-	entries.push_back(
-			{"Lockpick", Controller_shape_picture(627, 7, SF_SHAPES_VGA), {}, has(627), item(627, c_any_framenum)});
-	entries.push_back({"Keys", Controller_bar_picture(5), {}, has(641), action("TRY_KEYS")});
+	entries.push_back({"Lockpick", Controller_shape_picture(627, 7, SF_SHAPES_VGA), {}, has(627),
+					   or_say(has(627), "No lockpick", on_pick(627))});
+	entries.push_back({"Keys", Controller_bar_picture(5), {}, has(641), or_say(has(641), "No keys", []() {
+						   Game_object* pick = Friend_mode_object_target();
+						   if (!pick) {
+							   Friend_mode_target_notice("Select a target first");
+						   } else if (!Try_keys_on(pick)) {
+							   Friend_mode_target_notice("No key fits");
+						   }
+					   })});
 	// Y: no picture in the game for it yet (a plate with its name).
 	const std::string follow = !Friend_mode_is_guest() ? (friend_holding ? "Party follows" : "Party holds")
 													   : (friend_following ? "Take over" : "Follow Avatar");
 	const bool        can_follow = !Friend_mode_is_guest() ? gwin->get_party_man()->get_count() > 0
 															: friend_session.connected();
-	entries.push_back({follow, {}, {}, can_follow, []() {
+	entries.push_back({follow, {}, {}, can_follow, or_say(can_follow, "No companions", []() {
 						   Friend_mode_hold_or_follow();
-					   }});
+					   })});
 	// Until the chat quick phrases have their place here.
-	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, has(761), item(761, c_any_framenum)});
+	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, has(761),
+					   or_say(has(761), "No spellbook", item(761, c_any_framenum))});
 	return entries;
 }
 

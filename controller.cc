@@ -745,7 +745,7 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 		key = menu ? SDLK_RETURN : SDLK_SPACE;
 		break;
 	case SDL_GAMEPAD_BUTTON_EAST:
-		key = menu ? SDLK_ESCAPE : SDLK_UNKNOWN;
+		key = SDLK_ESCAPE;    // Back, close, cancel (the crosshair, the map; "bye").
 		break;
 	case SDL_GAMEPAD_BUTTON_START:
 		key = SDLK_ESCAPE;
@@ -1114,8 +1114,8 @@ int Ring_pick() {
 	int             best   = -1;
 	float           least  = reach;
 	for (int i = 0; i < count; ++i) {
-		float off = std::fabs(angle - Ring_angle(i, count));
-		off       = std::min(off, two_pi - off);
+		// The difference wrapped to -pi..pi (left of the top is negative).
+		const float off = std::fabs(std::remainder(angle - Ring_angle(i, count), two_pi));
 		if (off <= least) {
 			least = off;
 			best  = i;
@@ -1225,9 +1225,10 @@ void Controller_ring_close() {
 	ring.open = false;
 	Ring_hide();
 	const int index = ring.highlight;
-	if (index >= 0 && index < static_cast<int>(ring.entries.size()) && ring.entries[index].usable && ring.entries[index].use) {
+	if (index >= 0 && index < static_cast<int>(ring.entries.size()) && ring.entries[index].use) {
+		std::cout << "Controller: " << ring.title << ": " << ring.entries[index].name << std::endl;
 		const auto use = ring.entries[index].use;    // It may open another ring.
-		use();
+		use();    // Unavailable ones say why ("No watch").
 	}
 }
 
