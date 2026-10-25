@@ -169,6 +169,9 @@ From playing with a PS4 pad, after the menus and prompts were in:
    (swap, pointer speed, hide delay) join it later. (Done.)
 10. **Sort a window** (Shift+C) had no button: Circle held sorts the
     newest window, as a tap closes it. (Done.)
+11. **The window's Sort and Take all buttons** (under a container's
+    checkmark) hide while the pad is in use, as the minimap's Hold
+    button does: Circle held sorts, L2+Cross takes all. (Done.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
