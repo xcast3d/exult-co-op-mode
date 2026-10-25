@@ -286,6 +286,19 @@ void KeyBinder::AddKeyBinding(SDL_Keycode key, SDL_Keymod mod, const Action* act
 	bindings[k] = a;
 }
 
+bool KeyBinder::DoActionByName(const std::string& name, int param, bool press) const {
+	for (int i = 0; ExultActions[i].s[0] != '\0'; i++) {
+		if (name == ExultActions[i].s) {
+			ActionType a{&ExultActions[i], {param}};
+			if (press || a.action->func_release) {
+				DoAction(a, press);
+			}
+			return true;
+		}
+	}
+	return false;
+}
+
 bool KeyBinder::DoAction(const ActionType& a, bool press) const {
 	if (!cheat() && (a.action->key_type == Action::cheat_keys || a.action->key_type == Action::mapedit_keys)) {
 		return true;

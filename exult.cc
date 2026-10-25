@@ -62,6 +62,7 @@
 #include "exultmenu.h"
 #include "fnames.h"
 #include "font.h"
+#include "controller.h"
 #include "font_map.h"
 #include "friendclass.h"
 #include "friendmap.h"
@@ -3873,6 +3874,29 @@ static bool Friend_mode_space(bool shift, bool alt) {
 // as Friend_mode_space, for the line under "Targeting ...".
 static bool Friend_is_merchant(int npc_num);
 
+// A key named in a hint ("Space", "Shift+Space", "Alt+Space", "C"), or,
+// when the pad was the last thing used, its button: "A", "LT+A", "X"
+// (controller.cc names them as printed on the pad).
+static std::string Friend_key_label(const std::string& key) {
+	if (!Controller_last_input_is_pad()) {
+		return key;
+	}
+	const std::string act = Controller_label(Controller_action::target_act);
+	std::string       button;
+	if (key == "Space") {
+		button = act;
+	} else if (key == "Shift+Space" || key == "Alt+Space") {
+		const std::string held
+				= Controller_label(key[0] == 'S' ? Controller_action::shift : Controller_action::alt);
+		if (!held.empty() && !act.empty()) {
+			button = held + "+" + act;
+		}
+	} else if (key == "C") {
+		button = Controller_label(Controller_action::key_binding, "TOGGLE_COMBAT");
+	}
+	return button.empty() ? key : button;
+}
+
 static std::string Friend_space_hint() {
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
@@ -3881,19 +3905,19 @@ static std::string Friend_space_hint() {
 		return {};
 	}
 	auto two = [](const std::string& space, const std::string& shift, const std::string& alt = {}) {
-		std::string line = space + " (Space)";
+		std::string line = space + " (" + Friend_key_label("Space") + ")";
 		if (!shift.empty()) {
-			line += "  " + shift + " (Shift+Space)";
+			line += "  " + shift + " (" + Friend_key_label("Shift+Space") + ")";
 		}
 		if (!alt.empty()) {
-			line += "  " + alt + " (Alt+Space)";
+			line += "  " + alt + " (" + Friend_key_label("Alt+Space") + ")";
 		}
 		return line;
 	};
 	if (!thing) {
 		if (!gwin->in_combat()) {
 			if (!Friend_has_conversation(target)) {
-				return "Attack (C, then Space)";
+				return "Attack (" + Friend_key_label("C") + ", then " + Friend_key_label("Space") + ")";
 			}
 			// A guest talks only to merchants and trainers.
 			return Friend_mode_is_guest() && !Friend_is_merchant(target->get_npc_num()) ? std::string("Avatar only")
@@ -8490,13 +8514,101 @@ static void SetIcon() {
 #endif
 }
 
-void Open_game_controller(SDL_JoystickID joystick_index) {
-	SDL_Gamepad* input_device = SDL_OpenGamepad(joystick_index);
-	if (input_device) {
-		SDL_GetGamepadJoystick(input_device);
-		std::cout << "Game controller attached and open: \"" << SDL_GetGamepadName(input_device) << '"' << std::endl;
-	} else {
-		std::cout << "Game controller attached, but it failed to open. Error: \"" << SDL_GetError() << '"' << std::endl;
+
+// R (and the pad's L3): keys run, or walk.  Each machine's own, kept in the
+// config.
+static void Friend_mode_toggle_running() {
+	Friend_running = !Friend_running;
+	config->set("config/gameplay/running", Friend_running, true);
+	Friend_mode_notice(Friend_running ? "Running" : "Walking");
+}
+
+// Controller support: what a pad's button does (controller.cc keeps the
+// map; docs/friend-mode/controller-plan.md).  The same calls as the keys,
+// with the held triggers as Shift and Alt.
+static void Controller_run(const Controller_binding& binding, bool down) {
+	if (binding.action == Controller_action::player_list) {
+		// Held Back: who plays whom, as Tab.
+		const bool shown = down && friend_session.mode() != Friend_mode_session::Mode::off && !friend_chat_active;
+		if (shown != friend_player_list_shown) {
+			friend_player_list_shown = shown;
+			gwin->set_all_dirty();
+		}
+		return;
+	}
+	if (!down || friend_chat_active) {
+		return;
+	}
+	const bool shift    = Controller_shift_held();
+	const bool alt      = Controller_alt_held();
+	const bool notebook = Notebook_gump::get_instance() != nullptr;
+	switch (binding.action) {
+	case Controller_action::target_person:
+		if (Friend_keyboard_targeting && !notebook) {
+			Friend_mode_cycle_target(shift ? -1 : 1);
+		}
+		break;
+	case Controller_action::target_thing:
+		if (Friend_keyboard_targeting && !notebook) {
+			Friend_mode_cycle_object(shift ? -1 : 1);
+		}
+		break;
+	case Controller_action::target_act:
+		if (Friend_keyboard_targeting && !notebook) {
+			Friend_mode_space(shift, alt);
+		}
+		break;
+	case Controller_action::toggle_run:
+		if (!notebook) {
+			Friend_mode_toggle_running();
+		}
+		break;
+	case Controller_action::next_character:
+		if (notebook) {
+			break;
+		}
+		if (!Friend_mode_is_guest()) {
+			Friend_mode_lead_next();
+		} else if (friend_session.connected()) {
+			Friend_mode_guest_request_companion(-1);
+		}
+		break;
+	case Controller_action::backpack:
+		if (!notebook && gwin->get_main_actor()) {
+			Friend_mode_backpack_key(-1);
+		}
+		break;
+	case Controller_action::skills_ring:
+		Friend_mode_notice("Skills ring: not built yet");
+		break;
+	case Controller_action::utilities_ring:
+		Friend_mode_notice("Utilities ring: not built yet");
+		break;
+	case Controller_action::chat_phrases:
+		Friend_mode_notice("Chat phrases: not built yet");
+		break;
+	case Controller_action::key_binding:
+		// Start, as Escape: the pick first; then windows, then the menu.
+		if (binding.name == "CLOSE_OR_MENU" && Friend_keyboard_targeting && !notebook
+			&& Friend_mode_escape_clears_pick()) {
+			break;
+		}
+		if (!keybinder->DoActionByName(binding.name, -1, true)) {
+			std::cerr << "Controller: no action \"" << binding.name << "\" (config/gameplay/controller/buttons)"
+					  << std::endl;
+		}
+		break;
+	default:
+		break;
+	}
+}
+
+// The pad, or the keyboard and mouse, became the last thing used: the hint
+// line names the other's buttons now.
+static void Controller_switched_input() {
+	if (!friend_hint_shown.empty()) {
+		friend_hint_shown   = Friend_space_hint();
+		friend_hint_changed = true;
 	}
 }
 
@@ -8506,18 +8618,11 @@ bool Handle_device_connection_event(void* userdata, SDL_Event* event) {
 	// become connected or disconnected.
 	switch (event->type) {
 	case SDL_EVENT_GAMEPAD_ADDED: {
-		if (!SDL_GetGamepadFromID(event->gdevice.which)) {
-			Open_game_controller(event->gdevice.which);
-		}
+		Controller_device_added(event->gdevice.which);    // Controller support.
 		break;
 	}
 	case SDL_EVENT_GAMEPAD_REMOVED: {
-		SDL_Gamepad* input_device = SDL_GetGamepadFromID(event->gdevice.which);
-		if (input_device) {
-			SDL_CloseGamepad(input_device);
-			input_device = nullptr;
-			std::cout << "Game controller detached and closed." << std::endl;
-		}
+		Controller_device_removed(event->gdevice.which);
 		break;
 	}
 	}
@@ -8561,6 +8666,7 @@ static void Init() {
 	// Remove SDL_HINT_MOUSE_EMULATE_WARP_WITH_RELATIVE set as "0"
 	// Do not confuse that Hint with :
 	//        SDL_HINT_MOUSE_RELATIVE_MODE_WARP         set as "0"
+	Controller_set_hints();    // Controller support: pads SDL leaves off.
 	if (!SDL_Init(init_flags | joyinit)) {
 		cerr << "Unable to initialize SDL: " << SDL_GetError() << endl;
 		exit(-1);
@@ -8570,16 +8676,10 @@ static void Init() {
 	// KBD repeat should be nice.
 	SDL_HideCursor();
 
-	// Open any connected game controllers.
-	SDL_JoystickID* joysticks = SDL_GetJoysticks(nullptr);
-	if (joysticks) {
-		for (int i = 0; joysticks[i]; ++i) {
-			if (SDL_IsGamepad(joysticks[i])) {
-				Open_game_controller(joysticks[i]);
-			}
-		}
-		SDL_free(joysticks);
-	}
+	// Open any connected game controllers (controller.cc), and give their
+	// buttons to the game.
+	Controller_init();
+	Controller_set_game_hooks(Controller_run, Controller_switched_input);
 	// Listen for game controller device connection and disconnection
 	// events. Registering a listener allows these events to be received
 	// and processed via any event-processing loop, of which Exult has
@@ -10458,6 +10558,9 @@ static bool Friend_mode_chat_event(SDL_Event& event) {
  */
 
 static void Handle_event(SDL_Event& event) {
+	if (Controller_event(event)) {
+		return;    // Controller support: a pad's button (Controller_run).
+	}
 	// A guest during the Avatar's conversation: E and Shift+E move a
 	// highlight through the choices, Space suggests it (as a click does).
 	if (Friend_mode_is_guest() && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && !friend_chat_active
@@ -10483,9 +10586,7 @@ static void Handle_event(SDL_Event& event) {
 		// R: keys run, or walk (get_walking_speed).  2026-10-23, was Caps
 		// Lock, which capitalised chat too.  The status bar style moved to
 		// Shift+R.  Each machine's own, kept in the config.
-		Friend_running = !Friend_running;
-		config->set("config/gameplay/running", Friend_running, true);
-		Friend_mode_notice(Friend_running ? "Running" : "Walking");
+		Friend_mode_toggle_running();
 		return;
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE

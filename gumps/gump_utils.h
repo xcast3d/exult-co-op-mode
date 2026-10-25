@@ -41,7 +41,14 @@
 #define DELAY_TOTAL_MS  10
 #define DELAY_SINGLE_MS 1
 
+// Controller support: run on each pass of every event loop, modal ones
+// included (controller.cc polls the pad pointer and triggers there).
+inline void (*Delay_hook)() = nullptr;
+
 inline void Delay() {
+	if (Delay_hook) {
+		Delay_hook();
+	}
 	const Uint32 expiration = DELAY_TOTAL_MS + SDL_GetTicks();
 	for (;;) {
 		SDL_PumpEvents();

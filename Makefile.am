@@ -47,6 +47,8 @@ EXULTSOURCES =	\
 	combat.cc	\
 	combat.h	\
 	combat_opts.h	\
+	controller.cc	\
+	controller.h	\
 	headers/common_types.h	\
 	dir.cc		\
 	dir.h		\

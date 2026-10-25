@@ -115,6 +115,9 @@ public:
 	int avatar_speed;
 
 	static bool mouse_update;
+	// Controller support: hidden while the pad is in use and its pointer
+	// isn't showing (controller.cc).  A crosshair still shows.
+	static bool pad_hidden;
 
 private:
 	// This is updated By MakeCurrent to point to the current mouse object

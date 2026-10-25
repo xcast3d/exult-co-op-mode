@@ -94,6 +94,10 @@ public:
 	}
 
 	bool DoAction(const ActionType& action, bool press) const;
+	// Controller support: run a key action by its name ("TOGGLE_COMBAT"),
+	// with one parameter, under the same rules as its key.  False if no
+	// action has that name.
+	bool DoActionByName(const std::string& name, int param, bool press) const;
 	bool HandleEvent(const SDL_Event& ev) const;
 	bool IsMotionEvent(const SDL_Event& ev) const;
 
