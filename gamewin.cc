@@ -3097,7 +3097,10 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 		if (!clicked_actor && Friend_mode_guest_local_shape(obj->get_shapenum())) {
 			effects->remove_text_effects();    // Only shows something: run it here.
 			usecode->init_conversation();
+			// Our companion stands in for the Avatar (the spittoon's "ptui!").
+			Actor* const before = Friend_mode_set_usecode_walker(controlled);
 			obj->activate();
+			Friend_mode_set_usecode_walker(before);
 			return;
 		}
 		// Merchants talk to a guest's companion on the guest's own copy;
@@ -3147,12 +3150,10 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 				usecode->intercept_click_on_item(controlled);
 			}
 			// The one led stands in for the Avatar in the item's script
-			// (walks to the well, fills the bucket).
-			Actor* const before = lead_use != Friend_item_use::none ? Friend_mode_set_usecode_walker(controlled) : nullptr;
+			// (walks to the well, fills the bucket, spits in the spittoon).
+			Actor* const before = Friend_mode_set_usecode_walker(controlled);
 			obj->activate();
-			if (lead_use != Friend_item_use::none) {
-				Friend_mode_set_usecode_walker(before);
-			}
+			Friend_mode_set_usecode_walker(before);
 			if (lead_use == Friend_item_use::on_self) {
 				usecode->intercept_click_on_item(nullptr);    // In case it went unused.
 			}

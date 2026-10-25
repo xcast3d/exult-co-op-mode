@@ -2547,7 +2547,7 @@ bool Friend_mode_guest_local_shape(int shape) {
 	case 284:    // Sundial: says the time.
 	case 770:    // Orrery viewer.
 	case 729:    // Crystal ball.
-	case 944:    // Pot: a remark.
+	case 944:    // Pot: a remark; frame 0, the spittoon, spits ("ptui!").
 	case 742:    // Stuffed toy: a remark.
 	case 837:    // Easel: a remark (paint on it with brush and pigments).
 	case 644:    // Gold coin: "Call it." heads or tails (closes windows).
@@ -2643,7 +2643,9 @@ bool Friend_mode_guest_activate(Game_object* item) {
 	}
 	if (Friend_mode_guest_local_shape(item->get_shapenum())) {    // Shows something, here only.
 		gwin->get_usecode()->init_conversation();
+		Actor* const before = Friend_mode_set_usecode_walker(own);    // We stand in for the Avatar.
 		item->activate();
+		Friend_mode_set_usecode_walker(before);
 		return true;
 	}
 	gwin->get_effects()->add_text("The Avatar must do this", own);
