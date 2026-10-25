@@ -2953,11 +2953,17 @@ public:
 	}
 
 	// Only the slots take clicks; the tooltip's band doesn't hide the world.
+	// Hidden while the pad is in use (the skills ring has the slots), and
+	// not there to click.
 	bool has_point(int mx, int my) const override {
-		return TileRect(region.x + slots_x, region.y + slots_y, slots_w(), slots_h()).has_point(mx, my);
+		return !Gump::pad_in_use
+			   && TileRect(region.x + slots_x, region.y + slots_y, slots_w(), slots_h()).has_point(mx, my);
 	}
 
 	Gump_button* on_button(int mx, int my) override {
+		if (Gump::pad_in_use) {
+			return nullptr;
+		}
 		for (auto& button : buttons) {
 			if (button->on_button(mx, my)) {
 				return button.get();
@@ -3224,6 +3230,9 @@ void Skill_button::paint() {
 }
 
 void Skill_bar::paint() {
+	if (Gump::pad_in_use) {
+		return;    // Controller support: the skills ring shows the slots.
+	}
 	for (auto& button : buttons) {
 		button->paint();
 	}
