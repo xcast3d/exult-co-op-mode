@@ -782,5 +782,6 @@ void AudioOptions_gump::paint() {
 #endif
 		font->paint_text(iwin->get_ib8(), Strings::Speech_(), x + label_margin, y + yForRow(12) + 1);
 	}
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
 }

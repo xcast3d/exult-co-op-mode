@@ -21,6 +21,7 @@
 #endif
 
 #include "game.h"
+#include "gump_utils.h"
 
 #include "Audio.h"
 #include "Configuration.h"
@@ -1022,6 +1023,9 @@ int wait_delay(int ms, int startcol, int ncol, int rotspd) {
 		const unsigned long ticks1 = SDL_GetTicks();
 		// this may be a bit risky... How fast can events be generated?
 		while (SDL_PollEvent(&event)) {
+			if (Screen_event_hook) {
+				Screen_event_hook(event, false);    // Controller support: Cross as Space, Start as Escape.
+			}
 			switch (event.type) {
 			case SDL_EVENT_KEY_DOWN:
 				switch (event.key.key) {

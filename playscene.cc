@@ -17,6 +17,7 @@
  */
 
 #include "playscene.h"
+#include "gump_utils.h"
 
 #include "Audio.h"
 #include "data/exult_flx.h"
@@ -375,6 +376,9 @@ bool ScenePlayer::parse_text_section(const string& content, TextSection& section
 ScenePlayer::SkipAction ScenePlayer::check_break() {
 	SDL_Event event;
 	while (SDL_PollEvent(&event)) {
+		if (Screen_event_hook) {
+			Screen_event_hook(event, false);    // Controller support: Cross as Space, Start as Escape.
+		}
 		if (event.type == SDL_EVENT_KEY_DOWN) {
 			switch (event.key.key) {
 			case SDLK_ESCAPE:

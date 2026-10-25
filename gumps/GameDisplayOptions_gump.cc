@@ -578,5 +578,6 @@ void GameDisplayOptions_gump::paint() {
 	if (buttons[id_minimap_size]) {
 		font->paint_text(iwin->get_ib8(), Strings::MinimapSize_(), x + label_margin, y + yForRow(++y_index) + 1);
 	}
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
 }

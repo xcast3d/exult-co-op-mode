@@ -138,6 +138,10 @@ struct State {
 	Uint64 last_tick     = 0;
 
 	std::array<Trigger_use, 2> trigger{Trigger_use::off, Trigger_use::off};
+
+	// The left stick in Exult's other screens, as the D-pad: -1, 0 or 1 on
+	// each axis (x, y).
+	std::array<int, 2> stick_dir{0, 0};
 };
 
 State state;
@@ -629,6 +633,36 @@ bool Controller_event(const SDL_Event& event) {
 }
 
 void Controller_screen_event(SDL_Event& event, bool menu) {
+	// The left stick: pushed past half way, a press of the D-pad that way
+	// (back under a third lets go).
+	if (event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION && state.enabled && Is_primary(event.gaxis.which)
+		&& (event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX || event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTY)) {
+		const bool    across = event.gaxis.axis == SDL_GAMEPAD_AXIS_LEFTX;
+		int&          dir    = state.stick_dir[across ? 0 : 1];
+		const int     was    = dir;
+		const int     value  = event.gaxis.value;
+		constexpr int on     = SDL_JOYSTICK_AXIS_MAX * 6 / 10;
+		constexpr int off    = SDL_JOYSTICK_AXIS_MAX * 3 / 10;
+		if (value > on) {
+			dir = 1;
+		} else if (value < -on) {
+			dir = -1;
+		} else if (std::abs(value) < off) {
+			dir = 0;
+		}
+		if (dir == was || dir == 0) {
+			return;
+		}
+		SDL_Event press{};
+		press.type              = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+		press.gbutton.timestamp = event.gaxis.timestamp;
+		press.gbutton.which     = event.gaxis.which;
+		press.gbutton.button    = static_cast<Uint8>(
+				   across ? (dir < 0 ? SDL_GAMEPAD_BUTTON_DPAD_LEFT : SDL_GAMEPAD_BUTTON_DPAD_RIGHT)
+							 : (dir < 0 ? SDL_GAMEPAD_BUTTON_DPAD_UP : SDL_GAMEPAD_BUTTON_DPAD_DOWN));
+		press.gbutton.down = true;
+		event              = press;
+	}
 	if (!state.enabled || (event.type != SDL_EVENT_GAMEPAD_BUTTON_DOWN && event.type != SDL_EVENT_GAMEPAD_BUTTON_UP)
 		|| !Is_primary(event.gbutton.which)) {
 		return;
@@ -684,6 +718,16 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 	key_event.key.mod       = mod;
 	key_event.key.down      = down;
 	event                   = key_event;
+}
+
+bool Controller_left_stick_centred() {
+	SDL_Gamepad* pad = Primary_pad();
+	if (!pad) {
+		return true;
+	}
+	constexpr int dead = SDL_JOYSTICK_AXIS_MAX / 4;
+	return std::abs(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTX)) <= dead
+		   && std::abs(SDL_GetGamepadAxis(pad, SDL_GAMEPAD_AXIS_LEFTY)) <= dead;
 }
 
 bool Controller_last_input_is_pad() {

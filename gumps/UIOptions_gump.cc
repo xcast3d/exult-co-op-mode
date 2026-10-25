@@ -388,7 +388,12 @@ namespace {
 			font->paint_text(iwin->get_ib8(), Strings::Fillmode_(), x + label_margin, y + yForRow(4) + 1);
 			font->paint_text(iwin->get_ib8(), Strings::Fillscaler_(), x + label_margin, y + yForRow(5) + 1);
 			font->paint_text(iwin->get_ib8(), Strings::Palette_(), x + label_margin, y + yForRow(6) + 1);
+			paint_focus();    // Controller support: the highlight.
 			gwin->set_painted();
+		}
+
+		void focus_widgets(std::vector<Gump_widget*>& list) override {
+			add_focus(list, buttons);    // Controller support: the highlight.
 		}
 
 	private:
@@ -801,5 +806,6 @@ void UIOptions_gump::paint() {
 		}
 	}
 
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
 }

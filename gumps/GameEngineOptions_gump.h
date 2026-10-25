@@ -71,6 +71,9 @@ public:
 
 	// Paint it and its contents.
 	void paint() override;
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		add_focus(list, buttons);    // Controller support: the highlight.
+	}
 	void close() override;
 
 	void build_buttons();

@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "game.h"
 #include "gamewin.h"
 #include "istring.h"
+#include "Gump_ToggleButton.h"
 #include "misc_buttons.h"
 #include "palette.h"
 
@@ -161,9 +162,9 @@ static Modal_gump::DragType dragType = Modal_gump::DragType::Unknown;
 
 bool Modal_gump::focus_on_open = false;
 
-// The page's focus buttons in screen order, top to bottom, then left to right.
-static std::vector<Gump_button*> Focus_list(std::vector<Gump_button*> list) {
-	std::stable_sort(list.begin(), list.end(), [](Gump_button* a, Gump_button* b) {
+// The page's focus widgets in screen order, top to bottom, then left to right.
+static std::vector<Gump_widget*> Focus_list(std::vector<Gump_widget*> list) {
+	std::stable_sort(list.begin(), list.end(), [](Gump_widget* a, Gump_widget* b) {
 		const TileRect ra = a->get_rect();
 		const TileRect rb = b->get_rect();
 		return ra.y != rb.y ? ra.y < rb.y : ra.x < rb.x;
@@ -172,32 +173,58 @@ static std::vector<Gump_button*> Focus_list(std::vector<Gump_button*> list) {
 }
 
 bool Modal_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
-	std::vector<Gump_button*> found;
-	focus_buttons(found);
-	const std::vector<Gump_button*> list  = Focus_list(found);
-	const int count = static_cast<int>(list.size());
+	std::vector<Gump_widget*> found;
+	focus_widgets(found);
+	const std::vector<Gump_widget*> list  = Focus_list(found);
+	const int                       count = static_cast<int>(list.size());
 	if (count == 0) {
 		return Gump::key_down(chr, unicode);
 	}
-	switch (chr) {
-	case SDLK_UP:
-	case SDLK_DOWN:
-		if (focus < 0 || focus >= count) {
-			focus = chr == SDLK_UP ? count - 1 : 0;
-		} else {
-			focus = (focus + (chr == SDLK_UP ? count - 1 : 1)) % count;
-		}
+	if (focus >= count) {
+		focus = count - 1;    // A button went away.
+	}
+	const bool        pages = focus_on_page_keys();
+	const SDL_Keycode prev  = pages ? SDLK_PAGEUP : SDLK_UP;
+	const SDL_Keycode next  = pages ? SDLK_PAGEDOWN : SDLK_DOWN;
+	auto              shown = [this]() {
 		paint();
 		gwin->set_painted();
+	};
+	if (chr == prev || chr == next) {
+		if (focus < 0) {
+			focus = chr == prev ? count - 1 : 0;
+		} else {
+			focus = (focus + (chr == prev ? count - 1 : 1)) % count;
+		}
+		shown();
 		return true;
+	}
+	if (focus < 0) {
+		return Gump::key_down(chr, unicode);
+	}
+	Gump_widget* widget = list[focus];
+	Gump_button* button = widget->as_button();
+	switch (chr) {
 	case SDLK_RETURN:
 	case SDLK_KP_ENTER:
-		if (focus >= 0 && focus < count) {
-			list[focus]->activate(MouseButton::Left);
-			if (!done) {    // Back from a sub menu: the same button stays highlighted.
-				paint();
-				gwin->set_painted();
+		if (button) {
+			button->activate(MouseButton::Left);
+			if (!done) {    // Back from a sub menu: the same one stays highlighted.
+				shown();
 			}
+			return true;
+		}
+		break;
+	case SDLK_LEFT:
+	case SDLK_RIGHT:
+		if (dynamic_cast<Gump_ToggleButton*>(widget) || dynamic_cast<Gump_ToggleTextButton*>(widget)) {
+			// A right click steps a toggle back, a left click on.
+			button->activate(chr == SDLK_LEFT ? MouseButton::Right : MouseButton::Left);
+			shown();
+			return true;
+		}
+		if (!button && widget->key_down(chr, unicode)) {    // A slider.
+			shown();
 			return true;
 		}
 		break;
@@ -207,18 +234,21 @@ bool Modal_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
 	return Gump::key_down(chr, unicode);
 }
 
-// A box round the highlighted button, in the conversation highlight's white.
+// A box round the highlighted widget, in the conversation highlight's white.
 void Modal_gump::paint_focus() {
-	std::vector<Gump_button*> found;
-	focus_buttons(found);
-	const std::vector<Gump_button*> list = Focus_list(found);
+	std::vector<Gump_widget*> found;
+	focus_widgets(found);
+	const std::vector<Gump_widget*> list = Focus_list(found);
 	if (list.empty()) {
 		return;
 	}
 	if (focus < 0 && focus_on_open) {
 		focus = 0;
 	}
-	if (focus < 0 || focus >= static_cast<int>(list.size())) {
+	if (focus >= static_cast<int>(list.size())) {
+		focus = static_cast<int>(list.size()) - 1;
+	}
+	if (focus < 0) {
 		return;
 	}
 	const TileRect      rect  = list[focus]->get_rect();

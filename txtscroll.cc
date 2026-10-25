@@ -21,6 +21,7 @@
 #endif
 
 #include "txtscroll.h"
+#include "gump_utils.h"
 
 #include "Configuration.h"
 #include "common_types.h"
@@ -279,6 +280,9 @@ bool TextScroller::run(Game_window* gwin) {
 		do {
 			// this could be a problem when too many events are produced
 			while (SDL_PollEvent(&event)) {
+				if (Screen_event_hook) {
+					Screen_event_hook(event, false);    // Controller support: Cross as Space.
+				}
 				switch (event.type) {
 				case SDL_EVENT_KEY_DOWN:
 					if (event.key.key == SDLK_RSHIFT || event.key.key == SDLK_LSHIFT) {

@@ -56,7 +56,7 @@ public:
 	void paint() override;
 
 protected:
-	void focus_buttons(std::vector<Gump_button*>& list) override;
+	void focus_widgets(std::vector<Gump_widget*>& list) override;
 
 public:
 

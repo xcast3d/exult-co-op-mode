@@ -45,6 +45,9 @@ public:
 	void         help();
 	void         cancel();
 	void         paint() override;
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		add_focus(list, buttons);    // Controller support: the highlight.
+	}
 	Gump_button* on_button(int mx, int my) override;
 
 private:

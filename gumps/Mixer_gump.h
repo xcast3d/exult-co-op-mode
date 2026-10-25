@@ -68,6 +68,7 @@ public:
 
 	// Paint it and its contents.
 	void paint() override;
+	void focus_widgets(std::vector<Gump_widget*>& list) override;
 	// Close the gump and save changes
 	void close() override;
 	// Close the gump and revert changes

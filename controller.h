@@ -74,6 +74,9 @@ void Controller_set_game_hooks(Controller_runner runner, Controller_switched swi
 // is done with; false for everything else (which it may only note).
 bool Controller_event(const SDL_Event& event);
 
+// Is the left stick let go?  (Walking stops if it was let go while
+// another screen had the events.)
+bool Controller_left_stick_centred();
 // Is the pad the last thing used (for the hint line's names)?
 bool Controller_last_input_is_pad();
 // Held triggers as Shift and Alt (only while the pad pointer is hidden).
@@ -89,8 +92,8 @@ bool Controller_pointer_showing();
 // Escape, the shoulders Page Up / Down.  Otherwise (Get_click: signs,
 // conversations, "click to continue"): south Space, Start Escape, the
 // shoulders and D-pad up / down E and Shift+E (the conversation highlight),
-// D-pad left / right the arrows.  Rewrites 'event' in place; others are
-// left alone.
+// D-pad left / right the arrows.  The left stick, pushed, as the D-pad.
+// Rewrites 'event' in place; others are left alone.
 void Controller_screen_event(SDL_Event& event, bool menu);
 
 // The name on the first button doing 'action' ("A", "Cross", "LB",

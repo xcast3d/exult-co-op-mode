@@ -65,18 +65,36 @@ public:
 	bool mouse_down(int mx, int my, MouseButton button) override;
 
 	// Keyboard and controller focus (controller-plan.md, step 7): up and
-	// down move a highlight through focus_buttons(), wrapping round; Return
-	// presses the highlighted one, as a click would.  A page lists its
-	// buttons in screen order and calls paint_focus() after painting them;
-	// a page that lists none keeps its own keys.
+	// down move a highlight through focus_widgets() in screen order,
+	// wrapping round; Return presses the highlighted one, as a click would;
+	// left and right step a toggle back or on, or move a slider.  A page
+	// lists its widgets and calls paint_focus() after painting them; a page
+	// that lists none keeps its own keys.
 	bool key_down(SDL_Keycode chr, SDL_Keycode unicode) override;
-	// Highlight the first button as soon as a page opens (the pad is in
+	// Highlight the first widget as soon as a page opens (the pad is in
 	// use; set by controller.cc).  Otherwise the first up or down does.
 	static bool focus_on_open;
 
 protected:
-	virtual void focus_buttons(std::vector<Gump_button*>& list) {
+	virtual void focus_widgets(std::vector<Gump_widget*>& list) {
 		ignore_unused_variable_warning(list);
+	}
+	// Add a page's buttons (an array of owning pointers; empty ones skipped).
+	template <typename Buttons>
+	static void add_focus(std::vector<Gump_widget*>& list, Buttons& buttons) {
+		for (auto& button : buttons) {
+			if (button) {
+				list.push_back(&*button);
+			}
+		}
+	}
+	// Page Up / Down (the pad's LB / RB) move the highlight instead of up
+	// and down, for a page whose up and down do something else (Load/Save).
+	virtual bool focus_on_page_keys() const {
+		return false;
+	}
+	bool focus_shown() const {
+		return focus >= 0;
 	}
 	void paint_focus();
 

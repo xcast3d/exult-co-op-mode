@@ -272,7 +272,17 @@ public:
 		for (std::size_t i = 0; i < details.size(); ++i) {
 			label(row_details + static_cast<int>(i), details[i]);
 		}
+		paint_focus();    // Controller support: the highlight.
 		gwin->set_painted();
+	}
+
+	// Controller support: the highlight.
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		for (int id = 0; id < id_count; ++id) {
+			if (buttons[id] && shown(id)) {
+				list.push_back(buttons[id].get());
+			}
+		}
 	}
 
 	// The code (or the internet address) arrives a moment after opening,
@@ -443,12 +453,8 @@ void Gamemenu_gump::paint() {
 	gwin->set_painted();
 }
 
-void Gamemenu_gump::focus_buttons(std::vector<Gump_button*>& list) {
-	for (auto& btn : buttons) {
-		if (btn) {
-			list.push_back(btn.get());
-		}
-	}
+void Gamemenu_gump::focus_widgets(std::vector<Gump_widget*>& list) {
+	add_focus(list, buttons);
 }
 
 void Gamemenu_gump::do_exult_menu() {

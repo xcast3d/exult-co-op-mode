@@ -293,6 +293,7 @@ void InputOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::PathfindwithLongTouch_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), "WASD movement:", x + label_margin, y + yForRow(++y_index) + 1);
 
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
 }
 
@@ -399,5 +400,6 @@ void TargetingOptions_gump::paint() {
 			font->paint_text(iwin->get_ib8(), label(i), x + label_margin, y + yForRow(i) + 1);
 		}
 	}
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
 }

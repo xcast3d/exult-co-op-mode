@@ -340,7 +340,17 @@ void Mixer_gump::paint() {
 		font->paint_text(iwin->get_ib8(), Strings::disabled(), disabled_text_pos, y + yForRow(num_sliders - 1));
 	}
 
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
+}
+
+void Mixer_gump::focus_widgets(std::vector<Gump_widget*>& list) {
+	for (const auto& slider : {midislider, oggslider, sfxslider, speechslider}) {
+		if (slider) {
+			list.push_back(slider.get());
+		}
+	}
+	add_focus(list, buttons);
 }
 
 bool Mixer_gump::mouse_down(int mx, int my, MouseButton button) {
@@ -434,6 +444,14 @@ bool Mixer_gump::mousewheel_down(int mx, int my) {
 }
 
 bool Mixer_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
+	// The highlight first (controller support): up and down, and left and
+	// right on the highlighted slider; Return on a highlighted button
+	// presses it.
+	if ((chr == SDLK_UP || chr == SDLK_DOWN || chr == SDLK_LEFT || chr == SDLK_RIGHT
+		 || ((chr == SDLK_RETURN || chr == SDLK_KP_ENTER) && focus_shown()))
+		&& Modal_gump::key_down(chr, unicode)) {
+		return true;
+	}
 	switch (chr) {
 	case SDLK_RETURN:
 		close();

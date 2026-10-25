@@ -41,6 +41,7 @@
 #include "party.h"
 #include "touchui.h"
 
+#include <algorithm>
 #include <cctype>
 #include <cstring>
 #include <ctime>
@@ -564,6 +565,7 @@ void Newfile_gump::paint() {
 					y + infoy + (infoh - sman->get_text_height(4)) / 2);
 		}
 	}
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
 }
 
@@ -655,7 +657,18 @@ bool Newfile_gump::mouse_down(
 #ifdef DEBUG
 	cout << "Hit a save game field" << endl;
 #endif
-	selected = hit + list_position;
+	select_slot(hit + list_position);
+	return true;
+	// See if on text field.
+}
+
+/*
+ *  Select a line of the list: -2 the new save, -1 the quick save, or a
+ *  save game; the buttons follow (as a click on the line).
+ */
+
+void Newfile_gump::select_slot(int slot) {
+	selected = slot;
 
 	bool want_load   = true;
 	bool want_delete = true;
@@ -721,8 +734,47 @@ bool Newfile_gump::mouse_down(
 		}
 	}
 
-	return true;
-	// See if on text field.
+}
+
+void Newfile_gump::focus_widgets(std::vector<Gump_widget*>& list) {
+	for (const int id : {id_save, id_load, id_delete, id_close}) {
+		if (buttons[id]) {
+			list.push_back(buttons[id].get());
+		}
+	}
+}
+
+/*
+ *  Controller support (and the keyboard): up and down pick a line of the
+ *  list, scrolling it.  The new save gets a name (the date and time) so the
+ *  pad can save without typing.
+ */
+
+void Newfile_gump::step_selection(int dir) {
+	int slot = selected < -2 ? -2 : selected + dir;
+	slot     = std::clamp(slot, -2, num_games - 1);
+	if (slot == selected) {
+		return;
+	}
+	select_slot(slot);
+	if (slot == -2 && !newname[0]) {
+		const std::time_t now = std::time(nullptr);
+		std::strftime(newname, sizeof(newname), "%b %d %H:%M", std::localtime(&now));
+		cursor = static_cast<int>(std::strlen(newname));
+		if (!buttons[id_save]) {
+			buttons[id_save] = std::make_unique<Newfile_Textbutton>(
+					this, &Newfile_gump::save, Strings::SAVE(), btn_cols[0], btn_rows[0], 40);
+		}
+	}
+	// Keep it in view.
+	const int last_top = std::max(-2, num_games - fieldcount);
+	if (slot < list_position) {
+		list_position = slot;
+	} else if (slot >= list_position + fieldcount) {
+		list_position = slot - fieldcount + 1;
+	}
+	list_position = std::clamp(list_position, -2, last_top);
+	paint();
 }
 
 /*
@@ -871,6 +923,18 @@ bool Newfile_gump::text_input(const char* text) {
 bool Newfile_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
 	bool update_details = false;
 	int  repaint        = false;
+
+	// Controller support (and the keyboard): up and down pick a save; Page
+	// Up / Down (the pad's LB / RB) move the highlight along the buttons,
+	// and Return presses the highlighted one.
+	if (chr == SDLK_UP || chr == SDLK_DOWN) {
+		step_selection(chr == SDLK_UP ? -1 : 1);
+		return true;
+	}
+	if (chr == SDLK_PAGEUP || chr == SDLK_PAGEDOWN
+		|| ((chr == SDLK_RETURN || chr == SDLK_KP_ENTER) && focus_shown())) {
+		return Modal_gump::key_down(chr, unicode);
+	}
 
 	// Are we selected on some text?
 	if (selected == -3) {

@@ -680,5 +680,6 @@ void VideoOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::Samesettingsforwindow(), x + label_margin, y + yForRow(10) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::andfullscreen_(), x + label_margin, y + yForRow(11) + 1);
 #endif
+	paint_focus();    // Controller support: the highlight.
 	gwin->set_painted();
 }

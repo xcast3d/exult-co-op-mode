@@ -3992,7 +3992,17 @@ public:
 			font->paint_text(iwin->get_ib8(), "The host sets the rest.", x + label_margin,
 							 y + yForRow(set_count) + 1);
 		}
+		paint_focus();    // Controller support: the highlight.
 		Gwin()->set_painted();
+	}
+
+	// Controller support: the highlight.
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		for (int id = 0; id < id_count; ++id) {
+			if (buttons[id] && shown(id)) {
+				list.push_back(buttons[id].get());
+			}
+		}
 	}
 };
 

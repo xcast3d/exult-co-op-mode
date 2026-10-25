@@ -10321,6 +10321,13 @@ static void Handle_events() {
 			show_items_clicked = false;
 		}
 
+		if ((joy_aim_x != 0 || joy_aim_y != 0) && Controller_left_stick_centred()) {
+			// Controller support: the stick was let go while a menu or a
+			// conversation had the events.
+			gwin->stop_actor();
+			joy_aim_x = 0;
+			joy_aim_y = 0;
+		}
 		if (joy_aim_x != 0 || joy_aim_y != 0) {
 			// Calculate the player speed
 			const int speed = 200 * gwin->get_std_delay() / static_cast<int>(joy_speed_factor);

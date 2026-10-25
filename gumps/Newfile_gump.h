@@ -184,6 +184,8 @@ protected:
 	int AddCharacter(char c);
 
 	void LoadSaveGameDetails();    // Loads (and sorts) all the savegame details
+	void select_slot(int slot);       // Select a line of the list (as a click).
+	void step_selection(int dir);     // Up / down: the next line (controller support).
 	void FreeSaveGameDetails();    // Frees all the savegame details
 
 	void PaintSaveName(int line);
@@ -222,6 +224,17 @@ public:
 
 	// Paint it and its contents.
 	void paint() override;
+
+protected:
+	// Controller support: the highlight on Load, Save, Delete and Cancel,
+	// moved with Page Up / Down (LB / RB), as up and down pick a save.
+	void focus_widgets(std::vector<Gump_widget*>& list) override;
+
+	bool focus_on_page_keys() const override {
+		return true;
+	}
+
+public:
 
 	bool is_draggable() const override;
 
