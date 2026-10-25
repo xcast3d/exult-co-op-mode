@@ -1993,7 +1993,10 @@ static std::vector<std::vector<unsigned char>> Friend_inventory_items(Actor* act
 	return items;
 }
 
-// Host: send party inventories that changed (first sight is the baseline).
+// Host: send party inventories that changed.  Without send, this only
+// records them (the world a guest just got has them already).  A member
+// first seen while sending joined the party since (F9, or recruited after
+// the guest joined), and its inventory may differ from the guest's copy.
 static void Friend_mode_inventory_pass(bool send) {
 	std::vector<Actor*> party_actors{gwin->get_main_actor()};
 	Party_manager*      party = gwin->get_party_man();
@@ -2010,12 +2013,11 @@ static void Friend_mode_inventory_pass(bool send) {
 		auto         found = friend_inventory_hashes.find(npc);
 		if (found == friend_inventory_hashes.end()) {
 			friend_inventory_hashes[npc] = hash;
+		} else if (found->second == hash) {
 			continue;
+		} else {
+			found->second = hash;
 		}
-		if (found->second == hash) {
-			continue;
-		}
-		found->second = hash;
 		if (!send) {
 			continue;
 		}
@@ -9805,19 +9807,23 @@ static void Handle_events() {
 				Actor* actor = gwin->get_npc(guest_assigned_actor);
 				const Tile_coord state(tx, ty, tz);
 				// The host echoes each step it accepts, a round trip late.  An
-				// echo of a step we sent (and have since walked past) is
-				// ignored, or the companion is pulled back while running.
-				// Anything else (a refused step, the leash, a teleporter, the
-				// host's AI walking it) is the truth.
+				// echo of a step we sent is ignored, or the companion is pulled
+				// back while running.  That includes the latest one: over the
+				// internet we may have taken the next step this frame without
+				// sending it yet.  Anything else (a refused step, the leash, a
+				// teleporter, the host's AI walking it) is the truth.
 				const auto sent = std::find_if(guest_sent_steps.begin(), guest_sent_steps.end(),
 						[state_seq](const std::pair<uint32, Tile_coord>& step) {
 							return step.first == state_seq;
 						});
-				const bool echo = sent != guest_sent_steps.end() && sent->second == state
-								  && state_seq != guest_move_seq;
+				const bool echo = sent != guest_sent_steps.end() && sent->second == state;
 				if (echo) {
 					guest_sent_steps.erase(guest_sent_steps.begin(), sent);
 				} else if (actor && actor->get_tile() != state) {
+					const Tile_coord at = actor->get_tile();
+					cout << "Friend Mode: host put us at " << state.tx << ',' << state.ty << ',' << state.tz << " from "
+						 << at.tx << ',' << at.ty << ',' << at.tz << " (step " << state_seq << ", sent " << guest_move_seq
+						 << ")" << endl;
 					// A long jump to beside the Avatar is the leash; anywhere else
 					// it was a teleporter.
 					const bool beckoned = actor->get_tile().distance_2d(state) > Game_window::friend_leash_warn_tiles
