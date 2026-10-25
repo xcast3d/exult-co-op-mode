@@ -1,9 +1,15 @@
 # Controller support (plan)
 
-**Status:** steps 0 to 2 built on `feature/controller` (2026-10-25),
-**untested with a pad**: more pads, buttons to actions, the pad names in
-the hint line, the pad pointer. The rings, R3 and the rest are still a
-plan. (Plan 2026-10-19; current state and Steam Controller notes added
+**Status:** steps 0 to 2 built on `feature/controller` (2026-10-25) and
+played with a PS4 pad: more pads, buttons to actions, the pad names in
+the hint line, the pad pointer. Then (2026-10-25, untested with a pad):
+the pad in Exult's other screens as the keys they take (the title menu,
+windows, the "How many?" slider with left / right and LB / RB by ten,
+Yes/No, signs and conversation choices, which covers most of steps 3 to
+5 and 8); a highlight in the game menu (step 7, its first page only; the
+options pages are next); and the face buttons drawn as glyphs in the hint
+line (the PlayStation shapes, the Xbox letters). The rings, R3 and the
+rest are still a plan. (Plan 2026-10-19; current state and Steam Controller notes added
 2026-10-23; button map and direction from a Steam Input test,
 2026-10-25.) Listed under "Possible future projects" in the
 [project brief](../ultima-7-friend-mode.md).
