@@ -197,10 +197,20 @@ From playing with a PS4 pad, after the menus and prompts were in:
     shows its slots; it comes back with the mouse or a key). (Done.)
 16. **The spellbook is the Avatar's only.** While leading a companion
     (or as a guest), the utilities ring's Spellbook is dimmed and says
-    "Avatar only" (done), and the spellbook-to-slot picker (planned:
-    the open book driven by the pad, Cross casting on the pick, Square
-    held putting the spell in a slot, Ctrl+1-3 on the keyboard) works
-    only while playing the Avatar.
+    "Avatar only", and the open book doesn't take the pad. (Done.)
+17. **Spellbook to slot** (built 2026-10-25, untested with a pad). While
+    the Avatar's spellbook is open and in front (it has the keys), the
+    pad drives it: the D-pad moves the bookmark (its arrow keys), LB / RB
+    turn the circles, Cross casts the bookmarked spell as the spell bar
+    does (aimed at the Target System's pick; the crosshair with none) and
+    closes the book, as a cast from it does. Square held opens the skills
+    ring as a slot picker, "Put Fireball in...", its plates the three
+    slots as they are; letting go on one puts the spell there. On the
+    keyboard, Ctrl+1 to Ctrl+3 with the book open put the bookmarked
+    spell on that slot (otherwise they use it). Dragging still works.
+    (`Controller_spellbook_key`, `Controller_open_slot_picker` in exult.cc;
+    `Friend_class_cast_spell`, `Friend_class_set_avatar_slot` in
+    friendclass.cc.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 

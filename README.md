@@ -80,6 +80,12 @@ ten in "How many?"; in Load/Save, up / down pick a save and left / right
 the buttons). In conversations, R1 / L1 or up / down pick a reply, Cross
 says it, Options says bye. Cross also skips the intro.
 
+In the Avatar's open spellbook (Triangle's ring, or B), the D-pad moves the
+bookmark, L1 / R1 turn the circles, Cross casts the bookmarked spell at your
+pick (L1 / R1 in the world), and holding Square puts it on one of the spell
+bar's three slots (the left stick picks the slot, letting go puts it there).
+On the keyboard, Ctrl+1 to Ctrl+3 do the same with the book open.
+
 The buttons can be changed in `exult.cfg` under
 `config/gameplay/controller/buttons` (and `.../hold` for held actions).
 Details: [the controller plan](docs/friend-mode/controller-plan.md). On a
