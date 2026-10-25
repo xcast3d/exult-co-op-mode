@@ -98,7 +98,7 @@ or mouse action the Steam test used.
 | RT / R2 (right trigger), held | Alt; with the pointer showing: right mouse button | Alt / right click |
 | A / Cross (south) | act on the pick: talk, open, take, use, attack; held: item menu (below) | Space |
 | X / Square (west), held | skills radial (below; moved from east, 2026-10-25) | |
-| B / Circle (east) | close the newest window; with none, clear the pick (2026-10-25) | |
+| B / Circle (east) | close the newest window; with none, clear the pick; held: sort it (2026-10-25) | Shift+C |
 | Y / Triangle (north), held | utilities radial (below) | |
 | D-pad up | tap: switch to the next character; held: hold / follow (2026-10-25) | Shift+Tab / Y |
 | D-pad left | paperdoll | |
@@ -163,9 +163,12 @@ From playing with a PS4 pad, after the menus and prompts were in:
 7. **The Hold / Follow button under the minimap** hides while the pad is
    in use (it comes back with the mouse or a key). (Done.)
 8. **A list of the pad's buttons** is needed in the game, not only in
-   this plan. Planned: a "Controller" page in the game menu (step 11)
-   that lists the live map with the pad's own names (Cross or A...),
-   reachable with the pad; the same list in the README. (To do.)
+   this plan. Built: a "Controller" page in the game menu (the start of
+   step 11) that lists the live map with the pad's own names, a page at
+   a time (left / right); the same list in the README. The settings
+   (swap, pointer speed, hide delay) join it later. (Done.)
+10. **Sort a window** (Shift+C) had no button: Circle held sorts the
+    newest window, as a tap closes it. (Done.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 

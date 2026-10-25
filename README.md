@@ -39,10 +39,52 @@ public release yet.
 | **Action controls** | Walk with WASD (doors open in front of you and close behind you), R to run, and a corner minimap that shows where everyone is. | [Project brief, Phase 9](docs/ultima-7-friend-mode.md#phase-9--action-controls-optional) |
 | **Leading a companion** | The host can take a companion in hand the way a guest does, use their skill bar, and have the party follow them. | [Leading companions](docs/friend-mode/leading-companions.md) |
 | **Shops and trainers** | Guests buy from merchants and train with trainers using the party's gold, without moving the story. | [Shops and trainers](docs/friend-mode/shops-and-trainers.md) |
+| **Controller** | Play with an Xbox or PlayStation pad, alongside the keyboard and mouse: targeting on the shoulders, a pad pointer on the right stick, every menu driven from the pad. In development. | [Controller](#controller) |
 
 The Class System, the Target System and the action controls each have an
 on/off switch in the game menu. With them off, it plays like Ultima VII
 did.
+
+## Controller
+
+Plug in an Xbox or PlayStation pad (USB or Bluetooth) and play; the
+keyboard and mouse keep working at the same time. The game menu's
+**Controller** page lists the buttons with your pad's own names. In
+development: the skills and utilities rings aren't built yet.
+
+PlayStation names first, then Xbox. "Held" means held for about a third of
+a second; a tap does the other thing when you let go.
+
+| Button | In the world |
+| --- | --- |
+| Left stick | Walk (as fast as R's run or walk allows) |
+| L3 / LS (press the left stick) | Run or walk |
+| Right stick | The pointer (it hides after 5 seconds) |
+| R3 / RS (press the right stick) | Combat on or off |
+| L1 / LB | Next person or creature (with L2 / LT: previous) |
+| R1 / RB | Next thing (with L2 / LT: previous) |
+| L2 / LT, held | Shift (L2+Cross: take all or split); with the pointer up, the left mouse button (hold to drag) |
+| R2 / RT, held | Alt (R2+Cross: drop some); with the pointer up, the right mouse button |
+| Cross / A | Act on the pick: talk, open, take, use, attack |
+| Circle / B | Close the newest window (with none, clear the pick); held: sort it |
+| Square / X, held | Skills ring (coming) |
+| Triangle / Y, held | Utilities ring (coming) |
+| D-pad up | Next character; held: the party holds or follows |
+| D-pad left / right / down | Paperdoll / next backpack / stats |
+| Share / View | Player list (co-op, held) |
+| Options / Menu | Clear the pick, then close windows, then the game menu |
+
+In menus, the D-pad or left stick moves the highlight, Cross chooses,
+Circle or Options goes back, and left / right change a setting (L1 / R1 by
+ten in "How many?"; in Load/Save, up / down pick a save and left / right
+the buttons). In conversations, R1 / L1 or up / down pick a reply, Cross
+says it, Options says bye. Cross also skips the intro.
+
+The buttons can be changed in `exult.cfg` under
+`config/gameplay/controller/buttons` (and `.../hold` for held actions).
+Details: [the controller plan](docs/friend-mode/controller-plan.md). On a
+Mac, a pad that won't open may need Input Monitoring allowed; the Steam
+Controller works with Steam Input off for Exult.
 
 ## Lobby codes
 
