@@ -1,8 +1,11 @@
 # Controller support (plan)
 
-**Status:** a plan, not started (2026-10-19; current state and Steam
-Controller notes added 2026-10-23; button map and direction from a Steam
-Input test, 2026-10-25). Listed under "Possible future projects" in the
+**Status:** steps 0 to 2 built on `feature/controller` (2026-10-25),
+**untested with a pad**: more pads, buttons to actions, the pad names in
+the hint line, the pad pointer. The rings, R3 and the rest are still a
+plan. (Plan 2026-10-19; current state and Steam Controller notes added
+2026-10-23; button map and direction from a Steam Input test,
+2026-10-25.) Listed under "Possible future projects" in the
 [project brief](../ultima-7-friend-mode.md).
 
 Goal: play Black Gate, alone or in Co-Op Mode, with a gamepad and no
@@ -131,7 +134,7 @@ Let go with the stick centred to cancel. Tapping the button without
 choosing does nothing, so a short press can't fire anything by accident.
 
 - **Skills (east, held):** slots 1, 2 and 3 of the
-  [Class System](companion-skills.md) skill bar, with the bar's 36px icons
+  [Class System](companion-skills.md) skill bar, with the bar's 24px icons
   and cooldowns. The Avatar's spell bar the same way. A skill that needs a
   target uses the current pick, as the keys do; with no pick it shows the
   crosshair, aimed with the right stick and confirmed with south.
@@ -238,6 +241,71 @@ for:
 
 Window buttons are mostly covered: the paperdoll's disk button is Start,
 its combat button west.
+
+## Built so far (steps 0 to 2)
+
+- `controller.cc` / `controller.h`: the open pads (the first plays), the
+  map from `config/gameplay/controller/buttons/<button>` (`south`, `east`,
+  `leftshoulder`, `lefttrigger`, `dpup`...) = an action (`TARGET_PERSON`,
+  `TARGET_THING`, `TARGET_ACT`, `TOGGLE_RUN`, `NEXT_CHARACTER`, `BACKPACK`,
+  `PLAYER_LIST`, `SHIFT`, `ALT`, `SKILLS_RING`, `UTILITIES_RING`,
+  `CHAT_PHRASES`, `NONE`, or any key binding's name such as
+  `TOGGLE_COMBAT`), and `enabled`, `swap_south_east`, `pointer_speed`
+  (percent), `pointer_hide_ms`.
+- The pointer and the triggers are polled from `Delay()` (a hook in
+  `gump_utils.h`), so they work in every loop, the modal ones included.
+  While a trigger is held as a mouse button, each pointer move also pushes
+  a motion event carrying that button, which dragging needs.
+- Exult's own cursor hides while the pad is in use and its pointer isn't
+  showing (`Mouse::pad_hidden`); a crosshair still shows.
+- The D-pad as built: up the next character (Shift+Tab; a guest asks for
+  the next free companion), left the paperdolls (`INVENTORY`, the I key:
+  in this fork I opens paperdolls), right the next backpack (Shift+I),
+  down stats. Start clears the pick first, as Escape does, then closes
+  windows or opens the menu.
+- East, north and R3 only say "not built yet" until step 6 and step 9.
+
+## Art (checked 2026-10-25)
+
+For the controller screens, what the game and Friend Mode already have,
+and what is missing. Sizes are the frames' own. The skill bar draws 24x24
+pictures, so new art is 24x24 to match (the radial entries sit in 24px
+sockets, so the smaller shortcut bar icons centre in them).
+
+Already there, reused as is:
+
+| For | Art | Size |
+| --- | --- | --- |
+| Skills ring: skills 1-3 | `data/friend/skills/skill_icons_colour.shp` / `_parchment.shp`, one frame per skill | 24x24 |
+| Skills ring: the Avatar's spells | the spell bar's pictures (spellbook gump spell icons) | as the spell bar |
+| Utilities: feed | `shortcutbar.vga` 6 (food) | 14x14 |
+| Utilities: map | `shortcutbar.vga` 8 (maps) | 16x16 |
+| Utilities: journal | `shortcutbar.vga` 9 (notebook) | 12x12 |
+| Utilities: keys | `shortcutbar.vga` 3 (keyring), or 7 (key) | 16x13 / 9x16 |
+| Utilities: watch | BG `shapes.vga` 159 (pocketwatch) | 9x10 |
+| Utilities: lockpick | BG `shapes.vga` 627, frame 7 | 12x13 |
+| Pointer, "use X on Y" crosshair | `pointers.shp` frame 2 (greenselect) | 11x11 |
+| Item menu | `Itemmenu_gump` (the touch item menu: text buttons) | - |
+| Give to...: portraits | `Face_stats` faces along the bottom | - |
+| Menu focus (step 7), Give highlight, ring label | drawn boxes and the game font, as the conversation highlight is drawn | - |
+
+Missing, to be made (24x24, U7 palette, transparent ground, in the style
+of the skill icons):
+
+1. **Follow the Avatar** (utilities ring; guests): nothing in the game
+   fits (the hold / follow button is text).
+2. **Chat quick phrases** (utilities ring or R3): a speech scroll or
+   bubble; Black Gate has none.
+3. **Ring socket**: one entry's round plate, 28x28, with a **highlighted**
+   frame of the same size (the entry under the stick). Eight of them make
+   the ring.
+4. **Ring centre plate** (optional), about 40x40, under the name of the
+   highlighted entry; without it the name is drawn on a plain box.
+5. **Watch and lockpick at 24x24** (optional): the item shapes above work
+   but are small next to the skill icons.
+6. **Button glyphs** (optional, only if the hint line should show
+   pictures instead of "A", "LT+A"): A, B, X, Y; Cross, Circle, Square,
+   Triangle; LB, RB, LT, RT; D-pad; Start, Back; about 12x12 each.
 
 ## Text entry
 
