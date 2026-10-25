@@ -195,6 +195,12 @@ From playing with a PS4 pad, after the menus and prompts were in:
     chat quick phrases. (To decide.)
 15. **The skill bar hides while the pad is in use** (the skills ring
     shows its slots; it comes back with the mouse or a key). (Done.)
+16. **The spellbook is the Avatar's only.** While leading a companion
+    (or as a guest), the utilities ring's Spellbook is dimmed and says
+    "Avatar only" (done), and the spellbook-to-slot picker (planned:
+    the open book driven by the pad, Cross casting on the pick, Square
+    held putting the spell in a slot, Ctrl+1-3 on the keyboard) works
+    only while playing the Avatar.
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 

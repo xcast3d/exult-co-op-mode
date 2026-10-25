@@ -8804,9 +8804,12 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 	entries.push_back({follow, {}, {}, can_follow, or_say(can_follow, "No companions", []() {
 						   Friend_mode_hold_or_follow();
 					   })});
-	// Until the chat quick phrases have their place here.
-	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, has(761),
-					   or_say(has(761), "No spellbook", item(761, c_any_framenum))});
+	// Until the chat quick phrases have their place here.  The Avatar's
+	// only: dimmed while leading a companion (or as a guest).
+	const bool avatar   = gwin->get_controlled_actor() == gwin->get_main_actor();
+	const bool can_cast = avatar && has(761);
+	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, can_cast,
+					   or_say(can_cast, avatar ? "No spellbook" : "Avatar only", item(761, c_any_framenum))});
 	return entries;
 }
 
