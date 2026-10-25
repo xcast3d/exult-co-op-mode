@@ -410,6 +410,7 @@ bool Gump::add(
 
 bool Gump::smart_placement = true;
 bool Gump::sort_button     = true;
+bool Gump::pad_in_use      = false;
 
 namespace {
 	// A small (16x16) Exult drawn button with a picture: B black, X the
@@ -424,7 +425,15 @@ namespace {
 		Icon_button(Gump* par, int px, int py, const char* const* picture)
 				: Basic_button(par, px, py, icon_button_size, icon_button_size), rows(picture) {}
 
+		// Hidden, and not there to click, while the pad is in use.
+		Gump_button* on_button(int mx, int my) override {
+			return Gump::pad_in_use ? nullptr : Basic_button::on_button(mx, my);
+		}
+
 		void paint() override {
+			if (Gump::pad_in_use) {
+				return;
+			}
 			Basic_button::paint();
 			Image_buffer8* ib8  = gwin->get_win()->get_ib8();
 			TileRect       area = get_draw_area();

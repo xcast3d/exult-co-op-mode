@@ -228,6 +228,7 @@ void Set_last_input(bool pad) {
 	if (state.last_pad != pad) {
 		state.last_pad            = pad;
 		Modal_gump::focus_on_open = pad && state.enabled;
+		Gump::pad_in_use          = pad && state.enabled;
 		Update_cursor();
 		if (state.switched) {
 			state.switched();

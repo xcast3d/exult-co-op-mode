@@ -163,6 +163,10 @@ public:
 	// inventory (the same as Shift+C).  An option (config/gameplay/sort_key, on by default),
 	// for windows opened after it is set.
 	static bool sort_button;
+	// Controller support: the pad is in use (set by controller.cc).  The
+	// window's Sort and Take all buttons hide, as Circle held and L2+Cross
+	// do the same.
+	static bool pad_in_use;
 
 	// Lay the window's items out in rows, sorted by kind: weapons, armour,
 	// ammunition, bags, potions, food, reagents, keys, money and gems,
