@@ -82,6 +82,17 @@ bool Controller_alt_held();
 // Is the pad pointer showing (the triggers are then mouse buttons)?
 bool Controller_pointer_showing();
 
+// Exult's other screens, which wait in loops of their own (menus, the
+// "How many?" slider, Yes/No, signs, conversations): the pad's buttons
+// become the keys those screens already take.  'menu' (the title menu and
+// the game's windows): the D-pad the arrows, south Return, east and Start
+// Escape, the shoulders Page Up / Down.  Otherwise (Get_click: signs,
+// conversations, "click to continue"): south Space, Start Escape, the
+// shoulders and D-pad up / down E and Shift+E (the conversation highlight),
+// D-pad left / right the arrows.  Rewrites 'event' in place; others are
+// left alone.
+void Controller_screen_event(SDL_Event& event, bool menu);
+
 // The name on the first button doing 'action' ("A", "Cross", "LB",
 // "LT"...), or empty with none.  'key_name' for key_binding actions.
 std::string Controller_label(Controller_action action, const char* key_name = nullptr);

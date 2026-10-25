@@ -159,6 +159,73 @@ void Modal_gump::sync_drag_anchor(int mx, int my) {
 
 static Modal_gump::DragType dragType = Modal_gump::DragType::Unknown;
 
+bool Modal_gump::focus_on_open = false;
+
+// The page's focus buttons in screen order, top to bottom, then left to right.
+static std::vector<Gump_button*> Focus_list(std::vector<Gump_button*> list) {
+	std::stable_sort(list.begin(), list.end(), [](Gump_button* a, Gump_button* b) {
+		const TileRect ra = a->get_rect();
+		const TileRect rb = b->get_rect();
+		return ra.y != rb.y ? ra.y < rb.y : ra.x < rb.x;
+	});
+	return list;
+}
+
+bool Modal_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
+	std::vector<Gump_button*> found;
+	focus_buttons(found);
+	const std::vector<Gump_button*> list  = Focus_list(found);
+	const int count = static_cast<int>(list.size());
+	if (count == 0) {
+		return Gump::key_down(chr, unicode);
+	}
+	switch (chr) {
+	case SDLK_UP:
+	case SDLK_DOWN:
+		if (focus < 0 || focus >= count) {
+			focus = chr == SDLK_UP ? count - 1 : 0;
+		} else {
+			focus = (focus + (chr == SDLK_UP ? count - 1 : 1)) % count;
+		}
+		paint();
+		gwin->set_painted();
+		return true;
+	case SDLK_RETURN:
+	case SDLK_KP_ENTER:
+		if (focus >= 0 && focus < count) {
+			list[focus]->activate(MouseButton::Left);
+			if (!done) {    // Back from a sub menu: the same button stays highlighted.
+				paint();
+				gwin->set_painted();
+			}
+			return true;
+		}
+		break;
+	default:
+		break;
+	}
+	return Gump::key_down(chr, unicode);
+}
+
+// A box round the highlighted button, in the conversation highlight's white.
+void Modal_gump::paint_focus() {
+	std::vector<Gump_button*> found;
+	focus_buttons(found);
+	const std::vector<Gump_button*> list = Focus_list(found);
+	if (list.empty()) {
+		return;
+	}
+	if (focus < 0 && focus_on_open) {
+		focus = 0;
+	}
+	if (focus < 0 || focus >= static_cast<int>(list.size())) {
+		return;
+	}
+	const TileRect      rect  = list[focus]->get_rect();
+	const unsigned char white = static_cast<unsigned char>(gwin->get_pal()->find_color(63, 63, 63));
+	gwin->get_win()->get_ib8()->draw_box(rect.x - 2, rect.y - 2, rect.w + 4, rect.h + 4, 1, 0xFF, white);
+}
+
 Modal_gump::DragType Modal_gump::GetDragType() {
 	if (dragType == DragType::Unknown) {
 		// Read from config, default to offscreen

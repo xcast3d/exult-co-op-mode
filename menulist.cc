@@ -333,6 +333,9 @@ int MenuList::handle_events(Game_window* gwin) {
 		SDL_Renderer* renderer      = SDL_GetRenderer(gwin->get_win()->get_screen_window());
 		SDL_Event     event;
 		while (SDL_PollEvent(&event)) {
+			if (Screen_event_hook) {
+				Screen_event_hook(event, true);    // Controller support: the pad as keys.
+			}
 			SDL_ConvertEventToRenderCoordinates(renderer, &event);
 			int gx;
 			int gy;

@@ -11,6 +11,7 @@
 
 #include "Configuration.h"
 #include "gamewin.h"
+#include "Modal_gump.h"
 #include "gump_utils.h"
 #include "ibuf8.h"
 #include "mouse.h"
@@ -200,7 +201,8 @@ void Set_last_input(bool pad) {
 		state.last_activity = SDL_GetTicks();
 	}
 	if (state.last_pad != pad) {
-		state.last_pad = pad;
+		state.last_pad            = pad;
+		Modal_gump::focus_on_open = pad && state.enabled;
 		Update_cursor();
 		if (state.switched) {
 			state.switched();
@@ -514,7 +516,8 @@ void Controller_init() {
 		}
 		SDL_free(joysticks);
 	}
-	Delay_hook = Controller_tick;
+	Delay_hook        = Controller_tick;
+	Screen_event_hook = Controller_screen_event;
 }
 
 void Controller_device_added(SDL_JoystickID id) {
@@ -623,6 +626,64 @@ bool Controller_event(const SDL_Event& event) {
 	default:
 		return false;
 	}
+}
+
+void Controller_screen_event(SDL_Event& event, bool menu) {
+	if (!state.enabled || (event.type != SDL_EVENT_GAMEPAD_BUTTON_DOWN && event.type != SDL_EVENT_GAMEPAD_BUTTON_UP)
+		|| !Is_primary(event.gbutton.which)) {
+		return;
+	}
+	const bool down = event.type == SDL_EVENT_GAMEPAD_BUTTON_DOWN;
+	if (down) {
+		Set_last_input(true);
+	}
+	SDL_Keycode key = SDLK_UNKNOWN;
+	SDL_Keymod  mod = SDL_KMOD_NONE;
+	switch (Mapped_input(event.gbutton.button)) {
+	case SDL_GAMEPAD_BUTTON_SOUTH:
+		key = menu ? SDLK_RETURN : SDLK_SPACE;
+		break;
+	case SDL_GAMEPAD_BUTTON_EAST:
+		key = menu ? SDLK_ESCAPE : SDLK_UNKNOWN;
+		break;
+	case SDL_GAMEPAD_BUTTON_START:
+		key = SDLK_ESCAPE;
+		break;
+	case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+		key = SDLK_LEFT;
+		break;
+	case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+		key = SDLK_RIGHT;
+		break;
+	case SDL_GAMEPAD_BUTTON_DPAD_UP:
+	case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: {
+		const bool dpad = event.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_UP;
+		key = menu ? (dpad ? SDLK_UP : SDLK_PAGEUP) : SDLK_E;
+		mod = menu ? SDL_KMOD_NONE : SDL_KMOD_LSHIFT;
+		break;
+	}
+	case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+	case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: {
+		const bool dpad = event.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_DOWN;
+		key = menu ? (dpad ? SDLK_DOWN : SDLK_PAGEDOWN) : SDLK_E;
+		break;
+	}
+	default:
+		break;
+	}
+	if (key == SDLK_UNKNOWN) {
+		return;
+	}
+	SDL_Window* window = Game_screen_window();
+	SDL_Event   key_event{};
+	key_event.type          = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
+	key_event.key.timestamp = event.gbutton.timestamp;
+	key_event.key.windowID  = window ? SDL_GetWindowID(window) : 0;
+	key_event.key.key       = key;
+	key_event.key.scancode  = SDL_GetScancodeFromKey(key, nullptr);
+	key_event.key.mod       = mod;
+	key_event.key.down      = down;
+	event                   = key_event;
 }
 
 bool Controller_last_input_is_pad() {

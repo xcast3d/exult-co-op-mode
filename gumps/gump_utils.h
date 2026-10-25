@@ -44,6 +44,9 @@
 // Controller support: run on each pass of every event loop, modal ones
 // included (controller.cc polls the pad pointer and triggers there).
 inline void (*Delay_hook)() = nullptr;
+// Controller support: the pad's buttons as the keys a modal screen takes
+// ('menu': menus and windows; otherwise Get_click), rewriting the event.
+inline void (*Screen_event_hook)(SDL_Event& event, bool menu) = nullptr;
 
 inline void Delay() {
 	if (Delay_hook) {

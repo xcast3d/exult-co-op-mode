@@ -3874,14 +3874,29 @@ static bool Friend_mode_space(bool shift, bool alt) {
 // as Friend_mode_space, for the line under "Targeting ...".
 static bool Friend_is_merchant(int npc_num);
 
+// A face button's name as a glyph for the hint line: '\x01' and a letter,
+// drawn by Friend_paint_glyph (the PlayStation shapes, the Xbox letters).
+// Other names stay text ("L2", "LB").
+static std::string Friend_pad_glyph(const std::string& label) {
+	static const std::pair<const char*, char> glyphs[]
+			= {{"Cross", 'c'}, {"Circle", 'o'}, {"Square", 's'}, {"Triangle", 't'},
+			   {"A", 'A'},     {"B", 'B'},      {"X", 'X'},      {"Y", 'Y'}};
+	for (const auto& [name, code] : glyphs) {
+		if (label == name) {
+			return std::string("\x01") + code;
+		}
+	}
+	return label;
+}
+
 // A key named in a hint ("Space", "Shift+Space", "Alt+Space", "C"), or,
-// when the pad was the last thing used, its button: "A", "LT+A", "X"
-// (controller.cc names them as printed on the pad).
+// when the pad was the last thing used, its button: the Cross or A glyph,
+// "L2+" and the glyph (controller.cc names them as printed on the pad).
 static std::string Friend_key_label(const std::string& key) {
 	if (!Controller_last_input_is_pad()) {
 		return key;
 	}
-	const std::string act = Controller_label(Controller_action::target_act);
+	const std::string act = Friend_pad_glyph(Controller_label(Controller_action::target_act));
 	std::string       button;
 	if (key == "Space") {
 		button = act;
@@ -3892,7 +3907,7 @@ static std::string Friend_key_label(const std::string& key) {
 			button = held + "+" + act;
 		}
 	} else if (key == "C") {
-		button = Controller_label(Controller_action::key_binding, "TOGGLE_COMBAT");
+		button = Friend_pad_glyph(Controller_label(Controller_action::key_binding, "TOGGLE_COMBAT"));
 	}
 	return button.empty() ? key : button;
 }
@@ -6985,6 +7000,96 @@ static void Friend_mode_paint_pinned(Friend_pinned_text& pinned, const std::dequ
 	}
 }
 
+// Controller support: a face button's glyph in the hint line (the '\x01'
+// codes of Friend_pad_glyph), 11 pixels square: a dark button with its
+// symbol in the pad's colours, outlined in black like the words.
+constexpr int friend_glyph_size = 11;
+
+static void Friend_paint_glyph(Image_buffer8* buf, int x, int y, char code) {
+	// The button's symbol, 5 by 5, in the middle of a 9 by 9 disc.
+	static const std::pair<char, std::array<const char*, 5>> symbols[] = {
+			{'c', {"#...#", ".#.#.", "..#..", ".#.#.", "#...#"}},
+			{'o', {".###.", "#...#", "#...#", "#...#", ".###."}},
+			{'s', {"#####", "#...#", "#...#", "#...#", "#####"}},
+			{'t', {"..#..", ".#.#.", ".#.#.", "#...#", "#####"}},
+			{'A', {".###.", "#...#", "#####", "#...#", "#...#"}},
+			{'B', {"####.", "#...#", "####.", "#...#", "####."}},
+			{'X', {"#...#", ".#.#.", "..#..", ".#.#.", "#...#"}},
+			{'Y', {"#...#", ".#.#.", "..#..", "..#..", "..#.."}},
+	};
+	static const char* const disc[9]
+			= {"..#####..", ".#######.", "#########", "#########", "#########",
+			   "#########", "#########", ".#######.", "..#####.."};
+	struct Rgb {
+		int r, g, b;    // 0-63, the palette's range.
+	};
+	auto colour = [](char c) -> Rgb {
+		switch (c) {
+		case 'c':
+		case 'X':
+			return {30, 44, 63};    // Blue.
+		case 'o':
+		case 'B':
+			return {63, 22, 22};    // Red.
+		case 's':
+			return {63, 36, 56};    // Pink.
+		case 't':
+			return {22, 58, 42};    // Green (PlayStation).
+		case 'A':
+			return {26, 56, 22};    // Green (Xbox).
+		default:
+			return {63, 54, 14};    // Yellow (Y).
+		}
+	};
+	const std::array<const char*, 5>* symbol = nullptr;
+	for (const auto& [c, rows] : symbols) {
+		if (c == code) {
+			symbol = &rows;
+		}
+	}
+	if (!symbol) {
+		return;
+	}
+	Palette*            pal  = gwin->get_pal();
+	const Rgb           rgb  = colour(code);
+	const unsigned char ink  = static_cast<unsigned char>(pal->find_color(rgb.r, rgb.g, rgb.b));
+	const unsigned char body = static_cast<unsigned char>(pal->find_color(12, 12, 14));
+	auto in_disc = [](int dx, int dy) {
+		return dx >= 0 && dy >= 0 && dx < 9 && dy < 9 && disc[dy][dx] == '#';
+	};
+	for (int gy = 0; gy < friend_glyph_size; ++gy) {
+		for (int gx = 0; gx < friend_glyph_size; ++gx) {
+			const int dx = gx - 1;
+			const int dy = gy - 1;
+			if (in_disc(dx, dy)) {
+				const int  sx = dx - 2;
+				const int  sy = dy - 2;
+				const bool on = sx >= 0 && sy >= 0 && sx < 5 && sy < 5 && (*symbol)[sy][sx] == '#';
+				buf->put_pixel8(on ? ink : body, x + gx, y + gy);
+			} else if (in_disc(dx - 1, dy) || in_disc(dx + 1, dy) || in_disc(dx, dy - 1) || in_disc(dx, dy + 1)) {
+				buf->put_pixel8(0, x + gx, y + gy);    // The outline.
+			}
+		}
+	}
+}
+
+// A hint word's width with its glyphs.
+static int Friend_hint_word_width(const std::shared_ptr<Font>& font, const std::string& word) {
+	int    width = 0;
+	size_t at    = 0;
+	while (at < word.size()) {
+		if (word[at] == '\x01' && at + 1 < word.size()) {
+			width += friend_glyph_size;
+			at += 2;
+			continue;
+		}
+		const size_t next = std::min(word.find('\x01', at), word.size());
+		width += font->get_text_width(word.substr(at, next - at).c_str());
+		at = next;
+	}
+	return width;
+}
+
 // The Target System's hint ("Open (Space)  Pick up (Shift+Space)"): its
 // top centre at screen point (sx, sy), under the notices, in the menu font (the chat
 // line's; the overhead font has no '+') and a little smaller than the
@@ -7009,8 +7114,19 @@ static void Friend_mode_paint_hint(int sx, int sy) {
 		if (pinned.layer >= 0) {
 			gwin->destroy_layer(pinned.layer);
 		}
-		w = font->get_text_width(friend_hint_shown.c_str()) + 4;
-		h = font->get_text_height() + 4;
+		const int text_h  = font->get_text_height();
+		const int glyphs  = friend_hint_shown.find('\x01') != std::string::npos;
+		const int line_h  = glyphs ? std::max(text_h, friend_glyph_size) : text_h;
+		const int text_y  = 2 + (line_h - text_h) / 2;
+		const int glyph_y = 2 + (line_h - friend_glyph_size) / 2;
+		const int space   = font->get_text_width(" ");
+		w                 = 4;
+		for (size_t start = 0; start <= friend_hint_shown.size();) {
+			const size_t end = std::min(friend_hint_shown.find(' ', start), friend_hint_shown.size());
+			w += Friend_hint_word_width(font, friend_hint_shown.substr(start, end - start)) + space;
+			start = end + 1;
+		}
+		h = line_h + 4;
 		constexpr int text_layer_z = (1 << 18) + (1 << 16);
 		pinned.layer               = gwin->create_layer(pinned.name, w, h, 255, 0, text_layer_z);
 		if (pinned.layer < 0) {
@@ -7030,7 +7146,6 @@ static void Friend_mode_paint_hint(int sx, int sy) {
 		// notices' font has), then in its own colors on top.
 		unsigned char black[256];
 		std::fill(std::begin(black), std::end(black), static_cast<unsigned char>(0));
-		const int space = font->get_text_width(" ");
 		for (int pass = 0; pass < 2; ++pass) {
 			int    wx    = 2;
 			size_t start = 0;
@@ -7040,19 +7155,31 @@ static void Friend_mode_paint_hint(int sx, int sy) {
 					end = friend_hint_shown.size();
 				}
 				const std::string word = friend_hint_shown.substr(start, end - start);
-				if (!word.empty()) {
+				// Text runs and the pad's glyphs ('\x01' codes).
+				for (size_t at = 0; at < word.size();) {
+					if (word[at] == '\x01' && at + 1 < word.size()) {
+						if (pass == 1) {
+							Friend_paint_glyph(lbuf, wx, glyph_y, word[at + 1]);
+						}
+						wx += friend_glyph_size;
+						at += 2;
+						continue;
+					}
+					const size_t      next = std::min(word.find('\x01', at), word.size());
+					const std::string run  = word.substr(at, next - at);
 					if (pass == 0) {
 						for (int dy = -1; dy <= 1; ++dy) {
 							for (int dx = -1; dx <= 1; ++dx) {
 								if (dx || dy) {
-									font->draw_text(lbuf, wx + dx, 2 + dy, word.c_str(), black);
+									font->draw_text(lbuf, wx + dx, text_y + dy, run.c_str(), black);
 								}
 							}
 						}
 					} else {
-						font->draw_text(lbuf, wx, 2, word.c_str());
+						font->draw_text(lbuf, wx, text_y, run.c_str());
 					}
-					wx += font->get_text_width(word.c_str());
+					wx += font->get_text_width(run.c_str());
+					at = next;
 				}
 				wx += space;
 				start = end + 1;
@@ -11470,6 +11597,7 @@ static bool Get_click(
 		// Mouse scale factor
 		static bool rightclick;
 		while (SDL_PollEvent(&event)) {
+			Controller_screen_event(event, false);    // Controller support: the pad as keys.
 			SDL_ConvertEventToRenderCoordinates(renderer, &event);
 			// The host chats during a conversation too.
 			if (friend_host_dialogue_active && Friend_mode_chat_event(event)) {

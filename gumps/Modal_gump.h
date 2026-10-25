@@ -20,9 +20,11 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define MODAL_GUMP_H
 
 #include "Gump.h"
+#include "ignore_unused_variable_warning.h"
 #include "span.h"
 
 #include <chrono>
+#include <vector>
 
 /*
  *  A modal gump object represents a 'dialog' that grabs the mouse until
@@ -61,6 +63,27 @@ public:
 	}
 
 	bool mouse_down(int mx, int my, MouseButton button) override;
+
+	// Keyboard and controller focus (controller-plan.md, step 7): up and
+	// down move a highlight through focus_buttons(), wrapping round; Return
+	// presses the highlighted one, as a click would.  A page lists its
+	// buttons in screen order and calls paint_focus() after painting them;
+	// a page that lists none keeps its own keys.
+	bool key_down(SDL_Keycode chr, SDL_Keycode unicode) override;
+	// Highlight the first button as soon as a page opens (the pad is in
+	// use; set by controller.cc).  Otherwise the first up or down does.
+	static bool focus_on_open;
+
+protected:
+	virtual void focus_buttons(std::vector<Gump_button*>& list) {
+		ignore_unused_variable_warning(list);
+	}
+	void paint_focus();
+
+private:
+	int focus = -1;    // Index in focus_buttons(), or -1 for none yet.
+
+public:
 
 	bool mouse_up(int mx, int my, MouseButton button) override;
 

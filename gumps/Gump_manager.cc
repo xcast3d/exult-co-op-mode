@@ -1102,6 +1102,9 @@ bool Gump_manager::do_modal_gump(
 		SDL_Event event;
 		bool      got_event = false;
 		while (!escaped && !gump->is_done() && SDL_PollEvent(&event)) {
+			if (Screen_event_hook) {
+				Screen_event_hook(event, true);    // Controller support: the pad as keys.
+			}
 			escaped   = !handle_modal_gump_event(gump, event);
 			got_event = true;
 		}

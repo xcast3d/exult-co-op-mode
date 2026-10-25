@@ -55,6 +55,11 @@ public:
 	// Paint it and its contents.
 	void paint() override;
 
+protected:
+	void focus_buttons(std::vector<Gump_button*>& list) override;
+
+public:
+
 	void close() override {
 		done = true;
 	}

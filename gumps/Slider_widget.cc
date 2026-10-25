@@ -384,6 +384,12 @@ bool Slider_widget::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
 	case SDLK_RIGHT:
 		clicked_right_arrow();
 		break;
+	case SDLK_PAGEUP:    // Controller support: LB / RB by ten (and the keys).
+		move_diamond(-10 * step_val);
+		break;
+	case SDLK_PAGEDOWN:
+		move_diamond(10 * step_val);
+		break;
 	}
 	return true;
 }

@@ -439,7 +439,16 @@ void Gamemenu_gump::paint() {
 			btn->paint();
 		}
 	}
+	paint_focus();    // Controller support: the highlighted button.
 	gwin->set_painted();
+}
+
+void Gamemenu_gump::focus_buttons(std::vector<Gump_button*>& list) {
+	for (auto& btn : buttons) {
+		if (btn) {
+			list.push_back(btn.get());
+		}
+	}
 }
 
 void Gamemenu_gump::do_exult_menu() {
