@@ -19,6 +19,7 @@
 #include "items.h"
 #include "font.h"
 #include "palette.h"
+#include "shapeid.h"
 #include "shapes/vgafile.h"
 #include "mouse.h"
 
@@ -1082,8 +1083,20 @@ constexpr int ring_radius = 44;                                   // Centre to a
 constexpr int ring_plate  = 28;                                   // A plate's size (the art: 28x28).
 constexpr int ring_size   = 2 * ring_radius + ring_plate + 4;     // The layer, square.
 
-// Which entry the left stick points at (the first at the top, then
-// clockwise), or -1 near the centre.
+// An entry's angle, clockwise from the top (radians): up to four make an
+// arc over the title, 60 degrees apart (three: up-left, up, up-right);
+// more go all round.
+float Ring_angle(int index, int count) {
+	constexpr float two_pi = 6.2831853f;
+	if (count <= 4) {
+		constexpr float step = two_pi / 6;
+		return (index - (count - 1) / 2.f) * step;
+	}
+	return two_pi * index / count;
+}
+
+// Which entry the left stick points at (the nearest, within half the gap
+// to the next), or -1 near the centre or away from the arc.
 int Ring_pick() {
 	SDL_Gamepad* pad   = Primary_pad();
 	const int    count = static_cast<int>(ring.entries.size());
@@ -1096,15 +1109,23 @@ int Ring_pick() {
 		return -1;
 	}
 	constexpr float two_pi = 6.2831853f;
-	float           angle  = std::atan2(sx, -sy);    // 0 at the top, clockwise.
-	if (angle < 0) {
-		angle += two_pi;
+	const float     angle  = std::atan2(sx, -sy);    // 0 at the top, clockwise.
+	const float     reach  = count <= 4 ? two_pi / 12 + 0.35f : two_pi / count / 2;
+	int             best   = -1;
+	float           least  = reach;
+	for (int i = 0; i < count; ++i) {
+		float off = std::fabs(angle - Ring_angle(i, count));
+		off       = std::min(off, two_pi - off);
+		if (off <= least) {
+			least = off;
+			best  = i;
+		}
 	}
-	return static_cast<int>(std::lround(angle / (two_pi / count))) % count;
+	return best;
 }
 
 void Ring_plate_centre(int index, int count, int& cx, int& cy) {
-	const float angle = 6.2831853f * index / count;
+	const float angle = Ring_angle(index, count);
 	cx                = ring_size / 2 + static_cast<int>(std::lround(ring_radius * std::sin(angle)));
 	cy                = ring_size / 2 - static_cast<int>(std::lround(ring_radius * std::cos(angle)));
 }
@@ -1130,18 +1151,51 @@ void Ring_paint_plate(Image_buffer8* buf, int cx, int cy, bool lit) {
 	}
 }
 
-// Text with a black outline (the hint line's way), its top left at (x, y).
+// Text with a black outline (the hint line's way), its top left at (x, y),
+// word by word: this font draws a space as a solid black box.
 void Ring_text(Image_buffer8* buf, const std::shared_ptr<Font>& font, const std::string& text, int x, int y) {
 	unsigned char black[256];
 	std::fill(std::begin(black), std::end(black), static_cast<unsigned char>(0));
-	for (int dy = -1; dy <= 1; ++dy) {
-		for (int dx = -1; dx <= 1; ++dx) {
-			if (dx || dy) {
-				font->draw_text(buf, x + dx, y + dy, text.c_str(), black);
+	const int space = font->get_text_width(" ");
+	for (int pass = 0; pass < 2; ++pass) {
+		int wx = x;
+		for (size_t start = 0; start <= text.size();) {
+			const size_t      end  = std::min(text.find(' ', start), text.size());
+			const std::string word = text.substr(start, end - start);
+			if (!word.empty()) {
+				if (pass == 0) {
+					for (int dy = -1; dy <= 1; ++dy) {
+						for (int dx = -1; dx <= 1; ++dx) {
+							if (dx || dy) {
+								font->draw_text(buf, wx + dx, y + dy, word.c_str(), black);
+							}
+						}
+					}
+				} else {
+					font->draw_text(buf, wx, y, word.c_str());
+				}
+				wx += font->get_text_width(word.c_str());
+			}
+			wx += space;
+			start = end + 1;
+		}
+	}
+}
+
+// A plate nobody can use: everything on it darkened, as Exult greys things.
+void Ring_dim_plate(Image_buffer8* buf, int cx, int cy) {
+	const auto& dim = Shape_manager::get_instance()->get_xform(8);
+	const int   r   = ring_plate / 2;
+	for (int dy = -r; dy <= r; ++dy) {
+		for (int dx = -r; dx <= r; ++dx) {
+			if (dx * dx + dy * dy <= r * r) {
+				const unsigned char pix = buf->get_pixel8(cx + dx, cy + dy);
+				if (pix != 255) {
+					buf->put_pixel8(dim[pix], cx + dx, cy + dy);
+				}
 			}
 		}
 	}
-	font->draw_text(buf, x, y, text.c_str());
 }
 
 void Ring_hide() {
@@ -1227,6 +1281,9 @@ void Controller_ring_paint(int sx, int sy) {
 				buf->set_clip(cx - ring_plate / 2 + 2, cy - ring_plate / 2 + 2, ring_plate - 4, ring_plate - 4);
 				entry.paint(buf, cx, cy);
 				buf->clear_clip();
+			}
+			if (!entry.usable) {
+				Ring_dim_plate(buf, cx, cy);
 			}
 			if (!entry.corner.empty()) {
 				Ring_text(buf, font, entry.corner, cx + ring_plate / 2 - font->get_text_width(entry.corner.c_str()) - 1,

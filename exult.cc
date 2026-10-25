@@ -8703,7 +8703,38 @@ static std::function<void(Image_buffer8*, int, int)> Controller_bar_picture(int 
 	return Controller_shape_picture(icon->normal.shape, icon->normal.frame, icon->normal.get_shapefile());
 }
 
-// Utilities: always the same order, so it becomes muscle memory.
+// Eat: the hungriest in the party who eats is fed from the party's food (or
+// drink), as if they had been clicked on, with no crosshair.  False with no
+// food.
+static bool Controller_feed_hungriest() {
+	Actor* hungriest = nullptr;
+	int    least     = 0;
+	for (int i = 0; i <= gwin->get_party_man()->get_count(); ++i) {
+		Actor* who = Friend_party_member(i);
+		if (!who || who->is_dead() || who->get_info().does_not_eat()) {
+			continue;
+		}
+		const int food = who->get_property(static_cast<int>(Actor::food_level));
+		if (!hungriest || food < least) {
+			hungriest = who;
+			least     = food;
+		}
+	}
+	if (!hungriest) {
+		return false;
+	}
+	Usecode_machine* usecode = gwin->get_usecode();
+	Game_object*     old_target;
+	Tile_coord*      old_tile;
+	usecode->save_intercept(old_target, old_tile);
+	usecode->intercept_click_on_item(hungriest);    // The food's "on whom?" answered.
+	const bool fed = gwin->activate_item(377) || gwin->activate_item(616);    // Food, else drink.
+	usecode->restore_intercept(old_target, old_tile);
+	return fed;
+}
+
+// Utilities: always the same order, so it becomes muscle memory.  An entry
+// the party has nothing for is dimmed (no watch, no spellbook...).
 static std::vector<Controller_ring_entry> Controller_utility_entries() {
 	auto action = [](const char* name) {
 		return [name]() {
@@ -8715,23 +8746,32 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 			gwin->activate_item(shape, frame);
 		};
 	};
+	auto has = [](int shape, int frame = c_any_framenum) {
+		return is_party_item(shape, frame) != nullptr;
+	};
 	std::vector<Controller_ring_entry> entries;
-	entries.push_back({"Eat", Controller_bar_picture(8), {}, true, action("USEFOOD")});
-	entries.push_back({"Watch", Controller_shape_picture(159, 0, SF_SHAPES_VGA), {}, true, item(159, c_any_framenum)});
-	entries.push_back({"Map", Controller_bar_picture(2), {}, true, item(178, 0)});
+	entries.push_back({"Eat", Controller_bar_picture(8), {}, has(377) || has(616), []() {
+						   if (!Controller_feed_hungriest()) {
+							   Friend_mode_notice("No food");
+						   }
+					   }});
+	entries.push_back(
+			{"Watch", Controller_shape_picture(159, 0, SF_SHAPES_VGA), {}, has(159), item(159, c_any_framenum)});
+	entries.push_back({"Map", Controller_bar_picture(2), {}, has(178, 0), item(178, 0)});
 	entries.push_back({"Journal", Controller_bar_picture(6), {}, true, action("NOTEBOOK")});
-	entries.push_back({"Lockpick", Controller_shape_picture(627, 7, SF_SHAPES_VGA), {}, true, item(627, c_any_framenum)});
-	entries.push_back({"Keys", Controller_bar_picture(5), {}, true, action("TRY_KEYS")});
+	entries.push_back(
+			{"Lockpick", Controller_shape_picture(627, 7, SF_SHAPES_VGA), {}, has(627), item(627, c_any_framenum)});
+	entries.push_back({"Keys", Controller_bar_picture(5), {}, has(641), action("TRY_KEYS")});
 	// Y: no picture in the game for it yet (a plate with its name).
 	const std::string follow = !Friend_mode_is_guest() ? (friend_holding ? "Party follows" : "Party holds")
 													   : (friend_following ? "Take over" : "Follow Avatar");
-	entries.push_back({follow, {}, {}, true, []() {
-						   if (!Friend_mode_is_guest() || friend_session.connected()) {
-							   Friend_mode_hold_or_follow();
-						   }
+	const bool        can_follow = !Friend_mode_is_guest() ? gwin->get_party_man()->get_count() > 0
+															: friend_session.connected();
+	entries.push_back({follow, {}, {}, can_follow, []() {
+						   Friend_mode_hold_or_follow();
 					   }});
 	// Until the chat quick phrases have their place here.
-	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, true, item(761, c_any_framenum)});
+	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, has(761), item(761, c_any_framenum)});
 	return entries;
 }
 
