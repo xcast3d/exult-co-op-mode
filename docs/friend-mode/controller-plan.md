@@ -182,6 +182,13 @@ From playing with a PS4 pad, after the menus and prompts were in:
     does nothing. Names are drawn word by word (the font's spaces are
     black boxes). Up to four entries make an arc over the title (the
     three skills: up-left, up, up-right); more go all round. (Done.)
+13. **Second look at the rings.** Lockpick and Keys use the Target
+    System's pick (E) with no crosshair, or say "Select a target first";
+    Keys says "No key fits" when none does. An unavailable entry says why
+    at the top ("No watch", "No spellbook"). Circle is Escape in the
+    crosshair and the map too (it closes them; in a conversation it says
+    bye). The left half of the ring couldn't be picked (the stick's angle
+    wrapped wrongly: left and down-left picked the top-left entry). (Done.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
