@@ -188,7 +188,7 @@ endif
 endif
 
 EXTRA_DIST = 	\
-	README \
+	README-exult.txt \
 	FAQ \
 	README.md \
 	README-exult.md \

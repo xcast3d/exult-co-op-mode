@@ -668,7 +668,7 @@ dist:   $(EXEC) exconfig.exe install Exult\ Source\ Code.url mods
 	cp docs/images/*.svg $(DISTPATH)/Exult/images
 	cp docs/images/docs*.png $(DISTPATH)/Exult/images
 	cp NEWS $(DISTPATH)/Exult/NEWS.txt
-	cp README $(DISTPATH)/Exult/README.txt
+	cp README-exult.txt $(DISTPATH)/Exult/README.txt
 	cp docs/ReadMe.html $(DISTPATH)/Exult
 	cp README.windows $(DISTPATH)/Exult/README.windows.txt
 	cp win32/README-SDL.txt $(DISTPATH)/Exult/README-SDL.txt
