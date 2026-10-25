@@ -5470,8 +5470,12 @@ static void Friend_mode_hold_or_follow() {
 }
 
 // The button's label (what a click does), or empty when it has nothing to
-// do: no companions to hold, or a guest without one.
+// do: no companions to hold, or a guest without one.  Hidden while the pad
+// is in use: D-pad up, held, does it.
 static std::string Friend_mode_hold_button_label() {
+	if (Controller_last_input_is_pad()) {
+		return {};
+	}
 	if (!Friend_mode_is_guest()) {
 		return gwin->get_party_man()->get_count() > 0 ? (friend_holding ? "Follow" : "Hold") : std::string();
 	}
@@ -8714,6 +8718,13 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 	case Controller_action::chat_phrases:
 		Friend_mode_notice("Chat phrases: not built yet");
 		break;
+	case Controller_action::hold_follow:
+		// Y: the party holds or follows; a guest follows the Avatar or
+		// takes over again.
+		if (!notebook && (!Friend_mode_is_guest() || friend_session.connected())) {
+			Friend_mode_hold_or_follow();
+		}
+		break;
 	case Controller_action::close_window: {
 		// The newest window (a pack, a paperdoll, stats...) shuts; with
 		// none open, the pick clears.
@@ -8754,6 +8765,7 @@ static void Controller_switched_input() {
 		friend_hint_shown   = Friend_space_hint();
 		friend_hint_changed = true;
 	}
+	gwin->set_all_dirty();    // The hold button under the minimap shows or hides.
 }
 
 bool Handle_device_connection_event(void* userdata, SDL_Event* event) {
@@ -10338,6 +10350,7 @@ static void Handle_events() {
 			show_items_clicked = false;
 		}
 
+		Controller_frame();    // Controller support: held buttons.
 		if ((joy_aim_x != 0 || joy_aim_y != 0) && Controller_left_stick_centred()) {
 			// Controller support: the stick was let go while a menu or a
 			// conversation had the events.

@@ -90,7 +90,7 @@ struct Action_name {
 	const char*       name;
 };
 
-constexpr std::array<Action_name, 14> action_names{{
+constexpr std::array<Action_name, 15> action_names{{
 		{Controller_action::none, "NONE"},
 		{Controller_action::shift, "SHIFT"},
 		{Controller_action::alt, "ALT"},
@@ -105,7 +105,15 @@ constexpr std::array<Action_name, 14> action_names{{
 		{Controller_action::utilities_ring, "UTILITIES_RING"},
 		{Controller_action::chat_phrases, "CHAT_PHRASES"},
 		{Controller_action::close_window, "CLOSE_WINDOW"},
+		{Controller_action::hold_follow, "HOLD_FOLLOW"},
 }};
+
+// Held actions (config/gameplay/controller/hold/<button>): a button with
+// one does its own action on a tap (on release) and this one when held.
+constexpr std::array<std::pair<int, const char*>, 1> default_hold_map{{
+		{SDL_GAMEPAD_BUTTON_DPAD_UP, "HOLD_FOLLOW"},
+}};
+constexpr Uint64 hold_ms = 350;    // Held this long: the held action.
 
 // A held trigger is one of these from its press to its release, whatever
 // the pointer does meanwhile.
@@ -123,6 +131,11 @@ struct State {
 	int  hide_ms    = 5000;     // Pointer hides after this long untouched.
 
 	std::array<Controller_binding, input_count> map;
+	std::array<Controller_binding, input_count> hold_map;    // Held actions (none: none).
+	// A button with a held action, down and not yet decided (physical input).
+	std::array<bool, SDL_GAMEPAD_BUTTON_COUNT>   pending{};
+	std::array<bool, SDL_GAMEPAD_BUTTON_COUNT>   hold_fired{};
+	std::array<Uint64, SDL_GAMEPAD_BUTTON_COUNT> down_at{};
 	std::vector<SDL_JoystickID>                 pads;    // Open, oldest first; the first plays.
 
 	Controller_runner   runner   = nullptr;
@@ -501,8 +514,14 @@ void Controller_read_config() {
 	for (auto& binding : state.map) {
 		binding = Controller_binding();
 	}
+	for (auto& binding : state.hold_map) {
+		binding = Controller_binding();
+	}
 	for (const auto& [input, action] : default_map) {
 		state.map[input] = Parse_binding(action);
+	}
+	for (const auto& [input, action] : default_hold_map) {
+		state.hold_map[input] = Parse_binding(action);
 	}
 	for (const auto& entry : input_names) {
 		const std::string key = std::string("config/gameplay/controller/buttons/") + entry.name;
@@ -510,6 +529,12 @@ void Controller_read_config() {
 			std::string text;
 			config->value(key, text, "");
 			state.map[entry.input] = Parse_binding(text);
+		}
+		const std::string hold_key = std::string("config/gameplay/controller/hold/") + entry.name;
+		if (config->key_exists(hold_key)) {
+			std::string text;
+			config->value(hold_key, text, "");
+			state.hold_map[entry.input] = Parse_binding(text);
 		}
 	}
 	Update_cursor();
@@ -598,7 +623,27 @@ bool Controller_event(const SDL_Event& event) {
 		if (down) {
 			Set_last_input(true);
 		}
-		const Controller_binding& binding = Binding_of(event.gbutton.button);
+		const int                 input   = event.gbutton.button;
+		const Controller_binding& binding = Binding_of(input);
+		if (input < SDL_GAMEPAD_BUTTON_COUNT && state.hold_map[Mapped_input(input)].action != Controller_action::none) {
+			// Tap or hold: decided on release, or by Controller_frame.
+			if (down) {
+				state.pending[input]    = true;
+				state.hold_fired[input] = false;
+				state.down_at[input]    = SDL_GetTicks();
+			} else if (state.pending[input]) {
+				state.pending[input] = false;
+				if (state.hold_fired[input]) {
+					if (state.runner) {
+						state.runner(state.hold_map[Mapped_input(input)], false);
+					}
+				} else if (state.runner && binding.action != Controller_action::none) {
+					state.runner(binding, true);    // A tap.
+					state.runner(binding, false);
+				}
+			}
+			return true;
+		}
 		switch (binding.action) {
 		case Controller_action::none:
 		case Controller_action::shift:    // Read as held (Controller_shift_held).
@@ -728,6 +773,29 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 	key_event.key.mod       = mod;
 	key_event.key.down      = down;
 	event                   = key_event;
+}
+
+void Controller_frame() {
+	SDL_Gamepad* pad = Primary_pad();
+	if (!state.enabled || !pad) {
+		return;
+	}
+	const Uint64 now = SDL_GetTicks();
+	for (int input = 0; input < SDL_GAMEPAD_BUTTON_COUNT; ++input) {
+		if (!state.pending[input] || state.hold_fired[input]) {
+			continue;
+		}
+		if (!SDL_GetGamepadButton(pad, static_cast<SDL_GamepadButton>(input))) {
+			state.pending[input] = false;    // Let go while another screen had the events.
+			continue;
+		}
+		if (now - state.down_at[input] >= hold_ms) {
+			state.hold_fired[input] = true;
+			if (state.runner) {
+				state.runner(state.hold_map[Mapped_input(input)], true);
+			}
+		}
+	}
 }
 
 bool Controller_left_stick_centred() {

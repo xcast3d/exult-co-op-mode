@@ -42,6 +42,7 @@ enum class Controller_action {
 	utilities_ring,    // Held: the utilities radial (step 6, not built yet).
 	chat_phrases,      // Chat quick phrases (step 9, not built yet).
 	close_window,      // The newest window shuts; with none, the pick clears.
+	hold_follow,       // Y: the party holds or follows (a guest: follow or take over).
 	key_binding        // One of Exult's key actions, by name.
 };
 
@@ -62,6 +63,10 @@ void Controller_device_added(SDL_JoystickID id);
 void Controller_device_removed(SDL_JoystickID id);
 // Read the config again (the options page, later).
 void Controller_read_config();
+
+// The main loop's pass each frame: a button with a held action runs it
+// once held long enough (D-pad up held: hold / follow).
+void Controller_frame();
 
 // The game's side: what a button does.  'down' false on release (held
 // actions: the player list).  Set by exult.cc.
