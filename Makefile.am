@@ -191,6 +191,7 @@ EXTRA_DIST = 	\
 	README \
 	FAQ \
 	README.md \
+	README-exult.md \
 	README.windows \
 	README.macOS \
 	Makefile.common \
