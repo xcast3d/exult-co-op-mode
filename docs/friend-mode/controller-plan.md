@@ -100,7 +100,7 @@ or mouse action the Steam test used.
 | X / Square (west), held | skills radial (below; moved from east, 2026-10-25) | |
 | B / Circle (east) | close the newest window; with none, clear the pick (2026-10-25) | |
 | Y / Triangle (north), held | utilities radial (below) | |
-| D-pad up | switch to the next character | |
+| D-pad up | tap: switch to the next character; held: hold / follow (2026-10-25) | Shift+Tab / Y |
 | D-pad left | paperdoll | |
 | D-pad right | inventory | I |
 | D-pad down | stats | Z |
@@ -156,6 +156,18 @@ From playing with a PS4 pad, after the menus and prompts were in:
    clears the pick with none); the skills ring moved to Square (west),
    combat to R3. Chat quick phrases need a new place (the utilities
    ring). (Done.)
+6. **Y (hold / follow) had no button.** D-pad up held (about a third of
+   a second) does it; a tap still switches character, now on release.
+   Guests get follow / take over the same way. Held actions are in the
+   config too (`config/gameplay/controller/hold/<button>`). (Done.)
+7. **The Hold / Follow button under the minimap** hides while the pad is
+   in use (it comes back with the mouse or a key). (Done.)
+8. **A list of the pad's buttons** is needed in the game, not only in
+   this plan. Planned: a "Controller" page in the game menu (step 11)
+   that lists the live map with the pad's own names (Cross or A...),
+   reachable with the pad; the same list in the README. (To do.)
+9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
+   Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
 ## Radial menus
 
