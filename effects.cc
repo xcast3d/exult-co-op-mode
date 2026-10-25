@@ -1090,14 +1090,15 @@ TileRect Text_effect::Figure_text_pos() {
 			TileRect r = gwin->get_shape_rect(outer);
 			r.x -= gwin->get_scrolltx_lo();
 			r.y -= gwin->get_scrollty_lo();
-			if (chat_style) {
-				r.x += (r.w - width) / 2;
-				// Sit just above the head; the shape rect includes headroom.
-				constexpr int chat_drop = 16;
-				r.y -= height + 2 + stack_offset - chat_drop;
-				r.w = width;
-				r.h = height;
-			}
+			// Chat and every other label (names on a click, remarks) are
+			// centred just above the head, not on it at the picture's top
+			// left corner as in Exult (2026-10-25).  A person's shape rect
+			// includes headroom; a thing's doesn't.
+			const int drop = outer->as_actor() ? 16 : 0;
+			r.x += (r.w - width) / 2;
+			r.y -= height + 2 + stack_offset - drop;
+			r.w = width;
+			r.h = height;
 			return r;
 		}
 	} else {

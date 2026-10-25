@@ -628,27 +628,28 @@ const std::vector<Companion_class>& Classes() {
 			 -1,
 			 "Dupre's Shield",
 			 {
-					 Class_skill(41, "Lay on Hands")
-							 .describe("A big heal on the most hurt in the party")
-							 .recharge(30)
-							 .icon_spell(spell_heal)
-							 .kind(T::heal)
-							 .aim(G::hurt_party)
-							 .heal(25)
-							 .on_targets(sprite_sparkles)
-							 .says("*lays on hands*"),
+					 // Shield Ally first, the heal second (2026-10-25).
 					 // Blows on the ward land on Dupre while he stays within
 					 // 'guard_reach' (the Class AI keeps him there) with a shield
 					 // readied.
 					 Class_skill(43, "Shield Ally")
 							 .describe("Takes the melee blows meant for an ally")
+							 .recharge(30)
 							 .icon_spell(spell_protection)
 							 .kind(T::support)
 							 .aim(G::ward, 6)    // Allies within his reach of them (guard_reach).
-							 .unlock(level_second)
 							 .guard(15000)
 							 .on_targets(sprite_barrier)
 							 .says("*raises his shield*"),
+					 Class_skill(41, "Lay on Hands")
+							 .describe("A big heal on the most hurt in the party")
+							 .icon_spell(spell_heal)
+							 .kind(T::heal)
+							 .aim(G::hurt_party)
+							 .unlock(level_second)
+							 .heal(25)
+							 .on_targets(sprite_sparkles)
+							 .says("*lays on hands*"),
 					 Class_skill(42, "Challenge")
 							 .describe("Hostiles in the circle turn on Dupre")
 							 .recharge(90)

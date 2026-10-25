@@ -363,6 +363,7 @@ static std::string Friend_player_with_actor(const Actor* actor) {
 }
 static bool friend_chat_active = false;
 static std::string friend_chat_text;
+static bool friend_chat_slash_typed = false;    // "/" opened it with "/" in it: drop the key's own text.
 
 // The actor this machine's player speaks through, or null while spectating.
 static Actor* Friend_mode_local_speaker() {
@@ -2210,6 +2211,18 @@ static bool Friend_read_path(
 				if (obj->get_tile() == tile && !obj->get_owner()) {
 					next_obj = obj;
 					break;
+				}
+			}
+			// Animated things (a fountain's pool of water) change frame on
+			// each machine on their own: any frame on that tile.
+			if (!next_obj && ShapeID(shape, 0).get_info().is_animated()) {
+				candidates.clear();
+				Game_object::find_nearby(candidates, tile, shape, 0, 0xb0, quality, c_any_framenum);
+				for (Game_object* obj : candidates) {
+					if (obj->get_tile() == tile && !obj->get_owner()) {
+						next_obj = obj;
+						break;
+					}
 				}
 			}
 		} else if (Container_game_object* container = cur->as_container()) {
@@ -10370,7 +10383,7 @@ bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& u
 			&& event.key.key != SDLK_NUMLOCKCLEAR);
 }
 
-// The chat line: Enter opens it (not while writing in the journal), typing,
+// The chat line: Enter or "/" opens it (not while writing in the journal), typing,
 // Tab completion, Enter sends, Escape closes.  From Handle_event, and on the
 // host also while a conversation waits for a click.  True if the event was
 // the chat line's.
@@ -10378,6 +10391,12 @@ static bool Friend_mode_chat_event(SDL_Event& event) {
 	if (friend_session.connected()) {
 		if (friend_chat_active) {
 			if (event.type == SDL_EVENT_TEXT_INPUT) {
+				// The "/" that opened the line may also arrive as text.
+				const bool repeat_slash = friend_chat_slash_typed && std::string(event.text.text) == "/";
+				friend_chat_slash_typed = false;
+				if (repeat_slash) {
+					return true;
+				}
 				for (const char* ch = event.text.text; *ch && friend_chat_text.size() < 80; ++ch) {
 					if (static_cast<unsigned char>(*ch) >= 32 && static_cast<unsigned char>(*ch) < 127) {
 						friend_chat_text.push_back(*ch);
@@ -10387,6 +10406,7 @@ static bool Friend_mode_chat_event(SDL_Event& event) {
 				return true;
 			}
 			if (event.type == SDL_EVENT_KEY_DOWN) {
+				friend_chat_slash_typed = false;
 				if (event.key.key == SDLK_ESCAPE) {
 					friend_chat_active = false;
 					friend_chat_text.clear();
@@ -10416,10 +10436,13 @@ static bool Friend_mode_chat_event(SDL_Event& event) {
 				return true;
 			}
 		} else if (event.type == SDL_EVENT_KEY_DOWN
-				   && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)
+				   && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER
+					   || (event.key.key == SDLK_SLASH && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))))
 				   && !Notebook_gump::get_instance()) {    // Enter in the journal is a new line.
-			friend_chat_active = true;
-			friend_chat_text.clear();
+			// "/" opens it with "/" typed, for a command (/w, /wave).
+			friend_chat_active      = true;
+			friend_chat_slash_typed = event.key.key == SDLK_SLASH;
+			friend_chat_text        = friend_chat_slash_typed ? "/" : "";
 			gwin->stop_actor();
 			SDL_StartTextInput(gwin->get_win()->get_screen_window());
 			gwin->set_all_dirty();

@@ -110,7 +110,7 @@ project; see the end of the roadmap.
 
 ## Overhead chat
 
-- Press **Enter** to type; **Enter** sends, **Escape** cancels.
+- Press **Enter** to type (or **/**, which starts the line with "/" for a command); **Enter** sends, **Escape** cancels.
 - Text appears above the speaker's character and fades after a short interval.
 - The host relays chat to all participants.
 - Chat is a separate, non-Usecode system: it must not trigger NPC conversations or quest scripts.
@@ -699,6 +699,14 @@ Class AI placing and Challenge followed the same day (untested). Next for
 it: the host and a single player leading a companion, its skill bar and
 the party following it, with Y to hold the party
 ([plan](friend-mode/leading-companions.md), 2026-10-21).
+
+### Co-op scaling
+
+Enemies a little harder per guest playing a companion: mostly more
+effective health (the host shrinks each hit on them), a little more damage
+to the party, host-only settings, on top of Exult's own combat difficulty.
+Only if more testing shows combat got too easy with skills and the better
+AI (2026-10-25). Plan: [co-op scaling](friend-mode/coop-scaling-plan.md).
 
 ### Offering features to Exult
 

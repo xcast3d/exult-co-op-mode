@@ -93,6 +93,17 @@ behaviors have been verified together over two local instances.
 
 ## Next session
 
+**Test round, 2026-10-25 (tested on host and guest; no protocol change).**
+Labels from a click (names, remarks, "Locked") sit centred just above
+the head as chat does, not over it at the picture's top left as in Exult
+(`Text_effect::Figure_text_pos`; things get no drop, their pictures have no
+headroom). "/" opens the chat line with "/" typed. Pools of water work on
+guests: the fountain animates on each machine by itself, so the guest's
+frame rarely matched the host's and the host refused the drink as "not
+found"; a map path to an animated thing now matches any frame on its tile
+(`Friend_read_path`). Dupre's Shield Ally is first (level 1, 30 s) and Lay
+on Hands second (level 4, 60 s); icons swapped to match.
+
 **Feedback round, 2026-10-23: batch G built and tested (no protocol
 change).** After a full live test ([the feedback
 round](feedback-2026-10-23.md)): the guest's hold button says "Stop" (was
