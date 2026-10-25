@@ -6,10 +6,15 @@ the hint line, the pad pointer. Then (2026-10-25, untested with a pad):
 the pad in Exult's other screens as the keys they take (the title menu,
 windows, the "How many?" slider with left / right and LB / RB by ten,
 Yes/No, signs and conversation choices, which covers most of steps 3 to
-5 and 8); a highlight in the game menu (step 7, its first page only; the
-options pages are next); and the face buttons drawn as glyphs in the hint
-line (the PlayStation shapes, the Xbox letters). The rings, R3 and the
-rest are still a plan. (Plan 2026-10-19; current state and Steam Controller notes added
+5 and 8); the face buttons drawn as glyphs in the hint line (the
+PlayStation shapes, the Xbox letters). After a pad test: Cross skips the
+intro and scenes as Space does, the left stick drives menus as the D-pad,
+and step 7's highlight is on the game menu and every page it opens
+(Video, Audio and its Mixer, Game Engine, Game Display, Input, Target
+System, Class System, Co-Op Mode, UI and its layer page, Load/Save: up /
+down pick a save, LB / RB the buttons, a new save named by date). Still
+pointer-only: Audio's Advanced page and character creation. The rings,
+R3 and the rest are still a plan. (Plan 2026-10-19; current state and Steam Controller notes added
 2026-10-23; button map and direction from a Steam Input test,
 2026-10-25.) Listed under "Possible future projects" in the
 [project brief](../ultima-7-friend-mode.md).
