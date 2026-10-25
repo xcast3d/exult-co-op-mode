@@ -1,13 +1,255 @@
 # Controller support (plan)
 
 **Status:** a plan, not started (2026-10-19; current state and Steam
-Controller notes added 2026-10-23). Listed under "Possible future
-projects" in the [project brief](../ultima-7-friend-mode.md).
+Controller notes added 2026-10-23; button map and direction from a Steam
+Input test, 2026-10-25). Listed under "Possible future projects" in the
+[project brief](../ultima-7-friend-mode.md).
 
 Goal: play Black Gate, alone or in Co-Op Mode, with a gamepad and no
 keyboard or mouse. The [Target System](targeting-groups.md) (Q, E, Space)
 already turns most mouse work into a few keys; a controller mostly needs
-those keys on buttons, plus a way through conversations, menus and chat.
+those keys on buttons, plus a pointer, two radial menus, and a way through
+conversations, menus and chat.
+
+**Branch:** built on a branch of its own (such as `feature/controller`,
+from `feature/friend-mode`), merged back when a step is playable. Not
+started until the current round of test fixes is in.
+
+## Direction (decided 2026-10-25)
+
+- **Made for a standard pad.** Xbox or PlayStation layout: two sticks (each
+  also a button), D-pad, four face buttons, two shoulders, two triggers,
+  Select (Back, Share) and Start (Menu, Options). Nothing depends on
+  extras such as paddles, trackpads or gyro; a pad that has them can map
+  them in the config.
+- **The pad adds, never replaces.** When a controller is connected, the
+  keyboard and mouse keep working exactly as they do now, at the same time.
+  Nothing is switched off or hidden because a pad is present.
+- **Controller-only screens where buttons run out.** A pad has too few
+  buttons for every key Exult and Friend Mode use. Instead of chords, the
+  rest goes into controller UI: two held radial menus (skills, utilities),
+  a stick-driven pointer, and focus highlights in conversations and
+  menus. These appear only in response to the pad.
+- **The targeting line shows the pad's buttons.** The "Targeting Deer"
+  notice at the top and the hint line under it stay as they are, but
+  when the pad was the last thing used the hint names its buttons:
+  "Take (A)  Split (LT+A)" instead of "Take (Space)  Split
+  (Shift+Space)". Back to keys as soon as a key is pressed. Labels come
+  from SDL (`SDL_GetGamepadButtonLabel`: A/B/X/Y, or Cross/Circle/Square/
+  Triangle on PlayStation pads), not a fixed list.
+
+## Tested with Steam Input (2026-10-25)
+
+Before writing any code, the map below was tried with Steam Input sending
+keys and mouse to Exult (Steam Controller, macOS). It played well: walking,
+targeting, acting, fighting and the party windows all needed no keyboard.
+
+Steam setup that worked, for anyone using that route today:
+
+- Add Exult as a non-Steam game and launch it from Steam.
+- Pick a **keyboard and mouse** template (such as "Keyboard (WASD) and
+  Mouse") for Exult. With no layout, Steam falls back to its gamepad
+  template ("Controller 0 uses xinput : true" in Steam's
+  `logs/controller.txt`); on macOS Steam can't present a virtual gamepad to
+  other apps, so nothing reaches Exult, not even the pointer.
+- macOS needs Input Monitoring allowed for Steam (and possibly
+  Accessibility, for Steam to move the pointer).
+
+What it showed:
+
+- The tested buttons are the default map below, except two changes made
+  after: Space moved from east to south, and the triggers became Shift and
+  Alt, mouse buttons only while the pointer shows (the test had them as
+  clicks at all times).
+- Not enough buttons: skills (three slots), eating, the watch and the map
+  were left over with only two face buttons free. Hence the radial menus.
+- Mouse-only jobs (dragging items, the skill bar, odd buttons in windows)
+  were fine with a pad pointer and triggers as mouse buttons. Hence the
+  pointer stays in the native version.
+
+## Button map (default)
+
+Names: Xbox / PlayStation, then SDL's name. The "Same as" column is the key
+or mouse action the Steam test used.
+
+| Button | Does | Same as |
+| --- | --- | --- |
+| Left stick | walk | WASD / arrows |
+| Left stick click (L3) | run or walk, toggled | R |
+| Right stick | move the pointer (below) | mouse |
+| Right stick click (R3) | free; suggested: chat quick phrases | |
+| LB / L1 (left shoulder) | next person or creature | Q |
+| RB / R1 (right shoulder) | next thing | E |
+| LT / L2 (left trigger), held | Shift; with the pointer showing: left mouse button (held: drag) | Shift / left click |
+| RT / R2 (right trigger), held | Alt; with the pointer showing: right mouse button | Alt / right click |
+| A / Cross (south) | act on the pick: talk, open, take, use, attack; held: item menu (below) | Space |
+| X / Square (west) | combat mode on or off | C |
+| B / Circle (east), held | skills radial (below) | |
+| Y / Triangle (north), held | utilities radial (below) | |
+| D-pad up | switch to the next character | |
+| D-pad left | paperdoll | |
+| D-pad right | inventory | I |
+| D-pad down | stats | Z |
+| Select / Back | player list | Tab |
+| Start / Menu | game menu, or close the top window | Escape |
+
+Notes:
+
+- **South confirms** (decided 2026-10-25). The Steam test had Space on
+  east; the native map moves it to south, the usual confirm button on
+  Xbox and PlayStation, and the skills ring to east. SDL names buttons by
+  position, so on a Nintendo-style pad south is B; the config can swap
+  south and east for players who want that.
+- **Triggers are Shift and Alt, held.** Every Shift and Alt version of a
+  Target System key works on the pad without its own button:
+  LT + south is Shift+Space (take all, split), RT + south is Alt+Space
+  (drop some of one's own), LT + LB / RB is Shift+Q / Shift+E (cycle
+  backwards). Only while the pointer is showing are the triggers mouse
+  buttons instead (see Pointer).
+- **Targeting first, pointer for the rest.** Nearly everything usable in
+  the world is reached with LB / RB and south. The pointer is kept for
+  what the Target System doesn't cover: dragging an item to a chosen
+  place or person, buttons on windows (the paperdoll's disk and combat
+  buttons), the map. So the triggers spend most of the time as Shift and
+  Alt.
+- **Guests** get the same map. "Follow the Avatar" (Y on the keyboard)
+  goes in the utilities radial.
+- **Two pads** at once: only the first drives the player; a second is
+  ignored (no local second player is planned).
+
+The map lives in the config (`config/gameplay/controller/...`, button name
+to action name, the same action names as the key bindings in
+`keyactions.cc`), with the table above as the default, so it can be
+changed without a rebuild.
+
+## Radial menus
+
+Hold the button: a ring of up to eight entries opens around the Avatar.
+Push the **left stick** towards an entry to highlight it (the Avatar
+doesn't walk while a ring is open); **let go** of the button to use it.
+Let go with the stick centred to cancel. Tapping the button without
+choosing does nothing, so a short press can't fire anything by accident.
+
+- **Skills (east, held):** slots 1, 2 and 3 of the
+  [Class System](companion-skills.md) skill bar, with the bar's 36px icons
+  and cooldowns. The Avatar's spell bar the same way. A skill that needs a
+  target uses the current pick, as the keys do; with no pick it shows the
+  crosshair, aimed with the right stick and confirmed with south.
+- **Utilities (north, held):** feed (F), watch (W), map / location,
+  journal, lockpick (P), keys (K), follow the Avatar (guests), chat quick
+  phrases (if not on R3). Same order every time, so it becomes muscle
+  memory.
+- Drawn as a gump in the screen's centre with a name under the
+  highlighted entry. In single player the game keeps running while a ring
+  is open, as it does for the skill bar (open question: pause it in single
+  player only).
+- Written so other rings can be added (spells by circle, party orders).
+
+## Pointer
+
+- **Right stick moves Exult's pointer.** It starts hidden in the centre of
+  the screen and shows when the right stick moves. Speed grows with how
+  far the stick is pushed, with a small dead zone and a slow fine-aim
+  range near the centre.
+- **While it shows, the triggers are the mouse buttons.** LT down / up is
+  the left button down / up, so holding LT while moving the right stick
+  drags an item; RT is the right button. While it's hidden they are Shift
+  and Alt. The pointer on screen is the sign of which, so there is no
+  mode to remember.
+- **Hides after about 5 seconds** with no controller input, and goes back
+  to the centre for next time. LB, RB or south hide it at once, since
+  they mean the player is back to targeting.
+- **The real mouse always wins.** Moving the mouse shows the normal
+  pointer at the mouse's position; the pad pointer then carries on from
+  there.
+- Built by sending ordinary mouse events (`SDL_WarpMouseInWindow` and
+  pushed `SDL_EVENT_MOUSE_*` events), so every place that reads the mouse,
+  including the modal loops (`Get_click`, dragging, gumps), works with no
+  change of its own.
+
+## Items and equipment (decided 2026-10-25)
+
+What Space does with items today (`Friend_mode_space`,
+`Friend_mode_equip`, exult.cc), checked 2026-10-25:
+
+- **Swapping works for one's own character.** Space on plate boots in
+  one's pack readies them and puts the leather boots that were on into
+  the pack; with no room, the swap is undone ("No room"). Two-handed
+  weapons free both hands the same way.
+- **Unequipping works:** Space on a worn thing puts it in the pack.
+- **Only for the controlled character.** The Avatar in Iolo's paperdoll or
+  pack *takes* the item into the Avatar's own pack, as from any other
+  container. Equipping Iolo today means switching to him first (D-pad up).
+- **No split unequip.** Alt+Space on worn arrows drops some at one's feet.
+
+Changes, keyboard and pad alike:
+
+- **Space acts for the window's owner.** In a party member's paperdoll or
+  pack, the Avatar's Space readies, swaps or puts away on *that member*,
+  as it already does for one's own (the Avatar is the party
+  administrator). Taking it into one's own pack moves to Shift+Space
+  (LT + south). Containers outside the party work as today.
+- **Split unequip.** On a worn stack, Alt+Space (RT + south) puts *some*
+  back in the pack (how many). Dropping some of a worn stack moves to the
+  item menu.
+- **Item menu: hold south** on a picked item. Tap still does Space; hold
+  opens a short list over the pick, moved with the D-pad, south to choose,
+  Start to cancel:
+  - Use / Ready / Put away (whichever Space would do)
+  - Give to... (below)
+  - Put in... (an open container, or a chest picked on the map)
+  - Split (how many)
+  - Drop
+  Only the entries that apply are shown. South's tap has to wait for the
+  release to tell it from a hold (about a quarter second). Exult's touch
+  item menu (`Itemmenu_gump`: Use, Pick up, Move) is a `Modal_gump`, so it
+  can be the base and gets the menu focus of step 7 for free. On the
+  keyboard the same menu opens on a key (to choose; Ctrl+Space is a
+  candidate).
+- **Give to...** The party's portraits along the bottom (`Face_stats`)
+  get a highlight: Q / E (LB / RB) move it, Space (south) gives, Escape
+  (Start) cancels. It starts on the owner of the other open paperdoll if
+  there is one, else the next party member. The item goes into the
+  receiver's pack, the whole stack, or how many with Alt (RT); then Space
+  in their window readies it. Both must be within reach ("Too far away"),
+  and a full pack says "No room". The hint line adds "Give" when the pick
+  can be given. A keyboard key of its own as well: **G** (moving Black
+  Gate's abacus key, which is hardly used) or **U** (free since the world
+  map was shelved); to decide.
+- **Guests don't give** (decided 2026-10-25). As today, a guest only
+  drops things and picks things up into their own inventory. Their item
+  menu has no Give to... and Put in... only for their own bags; sharing
+  gear goes through the floor or the Avatar.
+
+## What still needs the pointer
+
+After the item changes above, the pointer (right stick, triggers) is left
+for:
+
+1. **"Use X on Y"**: a key on a door, a lockpick on a chest, food on a
+   companion, the bucket on a well. These show a crosshair (`Get_click`).
+   Better than the pointer: while the crosshair is up, LB / RB step
+   through likely targets (as Q / E do), south confirms, Start cancels;
+   the right stick still aims freely for anything else.
+2. **Pushing or placing things in the world** (crates, puzzle pieces) and
+   dropping on a chosen spot.
+3. **The map**, and arranging things inside a pack (Sort covers most of it).
+4. Anything not covered yet while the steps below are built.
+
+Window buttons are mostly covered: the paperdoll's disk button is Start,
+its combat button west.
+
+## Text entry
+
+Typing (chat, the journal, save names) stays on the keyboard. Options for
+no keyboard, in order of effort:
+
+1. Chat quick phrases (below) cover most of chat.
+2. Steam's on-screen keyboard, when Exult is launched from Steam (Big
+   Picture) or on a Steam Deck. Exult only has to start SDL text input
+   (`SDL_StartTextInput`) where it already takes text.
+3. An on-screen keyboard of our own (a grid of letters picked with the
+   D-pad and south) if 2 isn't enough. Later, and only if needed.
 
 ## What Exult has today
 
@@ -45,7 +287,9 @@ In more detail (checked 2026-10-23, SDL 3.4.18 from Homebrew):
 ## Steam Controller (original, 2015)
 
 Tested 2026-10-23 on macOS 27 with the Bluetooth (BLE) firmware: macOS
-shows it as "SteamController", vendor 0x28DE, product 0x1106.
+shows it as "SteamController", vendor 0x28DE, product 0x1106. Not the
+target pad (see Direction), but the one at hand, so native support should
+see it.
 
 - **SDL ignores it by default.** `SDL_HINT_JOYSTICK_HIDAPI_STEAM`
   ("HIDAPI driver for Bluetooth Steam Controllers") defaults to "0".
@@ -59,146 +303,133 @@ shows it as "SteamController", vendor 0x28DE, product 0x1106.
   the log when `SDL_OpenGamepad` fails.
 - **Steam running.** Steam opens the controller too. Whether SDL can still
   read it while Steam is open, or only once Steam has quit, is untested.
-  Launched from Steam as a non-Steam game, Steam Input may also send its
-  own key and mouse layout on top; the README should say to turn Steam
-  Input off for Exult, or to quit Steam.
+  Launched from Steam, Steam Input sends its own layout on top; with
+  native support the README should say to turn Steam Input off for Exult,
+  or to quit Steam.
 - **Extra inputs.** SDL names the back grips `SDL_GAMEPAD_BUTTON_LEFT_PADDLE1`
-  (L4) and `RIGHT_PADDLE1` (R4). Free in the map above; candidates are the
-  held radial menu for skills and spells, and "more" (LB) for players who
-  want the shoulders for combat. How SDL reports the two trackpads and the
-  gyro for this pad is still to check (the left pad probably comes in as
-  the D-pad).
-- **Until then** it already works through Steam: add Exult as a non-Steam
-  game and map the right pad to the mouse, triggers to clicks and the
-  buttons to keys. Good enough for play, and a check of which keys the
-  default map needs.
-
-## Button map (first version)
-
-Names as on an Xbox pad (SDL's south/east/west/north on others).
-
-| Button | Does | Same as |
-| --- | --- | --- |
-| Left stick | walk | the mouse / WASD |
-| A (south) | act on the pick: talk, open, take, use, attack | Space |
-| B (east) | back: close the top window, cancel a prompt, clear the pick | Escape |
-| X (west) | next thing | E |
-| Y (north) | next person or creature | Q |
-| LB (left shoulder) | "more": with A, how many / take all / pick up | Shift |
-| RB (right shoulder) | combat mode on or off | C |
-| LT / RT | previous / next party member's paperdoll | 1-8 |
-| D-pad up / down | previous / next (in the current list) | Shift+Q, Shift+E |
-| D-pad left / right | previous / next backpack | Shift+I |
-| Start | game menu | Escape (no window open) |
-| Back / Select | journal; held: player list | N, Tab |
-| Right stick click | chat quick phrases (below) | Enter |
-
-Guests get the same map; on a guest Y (north) held for a second is
-"follow the Avatar" (Y on the keyboard).
-
-The map lives in the config (`config/gameplay/controller/...`, button name
-to action name, the same action names as the key bindings in
-`keyactions.cc`), with the table above as the default, so it can be
-changed without a rebuild.
+  (L4) and `RIGHT_PADDLE1` (R4). Not in the default map; mappable in the
+  config. How SDL reports the two trackpads and the gyro for this pad is
+  still to check (the left pad probably comes in as the D-pad; the right
+  pad would suit the pointer).
 
 ## Implementation
 
 0. **See more pads.** Set `SDL_HINT_JOYSTICK_HIDAPI_STEAM` to "1" next to
    the other hints before `SDL_Init` (exult.cc), and keep a list of the
-   open pads instead of looking them up per event, so held buttons (LB,
-   held Y, held Back) can be read from anywhere.
+   open pads instead of looking them up per event, so held buttons (east,
+   north, the triggers) can be read from anywhere. New code in its own file
+   (`controller.cc`), with only hooks in `exult.cc` (see
+   [branching](branching.md)).
 1. **Buttons to actions.** In `Handle_event`, turn
    `SDL_EVENT_GAMEPAD_BUTTON_DOWN/UP` into the existing actions instead of
    fake key presses: the Target System calls (`Friend_mode_cycle_target`,
    `Friend_mode_cycle_object`, `Friend_mode_space`), and Exult's key
    actions (`ActionCombat`, `ActionInventory`, `ActionCloseOrMenu`...) by
-   name through the keybinder's action table. LB is held state passed in
-   where Shift is read today (`Friend_mode_space(shift)`, the cycles'
-   step).
-2. **Modal loops.** Conversations, signs, books and number prompts wait
+   name through the keybinder's action table. L3 toggles running the way
+   R does. Held LT / RT are passed in where Shift and Alt are read today
+   (`Friend_mode_space(shift, alt)`, the cycles' step).
+1b. **Hint line.** Remember whether the last input was the pad or the
+   keyboard, and have `Friend_space_hint` (and the other "(Key)" hints)
+   name buttons for the pad. Redraw the line when that switches.
+2. **Pointer.** Right stick and triggers as above. Comes early: with it,
+   everything that has no controller path yet is still reachable.
+3. **Modal loops.** Conversations, signs, books and number prompts wait
    in their own loops (`Get_click`, `Gump_manager::do_modal_gump`), outside
-   `Handle_event`. Each needs A as a click (Space already closes signs and
-   turns book pages there) and B as Escape.
-3. **Conversation choices (the main gap).** Choices are picked with the
-   mouse or 1-9/a-z (`Usecode_internal::get_user_choice_num`). Add a
-   highlighted choice:
-   - when choices appear, the first is highlighted;
-   - D-pad up/down (and X/Y, the cycle buttons) move the highlight, wrapping
-     round;
-   - A picks it; B picks "bye" if offered (as Escape does today).
-   The highlight is drawn the way Suggest a reply draws a guest's
-   suggestion (`Conversation::suggest_choice`, a choice in a palette
-   color), in a color of its own. The same keys work on the keyboard:
-   Q/E move it and Space picks, so conversations need no mouse either.
-   Keyboard part built 2026-10-22 (`Conversation::move_highlight`, white;
-   E and Shift+E, Space; nothing highlighted until the first E). A
-   controller only has to send those keys.
-   Guests watching the Avatar's conversation use the same highlight to
-   pick their suggestion: A sends it (the "Suggest a reply" message).
-4. **NPC text that waits for a click** ("click to continue") takes A as a
-   click; it already takes any key.
-5. **Menus and option pages.** The game menu and the options pages are
-   lists of buttons (`Gamemenu_gump`, `*Options_gump`). Add a focused
-   button: D-pad up/down moves it (drawn with a highlight box), left/right
-   changes a Yes/No or list setting, A presses it, B cancels. Start in
-   the title menu works the same (it is already keyboard-driven).
-6. **Number prompts** ("How many?", the quantity slider): left/right
-   change by one, LB+left/right by ten, A accepts, B cancels.
-7. **Chat.** No keyboard: the right stick click opens a short list of
-   quick phrases ("Follow me", "Wait here", "Over here", "Ready", "Thanks"),
-   picked like conversation choices; plus the emotes (`/wave`, `/bow`...).
-   Typing stays on the keyboard.
-8. **Items between packs and equipment** already work without dragging:
-   A takes into the pack, readies, puts away or drops
-   (`Game_window::move_object`). Still missing: giving an item to another
-   party member (the Avatar only). A "give to" list on LB+A in an open
-   pack window could follow.
-9. **Pointer (stopgap).** The right stick moves the mouse pointer, RT is a
-   left click and LT a right click while it is moving. Covers whatever has
-   no controller path yet (the skill and spell bars before the radial menu,
-   dragging, the map), and the Steam Controller's right trackpad if SDL
-   reports it. Not in the button map above; it only takes the right stick
-   and triggers when they are moved, and LT/RT go back to paperdolls when
-   the pointer has been still for a moment.
-10. **Options:** a "Controller" line on the Target System page (on when a
-   controller is connected) and the remapping in the config.
+   `Handle_event`. Each needs south as a click (Space already closes signs
+   and turns book pages there) and Start as Escape.
+4. **Conversation choices.** Choices are picked with the mouse or 1-9/a-z
+   (`Usecode_internal::get_user_choice_num`). The keyboard highlight is
+   built (2026-10-22: `Conversation::move_highlight`, white; E and Shift+E,
+   Space; nothing highlighted until the first E). On a pad: RB / LB move it
+   (the same buttons as E / Q), D-pad up / down too, south picks, Start
+   picks "bye" if offered (as Escape does). Guests watching the Avatar's
+   conversation use the same highlight to pick their suggestion: south sends
+   it (the "Suggest a reply" message).
+5. **NPC text that waits for a click** ("click to continue") takes south
+   as a click; it already takes any key.
+6. **Radial menus.** The skills and utilities rings above: a ring gump
+   with highlight and labels, opened on a held button, read from the left
+   stick, used on release.
+7. **Menus and option pages.** The pause menu (Start) and every page it
+   opens are driven by the pad, sub menus included:
+   - **A highlighted item.** D-pad up / down moves it, wrapping round,
+     drawn with a highlight box. The first item is highlighted when a page
+     opens, and returning from a sub menu highlights the item that opened
+     it.
+   - **South presses it**, as a click would: a button runs, a sub menu
+     opens with its own first item highlighted.
+   - **Left / right change a setting** on the highlighted line (Yes/No,
+     a list such as the scaler, a slider by one step), without opening
+     the drop-down.
+   - **Start or east goes back** one level, as Cancel does; on the pause
+     menu itself it closes it.
+   - Covers the pause menu (`Gamemenu_gump`) and its pages: Load/Save
+     (`Newfile_gump`, the save list scrolling with the highlight), the
+     options pages (`VideoOptions_gump`, `AudioOptions_gump`,
+     `GameEngineOptions_gump`, `GameDisplayOptions_gump`,
+     `InputOptions_gump`, `TargetingOptions_gump`, `UIOptions_gump`,
+     `AdvancedOptions_gump`), the Mixer, and Yes/No prompts
+     (`Yesno_gump`). The title menu works the same (it is already
+     keyboard-driven).
+   - **Built once, in `Modal_gump`,** which all of these derive from: it
+     keeps the page's buttons in screen order and a focus index, and
+     handles up / down / confirm / back. Each page only has to say which
+     of its widgets take left / right. The same keys on the keyboard
+     (arrows, Enter, Escape) do the same, so the menus need no mouse
+     either way.
+   - Typing fields (a save's name, the password box) take text from the
+     keyboard or the on-screen keyboard (see Text entry); with the pad,
+     a new save gets a name filled in (the date and place) so it can be
+     saved without typing.
+8. **Number prompts** ("How many?", the quantity slider): D-pad left /
+   right change by one, LB / RB by ten, south accepts, Start cancels.
+9. **Chat.** No keyboard: a short list of quick phrases ("Follow me", "Wait
+   here", "Over here", "Ready", "Thanks") and the emotes (`/wave`,
+   `/bow`...), on R3 or in the utilities ring, picked like conversation
+   choices. Typing: see Text entry.
+10. **Items and equipment.** The changes under Items and equipment: Space
+    for the window's owner, split unequip, the item menu on a held south,
+    Give to... with the face highlight, and the crosshair stepping through
+    targets with LB / RB. Mostly Target System work in exult.cc, useful on
+    the keyboard as well.
+11. **Options:** a "Controller" page: on or off (on by default), swap
+    south and east, pointer speed, pointer hide delay. Remapping in the
+    config.
 
 ## Order
 
-1. Buttons to the Target System and key actions, A/B in signs and prompts.
-2. Conversation choice highlight (keyboard and controller at once).
-3. Menus and option pages.
-4. Chat quick phrases.
-5. Remapping in the config; then a "Controller" options page if needed.
-
-Steps 1 and 2 already make the game playable with a pad, except menus and
-chat.
+1. Steps 0 to 2: more pads, buttons and the hint line, pointer. The game
+   is playable with a pad from here (it is what the Steam test played).
+2. Steps 3 to 5: modal loops and conversations, so no mouse work is needed
+   in dialogue.
+3. Step 6: radial menus (skills, utilities).
+4. Steps 7 and 8: menus, option pages, number prompts.
+5. Step 10: items and equipment (Space for the owner, item menu, Give).
+6. Step 9 and Text entry.
+7. Step 11: options page and remapping.
 
 ## Testing
 
-A controller on the Mac (any SDL-known pad: Xbox, PlayStation, Switch
-Pro). Black Gate's opening in Trinsic without touching the keyboard or
-mouse: walk, talk to Finnigan through every choice, open the stables'
-chests, take and ready a weapon, fight a rat, use the game menu to save.
-Then a guest doing the same with the host on the keyboard.
+An Xbox or PlayStation pad on the Mac (the target), then the Steam
+Controller. Black Gate's opening in Trinsic without touching the keyboard
+or mouse: walk and run, talk to Finnigan through every choice, open the
+stables' chests, take and ready a weapon, drag an item between packs with
+the pointer, fight a rat, use a skill and eat from the radials, use the
+game menu to save. Then the same with the mouse and keyboard used in
+between, to check neither stops the other. Then a guest doing the same
+with the host on the keyboard.
 
 Steam Controller (Bluetooth): with Steam quit, then with Steam open, then
 launched from Steam. Each time, check the log for "Game controller attached
-and open", that the stick walks, and that the paddles arrive. Also a pad
-plugged in and pulled out mid-game, and two pads at once (host and a local
-second player are not planned, but the second pad must not also drive the
+and open" and that the stick walks. Also a pad plugged in and pulled out
+mid-game, and two pads at once (the second must not also drive the
 Avatar).
 
 ## For upstream Exult
 
-Nothing here depends on Co-Op Mode. Steps 1 to 6 would suit Exult itself
-(see [upstreaming notes](upstreaming.md)); the Co-Op parts (guests'
-suggestions, chat phrases) stay ours.
-
-## Skills and spells (Class System)
-
-Decided 2026-10-20: the Class System's skill bar (a guest's companion) and
-the Avatar's spell bar are used with the mouse; a controller gets its own
-way in, such as a radial menu on a held button listing the skills or
-spells, rather than keyboard keys mapped to buttons. See
-[companion skills](companion-skills.md).
+Nothing in steps 0 to 5, 7 and 8 depends on Co-Op Mode or the Class
+System, and they would suit Exult itself (see
+[upstreaming notes](upstreaming.md)). The skills ring needs the Class
+System; the Co-Op parts (guests' suggestions, chat phrases, follow) stay
+ours. The map would then have to fall back to Exult's own keys where the
+Target System isn't there.
