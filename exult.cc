@@ -8725,6 +8725,11 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 			Friend_mode_hold_or_follow();
 		}
 		break;
+	case Controller_action::sort_window:
+		if (Friend_sort_key && !notebook && gwin->get_main_actor()) {
+			Friend_mode_sort_window();    // Shift+C: tidy the newest window.
+		}
+		break;
 	case Controller_action::close_window: {
 		// The newest window (a pack, a paperdoll, stats...) shuts; with
 		// none open, the pick clears.

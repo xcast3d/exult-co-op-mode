@@ -11,9 +11,13 @@
 
 #include "Configuration.h"
 #include "gamewin.h"
+#include "Gump_manager.h"
 #include "Modal_gump.h"
+#include "Text_button.h"
 #include "gump_utils.h"
 #include "ibuf8.h"
+#include "items.h"
+#include "font.h"
 #include "mouse.h"
 
 #include <algorithm>
@@ -90,7 +94,7 @@ struct Action_name {
 	const char*       name;
 };
 
-constexpr std::array<Action_name, 15> action_names{{
+constexpr std::array<Action_name, 16> action_names{{
 		{Controller_action::none, "NONE"},
 		{Controller_action::shift, "SHIFT"},
 		{Controller_action::alt, "ALT"},
@@ -106,12 +110,14 @@ constexpr std::array<Action_name, 15> action_names{{
 		{Controller_action::chat_phrases, "CHAT_PHRASES"},
 		{Controller_action::close_window, "CLOSE_WINDOW"},
 		{Controller_action::hold_follow, "HOLD_FOLLOW"},
+		{Controller_action::sort_window, "SORT_WINDOW"},
 }};
 
 // Held actions (config/gameplay/controller/hold/<button>): a button with
 // one does its own action on a tap (on release) and this one when held.
-constexpr std::array<std::pair<int, const char*>, 1> default_hold_map{{
+constexpr std::array<std::pair<int, const char*>, 2> default_hold_map{{
 		{SDL_GAMEPAD_BUTTON_DPAD_UP, "HOLD_FOLLOW"},
+		{SDL_GAMEPAD_BUTTON_EAST, "SORT_WINDOW"},    // Tap closes the window, hold tidies it.
 }};
 constexpr Uint64 hold_ms = 350;    // Held this long: the held action.
 
@@ -852,4 +858,202 @@ std::string Controller_label(Controller_action action, const char* key_name) {
 		}
 	}
 	return {};
+}
+
+// The Controller page (the game menu): the live map, a page of buttons at a
+// time; left / right (or LB / RB, or the arrows) turn the pages.
+namespace {
+using Page_row = std::pair<std::string, std::string>;    // The button, what it does.
+
+std::string Describe(const Controller_binding& binding) {
+	switch (binding.action) {
+	case Controller_action::shift:
+		return "Shift; pointer up: left click, drag";
+	case Controller_action::alt:
+		return "Alt; pointer up: right click";
+	case Controller_action::target_person:
+		return "Next person or creature";
+	case Controller_action::target_thing:
+		return "Next thing";
+	case Controller_action::target_act:
+		return "Act on the pick";
+	case Controller_action::toggle_run:
+		return "Run or walk";
+	case Controller_action::next_character:
+		return "Next character";
+	case Controller_action::backpack:
+		return "Next backpack";
+	case Controller_action::player_list:
+		return "Player list (co-op, held)";
+	case Controller_action::skills_ring:
+		return "Skills ring (held; coming)";
+	case Controller_action::utilities_ring:
+		return "Utilities ring (held; coming)";
+	case Controller_action::chat_phrases:
+		return "Chat phrases (coming)";
+	case Controller_action::close_window:
+		return "Close the newest window";
+	case Controller_action::hold_follow:
+		return "The party holds or follows";
+	case Controller_action::sort_window:
+		return "Sort the newest window";
+	case Controller_action::key_binding:
+		if (binding.name == "TOGGLE_COMBAT") {
+			return "Combat on or off";
+		}
+		if (binding.name == "INVENTORY") {
+			return "Paperdoll";
+		}
+		if (binding.name == "STATS") {
+			return "Stats";
+		}
+		if (binding.name == "CLOSE_OR_MENU") {
+			return "Clear the pick, close, menu";
+		}
+		{
+			std::string text = binding.name;    // Another key action: its name.
+			std::replace(text.begin(), text.end(), '_', ' ');
+			return text;
+		}
+	default:
+		return {};
+	}
+}
+
+// Every page: the world's buttons (from the map), then the menus'.
+std::vector<std::vector<Page_row>> Page_rows() {
+	constexpr int        per_page = 10;
+	std::vector<Page_row> world{{"Left stick", "Walk"}, {"Right stick", "Pointer"}};
+	static const int order[] = {SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_EAST, SDL_GAMEPAD_BUTTON_WEST,
+			SDL_GAMEPAD_BUTTON_NORTH, SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER,
+			left_trigger, right_trigger, SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK,
+			SDL_GAMEPAD_BUTTON_DPAD_UP, SDL_GAMEPAD_BUTTON_DPAD_DOWN, SDL_GAMEPAD_BUTTON_DPAD_LEFT,
+			SDL_GAMEPAD_BUTTON_DPAD_RIGHT, SDL_GAMEPAD_BUTTON_BACK, SDL_GAMEPAD_BUTTON_START,
+			SDL_GAMEPAD_BUTTON_LEFT_PADDLE1, SDL_GAMEPAD_BUTTON_RIGHT_PADDLE1, SDL_GAMEPAD_BUTTON_LEFT_PADDLE2,
+			SDL_GAMEPAD_BUTTON_RIGHT_PADDLE2, SDL_GAMEPAD_BUTTON_MISC1, SDL_GAMEPAD_BUTTON_TOUCHPAD};
+	for (const int input : order) {
+		const std::string label = Input_label(input);
+		const std::string tap   = Describe(Binding_of(input));
+		if (!tap.empty()) {
+			world.emplace_back(label, tap);
+		}
+		const std::string held = Describe(state.hold_map[Mapped_input(input)]);
+		if (!held.empty()) {
+			world.emplace_back(label + ", held", held);
+		}
+	}
+	std::vector<std::vector<Page_row>> pages;
+	for (size_t at = 0; at < world.size(); at += per_page) {
+		pages.emplace_back(world.begin() + at, world.begin() + std::min(world.size(), at + per_page));
+	}
+	const std::string south  = Input_label(Mapped_input(SDL_GAMEPAD_BUTTON_SOUTH));
+	const std::string east   = Input_label(Mapped_input(SDL_GAMEPAD_BUTTON_EAST));
+	const std::string start  = Input_label(SDL_GAMEPAD_BUTTON_START);
+	const std::string lb     = Input_label(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER);
+	const std::string rb     = Input_label(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER);
+	pages.push_back({
+			{"Menus:", ""},
+			{"Up / Down, left stick", "Move the highlight"},
+			{south, "Choose"},
+			{east + " or " + start, "Back"},
+			{"Left / Right", "Change a setting"},
+			{lb + " / " + rb, "By ten; Load/Save buttons"},
+			{"Conversations:", ""},
+			{lb + " / " + rb + ", Up / Down", "Pick a reply"},
+			{south, "Say it; skip the intro"},
+			{start, "Bye"},
+	});
+	return pages;
+}
+
+class Controller_buttons_gump : public Modal_gump {
+	using Button = CallbackTextButton<Controller_buttons_gump>;
+
+	std::vector<std::vector<Page_row>>   pages;
+	int                                  page = 0;
+	int                                  label_w = 0;
+	std::array<std::unique_ptr<Gump_button>, 3> buttons;    // Previous, next, OK.
+
+	void turn(int dir) {
+		page = (page + dir + static_cast<int>(pages.size())) % static_cast<int>(pages.size());
+		paint();
+	}
+
+	void previous() {
+		turn(-1);
+	}
+
+	void next() {
+		turn(1);
+	}
+
+public:
+	Controller_buttons_gump() : Modal_gump(nullptr, -1), pages(Page_rows()) {
+		int desc_w = 0;
+		for (const auto& rows : pages) {
+			for (const auto& [label, desc] : rows) {
+				label_w = std::max(label_w, font->get_text_width(label.c_str()));
+				desc_w  = std::max(desc_w, font->get_text_width(desc.c_str()));
+			}
+		}
+		const int width = std::max(160, label_margin * 2 + label_w + 10 + desc_w);
+		SetProceduralBackground(TileRect(0, 0, width, yForRow(13)), -1);
+		const int margin = label_margin;    // (Passed on by reference: a copy.)
+		buttons[0] = std::make_unique<Button>(this, &Controller_buttons_gump::previous, "<", margin, yForRow(12), 20);
+		buttons[1] = std::make_unique<Button>(this, &Controller_buttons_gump::next, ">", margin + 24, yForRow(12), 20);
+		buttons[2] = std::make_unique<Button>(
+				this, &Controller_buttons_gump::close, GumpStrings::OK(), width - 50 - margin, yForRow(12), 50);
+	}
+
+	void paint() override {
+		Modal_gump::paint();
+		for (auto& button : buttons) {
+			button->paint();
+		}
+		Image_buffer8*    ib    = gwin->get_win()->get_ib8();
+		const std::string title = "Controller  (page " + std::to_string(page + 1) + " of "
+								  + std::to_string(pages.size()) + ")";
+		font->paint_text(ib, title.c_str(), x + label_margin, y + yForRow(0) + 1);
+		int row = 1;
+		for (const auto& [label, desc] : pages[page]) {
+			font->paint_text(ib, label.c_str(), x + label_margin, y + yForRow(row) + 1);
+			font->paint_text(ib, desc.c_str(), x + label_margin + label_w + 10, y + yForRow(row) + 1);
+			++row;
+		}
+		gwin->set_painted();
+	}
+
+	bool key_down(SDL_Keycode chr, SDL_Keycode unicode) override {
+		switch (chr) {
+		case SDLK_LEFT:
+		case SDLK_PAGEUP:
+			turn(-1);
+			return true;
+		case SDLK_RIGHT:
+		case SDLK_PAGEDOWN:
+			turn(1);
+			return true;
+		case SDLK_RETURN:
+		case SDLK_KP_ENTER:
+			close();
+			return true;
+		default:
+			return Modal_gump::key_down(chr, unicode);
+		}
+	}
+
+	Gump_button* on_button(int mx, int my) override {
+		for (auto& button : buttons) {
+			if (Gump_button* found = button->on_button(mx, my)) {
+				return found;
+			}
+		}
+		return Modal_gump::on_button(mx, my);
+	}
+};
+}    // namespace
+
+void Controller_buttons_page() {
+	Controller_buttons_gump page;
+	Game_window::get_instance()->get_gump_man()->do_modal_gump(&page, Mouse::hand);
 }

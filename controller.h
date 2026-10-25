@@ -43,6 +43,7 @@ enum class Controller_action {
 	chat_phrases,      // Chat quick phrases (step 9, not built yet).
 	close_window,      // The newest window shuts; with none, the pick clears.
 	hold_follow,       // Y: the party holds or follows (a guest: follow or take over).
+	sort_window,       // Shift+C: tidy the newest window.
 	key_binding        // One of Exult's key actions, by name.
 };
 
@@ -90,6 +91,10 @@ bool Controller_shift_held();
 bool Controller_alt_held();
 // Is the pad pointer showing (the triggers are then mouse buttons)?
 bool Controller_pointer_showing();
+
+// The game menu's Controller page: every button and what it does, in the
+// pad's own names (Cross or A...), from the live map.
+void Controller_buttons_page();
 
 // Exult's other screens, which wait in loops of their own (menus, the
 // "How many?" slider, Yes/No, signs, conversations): the pad's buttons
