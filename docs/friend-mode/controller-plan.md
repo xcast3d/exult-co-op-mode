@@ -91,14 +91,14 @@ or mouse action the Steam test used.
 | Left stick | walk | WASD / arrows |
 | Left stick click (L3) | run or walk, toggled | R |
 | Right stick | move the pointer (below) | mouse |
-| Right stick click (R3) | free; suggested: chat quick phrases | |
+| Right stick click (R3) | combat mode on or off (moved from west, 2026-10-25) | C |
 | LB / L1 (left shoulder) | next person or creature | Q |
 | RB / R1 (right shoulder) | next thing | E |
 | LT / L2 (left trigger), held | Shift; with the pointer showing: left mouse button (held: drag) | Shift / left click |
 | RT / R2 (right trigger), held | Alt; with the pointer showing: right mouse button | Alt / right click |
 | A / Cross (south) | act on the pick: talk, open, take, use, attack; held: item menu (below) | Space |
-| X / Square (west) | combat mode on or off | C |
-| B / Circle (east), held | skills radial (below) | |
+| X / Square (west), held | skills radial (below; moved from east, 2026-10-25) | |
+| B / Circle (east) | close the newest window; with none, clear the pick (2026-10-25) | |
 | Y / Triangle (north), held | utilities radial (below) | |
 | D-pad up | switch to the next character | |
 | D-pad left | paperdoll | |
@@ -111,7 +111,7 @@ Notes:
 
 - **South confirms** (decided 2026-10-25). The Steam test had Space on
   east; the native map moves it to south, the usual confirm button on
-  Xbox and PlayStation, and the skills ring to east. SDL names buttons by
+  Xbox and PlayStation (the skills ring went to east, then to west). SDL names buttons by
   position, so on a Nintendo-style pad south is B; the config can swap
   south and east for players who want that.
 - **Triggers are Shift and Alt, held.** Every Shift and Alt version of a
@@ -136,6 +136,27 @@ to action name, the same action names as the key bindings in
 `keyactions.cc`), with the table above as the default, so it can be
 changed without a rebuild.
 
+## Pad test notes (2026-10-25)
+
+From playing with a PS4 pad, after the menus and prompts were in:
+
+1. **Stick walking ignored run / walk.** The stick went by how far it
+   was pushed, up to full speed. Now it is no faster than the keys: R's
+   run or walk, and slower in combat. (Fixed.)
+2. **Load/Save mixed its axes.** The saves are a column, the buttons a
+   row: up / down pick a save, left / right (and LB / RB) the buttons.
+   On the keyboard left / right still move the cursor in the name.
+   (Fixed.)
+3. **Yes/No had no highlight.** It now has one, moved with left /
+   right; Cross presses it. (Fixed.)
+4. **The pointer didn't go away.** Any pad input kept it up, walking
+   included; now only the right stick and trigger clicks do, and after
+   the hide delay it goes, coming back in the centre. (Fixed.)
+5. **East felt like "close".** Circle now closes the newest window (or
+   clears the pick with none); the skills ring moved to Square (west),
+   combat to R3. Chat quick phrases need a new place (the utilities
+   ring). (Done.)
+
 ## Radial menus
 
 Hold the button: a ring of up to eight entries opens around the Avatar.
@@ -144,7 +165,7 @@ doesn't walk while a ring is open); **let go** of the button to use it.
 Let go with the stick centred to cancel. Tapping the button without
 choosing does nothing, so a short press can't fire anything by accident.
 
-- **Skills (east, held):** slots 1, 2 and 3 of the
+- **Skills (west, held):** slots 1, 2 and 3 of the
   [Class System](companion-skills.md) skill bar, with the bar's 24px icons
   and cooldowns. The Avatar's spell bar the same way. A skill that needs a
   target uses the current pick, as the keys do; with no pick it shows the
