@@ -151,6 +151,7 @@ struct State {
 	Controller_switched switched = nullptr;
 
 	bool last_pad = false;    // The last input was the pad's.
+	bool quit     = false;    // Controller_quit: nothing opens any more.
 
 	// The pointer, in window coordinates.
 	bool   showing     = false;
@@ -565,8 +566,23 @@ void Controller_init() {
 	Screen_event_hook = Controller_screen_event;
 }
 
+void Controller_quit() {
+	Delay_hook        = nullptr;
+	Screen_event_hook = nullptr;
+	state.runner      = nullptr;
+	state.switched    = nullptr;
+	state.enabled     = false;
+	state.quit        = true;
+	for (const SDL_JoystickID id : state.pads) {
+		if (SDL_Gamepad* pad = SDL_GetGamepadFromID(id)) {
+			SDL_CloseGamepad(pad);
+		}
+	}
+	state.pads.clear();    // So SDL_Quit's removals find nothing of ours.
+}
+
 void Controller_device_added(SDL_JoystickID id) {
-	if (std::find(state.pads.begin(), state.pads.end(), id) != state.pads.end()) {
+	if (state.quit || std::find(state.pads.begin(), state.pads.end(), id) != state.pads.end()) {
 		return;
 	}
 	SDL_Gamepad* pad = SDL_OpenGamepad(id);

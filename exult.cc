@@ -9382,6 +9382,7 @@ static int Play() {
 		}
 	} while (quitting_time == QUIT_TIME_RESTART);
 
+	Controller_quit();    // Before the window goes: SDL_Quit (at exit) reports the pads removed.
 	delete gwin;
 
 	Audio::Destroy();    // Deinit the sound system.

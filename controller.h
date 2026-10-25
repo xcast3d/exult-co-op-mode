@@ -63,6 +63,9 @@ void Controller_set_hints();
 // After SDL_Init: read the config, open the pads already connected and
 // hook into every event loop (Delay).
 void Controller_init();
+// Quitting: the pads closed and every hook let go, before the game window
+// is destroyed (SDL_Quit, at exit, reports the pads removed after that).
+void Controller_quit();
 // A pad came or went (from the device watch, any thread's loop).
 void Controller_device_added(SDL_JoystickID id);
 void Controller_device_removed(SDL_JoystickID id);
