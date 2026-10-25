@@ -147,8 +147,9 @@ struct State {
 	std::array<Uint64, SDL_GAMEPAD_BUTTON_COUNT> down_at{};
 	std::vector<SDL_JoystickID>                 pads;    // Open, oldest first; the first plays.
 
-	Controller_runner   runner   = nullptr;
-	Controller_switched switched = nullptr;
+	Controller_runner     runner     = nullptr;
+	Controller_switched   switched   = nullptr;
+	Controller_window_key window_key = nullptr;
 
 	bool last_pad = false;    // The last input was the pad's.
 	bool quit     = false;    // Controller_quit: nothing opens any more.
@@ -571,6 +572,7 @@ void Controller_quit() {
 	Screen_event_hook = nullptr;
 	state.runner      = nullptr;
 	state.switched    = nullptr;
+	state.window_key  = nullptr;
 	state.enabled     = false;
 	state.quit        = true;
 	for (const SDL_JoystickID id : state.pads) {
@@ -627,6 +629,32 @@ void Controller_set_game_hooks(Controller_runner runner, Controller_switched swi
 	state.switched = switched;
 }
 
+void Controller_set_window_hook(Controller_window_key window_key) {
+	state.window_key = window_key;
+}
+
+// The keys a window in front gets for the pad's buttons, or none.
+static SDL_Keycode Window_key(int input) {
+	switch (Mapped_input(input)) {
+	case SDL_GAMEPAD_BUTTON_SOUTH:
+		return SDLK_SPACE;
+	case SDL_GAMEPAD_BUTTON_DPAD_UP:
+		return SDLK_UP;
+	case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
+		return SDLK_DOWN;
+	case SDL_GAMEPAD_BUTTON_DPAD_LEFT:
+		return SDLK_LEFT;
+	case SDL_GAMEPAD_BUTTON_DPAD_RIGHT:
+		return SDLK_RIGHT;
+	case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER:
+		return SDLK_PAGEUP;
+	case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER:
+		return SDLK_PAGEDOWN;
+	default:
+		return SDLK_UNKNOWN;
+	}
+}
+
 bool Controller_event(const SDL_Event& event) {
 	switch (event.type) {
 	case SDL_EVENT_KEY_DOWN:
@@ -649,7 +677,13 @@ bool Controller_event(const SDL_Event& event) {
 		if (down) {
 			Set_last_input(true);
 		}
-		const int                 input   = event.gbutton.button;
+		const int input = event.gbutton.button;
+		if (state.window_key) {    // A window in front takes it first (the spellbook).
+			const SDL_Keycode key = Window_key(input);
+			if (key != SDLK_UNKNOWN && state.window_key(key, down)) {
+				return true;
+			}
+		}
 		const Controller_binding& binding = Binding_of(input);
 		if (input < SDL_GAMEPAD_BUTTON_COUNT && state.hold_map[Mapped_input(input)].action != Controller_action::none) {
 			// Tap or hold: decided on release, or by Controller_frame.

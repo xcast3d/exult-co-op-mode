@@ -2509,6 +2509,26 @@ Actor* Bar_actor() {
 	return gwin->get_main_actor();
 }
 
+// The Avatar's spell 'spell' as a slot: usable now, or why not.
+Bar_slot Spell_slot(Actor* actor, Spellbook_object* book, int spell) {
+	Bar_slot slot;
+	slot.spell       = spell;
+	slot.icon        = spell;
+	slot.name        = Spell_name(spell);
+	slot.description = Spell_description(spell);
+	if (!book) {
+		slot.why = "No spellbook";
+	} else if (!book->has_spell(spell)) {
+		slot.why       = std::string("You don't know ") + slot.name;
+		slot.unlearned = true;
+	} else if (!book->can_do_spell(actor, spell)) {
+		slot.why = slot.name + ": not enough mana, reagents or experience";
+	} else {
+		slot.usable = true;
+	}
+	return slot;
+}
+
 std::vector<Bar_slot> Bar_slots(Actor* actor) {
 	std::vector<Bar_slot> slots;
 	if (!actor) {
@@ -2517,8 +2537,8 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 	if (actor == Gwin()->get_main_actor()) {
 		Spellbook_object* book = Avatar_spellbook();
 		for (const int spell : avatar_slots) {
-			Bar_slot slot;
 			if (spell < 0) {
+				Bar_slot slot;
 				slot.empty       = true;
 				slot.name        = "Empty Slot";
 				slot.why         = "Drag a spell here from spellbook";
@@ -2526,21 +2546,7 @@ std::vector<Bar_slot> Bar_slots(Actor* actor) {
 				slots.push_back(slot);
 				continue;
 			}
-			slot.spell = spell;
-			slot.icon  = spell;
-			slot.name  = Spell_name(spell);
-			slot.description = Spell_description(spell);
-			if (!book) {
-				slot.why = "No spellbook";
-			} else if (!book->has_spell(spell)) {
-				slot.why       = std::string("You don't know ") + slot.name;
-				slot.unlearned = true;
-			} else if (!book->can_do_spell(actor, spell)) {
-				slot.why = slot.name + ": not enough mana, reagents or experience";
-			} else {
-				slot.usable = true;
-			}
-			slots.push_back(slot);
+			slots.push_back(Spell_slot(actor, book, spell));
 		}
 		return slots;
 	}
@@ -2633,9 +2639,15 @@ void Engage_after_cast() {
 	}
 }
 
+void Use_slot_as(const Bar_slot& slot, int index, Actor* actor);
+
 void Use_slot(const Bar_slot& slot, int index) {
-	Game_window* gwin  = Gwin();
-	Actor*       actor = Bar_actor();
+	Use_slot_as(slot, index, Bar_actor());
+}
+
+// A slot used by 'actor' (the bar's, or the Avatar casting from the book).
+void Use_slot_as(const Bar_slot& slot, int index, Actor* actor) {
+	Game_window* gwin = Gwin();
 	cout << "Friend Class: bar click on " << slot.name << (slot.usable ? "" : " (not usable: " + slot.why + ")") << endl;
 	if (!actor) {
 		return;
@@ -4170,6 +4182,42 @@ bool Friend_class_use_slot(int index) {
 	}
 	pending_slot = index;    // On the next frame, as a click.
 	return true;
+}
+
+void Friend_class_cast_spell(int spell) {
+	Actor* avatar = Gwin()->get_main_actor();
+	if (!avatar || spell < 0) {
+		return;
+	}
+	constexpr int book_index = 100;    // Not a slot: its own "Again" for a peaceful pick.
+	Use_slot_as(Spell_slot(avatar, Avatar_spellbook(), spell), book_index, avatar);
+}
+
+int Friend_class_avatar_slot(int index) {
+	return index >= 0 && index < static_cast<int>(avatar_slots.size()) ? avatar_slots[index] : -1;
+}
+
+void Friend_class_set_avatar_slot(int index, int spell) {
+	if (Is_guest() || index < 0 || index >= static_cast<int>(avatar_slots.size())) {
+		return;
+	}
+	avatar_slots[index] = spell;
+	Friend_mode_class_notice(std::string(Spell_name(spell)) + " on slot " + std::to_string(index + 1));
+	cout << "Friend Class: Avatar's bar now " << avatar_slots[0] << ' ' << avatar_slots[1] << ' ' << avatar_slots[2]
+		 << endl;
+	Save_avatar_slots();
+}
+
+std::string Friend_class_spell_name(int spell) {
+	return spell >= 0 ? Spell_name(spell) : "Empty";
+}
+
+void Friend_class_paint_spell(int spell, Image_buffer8* buf, int cx, int cy) {
+	Shape_frame* picture = spell >= 0 ? Spellbook_spell_picture(spell) : nullptr;
+	if (picture) {
+		picture->paint_rle(buf, cx - picture->get_width() / 2 + picture->get_xleft(),
+						   cy - picture->get_height() / 2 + picture->get_yabove());
+	}
 }
 
 bool Friend_class_slot_info(int index, std::string& name, int& seconds, bool& usable) {

@@ -80,6 +80,10 @@ public:
 	void close_all_gumps(bool pers = false);    // Close all gumps
 	void set_kbd_focus(Gump* gump);
 
+	Gump* get_kbd_focus() const {    // Controller support: the open spellbook.
+		return kbd_focus;
+	}
+
 	bool showing_gumps(bool no_pers = false) const;    // Are gumps showing?
 
 	bool gump_mode() const {    // Fast check.

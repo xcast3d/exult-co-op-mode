@@ -83,6 +83,11 @@ using Controller_runner = void (*)(const Controller_binding& binding, bool down)
 // mouse, to redraw the hint line.
 using Controller_switched = void (*)();
 void Controller_set_game_hooks(Controller_runner runner, Controller_switched switched);
+// A window that takes the pad while it is open and in front (the Avatar's
+// spellbook): given the D-pad as the arrows, LB / RB as Page Up / Down and
+// south as Space, it says whether it took them.  Set by exult.cc.
+using Controller_window_key = bool (*)(SDL_Keycode key, bool down);
+void Controller_set_window_hook(Controller_window_key window_key);
 
 // Handle_event's first look at an event.  True if it was the pad's and
 // is done with; false for everything else (which it may only note).

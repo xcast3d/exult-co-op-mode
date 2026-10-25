@@ -403,6 +403,10 @@ void Spellbook_gump::change_page(int delta) {
 	paint();
 }
 
+int Spellbook_gump::bookmarked_spell() const {
+	return book ? book->bookmark : -1;
+}
+
 /*
  *  Set bookmark.
  */

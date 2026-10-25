@@ -63,6 +63,7 @@
 #include "fnames.h"
 #include "font.h"
 #include "controller.h"
+#include "gumps/Spellbook_gump.h"
 #include "shapeinf/gumpinf.h"
 #include "font_map.h"
 #include "friendclass.h"
@@ -8813,6 +8814,78 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 	return entries;
 }
 
+// Controller support: the Avatar's spellbook, open and in front (it has the
+// keys), while playing the Avatar; else null.  It's the Avatar's only.
+static Spellbook_gump* Controller_open_spellbook() {
+	if (gwin->get_controlled_actor() != gwin->get_main_actor()) {
+		return nullptr;
+	}
+	return dynamic_cast<Spellbook_gump*>(gwin->get_gump_man()->get_kbd_focus());
+}
+
+// The pad in the open spellbook: the D-pad moves the bookmark (its arrow
+// keys), LB / RB turn the circles (Page Up / Down), Cross casts the
+// bookmarked spell aimed at the Target System's pick, closing the book as
+// a cast from it does.  (Circle closes it as any window; Square held puts
+// the spell on a slot.)
+static bool Controller_spellbook_key(SDL_Keycode key, bool down) {
+	Spellbook_gump* book = Controller_open_spellbook();
+	if (!book || friend_chat_active) {
+		return false;
+	}
+	if (!down) {
+		return true;
+	}
+	if (key == SDLK_SPACE) {
+		const int spell = book->bookmarked_spell();
+		if (spell < 0) {
+			Friend_mode_target_notice("Choose a spell first");
+			return true;
+		}
+		gwin->get_gump_man()->close_gump(book);
+		gwin->set_all_dirty();
+		Friend_class_cast_spell(spell);
+		return true;
+	}
+	SDL_Event press{};
+	press.type         = SDL_EVENT_KEY_DOWN;
+	press.key.key      = key;
+	press.key.scancode = SDL_GetScancodeFromKey(key, nullptr);
+	press.key.down     = true;
+	book->handle_kbd_event(&press);
+	gwin->set_all_dirty();
+	return true;
+}
+
+// Square held with a spell bookmarked in the open spellbook: the skills
+// ring as a slot picker, "Put Fireball in...", its plates the bar's slots
+// as they are.  True if it opened.
+static bool Controller_open_slot_picker() {
+	Spellbook_gump* book  = Controller_open_spellbook();
+	const int       spell = book ? book->bookmarked_spell() : -1;
+	if (spell < 0 || Friend_mode_is_guest()) {
+		return false;
+	}
+	auto entries = [spell]() {
+		std::vector<Controller_ring_entry> slots;
+		for (int i = 0; i < 3; ++i) {
+			const int   now = Friend_class_avatar_slot(i);
+			std::string name
+					= "Slot " + std::to_string(i + 1) + (now >= 0 ? ": " + Friend_class_spell_name(now) : ": empty");
+			slots.push_back({name,
+							 [now](Image_buffer8* buf, int cx, int cy) {
+								 Friend_class_paint_spell(now, buf, cx, cy);
+							 },
+							 {}, true, [i, spell]() {
+								 Friend_class_set_avatar_slot(i, spell);
+							 }});
+		}
+		return slots;
+	};
+	Controller_ring_open("Put " + Friend_class_spell_name(spell) + " in...", entries(), entries);
+	return true;
+}
+
 // Controller support: what a pad's button does (controller.cc keeps the
 // map; docs/friend-mode/controller-plan.md).  The same calls as the keys,
 // with the held triggers as Shift and Alt.
@@ -8835,7 +8908,9 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 		if (friend_chat_active || Notebook_gump::get_instance() || Controller_ring_is_open()) {
 			return;
 		}
-		if (binding.action == Controller_action::skills_ring) {
+		if (binding.action == Controller_action::skills_ring && Controller_open_slot_picker()) {
+			// (The spellbook open: the picker instead.)
+		} else if (binding.action == Controller_action::skills_ring) {
 			std::vector<Controller_ring_entry> skills = Controller_skill_entries();
 			if (skills.empty()) {
 				Friend_mode_notice("No skill bar (Game menu, Class System)");
@@ -9018,6 +9093,7 @@ static void Init() {
 	// buttons to the game.
 	Controller_init();
 	Controller_set_game_hooks(Controller_run, Controller_switched_input);
+	Controller_set_window_hook(Controller_spellbook_key);
 	// Listen for game controller device connection and disconnection
 	// events. Registering a listener allows these events to be received
 	// and processed via any event-processing loop, of which Exult has
@@ -10972,8 +11048,15 @@ static void Handle_event(SDL_Event& event) {
 		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
 		&& !Notebook_gump::get_instance() && event.key.scancode >= SDL_SCANCODE_1
 		&& event.key.scancode <= SDL_SCANCODE_3) {
-		// Ctrl+1 to Ctrl+3: the skill or spell bar's slots (2026-10-23).
-		if (!Friend_class_use_slot(event.key.scancode - SDL_SCANCODE_1)) {
+		// Ctrl+1 to Ctrl+3: the skill or spell bar's slots (2026-10-23).  With
+		// the Avatar's spellbook open, the bookmarked spell goes on that slot.
+		const int       slot = event.key.scancode - SDL_SCANCODE_1;
+		Spellbook_gump* book = Controller_open_spellbook();
+		if (book && book->bookmarked_spell() >= 0 && !Friend_mode_is_guest()) {
+			Friend_class_set_avatar_slot(slot, book->bookmarked_spell());
+			return;
+		}
+		if (!Friend_class_use_slot(slot)) {
 			Mouse::mouse()->flash_shape(Mouse::redx);
 		}
 		return;

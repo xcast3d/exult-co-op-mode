@@ -74,6 +74,7 @@ public:
 	~Spellbook_gump() override;
 	void         do_spell(int spell) override;        // Perform spell.
 	void         change_page(int delta);              // Page forward/backward.
+	int          bookmarked_spell() const;            // The bookmark's spell, or -1 (controller support).
 	void         select_spell(int spell) override;    // Set bookmark.
 	Game_object* get_owner() override;                // Get object this belongs to.
 	// Is a given point on a button?

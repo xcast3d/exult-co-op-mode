@@ -71,6 +71,17 @@ class Image_buffer8;
 // dimmed while it can't be used.  False with no picture (names chosen, an
 // empty slot).
 bool Friend_class_paint_slot(int index, Image_buffer8* buf, int cx, int cy);
+// Controller support (the spellbook on the pad): cast 'spell' from the
+// Avatar's book as the spell bar does, aimed at the Target System's pick
+// (no crosshair while there is one).  Works with the Class System off too.
+void Friend_class_cast_spell(int spell);
+// The Avatar's spell bar: slot 'index's spell (-1 empty), and putting one
+// there (saved; "Fireball on slot 2").  The host's and single player's.
+int  Friend_class_avatar_slot(int index);
+void Friend_class_set_avatar_slot(int index, int spell);
+// A spell's name ("Empty" for -1), and its picture centred on (cx, cy).
+std::string Friend_class_spell_name(int spell);
+void        Friend_class_paint_spell(int spell, Image_buffer8* buf, int cx, int cy);
 
 class Gump_button;
 // The Avatar's spell bar, dragging (drag.cc): the spell a drag from this
