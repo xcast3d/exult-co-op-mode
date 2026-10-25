@@ -50,7 +50,7 @@ did.
 Plug in an Xbox or PlayStation pad (USB or Bluetooth) and play; the
 keyboard and mouse keep working at the same time. The game menu's
 **Controller** page lists the buttons with your pad's own names. In
-development: the skills and utilities rings aren't built yet.
+development: the rings' plates are placeholders until their art is done.
 
 PlayStation names first, then Xbox. "Held" means held for about a third of
 a second; a tap does the other thing when you let go.
@@ -67,8 +67,8 @@ a second; a tap does the other thing when you let go.
 | R2 / RT, held | Alt (R2+Cross: drop some); with the pointer up, the right mouse button |
 | Cross / A | Act on the pick: talk, open, take, use, attack |
 | Circle / B | Close the newest window (with none, clear the pick); held: sort it |
-| Square / X, held | Skills ring (coming) |
-| Triangle / Y, held | Utilities ring (coming) |
+| Square / X, held | Skills ring: push the left stick to an entry, let go to use it |
+| Triangle / Y, held | Utilities ring: eat, watch, map, journal, lockpick, keys, hold / follow, spellbook |
 | D-pad up | Next character; held: the party holds or follows |
 | D-pad left / right / down | Paperdoll / next backpack / stats |
 | Share / View | Player list (co-op, held) |

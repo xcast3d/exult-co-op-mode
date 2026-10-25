@@ -13,8 +13,11 @@ and step 7's highlight is on the game menu and every page it opens
 (Video, Audio and its Mixer, Game Engine, Game Display, Input, Target
 System, Class System, Co-Op Mode, UI and its layer page, Load/Save: up /
 down pick a save, LB / RB the buttons, a new save named by date). Still
-pointer-only: Audio's Advanced page and character creation. The rings,
-R3 and the rest are still a plan. (Plan 2026-10-19; current state and Steam Controller notes added
+pointer-only: Audio's Advanced page and character creation. Step 6
+built (2026-10-25, untested with a pad): both rings, with placeholder
+plates drawn in code (a dark disc, gold when highlighted) until the art
+in the Art section is made; the utilities ring has the spellbook where
+chat quick phrases will go. Steps 9 to 11 are still a plan. (Plan 2026-10-19; current state and Steam Controller notes added
 2026-10-23; button map and direction from a Steam Input test,
 2026-10-25.) Listed under "Possible future projects" in the
 [project brief](../ultima-7-friend-mode.md).
