@@ -175,6 +175,13 @@ From playing with a PS4 pad, after the menus and prompts were in:
 11. **The window's Sort and Take all buttons** (under a container's
     checkmark) hide while the pad is in use, as the minimap's Hold
     button does: Circle held sorts, L2+Cross takes all. (Done.)
+12. **The rings, first look.** Eat feeds the hungriest who eats, from
+    the party's food (else drink), with no crosshair (the food's "on
+    whom?" answered in code, as Exult's healing key does). An entry the
+    party has nothing for (no watch, no spellbook, no keys) is dimmed and
+    does nothing. Names are drawn word by word (the font's spaces are
+    black boxes). Up to four entries make an arc over the title (the
+    three skills: up-left, up, up-right); more go all round. (Done.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
