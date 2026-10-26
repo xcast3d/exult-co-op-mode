@@ -3013,14 +3013,19 @@ static void Friend_mode_clear_target() {
 
 // Out of combat the Avatar may also pick a party member (to talk to); a
 // guest's companions are the Avatar's business.
+// Q cycling for the crosshair (Get_click): the party and oneself are
+// offered in combat too, and a pick there is never attacked.
+static bool friend_crosshair_cycle = false;
+
 static bool Friend_is_party_pick(const Actor* own, const Actor* actor) {
-	if (!own || !actor || !Friend_targeting_party || gwin->in_combat() || actor == own || actor->is_dead()) {
+	if (!own || !actor || !Friend_targeting_party || (gwin->in_combat() && !friend_crosshair_cycle)
+		|| actor->is_dead()) {
 		return false;
 	}
-	// The Avatar too (not in Exult's party list), for a companion one leads
-	// or a guest (2026-10-26): water from a pool, a heal, an item.  A guest
-	// picks only the Avatar, not other companions.
-	if (actor == gwin->get_main_actor()) {
+	// Oneself (2026-10-26): potions, a healing pool, an item.  The Avatar
+	// too (not in Exult's party list), for a companion one leads or a
+	// guest.  A guest picks only those, not other companions.
+	if (actor == own || actor == gwin->get_main_actor()) {
 		return true;
 	}
 	return !Friend_mode_is_guest() && actor->is_in_party();
@@ -3082,6 +3087,9 @@ static std::vector<Actor*> Friend_target_candidates(Actor* own) {
 	Actor_vector nearby;
 	own->find_nearby_actors(nearby, c_any_shapenum, friend_attack_max_tiles);
 	const TileRect      view = gwin->get_win_tile_rect();
+	if (std::find(nearby.begin(), nearby.end(), own) == nearby.end()) {
+		nearby.push_back(own);    // Oneself, if the search left one out.
+	}
 	std::vector<Actor*> foes;
 	for (Actor* actor : nearby) {
 		const Tile_coord at = actor->get_tile();
@@ -3153,7 +3161,7 @@ static void Friend_mode_cycle_target(int step) {
 	// for Space (and whatever was being attacked is let go).
 	Actor* foe = foes[index];
 	gwin->set_action_target(foe);
-	if (fighting && Friend_is_hostile_target(own, foe) && Friend_mode_attack_target(foe)) {
+	if (fighting && !friend_crosshair_cycle && Friend_is_hostile_target(own, foe) && Friend_mode_attack_target(foe)) {
 		return;
 	}
 	Friend_mode_target_notice("Targeting " + Friend_target_name(foe), true);
@@ -3825,6 +3833,9 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		Friend_mode_target_notice("Can't see " + (thing ? Friend_thing_name(thing.get()) : Friend_target_name(target)));
 		return true;
 	}
+	if (!thing && target == own) {
+		return true;    // Picked to be given or used on (a potion), not talked to or fought.
+	}
 	if (!thing) {
 		if (!fighting) {
 			// Talk.  A deer or a rabbit has nothing to say: Space does nothing
@@ -3997,6 +4008,9 @@ static std::string Friend_space_hint() {
 		}
 		return line;
 	};
+	if (!thing && target == own) {
+		return {};    // Oneself: nothing for Space.
+	}
 	if (!thing) {
 		if (!gwin->in_combat()) {
 			if (!Friend_has_conversation(target)) {
@@ -8767,8 +8781,22 @@ static std::string Friend_window_name(Gump* gump) {
 	return holder ? Friend_target_name(holder) + "'s " + Friend_thing_name(box) : Friend_thing_name(box);
 }
 
-std::string Friend_mode_window_name(Gump* gump) {
-	return Friend_window_name(gump);
+// Each frame: a container in someone's inventory that just opened (by key,
+// pad or click) says whose it is at the top, "Iolo's backpack", since
+// their windows look alike (2026-10-26).
+static void Friend_mode_name_new_windows() {
+	static std::vector<Gump*> known;
+	const std::vector<Gump*> windows = Friend_open_windows();
+	Gump*                    opened  = nullptr;
+	for (Gump* gump : windows) {
+		if (std::find(known.begin(), known.end(), gump) == known.end() && gump->is_inventory_container()) {
+			opened = gump;
+		}
+	}
+	known = windows;
+	if (opened) {
+		Friend_mode_context_line(Friend_window_name(opened));
+	}
 }
 
 // Controller support (Share / View tapped): the oldest open window comes to
@@ -11007,6 +11035,7 @@ static void Handle_events() {
 			show_items_clicked = false;
 		}
 
+		Friend_mode_name_new_windows();
 		Controller_frame();    // Controller support: held buttons.
 		Controller_spellbook_hint();
 		if ((joy_aim_x != 0 || joy_aim_y != 0) && Controller_left_stick_centred()) {
@@ -12468,7 +12497,9 @@ static bool Get_click(
 					if (crosshair && (c == SDLK_Q || c == SDLK_E)) {
 						const int step = (event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1;
 						if (c == SDLK_Q) {
+							friend_crosshair_cycle = true;    // The party and oneself, even in combat.
 							Friend_mode_cycle_target(step);
+							friend_crosshair_cycle = false;
 						} else {
 							Friend_mode_cycle_object(step);
 						}
