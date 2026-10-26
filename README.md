@@ -49,7 +49,10 @@ did.
 
 Plug in an Xbox or PlayStation pad (USB or Bluetooth) and play; the
 keyboard and mouse keep working at the same time. The game menu's
-**Controller** page lists the buttons with your pad's own names. In
+**Controller** page has the settings (the controller on or off, swap
+Cross and Circle for Nintendo-style layouts, pointer speed, how soon the
+pointer hides) and, under **Buttons...**, the buttons with your pad's own
+names. In
 development: the rings' plates are placeholders until their art is done.
 
 PlayStation names first, then Xbox. "Held" means held for about a third of

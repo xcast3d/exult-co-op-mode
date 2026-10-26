@@ -446,7 +446,7 @@ void Gamemenu_gump::class_options() {
 }
 
 void Gamemenu_gump::controller_page() {
-	Controller_buttons_page();
+	Controller_options_page();    // Its Buttons... shows the list.
 }
 
 void Gamemenu_gump::paint() {

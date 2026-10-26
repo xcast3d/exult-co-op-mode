@@ -13,6 +13,7 @@
 #include "gamewin.h"
 #include "Gump_manager.h"
 #include "Modal_gump.h"
+#include "Gump_ToggleButton.h"
 #include "Text_button.h"
 #include "gump_utils.h"
 #include "ibuf8.h"
@@ -1647,4 +1648,154 @@ int Controller_choose(const std::string& title, const std::vector<std::string>& 
 	Choice_gump choice(title, entries);
 	Game_window::get_instance()->get_gump_man()->do_modal_gump(&choice, Mouse::hand);
 	return choice.get_chosen();
+}
+
+// The Controller settings page (controller-plan.md, step 11).
+namespace {
+constexpr std::array<int, 5>         speed_values{50, 75, 100, 150, 200};
+constexpr std::array<const char*, 5> speed_names{"Slowest", "Slow", "Normal", "Fast", "Fastest"};
+constexpr std::array<int, 4>         hide_values{3000, 5000, 10000, 30000};
+constexpr std::array<const char*, 4> hide_names{"3 s", "5 s", "10 s", "30 s"};
+
+// The entry nearest 'value'.
+template <size_t N>
+int Nearest(const std::array<int, N>& values, int value) {
+	int best = 0;
+	for (int i = 1; i < static_cast<int>(N); ++i) {
+		if (std::abs(values[i] - value) < std::abs(values[best] - value)) {
+			best = i;
+		}
+	}
+	return best;
+}
+
+class Controller_options_gump : public Modal_gump {
+	using Button = CallbackTextButton<Controller_options_gump>;
+	using Toggle = CallbackToggleTextButton<Controller_options_gump>;
+
+	enum { set_enabled, set_swap, set_speed, set_hide, set_count };
+	enum { id_enabled, id_swap, id_speed, id_hide, id_buttons, id_ok, id_cancel, id_count };
+
+	std::array<int, set_count>                         settings{};
+	std::array<std::unique_ptr<Gump_button>, id_count> buttons;
+	std::string                                        swap_label;
+
+	const char* label(int setting) const {
+		switch (setting) {
+		case set_enabled:
+			return "Controller:";
+		case set_swap:
+			return swap_label.c_str();
+		case set_speed:
+			return "Pointer speed:";
+		default:
+			return "Pointer hides after:";
+		}
+	}
+
+	void toggle_enabled(int state) {
+		settings[set_enabled] = state;
+	}
+
+	void toggle_swap(int state) {
+		settings[set_swap] = state;
+	}
+
+	void toggle_speed(int state) {
+		settings[set_speed] = state;
+	}
+
+	void toggle_hide(int state) {
+		settings[set_hide] = state;
+	}
+
+	void show_buttons() {
+		Controller_buttons_page();
+		paint();
+	}
+
+	void cancel() {
+		done = true;
+	}
+
+public:
+	Controller_options_gump() : Modal_gump(nullptr, -1) {
+		// "Swap Cross and Circle", "Swap A and B": the pad's own names, by position.
+		swap_label = "Swap " + Input_label(SDL_GAMEPAD_BUTTON_SOUTH) + " and " + Input_label(SDL_GAMEPAD_BUTTON_EAST)
+					 + ":";
+		settings[set_enabled] = state.enabled ? 1 : 0;
+		settings[set_swap]    = state.swap_south ? 1 : 0;
+		settings[set_speed]   = Nearest(speed_values, state.speed);
+		settings[set_hide]    = Nearest(hide_values, state.hide_ms);
+		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 3)), -1);
+		const std::vector<std::string> yes_no{GumpStrings::No(), GumpStrings::Yes()};
+		const std::vector<std::string> on_off{"Off", "On"};
+		const std::vector<std::string> speeds(speed_names.begin(), speed_names.end());
+		const std::vector<std::string> hides(hide_names.begin(), hide_names.end());
+		buttons[id_enabled] = std::make_unique<Toggle>(this, &Controller_options_gump::toggle_enabled, on_off,
+				settings[set_enabled], get_button_pos_for_label(label(set_enabled)), yForRow(0), 50);
+		buttons[id_swap]    = std::make_unique<Toggle>(this, &Controller_options_gump::toggle_swap, yes_no,
+				   settings[set_swap], get_button_pos_for_label(label(set_swap)), yForRow(1), 50);
+		buttons[id_speed]   = std::make_unique<Toggle>(this, &Controller_options_gump::toggle_speed, speeds,
+				  settings[set_speed], get_button_pos_for_label(label(set_speed)), yForRow(2), 50);
+		buttons[id_hide]    = std::make_unique<Toggle>(this, &Controller_options_gump::toggle_hide, hides,
+				   settings[set_hide], get_button_pos_for_label(label(set_hide)), yForRow(3), 50);
+		buttons[id_buttons] = std::make_unique<Button>(
+				this, &Controller_options_gump::show_buttons, "Buttons...", label_margin + 0, yForRow(set_count), 70);
+		buttons[id_ok]
+				= std::make_unique<Button>(this, &Controller_options_gump::close, GumpStrings::OK(), 25, yForRow(set_count + 2), 50);
+		buttons[id_cancel] = std::make_unique<Button>(
+				this, &Controller_options_gump::cancel, GumpStrings::CANCEL(), 75, yForRow(set_count + 2), 50);
+		ResizeWidthToFitWidgets(tcb::span(buttons.data(), id_count));
+		HorizontalArrangeWidgets(tcb::span(buttons.data() + id_ok, 2));
+		RightAlignWidgets(tcb::span(buttons.data(), set_count));
+	}
+
+	// OK (and the checkmark): saved and in use at once.
+	void close() override {
+		config->set("config/gameplay/controller/enabled", settings[set_enabled], false);
+		config->set("config/gameplay/controller/swap_south_east", settings[set_swap], false);
+		config->set("config/gameplay/controller/pointer_speed", speed_values[settings[set_speed]], false);
+		config->set("config/gameplay/controller/pointer_hide_ms", hide_values[settings[set_hide]], true);
+		Controller_read_config();
+		if (!state.enabled) {
+			Hide_pointer();
+			Set_last_input(false);    // The mouse cursor and the hidden buttons back.
+		}
+		done = true;
+	}
+
+	void paint() override {
+		Modal_gump::paint();
+		for (auto& button : buttons) {
+			if (button) {
+				button->paint();
+			}
+		}
+		Image_buffer8* ib = gwin->get_win()->get_ib8();
+		for (int i = 0; i < set_count; ++i) {
+			font->paint_text(ib, label(i), x + label_margin, y + yForRow(i) + 1);
+		}
+		paint_focus();
+		gwin->set_painted();
+	}
+
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		add_focus(list, buttons);
+	}
+
+	Gump_button* on_button(int mx, int my) override {
+		for (auto& button : buttons) {
+			if (Gump_button* found = button ? button->on_button(mx, my) : nullptr) {
+				return found;
+			}
+		}
+		return Modal_gump::on_button(mx, my);
+	}
+};
+}    // namespace
+
+void Controller_options_page() {
+	Controller_options_gump page;
+	Game_window::get_instance()->get_gump_man()->do_modal_gump(&page, Mouse::hand);
 }

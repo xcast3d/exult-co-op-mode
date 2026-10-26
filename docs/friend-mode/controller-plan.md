@@ -17,7 +17,7 @@ pointer-only: Audio's Advanced page and character creation. Step 6
 built (2026-10-25, untested with a pad): both rings, with placeholder
 plates drawn in code (a dark disc, gold when highlighted) until the art
 in the Art section is made; the utilities ring has the spellbook where
-chat quick phrases would have gone. Steps 10 and 11's buttons list are built too; step 9 (chat) is dropped; the settings of step 11 are left. (Plan 2026-10-19; current state and Steam Controller notes added
+chat quick phrases would have gone. Steps 10 and 11's buttons list are built too; step 9 (chat) is dropped; step 11's settings page is built too (2026-10-26). (Plan 2026-10-19; current state and Steam Controller notes added
 2026-10-23; button map and direction from a Steam Input test,
 2026-10-25.) Listed under "Possible future projects" in the
 [project brief](../ultima-7-friend-mode.md).
@@ -271,6 +271,16 @@ From playing with a PS4 pad, after the menus and prompts were in:
 5. **A guest couldn't suggest a reply from the pad** during the Avatar's
    conversation: R1 / L1 and the D-pad now move the highlight, Cross
    suggests it. (Done, 2026-10-26.)
+
+6. **Step 11, the Controller settings** (built 2026-10-26, untested with
+   a pad): the game menu's Controller entry opens a settings page:
+   Controller On / Off, Swap Cross and Circle (A and B; named as printed
+   on the pad), Pointer speed (Slowest to Fastest: 50 to 200 percent),
+   Pointer hides after (3, 5, 10 or 30 seconds), and Buttons... (the
+   buttons list). OK saves to `config/gameplay/controller/...` and takes
+   effect at once; Cancel or Escape leaves it as it was. Off gives the
+   mouse cursor and the hidden buttons back. Remapping stays in the
+   config. (`Controller_options_page` in controller.cc.)
 
 ### Chat on the pad: not planned (decided 2026-10-26)
 

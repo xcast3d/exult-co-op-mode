@@ -153,8 +153,12 @@ std::string Controller_button_name(int button);
 // index, or -1.  Waits (a modal window).
 int Controller_choose(const std::string& title, const std::vector<std::string>& entries);
 
-// The game menu's Controller page: every button and what it does, in the
-// pad's own names (Cross or A...), from the live map.
+// The game menu's Controller page: the settings (on or off, swap south and
+// east, pointer speed, pointer hide delay; saved in the config), with a
+// Buttons... button for the list below.
+void Controller_options_page();
+// Every button and what it does, in the pad's own names (Cross or A...),
+// from the live map.
 void Controller_buttons_page();
 
 // Exult's other screens, which wait in loops of their own (menus, the
