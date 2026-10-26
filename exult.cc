@@ -3805,6 +3805,18 @@ static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 // Not okay to take: asks first.  Alt always means "how many".
 //
 // False if Space should do its usual thing.
+// The party for Space: the Avatar and the companions (Exult's party list
+// leaves the Avatar out).
+static bool Friend_is_party_or_avatar(const Actor* actor) {
+	return actor && (actor == gwin->get_main_actor() || actor->is_in_party());
+}
+
+// May 'own' open this one's paperdoll from Space?  The host and single
+// player any member's (the party administrator); a guest only its own.
+static bool Friend_may_view_character(const Actor* own, const Actor* actor) {
+	return actor == own || (!Friend_mode_is_guest() && Friend_is_party_or_avatar(actor));
+}
+
 // People with a conversation have an NPC number and a script of their
 // own; a deer or a rat has neither.
 static bool Friend_has_conversation(const Actor* actor) {
@@ -3819,7 +3831,7 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		return false;
 	}
 	const bool fighting = gwin->in_combat();
-	if (!thing && fighting
+	if (!thing && fighting && !shift
 		&& (!Friend_is_attack_target(own, target)
 			|| (!Friend_mode_is_guest() && gwin->get_main_actor()->get_target() == target))) {
 		return false;
@@ -3833,8 +3845,38 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		Friend_mode_target_notice("Can't see " + (thing ? Friend_thing_name(thing.get()) : Friend_target_name(target)));
 		return true;
 	}
+	// People (2026-10-26).  Oneself: Space views one's character.
 	if (!thing && target == own) {
-		return true;    // Picked to be given or used on (a potion), not talked to or fought.
+		own->show_inventory();
+		return true;
+	}
+	// The party (the Avatar too): Shift+Space views their character; Space
+	// talks, as below.
+	if (!thing && Friend_is_party_or_avatar(target)) {
+		if (shift) {
+			if (Friend_may_view_character(own, target)) {
+				target->show_inventory();
+			}
+			return true;
+		}
+		if (!fighting && Friend_has_conversation(target)) {
+			gwin->double_clicked_object(target);
+		}
+		return true;
+	}
+	// Anyone else: Shift+Space attacks, combat mode coming on by itself (a
+	// peaceful person only after asking again).
+	if (!thing && shift) {
+		const bool peaceful = target->get_npc_num() > 0 && !Friend_mode_is_hostile(own, target);
+		if (peaceful && !fighting
+			&& !Friend_confirmed(target, Friend_confirm::attack, "Attack " + Friend_target_name(target) + "? Again")) {
+			return true;
+		}
+		if (!fighting) {
+			gwin->toggle_combat();
+		}
+		Friend_mode_attack_target(target, true);
+		return true;
 	}
 	if (!thing) {
 		if (!fighting) {
@@ -4008,20 +4050,29 @@ static std::string Friend_space_hint() {
 		}
 		return line;
 	};
+	// People (2026-10-26): oneself, Space views one's character; the party,
+	// Space talks and Shift+Space views theirs; anyone else, Space talks
+	// and Shift+Space attacks (combat mode coming on by itself).
 	if (!thing && target == own) {
-		return {};    // Oneself: nothing for Space.
+		return two("View Character", "");
 	}
 	if (!thing) {
 		if (!gwin->in_combat()) {
-			if (!Friend_has_conversation(target)) {
-				if (target == gwin->get_main_actor()) {
-					return {};    // Picked to be given or used on, not fought.
+			const bool talks = Friend_has_conversation(target)
+							   && (!Friend_mode_is_guest() || Friend_is_merchant(target->get_npc_num()));
+			const std::string attack = "Attack (" + Friend_key_label("Shift+Space") + ")";
+			if (Friend_is_party_or_avatar(target)) {
+				const bool view = Friend_may_view_character(own, target);
+				if (talks) {
+					return two("Talk", view ? "View Character" : "");
 				}
-				return "Attack (" + Friend_key_label("C") + ", then " + Friend_key_label("Space") + ")";
+				return view ? "View Character (" + Friend_key_label("Shift+Space") + ")" : std::string();
 			}
-			// A guest talks only to merchants and trainers.
-			return Friend_mode_is_guest() && !Friend_is_merchant(target->get_npc_num()) ? std::string("Avatar only")
-																						 : two("Talk", "");
+			if (talks) {
+				return two("Talk", "Attack");
+			}
+			// A guest talks only to merchants and trainers (the Avatar does).
+			return Friend_has_conversation(target) ? "Avatar only  " + attack : attack;
 		}
 		if (!Friend_is_attack_target(own, target)) {
 			return {};

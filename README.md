@@ -66,9 +66,9 @@ a second; a tap does the other thing when you let go.
 | R3 / RS (press the right stick) | Combat on or off |
 | L1 / LB | Next person or creature (with L2 / LT: previous) |
 | R1 / RB | Next thing (with L2 / LT: previous) |
-| L2 / LT, held | Shift (L2+Cross: take all or split); with the pointer up, the left mouse button (hold to drag) |
+| L2 / LT, held | Shift (L2+Cross: take all, attack a person, or view a companion's character); with the pointer up, the left mouse button (hold to drag) |
 | R2 / RT, held | Alt (R2+Cross: drop some); with the pointer up, the right mouse button |
-| Cross / A | Act on the pick: talk, open, take, use, attack (in a companion's pack or paperdoll: ready or put away on them); held: the item menu (give, put in, split, drop) |
+| Cross / A | Act on the pick: talk, open, take, use (on yourself: view your character; in a companion's pack or paperdoll: ready or put away on them); held: the item menu (give, put in, split, drop) |
 | Circle / B | Close the newest window (with none, clear the pick); held: sort it |
 | Square / X, held | Skills ring: push the left stick to an entry, let go to use it |
 | Triangle / Y, held | Utilities ring: eat, watch, map, journal, lockpick, keys, spellbook |
