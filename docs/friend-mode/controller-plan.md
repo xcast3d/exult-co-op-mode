@@ -211,6 +211,14 @@ From playing with a PS4 pad, after the menus and prompts were in:
     (`Controller_spellbook_key`, `Controller_open_slot_picker` in exult.cc;
     `Friend_class_cast_spell`, `Friend_class_set_avatar_slot` in
     friendclass.cc.)
+18. **After a first try:** with the book open on the pad, the line at
+    the top names the bookmarked spell, and under it "Cast (Cross)  Put
+    on a slot (Square held)", kept up while the book is open. Spells in
+    the rings (the slot picker, the skills ring showing the Avatar's
+    bar) are their names in a box, not the spell pictures, which didn't
+    read at that size. Parchment skill icons carry their own tile, so
+    they get no plate behind them (a gold frame when highlighted); colour
+    icons keep the plate. (Done.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
