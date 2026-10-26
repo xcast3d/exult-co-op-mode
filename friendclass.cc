@@ -1026,19 +1026,11 @@ uint32 Global_wait_left(int npc) {
 	return (found->second - now + 999) / 1000;
 }
 
-bool Short_cooldowns() {
-	static bool checked = false;
-	static bool on      = false;
-	if (!checked) {
-		// For testing only, not on the options page.
-		config->value("config/friend/class/short_cooldowns", on, false);
-		checked = true;
-	}
-	return on;
-}
-
+// Each skill's own cooldown (30, 60 or 90 seconds).  The testing switch
+// for 5-second ones (config/friend/class/short_cooldowns) is gone for
+// release (2026-10-26).
 int Cooldown_ms(const Class_skill& skill) {
-	return (Short_cooldowns() ? 5 : skill.cooldown) * 1000;
+	return skill.cooldown * 1000;
 }
 
 /*

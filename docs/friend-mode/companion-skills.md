@@ -333,8 +333,9 @@ today (health, flags, missiles, sprites, chat).
 **Also needed** (not menu options):
 
 - Log lines on the host for balancing: who used what, on whom, how much.
-- For testing: `config/friend/class/short_cooldowns` (yes/no, in the cfg,
-  not on the page) makes every cooldown 5 seconds.
+- For testing, until 2026-10-26: `config/friend/class/short_cooldowns`
+  made every cooldown 5 seconds. Removed for release; the cooldowns are
+  always the skills' own.
 - The test checklist section, and the brief's roadmap.
 
 ## The skills

@@ -1204,6 +1204,12 @@ static void Friend_mode_use_object_for_guest(const Friend_mode_session::Object_f
 	cout << "Friend Mode: used shape " << obj->get_shapenum() << " for guest at " << tile.tx << ',' << tile.ty << endl;
 }
 
+// The host's test keys (F9: gather the companions, Ctrl+F9: the test kit,
+// Shift+F9 / Shift+F8: creatures; F8: the second group), only in a build
+// made with FRIEND_TEST_KEYS defined (e.g. CPPFLAGS=-DFRIEND_TEST_KEYS):
+// release builds have neither the keys nor this code (2026-10-26).
+#ifdef FRIEND_TEST_KEYS
+
 // Host debug aid (F9): build a Friend Mode test kit around the Avatar with
 // one of each object guests can use, plus containers with items.  Black
 // Gate shapes.  Spawn before a guest joins: new objects are not synced yet,
@@ -1577,6 +1583,7 @@ static void Friend_mode_spawn_test_creatures(bool small) {
 	gwin->set_all_dirty();
 	Friend_mode_notice(made ? "Test creatures placed" : "No test creatures in this game");
 }
+#endif    // FRIEND_TEST_KEYS
 
 // ---- Item sync (world sync W3) ------------------------------------------
 // The host fingerprints the movable objects (and container contents) in the
@@ -11732,6 +11739,7 @@ static void Handle_event(SDL_Event& event) {
 		Friend_mode_hold_or_follow();    // Y: follow the Avatar, or take over again.
 		return;
 	}
+#ifdef FRIEND_TEST_KEYS    // Host test keys (F8, F9, with Shift or Ctrl): not in release builds.
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
 		if (event.key.mod & SDL_KMOD_SHIFT) {
 			Friend_mode_spawn_test_creatures(false);    // A fight.
@@ -11751,6 +11759,7 @@ static void Handle_event(SDL_Event& event) {
 		}
 		return;
 	}
+#endif
 	if (Friend_mode_chat_event(event)) {
 		return;
 	}

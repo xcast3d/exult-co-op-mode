@@ -931,8 +931,9 @@ Built 2026-10-20, untested. Only the host pauses the game.
 Built 2026-10-20 without a test run (the user was away); played and tuned
 since in the 2026-10-22 and 10-23 rounds (their own sections below), but
 these boxes were never ticked. Turn it on first: Game menu → Class System → Enable: Yes on
-the host. For quick rounds, set `config/friend/class/short_cooldowns` to
-`yes` in the host's cfg (5-second cooldowns; not on the options page).
+the host. (The 5-second cooldowns for quick rounds,
+`config/friend/class/short_cooldowns`, were removed for release on
+2026-10-26; the F8 / F9 test keys need a build with `-DFRIEND_TEST_KEYS`.)
 The host's log says "Friend Class: Jaana uses Restoration on 3 targets
 (+24 health)" for every skill used.
 
