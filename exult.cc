@@ -3014,9 +3014,16 @@ static void Friend_mode_clear_target() {
 // Out of combat the Avatar may also pick a party member (to talk to); a
 // guest's companions are the Avatar's business.
 static bool Friend_is_party_pick(const Actor* own, const Actor* actor) {
-	return own && actor && Friend_targeting_party && !Friend_mode_is_guest() && !gwin->in_combat() && actor != own
-		   && actor->is_in_party()
-		   && !actor->is_dead();
+	if (!own || !actor || !Friend_targeting_party || gwin->in_combat() || actor == own || actor->is_dead()) {
+		return false;
+	}
+	// The Avatar too (not in Exult's party list), for a companion one leads
+	// or a guest (2026-10-26): water from a pool, a heal, an item.  A guest
+	// picks only the Avatar, not other companions.
+	if (actor == gwin->get_main_actor()) {
+		return true;
+	}
+	return !Friend_mode_is_guest() && actor->is_in_party();
 }
 
 // Anyone Q may pick just now.
@@ -3090,7 +3097,7 @@ static std::vector<Actor*> Friend_target_candidates(Actor* own) {
 static void Friend_mode_cycle_target(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
-		|| !gwin->main_actor_can_act()) {
+		|| !gwin->player_can_act()) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
@@ -3107,13 +3114,18 @@ static void Friend_mode_cycle_target(int step) {
 		return;
 	}
 	// Nearest first; in combat mode hostiles come before everyone else, and
-	// out of it the party comes last.
-	const Tile_coord from = own->get_tile();
+	// out of it the party comes last: everyone else, then the Avatar, then
+	// the companions.
+	const Tile_coord from  = own->get_tile();
+	Actor*           avatar = gwin->get_main_actor();
+	auto             rank  = [avatar](const Actor* actor) {
+		return actor == avatar ? 1 : actor->is_in_party() ? 2 : 0;
+	};
 	std::stable_sort(foes.begin(), foes.end(), [&](const Actor* a, const Actor* b) {
-		const bool pa = a->is_in_party();
-		const bool pb = b->is_in_party();
-		if (pa != pb) {
-			return pb;
+		const int ra = rank(a);
+		const int rb = rank(b);
+		if (ra != rb) {
+			return ra < rb;
 		}
 		if (fighting) {
 			const bool ha = Friend_is_hostile_target(own, a);
@@ -3804,7 +3816,7 @@ static bool Friend_mode_space(bool shift, bool alt) {
 			|| (!Friend_mode_is_guest() && gwin->get_main_actor()->get_target() == target))) {
 		return false;
 	}
-	if (gwin->network_input_blocked() || !gwin->main_actor_can_act()) {
+	if (gwin->network_input_blocked() || !gwin->player_can_act()) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return true;
 	}
@@ -3988,6 +4000,9 @@ static std::string Friend_space_hint() {
 	if (!thing) {
 		if (!gwin->in_combat()) {
 			if (!Friend_has_conversation(target)) {
+				if (target == gwin->get_main_actor()) {
+					return {};    // Picked to be given or used on, not fought.
+				}
 				return "Attack (" + Friend_key_label("C") + ", then " + Friend_key_label("Space") + ")";
 			}
 			// A guest talks only to merchants and trainers.
@@ -4336,7 +4351,7 @@ static void Friend_mode_backpack_key(int member) {
 static void Friend_mode_cycle_object(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
-		|| !gwin->main_actor_can_act()) {
+		|| !gwin->player_can_act()) {
 		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
@@ -8752,6 +8767,10 @@ static std::string Friend_window_name(Gump* gump) {
 	return holder ? Friend_target_name(holder) + "'s " + Friend_thing_name(box) : Friend_thing_name(box);
 }
 
+std::string Friend_mode_window_name(Gump* gump) {
+	return Friend_window_name(gump);
+}
+
 // Controller support (Share / View tapped): the oldest open window comes to
 // the front, as a click on it does, so tapping goes round them all; its
 // name shows at the top, and the Target System picks its first thing (R1 /
@@ -10931,7 +10950,7 @@ static void Handle_events() {
 		// Moved this out of the animation loop, since we want movement to be
 		// more responsive. Also, if the step delta is only 1 tile,
 		// always check every loop
-		if ((!gwin->is_moving() || gwin->get_step_tile_delta() == 1) && gwin->main_actor_can_act_charmed()) {
+		if ((!gwin->is_moving() || gwin->get_step_tile_delta() == 1) && gwin->player_can_act_charmed()) {
 			int       x  = Mouse::mouse()->get_mousex();
 			int       y  = Mouse::mouse()->get_mousey();
 			const int ms = SDL_GetMouseState(nullptr, nullptr);
@@ -10967,7 +10986,7 @@ static void Handle_events() {
 								|| dragging;
 			const int dx = typing ? 0 : (keys[SDL_SCANCODE_D] ? 1 : 0) - (keys[SDL_SCANCODE_A] ? 1 : 0);
 			const int dy = typing ? 0 : (keys[SDL_SCANCODE_S] ? 1 : 0) - (keys[SDL_SCANCODE_W] ? 1 : 0);
-			if ((dx || dy) && gwin->main_actor_can_act_charmed()) {
+			if ((dx || dy) && gwin->player_can_act_charmed()) {
 				if (!friend_wasd_dx && !friend_wasd_dy) {
 					Friend_mode_walking_stops_attack();
 				}
@@ -11587,7 +11606,7 @@ static void Handle_event(SDL_Event& event) {
 	}
 	// Mouse scale factor
 	const bool dont_move_mode = gwin->main_actor_dont_move();
-	const bool avatar_can_act = gwin->main_actor_can_act();
+	const bool avatar_can_act = gwin->player_can_act();    // The one played (Friend Mode).
 
 	// We want this
 	Gump_manager* gump_man = gwin->get_gump_man();
@@ -11607,7 +11626,7 @@ static void Handle_event(SDL_Event& event) {
 		}
 
 		SDL_Gamepad* input_device = SDL_GetGamepadFromID(event.gaxis.which);
-		if (input_device && !dont_move_mode && avatar_can_act && gwin->main_actor_can_act_charmed()) {
+		if (input_device && !dont_move_mode && avatar_can_act && gwin->player_can_act_charmed()) {
 			auto get_normalized_axis = [input_device](SDL_GamepadAxis axis) {
 				return SDL_GetGamepadAxis(input_device, axis) / static_cast<float>(SDL_JOYSTICK_AXIS_MAX);
 			};
@@ -11763,7 +11782,7 @@ static void Handle_event(SDL_Event& event) {
 				gump_man->can_right_click_close() && gump_man->gump_mode() && gump_man->find_gump(x, y, false)) {
 				gump          = nullptr;
 				right_on_gump = true;
-			} else if (avatar_can_act && gwin->main_actor_can_act_charmed()) {
+			} else if (avatar_can_act && gwin->player_can_act_charmed()) {
 				Friend_mode_walking_stops_attack();
 				// Try removing old queue entry.
 				gwin->get_tqueue()->remove(gwin->get_main_actor());
@@ -11864,14 +11883,14 @@ static void Handle_event(SDL_Event& event) {
 			} else if (avatar_can_act) {
 				// Last right click not within .5 secs (not a doubleclick or
 				// rapid right clicking)?
-				if (gwin->get_allow_right_pathfind() == 1 && curtime - last_b3_click > 500 && gwin->main_actor_can_act_charmed()) {
+				if (gwin->get_allow_right_pathfind() == 1 && curtime - last_b3_click > 500 && gwin->player_can_act_charmed()) {
 					gwin->start_actor_along_path(x, y, Mouse::mouse()->avatar_speed);
 				}
 
 				// Last right click within .5 secs (doubleclick)?
 				else if (
 						gwin->get_allow_right_pathfind() == 2 && curtime - last_b3_click < 500
-						&& gwin->main_actor_can_act_charmed()) {
+						&& gwin->player_can_act_charmed()) {
 					gwin->start_actor_along_path(x, y, Mouse::mouse()->avatar_speed);
 				}
 
@@ -11913,7 +11932,7 @@ static void Handle_event(SDL_Event& event) {
 					gwin->paused_combat_select(x, y);
 					break;
 				}
-				if (gwin->get_touch_pathfind() && avatar_can_act && gwin->main_actor_can_act_charmed() && !dragging
+				if (gwin->get_touch_pathfind() && avatar_can_act && gwin->player_can_act_charmed() && !dragging
 					&& !gump_man->find_gump(x, y, false)) {
 					gwin->start_actor_along_path(x, y, Mouse::mouse()->avatar_speed);
 					dragging = dragged = false;
@@ -11993,7 +12012,7 @@ static void Handle_event(SDL_Event& event) {
 		}
 		// Dragging with right?
 		else if ((event.motion.state & SDL_BUTTON_RMASK) && !right_on_gump) {
-			if (avatar_can_act && gwin->main_actor_can_act_charmed()) {
+			if (avatar_can_act && gwin->player_can_act_charmed()) {
 				gwin->start_actor(mx, my, Mouse::mouse()->avatar_speed);
 			}
 		}

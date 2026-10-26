@@ -762,8 +762,8 @@ bool Gump_manager::double_clicked(
 
 	if (gump) {
 		// If avatar cannot act, a double-click will only close gumps, and
-		// nothing else.
-		if (!gwin->main_actor_can_act()) {
+		// nothing else (Friend Mode: the character being played).
+		if (!gwin->player_can_act()) {
 			if (gwin->get_double_click_closes_gumps()) {
 				gump->close();
 				gwin->paint();

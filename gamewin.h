@@ -721,6 +721,12 @@ public:
 	bool main_actor_dont_move() const;
 	bool main_actor_can_act() const;
 	bool main_actor_can_act_charmed() const;
+	// Friend Mode: the character being played (the Avatar, a companion the
+	// host leads, a guest's) can act, for what the player's input may do.
+	// With the Avatar knocked out, a companion played still acts
+	// (2026-10-26, docs/friend-mode/feedback-2026-10-25.md).
+	bool player_can_act() const;
+	bool player_can_act_charmed() const;
 
 	inline bool set_in_dungeon(unsigned int lift) {
 		if (in_dungeon == lift) {

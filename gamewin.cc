@@ -725,6 +725,14 @@ bool Game_window::main_actor_can_act_charmed() const {
 	return main_actor->can_act_charmed();
 }
 
+bool Game_window::player_can_act() const {
+	return (controlled_actor ? controlled_actor : main_actor)->can_act();
+}
+
+bool Game_window::player_can_act_charmed() const {
+	return (controlled_actor ? controlled_actor : main_actor)->can_act_charmed();
+}
+
 bool Game_window::in_infravision() const {
 	return infravision_active || cheat.in_infravision();
 }
@@ -2966,7 +2974,7 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 	if (network_input_blocked() || main_actor_dont_move()) {
 		return;
 	}
-	const bool avatar_can_act = main_actor_can_act();
+	const bool avatar_can_act = player_can_act();    // Friend Mode: the one played.
 	if (!gump) {
 		if (!avatar_can_act && obj && obj->as_actor() && obj->as_actor() == main_actor->as_actor()) {
 			ActionFileGump(nullptr);
@@ -3007,7 +3015,7 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 			return;
 		}
 	} else if (combat && !gump &&    // In combat?
-		!Combat::is_paused() && main_actor_can_act_charmed() && (!gump_man->gump_mode() || gump_man->gumps_dont_pause_game())) {
+		!Combat::is_paused() && player_can_act_charmed() && (!gump_man->gump_mode() || gump_man->gumps_dont_pause_game())) {
 		Actor*                        npc  = obj->as_actor();
 		const Shape_info&             info = obj->get_info();
 		const Shape_info::Shape_class cls  = info.get_shape_class();

@@ -693,6 +693,22 @@ void Gump::paint() {
 	// Paint red "checkmark".
 	paint_elems();
 
+	// Friend Mode (2026-10-26): whose it is, on a container in someone's
+	// inventory ("Iolo's backpack"), since their windows look alike: on a
+	// parchment label above the things, in the paperdolls' small font.
+	if (is_inventory_container()) {
+		Shape_manager*    sman  = Shape_manager::get_instance();
+		const std::string title = Friend_mode_window_name(this);
+		const int         tw    = sman->get_text_width(2, title.c_str());
+		const int         th    = sman->get_text_height(2);
+		const int         tx    = x + object_area.x + (object_area.w - tw) / 2;
+		const int         ty    = y + object_area.y - th - 3;
+		Image_buffer8*    ib    = gwin->get_win()->get_ib8();
+		const unsigned char parchment = static_cast<unsigned char>(gwin->get_pal()->find_color(54, 46, 32));
+		ib->draw_box(tx - 3, ty - 1, tw + 6, th + 2, 1, parchment, 0);
+		sman->paint_text(2, title.c_str(), tx, ty);
+	}
+
 	if (!container) {
 		return;    // Empty.
 	}

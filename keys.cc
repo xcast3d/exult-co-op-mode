@@ -312,11 +312,12 @@ bool KeyBinder::DoAction(const ActionType& a, bool press) const {
 		return true;
 	}
 
-	// Restrict keys if avatar is sleeping/paralyzed/unconscious/dead
-	if (!a.action->allow_if_cant_act && !Game_window::get_instance()->main_actor_can_act()) {
+	// Restrict keys if avatar is sleeping/paralyzed/unconscious/dead (Friend
+	// Mode: the character being played, a companion led or a guest's)
+	if (!a.action->allow_if_cant_act && !Game_window::get_instance()->player_can_act()) {
 		return true;
 	}
-	if (!a.action->allow_if_cant_act_charmed && !Game_window::get_instance()->main_actor_can_act_charmed()) {
+	if (!a.action->allow_if_cant_act_charmed && !Game_window::get_instance()->player_can_act_charmed()) {
 		return true;
 	}
 	if (press) {
