@@ -8660,6 +8660,14 @@ static void Friend_mode_toggle_running() {
 // 6).  Skills: the bar's slots as it shows them (a companion's skills, or
 // the Avatar's spells).
 static std::vector<Controller_ring_entry> Controller_skill_entries() {
+	// The Avatar's spells (the bar shows them while playing the Avatar) and
+	// names chosen in the options: text; parchment icons carry their own
+	// tile: no plate; colour icons sit on a plate.
+	const bool spells = gwin->get_controlled_actor() == gwin->get_main_actor() && !Friend_mode_is_guest();
+	const Controller_ring_look look
+			= spells || Friend_class_icon_style == friend_icons_names ? Controller_ring_look::text
+			  : Friend_class_icon_style == friend_icons_parchment     ? Controller_ring_look::bare
+																	  : Controller_ring_look::plate;
 	std::vector<Controller_ring_entry> entries;
 	for (int i = 0; i < 8; ++i) {
 		std::string name;
@@ -8678,6 +8686,7 @@ static std::vector<Controller_ring_entry> Controller_skill_entries() {
 		entry.use = [i]() {
 			Friend_class_use_slot(i);
 		};
+		entry.look = look;
 		entries.push_back(std::move(entry));
 	}
 	return entries;
@@ -8857,6 +8866,31 @@ static bool Controller_spellbook_key(SDL_Keycode key, bool down) {
 	return true;
 }
 
+// The open spellbook on the pad: its bookmarked spell at the top, and under
+// it what the buttons do with it, kept up while the book is open.
+static void Controller_spellbook_hint() {
+	static int    shown_spell = -2;
+	static uint32 shown_at    = 0;
+	Spellbook_gump* book = Controller_last_input_is_pad() ? Controller_open_spellbook() : nullptr;
+	if (!book) {
+		shown_spell = -2;
+		return;
+	}
+	const int    spell = book->bookmarked_spell();
+	const uint32 now   = static_cast<uint32>(SDL_GetTicks());
+	if (spell == shown_spell && now - shown_at < 3000) {
+		return;    // Notices last 4 seconds: renewed before it fades.
+	}
+	shown_spell             = spell;
+	shown_at                = now;
+	const std::string cast  = Friend_pad_glyph(Controller_label(Controller_action::target_act));
+	const std::string slot  = Friend_pad_glyph(Controller_label(Controller_action::skills_ring));
+	Friend_mode_context_line(spell >= 0 ? Friend_class_spell_name(spell) : "Spellbook");
+	friend_hint_shown   = spell >= 0 ? "Cast (" + cast + ")  Put on a slot (" + slot + " held)" : "Choose a spell (D-pad)";
+	friend_hint_at      = now;
+	friend_hint_changed = true;
+}
+
 // Square held with a spell bookmarked in the open spellbook: the skills
 // ring as a slot picker, "Put Fireball in...", its plates the bar's slots
 // as they are.  True if it opened.
@@ -8869,16 +8903,13 @@ static bool Controller_open_slot_picker() {
 	auto entries = [spell]() {
 		std::vector<Controller_ring_entry> slots;
 		for (int i = 0; i < 3; ++i) {
-			const int   now = Friend_class_avatar_slot(i);
-			std::string name
-					= "Slot " + std::to_string(i + 1) + (now >= 0 ? ": " + Friend_class_spell_name(now) : ": empty");
-			slots.push_back({name,
-							 [now](Image_buffer8* buf, int cx, int cy) {
-								 Friend_class_paint_spell(now, buf, cx, cy);
-							 },
-							 {}, true, [i, spell]() {
+			const int         now  = Friend_class_avatar_slot(i);
+			const std::string name = std::to_string(i + 1) + ": " + (now >= 0 ? Friend_class_spell_name(now) : "empty");
+			slots.push_back({name, {}, {}, true,
+							 [i, spell]() {
 								 Friend_class_set_avatar_slot(i, spell);
-							 }});
+							 },
+							 Controller_ring_look::text});
 		}
 		return slots;
 	};
@@ -10610,6 +10641,7 @@ static void Handle_events() {
 		}
 
 		Controller_frame();    // Controller support: held buttons.
+		Controller_spellbook_hint();
 		if ((joy_aim_x != 0 || joy_aim_y != 0) && Controller_left_stick_centred()) {
 			// Controller support: the stick was let go while a menu or a
 			// conversation had the events.

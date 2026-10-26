@@ -109,6 +109,11 @@ bool Controller_pointer_showing();
 // Avatar; the left stick highlights one (the Avatar doesn't walk
 // meanwhile) and letting go of the button uses it.  Let go with the stick
 // centred to cancel.  The game runs on meanwhile.
+// How an entry is drawn: a round plate with its picture; the picture alone
+// (pictures that carry their own tile: the parchment skill icons); or its
+// name as text in a box (spells, whose pictures don't read at this size).
+enum class Controller_ring_look { plate, bare, text };
+
 struct Controller_ring_entry {
 	std::string name;
 	// The picture, centred on (cx, cy) in 'buf'; none: the plate is blank.
@@ -116,6 +121,7 @@ struct Controller_ring_entry {
 	std::string           corner;           // Small text on the plate (seconds left).
 	bool                  usable = true;    // Dimmed when not (its use then says why).
 	std::function<void()> use;
+	Controller_ring_look  look = Controller_ring_look::plate;
 };
 // 'title' shows in the middle until an entry is highlighted.  Entries are
 // read again each frame with 'refresh' (cooldowns), if given.

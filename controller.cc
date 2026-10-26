@@ -1131,7 +1131,8 @@ Ring_state ring;
 
 constexpr int ring_radius = 44;                                   // Centre to a plate's centre.
 constexpr int ring_plate  = 28;                                   // A plate's size (the art: 28x28).
-constexpr int ring_size   = 2 * ring_radius + ring_plate + 4;     // The layer, square.
+constexpr int ring_size   = 2 * ring_radius + ring_plate + 4;     // The ring, square.
+constexpr int ring_w      = ring_size + 64;                       // The layer: room for text entries.
 
 // An entry's angle, clockwise from the top (radians): up to four make an
 // arc over the title, 60 degrees apart (three: up-left, up, up-right);
@@ -1176,7 +1177,7 @@ int Ring_pick() {
 
 void Ring_plate_centre(int index, int count, int& cx, int& cy) {
 	const float angle = Ring_angle(index, count);
-	cx                = ring_size / 2 + static_cast<int>(std::lround(ring_radius * std::sin(angle)));
+	cx                = ring_w / 2 + static_cast<int>(std::lround(ring_radius * std::sin(angle)));
 	cy                = ring_size / 2 - static_cast<int>(std::lround(ring_radius * std::cos(angle)));
 }
 
@@ -1248,6 +1249,33 @@ void Ring_dim_plate(Image_buffer8* buf, int cx, int cy) {
 	}
 }
 
+// A text entry: its name in a dark box, the rim gold when highlighted,
+// darker when it can't be used.
+void Ring_paint_label(
+		Image_buffer8* buf, const std::shared_ptr<Font>& font, const std::string& text, int cx, int cy, bool lit,
+		bool usable) {
+	Palette*            pal  = Game_window::get_instance()->get_pal();
+	const unsigned char body = static_cast<unsigned char>(lit ? pal->find_color(30, 22, 12) : pal->find_color(14, 10, 6));
+	const unsigned char rim  = static_cast<unsigned char>(lit ? pal->find_color(63, 50, 16) : 0);
+	const int           w    = font->get_text_width(text.c_str()) + 10;
+	const int           h    = font->get_text_height() + 6;
+	const int           x    = cx - w / 2;
+	const int           y    = cy - h / 2;
+	buf->draw_box(x, y, w, h, 1, body, rim);
+	Ring_text(buf, font, text, x + 5, y + 3);
+	if (!usable) {
+		const auto& dim = Shape_manager::get_instance()->get_xform(8);
+		for (int py = y; py < y + h; ++py) {
+			for (int px = x; px < x + w; ++px) {
+				const unsigned char pix = buf->get_pixel8(px, py);
+				if (pix != 255) {
+					buf->put_pixel8(dim[pix], px, py);
+				}
+			}
+		}
+	}
+}
+
 void Ring_hide() {
 	Game_window* gwin = Game_window::get_instance();
 	if (ring.layer >= 0 && gwin->get_win()->layer_is_visible(ring.layer)) {
@@ -1305,7 +1333,7 @@ void Controller_ring_paint(int sx, int sy) {
 	}
 	if (ring.layer < 0) {
 		constexpr int text_layer_z = (1 << 18) + (1 << 16);    // As the hint line's.
-		ring.layer                 = gwin->create_layer("Radial menu", ring_size, ring_size, 255, 0, text_layer_z);
+		ring.layer                 = gwin->create_layer("Radial menu", ring_w, ring_size, 255, 0, text_layer_z);
 		if (ring.layer < 0) {
 			return;
 		}
@@ -1326,7 +1354,14 @@ void Controller_ring_paint(int sx, int sy) {
 			int         cx    = 0;
 			int         cy    = 0;
 			Ring_plate_centre(i, count, cx, cy);
-			Ring_paint_plate(buf, cx, cy, i == ring.highlight);
+			const bool lit = i == ring.highlight;
+			if (entry.look == Controller_ring_look::text) {
+				Ring_paint_label(buf, font, entry.name, cx, cy, lit, entry.usable);
+				continue;
+			}
+			if (entry.look == Controller_ring_look::plate) {
+				Ring_paint_plate(buf, cx, cy, lit);
+			}
 			if (entry.paint) {
 				// The picture, kept inside its plate.
 				buf->set_clip(cx - ring_plate / 2 + 2, cy - ring_plate / 2 + 2, ring_plate - 4, ring_plate - 4);
@@ -1336,22 +1371,32 @@ void Controller_ring_paint(int sx, int sy) {
 			if (!entry.usable) {
 				Ring_dim_plate(buf, cx, cy);
 			}
+			if (entry.look == Controller_ring_look::bare && lit) {
+				// No plate to light: a gold frame round the picture.
+				Palette*            pal  = Game_window::get_instance()->get_pal();
+				const unsigned char gold = static_cast<unsigned char>(pal->find_color(63, 50, 16));
+				buf->draw_box(cx - ring_plate / 2, cy - ring_plate / 2, ring_plate, ring_plate, 1, 0xFF, gold);
+			}
 			if (!entry.corner.empty()) {
 				Ring_text(buf, font, entry.corner, cx + ring_plate / 2 - font->get_text_width(entry.corner.c_str()) - 1,
 						  cy + ring_plate / 2 - font->get_text_height());
 			}
 		}
-		// The highlighted entry's name in the middle (else the ring's title).
-		const std::string name = ring.highlight >= 0 && ring.highlight < count ? ring.entries[ring.highlight].name : ring.title;
-		Ring_text(buf, font, name, (ring_size - font->get_text_width(name.c_str())) / 2,
+		// The highlighted entry's name in the middle (else the ring's title;
+		// a text entry already shows its name).
+		const bool        named = ring.highlight >= 0 && ring.highlight < count
+							  && ring.entries[ring.highlight].look != Controller_ring_look::text;
+		const std::string name  = named ? ring.entries[ring.highlight].name : ring.title;
+		Ring_text(buf, font, name, (ring_w - font->get_text_width(name.c_str())) / 2,
 				  (ring_size - font->get_text_height()) / 2);
 		gwin->pop_render_target(prev);
 		gwin->layer_set_dirty(ring.layer);
 		ring.painted = shows;
 	}
 	const float f       = iwin->get_ui_scale_factor(Image_window::UiLayerTextEffects);
-	const int   d       = static_cast<int>(ring_size * f);
-	const int   dest[4] = {sx - d / 2, sy - d / 2, d, d};
+	const int   dw      = static_cast<int>(ring_w * f);
+	const int   dh      = static_cast<int>(ring_size * f);
+	const int   dest[4] = {sx - dw / 2, sy - dh / 2, dw, dh};
 	if (!std::equal(dest, dest + 4, ring.dest) || !iwin->layer_is_visible(ring.layer)) {
 		std::copy(dest, dest + 4, ring.dest);
 		gwin->layer_set_dest(ring.layer, dest[0], dest[1], dest[2], dest[3]);
