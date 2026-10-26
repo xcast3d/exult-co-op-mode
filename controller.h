@@ -135,6 +135,12 @@ bool Controller_ring_is_open();
 // (sx, sy), or hidden.
 void Controller_ring_paint(int sx, int sy);
 
+// A short note for an open window (the spellbook's "Turn the page"), its
+// top centre at screen point (sx, sy); empty text hides it.  Each frame.
+void Controller_paint_note(const std::string& text, int sx, int sy);
+// A pad button's name as printed on the pad (SDL_GAMEPAD_BUTTON_...).
+std::string Controller_button_name(int button);
+
 // The game menu's Controller page: every button and what it does, in the
 // pad's own names (Cross or A...), from the live map.
 void Controller_buttons_page();

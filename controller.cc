@@ -1132,7 +1132,7 @@ Ring_state ring;
 constexpr int ring_radius = 44;                                   // Centre to a plate's centre.
 constexpr int ring_plate  = 28;                                   // A plate's size (the art: 28x28).
 constexpr int ring_size   = 2 * ring_radius + ring_plate + 4;     // The ring, square.
-constexpr int ring_w      = ring_size + 64;                       // The layer: room for text entries.
+constexpr int ring_w      = ring_size + 200;                      // The layer: room for text entries.
 
 // An entry's angle, clockwise from the top (radians): up to four make an
 // arc over the title, 60 degrees apart (three: up-left, up, up-right);
@@ -1175,9 +1175,11 @@ int Ring_pick() {
 	return best;
 }
 
-void Ring_plate_centre(int index, int count, int& cx, int& cy) {
+// 'across': the sideways radius (wider for text entries, so their boxes
+// don't meet).
+void Ring_plate_centre(int index, int count, int& cx, int& cy, int across = ring_radius) {
 	const float angle = Ring_angle(index, count);
-	cx                = ring_w / 2 + static_cast<int>(std::lround(ring_radius * std::sin(angle)));
+	cx                = ring_w / 2 + static_cast<int>(std::lround(across * std::sin(angle)));
 	cy                = ring_size / 2 - static_cast<int>(std::lround(ring_radius * std::cos(angle)));
 }
 
@@ -1349,11 +1351,21 @@ void Controller_ring_paint(int sx, int sy) {
 		buf->fill8(255);    // Transparent.
 		Image_buffer8* prev  = gwin->push_render_target(buf);
 		const int      count = static_cast<int>(ring.entries.size());
+		// Text entries: spread sideways by the widest box, so neighbours on
+		// the same row (the arc's left and right) keep a gap between them.
+		int widest = 0;
+		for (const auto& entry : ring.entries) {
+			if (entry.look == Controller_ring_look::text) {
+				widest = std::max(widest, font->get_text_width(entry.name.c_str()) + 10);
+			}
+		}
+		const int max_across = ring_w / 2 - widest / 2 - 2;
+		const int across     = std::clamp(widest * 2 / 3 + 8, ring_radius, std::max(ring_radius, max_across));
 		for (int i = 0; i < count; ++i) {
 			const auto& entry = ring.entries[i];
 			int         cx    = 0;
 			int         cy    = 0;
-			Ring_plate_centre(i, count, cx, cy);
+			Ring_plate_centre(i, count, cx, cy, across);
 			const bool lit = i == ring.highlight;
 			if (entry.look == Controller_ring_look::text) {
 				Ring_paint_label(buf, font, entry.name, cx, cy, lit, entry.usable);
@@ -1403,4 +1415,63 @@ void Controller_ring_paint(int sx, int sy) {
 		gwin->layer_set_visible(ring.layer, true);
 		gwin->set_painted();
 	}
+}
+
+// A note under an open window.
+void Controller_paint_note(const std::string& text, int sx, int sy) {
+	static int         layer = -1;
+	static std::string painted;
+	static int         w       = 0;
+	static int         h       = 0;
+	static int         shown[4] = {0, 0, 0, 0};
+	Game_window*       gwin    = Game_window::get_instance();
+	Image_window*      iwin    = gwin->get_win();
+	auto               font    = fontManager.get_font("MENU_FONT");
+	if (text.empty() || !font) {
+		if (layer >= 0 && iwin->layer_is_visible(layer)) {
+			gwin->layer_set_visible(layer, false);
+			gwin->set_painted();
+		}
+		return;
+	}
+	if (layer < 0 || text != painted) {
+		if (layer >= 0) {
+			gwin->destroy_layer(layer);
+		}
+		w                          = font->get_text_width(text.c_str()) + 4;
+		h                          = font->get_text_height() + 4;
+		constexpr int text_layer_z = (1 << 18) + (1 << 16);
+		layer                      = gwin->create_layer("Window note", w, h, 255, 0, text_layer_z);
+		if (layer < 0) {
+			return;
+		}
+		gwin->layer_set_ui_kind(layer, Image_window::UiLayerTextEffects);
+		Image_buffer8* buf = gwin->get_layer_ibuf(layer);
+		if (!buf) {
+			return;
+		}
+		buf->clear_clip();
+		buf->fill8(255);
+		Image_buffer8* prev = gwin->push_render_target(buf);
+		Ring_text(buf, font, text, 2, 2);
+		gwin->pop_render_target(prev);
+		gwin->layer_set_dirty(layer);
+		painted  = text;
+		shown[2] = -1;    // Place it again.
+	}
+	constexpr float smaller = 0.8f;    // As the hint line.
+	const float     f       = iwin->get_ui_scale_factor(Image_window::UiLayerTextEffects) * smaller;
+	const int       dw      = static_cast<int>(w * f);
+	const int       dh      = static_cast<int>(h * f);
+	const int       dest[4] = {sx - dw / 2, sy, dw, dh};
+	if (!std::equal(dest, dest + 4, shown) || !iwin->layer_is_visible(layer)) {
+		std::copy(dest, dest + 4, shown);
+		gwin->layer_set_dest(layer, dest[0], dest[1], dest[2], dest[3]);
+		gwin->layer_set_visible(layer, true);
+		gwin->set_painted();
+	}
+}
+
+std::string Controller_button_name(int button) {
+	return Input_label(button);
 }

@@ -10771,6 +10771,22 @@ static void Handle_events() {
 		Friend_mode_paint_chat_log();
 		Friend_mode_paint_player_list();
 		{
+			// Controller support: under the open spellbook, how to turn the
+			// pages (its shoulders, as printed on the pad).
+			Spellbook_gump* book = Controller_last_input_is_pad() ? Controller_open_spellbook() : nullptr;
+			if (book) {
+				const TileRect area = book->get_rect();
+				int            note_x;
+				int            note_y;
+				gwin->get_win()->game_to_screen(area.x + area.w / 2, area.y + area.h + 2, false, note_x, note_y);
+				Controller_paint_note("Turn the page: " + Controller_button_name(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) + " / "
+											  + Controller_button_name(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER),
+									  note_x, note_y);
+			} else {
+				Controller_paint_note({}, 0, 0);
+			}
+		}
+		{
 			// Controller support: a radial menu, round the Avatar.
 			int ring_x;
 			int ring_y;
