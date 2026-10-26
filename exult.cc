@@ -3668,6 +3668,39 @@ static int Friend_free_spot(Actor* own, Game_object* obj) {
 
 // Space on a worn or wielded thing in one's own inventory: off to the pack.
 // On one in the pack: readied, swapping out what is in its spot.
+// A thing in a party member's window (their paperdoll or pack), not one's
+// own, on the host and in single player (the Avatar is the party
+// administrator): that member, else null.  Space readies, swaps or puts
+// away on them; Shift+Space takes it into one's own pack (2026-10-25,
+// controller-plan.md, "Items and equipment").  A guest's Space takes, as
+// before.
+static Actor* Friend_window_member(Actor* own, Game_object* obj, bool in_window) {
+	Game_object* outer = obj->get_outermost();
+	Actor*       owner = outer ? outer->as_actor() : nullptr;
+	if (!in_window || !owner || owner == own || Friend_mode_is_guest()) {
+		return nullptr;
+	}
+	return owner == gwin->get_main_actor() || owner->is_in_party() ? owner : nullptr;
+}
+
+// Alt+Space on a worn stack (arrows, bolts): some of it back into the
+// wearer's pack (how many).  True if it was such a stack.
+static bool Friend_mode_put_some_away(Actor* wearer, Game_object* obj, Gump* window) {
+	if (wearer->find_readied(obj) < 0 || obj->get_quantity() <= 1) {
+		return false;
+	}
+	Container_game_object* pack = Friend_pack_of(wearer);
+	if (pack == wearer) {
+		Friend_mode_target_notice("No backpack");
+		return true;
+	}
+	const int count = Friend_how_many(obj, true);
+	if (count > 0 && gwin->move_object(obj, window, pack, -1, count)) {
+		Friend_mode_target_notice("Put away " + std::to_string(count) + " of " + Friend_thing_name(obj));
+	}
+	return true;
+}
+
 static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 	Container_game_object* pack = Friend_pack_of(own);
 	if (own->find_readied(obj) >= 0) {
@@ -3808,10 +3841,30 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		gwin->double_clicked_object(obj, window != nullptr || mine);
 		return true;
 	}
+	// A party member's window: Space readies, swaps or puts away on them
+	// (or opens a bag); Alt+Space puts some of a worn stack away; anything
+	// else, and Shift+Space, takes it into one's own pack (below).
+	Actor* member = Friend_window_member(own, obj, window != nullptr);
+	if (member) {
+		if (plain && Friend_is_wearable(member, obj)) {
+			Friend_mode_equip(member, obj, window);
+			return true;
+		}
+		if (plain && obj->as_container()) {
+			gwin->double_clicked_object(obj, true);
+			return true;
+		}
+		if (alt && Friend_mode_put_some_away(member, obj, window)) {
+			return true;
+		}
+	}
 	// One's own.  Space: use, ready or put away; what has none of those is
 	// dropped, after asking.  Shift+Space drops at once; Alt+Space drops
-	// some (how many).
+	// some (how many), or on a worn stack puts some away.
 	if (mine) {
+		if (alt && Friend_mode_put_some_away(own, obj, window)) {
+			return true;
+		}
 		if (plain && (obj->as_container() || obj->usecode_exists())) {
 			gwin->double_clicked_object(obj, true);
 		} else if (plain && Friend_is_wearable(own, obj)) {
@@ -3846,8 +3899,9 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		gwin->double_clicked_object(obj);
 		return true;
 	}
-	// Shift in someone else's window: everything there.
-	if (shift && window) {
+	// Shift in someone else's window: everything there (in a party member's,
+	// Shift+Space takes just this one).
+	if (shift && window && !member) {
 		Friend_mode_take_all(obj->get_owner(), obj, "Not all yours: Shift+Space again to take all");
 		Friend_mode_pick_next_in_window();
 		return true;
@@ -3953,8 +4007,20 @@ static std::string Friend_space_hint() {
 	// Taking it would be a crime: "Steal" (Space asks again first).
 	const std::string take = Friend_is_theft(obj) ? "Steal" : "Take";
 	const std::string some = stack ? "Split" : "";
+	// A party member's window: ready / put away on them, Shift takes.
+	if (Actor* member = Friend_window_member(own, obj, window)) {
+		const bool        worn = member->find_readied(obj) >= 0;
+		const std::string some_away = worn && stack ? "Put some away" : some;
+		if (Friend_is_wearable(member, obj)) {
+			return two(worn ? "Put away" : "Ready", take, some_away);
+		}
+		if (obj->as_container()) {
+			return two("Open", take, some);
+		}
+		return two(take, "", some);
+	}
 	if (mine) {
-		const std::string drop = stack ? "Drop some" : "";
+		const std::string drop = stack ? (own->find_readied(obj) >= 0 ? "Put some away" : "Drop some") : "";
 		if (Friend_is_readable(obj)) {
 			return two("Read", "Drop", drop);
 		}
