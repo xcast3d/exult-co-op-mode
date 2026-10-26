@@ -285,7 +285,8 @@ From playing with a PS4 pad, after the menus and prompts were in:
    ("The controller needs the Target System (Game menu)", at most every 5
    seconds) and the Controller page shows "Needs the Target System on".
    Walking, the pointer, menus and the rings work either way. (Done.)
-9. **A Keys page** in the game menu, beside Controller: the keyboard's
+9. **A Keys page** (Game Input's Keys... button; at first in the game
+   menu, moved so the menu doesn't grow): the keyboard's
    Friend Mode keys (targeting, moving and the party, Co-Op), a page at a
    time, sharing the buttons list's window (`Controller_show_pages`,
    `Friend_mode_keys_page`). (Done.)

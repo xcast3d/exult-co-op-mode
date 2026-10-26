@@ -277,9 +277,9 @@ Class System boxes aren't ticked). See "Class System" in the
   (green up arrow, blue shield, red down arrow), sent to guests; a line on
   what each skill does; Battle Hymn's strength raises health; "Require
   class items" off the page.
-- **Effect preview** on the Class System page: steps through sprites,
-  missile pictures and sounds, playing each on your character with its
-  number, for choosing each skill's look.
+- **Effect preview** on the Class System page (removed 2026-10-26, once
+  every skill's look was chosen): stepped through sprites, missile pictures
+  and sounds, playing each on your character with its number.
 - **Class AI:** chooses and uses skills by type (health, status, how many
   hostiles, a hostile on a hurt companion), and places companions in a
   fight (`Friend_class_place`, from `Combat_schedule::now_what`): ranged

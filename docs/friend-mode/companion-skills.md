@@ -270,7 +270,8 @@ emotes show over companions, on every machine: *stunned*, *asleep*,
 *dazed*, *crippled*, *marked*, *enraged*, or *resisted* when the roll fails.
 Each comes from the effect; a skill can set its own with `reacts("*drowsy*")`.
 
-**Effect preview** (Class System page → Effect preview): a panel at the
+**Effect preview** (removed 2026-10-26, its job done: every skill's look
+was chosen with it; it lived on the Class System page): a panel at the
 top of the view, with the game running, that steps through U7's sprite
 effects, the missile pictures weapons and ammunition fly as, and the sound
 effects, playing each on one's character (a missile flies at the Q pick, or

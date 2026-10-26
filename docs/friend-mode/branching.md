@@ -35,8 +35,7 @@ and works on its own:
 4. **Lobby and WebRTC.** `tools/lobby`, the `third_party` submodules
    (libdatachannel, Mbed TLS), the WebRTC connection: a second way to
    connect.
-5. **Class System.** Skills, the skill and spell bars, Class AI, the effect
-   preview. Uses 2 (picks, the range circle) and 3 (guests); works in single
+5. **Class System.** Skills, the skill and spell bars, Class AI. Uses 2 (picks, the range circle) and 3 (guests); works in single
    player too.
 
 So someone can stop after 2 (a better single-player Exult), 3 (co-op over

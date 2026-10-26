@@ -660,7 +660,7 @@ and windows moved between and arranged without the pointer. The button
 names follow the pad (Cross or A). It works through the Target System, so
 that must be on. Chat on a pad is not planned (a chatpad attachment works;
 most players use voice chat). The game menu has a Controller page
-(settings and the buttons list) and a Keys page (the keyboard's Friend
+(settings and the buttons list), and Game Input a Keys... page (the keyboard's Friend
 Mode keys).
 
 ### Exult in the browser
