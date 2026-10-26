@@ -249,8 +249,9 @@ From playing with a PS4 pad, after the menus and prompts were in:
 ### Next (notes for 2026-10-26)
 
 1. **A backpack's window has no name.** Alone on screen it's not clear
-   whose it is: a title above it ("Iolo's backpack"), at least while the
-   pad is in use.
+   whose it is: a title above it ("Iolo's backpack"). Not
+   controller-specific: moved to `feature/friend-mode`
+   ([feedback note](feedback-2026-10-25.md)).
 2. **No way to move between open windows without the pointer.** Open one
    window, then another: going back to the first needs a click. Maybe
    the triggers cycle through the open windows (bringing each to the
