@@ -6340,6 +6340,7 @@ static void Friend_mode_restart_at_menu() {
 		argv.push_back(arg.data());
 	}
 	argv.push_back(nullptr);
+	Controller_quit();    // (Already, after Play(); harmless twice.)
 	SDL_Quit();
 #if defined(_WIN32)
 	_spawnv(_P_NOWAIT, argv[0], argv.data());
@@ -8541,6 +8542,7 @@ int main(int argc, char* argv[]) {
 			Friend_mode_restart_at_menu();
 		}
 	} catch (const quit_exception& /*e*/) {
+		Controller_quit();    // Before the window goes: SDL_Quit reports the pads removed.
 		// Your basic "shutup Valgrind" code.
 		Free_text();
 		fontManager.reset();
