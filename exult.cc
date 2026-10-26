@@ -8722,6 +8722,142 @@ static void Friend_mode_toggle_running() {
 	Friend_mode_notice(Friend_running ? "Running" : "Walking");
 }
 
+// The item menu (controller-plan.md, "Items and equipment"; Cross held on
+// the pad, Ctrl+Space): what can be done with the pick, the entries that
+// apply only.
+//
+// Give to...: a party member's pack (the host and single player; a guest
+// doesn't give).  Within reach, or "Too far away"; how many of a stack.
+static void Friend_mode_give(Game_object* obj) {
+	Actor*              own    = gwin->get_controlled_actor();
+	Game_object*        outer  = obj->get_outermost();
+	Actor*              holder = outer ? outer->as_actor() : nullptr;
+	std::vector<Actor*> members;
+	std::vector<std::string> names;
+	for (int i = 0; i <= gwin->get_party_man()->get_count(); ++i) {
+		Actor* who = Friend_party_member(i);
+		if (who && who != holder && !who->is_dead()) {
+			members.push_back(who);
+			names.push_back(Friend_target_name(who));
+		}
+	}
+	const int chosen = Controller_choose("Give " + Friend_thing_name(obj) + " to", names);
+	if (chosen < 0) {
+		return;
+	}
+	Actor* to = members[chosen];
+	if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(own, to)) {
+		Friend_mode_target_notice("Too far away");
+		return;
+	}
+	Container_game_object* pack = Friend_pack_of(to);
+	if (pack == to) {
+		Friend_mode_target_notice(Friend_target_name(to) + " has no backpack");
+		return;
+	}
+	const int   count = Friend_how_many(obj, true);
+	const std::string name = count < obj->get_quantity() ? std::to_string(count) + " of " + Friend_thing_name(obj)
+														   : Friend_thing_name(obj);
+	if (count <= 0) {
+		return;
+	}
+	if (gwin->move_object(obj, gwin->get_gump_man()->find_gump(obj), pack, -1, count)) {
+		Friend_mode_target_notice("Gave " + name + " to " + Friend_target_name(to));
+	} else {
+		Friend_mode_target_notice("No room");
+	}
+}
+
+// Put in...: one of the open container windows (not its own, nor itself).
+static void Friend_mode_put_in(Game_object* obj) {
+	std::vector<Container_game_object*> targets;
+	std::vector<std::string>            names;
+	Gump*                               from = gwin->get_gump_man()->find_gump(obj);
+	for (Gump* gump : *gwin->get_gump_man()) {
+		Container_game_object* box = gump ? gump->get_container() : nullptr;
+		if (!box || box->as_actor() || box == obj || box == obj->get_owner() || gump->is_persistent()) {
+			continue;
+		}
+		Game_object* outer  = box->get_outermost();
+		Actor*       holder = outer && outer != box ? outer->as_actor() : nullptr;
+		targets.push_back(box);
+		names.push_back(holder ? Friend_target_name(holder) + "'s " + Friend_thing_name(box) : Friend_thing_name(box));
+	}
+	if (targets.empty()) {
+		Friend_mode_target_notice("Open a container first");
+		return;
+	}
+	const int chosen = Controller_choose("Put " + Friend_thing_name(obj) + " in", names);
+	if (chosen < 0) {
+		return;
+	}
+	if (gwin->move_object(obj, from, targets[chosen], -1, obj->get_quantity())) {
+		Friend_mode_target_notice("Put " + Friend_thing_name(obj) + " in " + names[chosen]);
+	} else {
+		Friend_mode_target_notice("No room");
+	}
+}
+
+static void Friend_mode_item_menu() {
+	Actor*                   own   = gwin->get_controlled_actor();
+	const Game_object_shared thing = friend_object_target.lock();
+	if (!own || !thing) {
+		Friend_mode_target_notice("Pick a thing first");
+		return;
+	}
+	Game_object* obj    = thing.get();
+	Game_object* outer  = obj->get_outermost();
+	Actor*       holder = outer ? outer->as_actor() : nullptr;
+	const bool   party  = holder && (holder == gwin->get_main_actor() || holder->is_in_party());
+	const bool   guest  = Friend_mode_is_guest();
+	struct Choice {
+		std::string           label;
+		std::function<void()> run;
+	};
+	std::vector<Choice> choices;
+	// What Space would do, by its hint ("Ready (Space)  Take (Shift+Space)").
+	const std::string hint  = Friend_space_hint();
+	const std::string first = hint.substr(0, hint.find(" ("));
+	if (!first.empty()) {
+		choices.push_back({first, []() {
+							   Friend_mode_space(false, false);
+						   }});
+	}
+	if (party && !guest && obj->is_dragable()) {
+		choices.push_back({"Give to...", [thing]() {
+							   Friend_mode_give(thing.get());
+						   }});
+	}
+	if (obj->is_dragable() && (party || !guest)) {
+		choices.push_back({"Put in...", [thing]() {
+							   Friend_mode_put_in(thing.get());
+						   }});
+	}
+	if (obj->get_quantity() > 1) {
+		choices.push_back({"Split", []() {
+							   Friend_mode_space(false, true);    // As Alt+Space: how many.
+						   }});
+	}
+	if (party && obj->is_dragable()) {
+		choices.push_back({"Drop", [thing]() {
+							   Game_object* item = thing.get();
+							   const std::string name = Friend_thing_name(item);
+							   if (gwin->move_object(item, gwin->get_gump_man()->find_gump(item), nullptr, -1,
+													 item->get_quantity())) {
+								   Friend_mode_target_notice("Dropped " + name);
+							   }
+						   }});
+	}
+	std::vector<std::string> labels;
+	for (const auto& choice : choices) {
+		labels.push_back(choice.label);
+	}
+	const int chosen = Controller_choose(Friend_thing_name(obj), labels);
+	if (chosen >= 0 && friend_object_target.lock() == thing) {
+		choices[chosen].run();
+	}
+}
+
 // Controller support: the radial menus' entries (controller-plan.md, step
 // 6).  Skills: the bar's slots as it shows them (a companion's skills, or
 // the Avatar's spells).
@@ -9072,6 +9208,11 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 		// takes over again.
 		if (!notebook && (!Friend_mode_is_guest() || friend_session.connected())) {
 			Friend_mode_hold_or_follow();
+		}
+		break;
+	case Controller_action::item_menu:
+		if (Friend_keyboard_targeting && !notebook) {
+			Friend_mode_item_menu();
 		}
 		break;
 	case Controller_action::sort_window:
@@ -11147,6 +11288,13 @@ static void Handle_event(SDL_Event& event) {
 		return;
 	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_SPACE
+		&& !event.key.repeat && (event.key.mod & SDL_KMOD_CTRL)
+		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !friend_chat_active
+		&& !Notebook_gump::get_instance()) {
+		Friend_mode_item_menu();    // Ctrl+Space: the item menu (Cross held on the pad).
+		return;
+	}
+	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_SPACE
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) && !friend_chat_active
 		&& !Notebook_gump::get_instance()
 		&& Friend_mode_space(event.key.mod & SDL_KMOD_SHIFT, event.key.mod & SDL_KMOD_ALT)) {
@@ -11980,6 +12128,28 @@ static void Handle_event(SDL_Event& event) {
 // (or turns the page) as a click does.
 static bool get_click_space_continues = false;
 
+// The crosshair (Get_click) aimed at the Target System's thing, if it's
+// on the map: the pointer moved onto it (controller support).  False with
+// none.
+static bool Friend_aim_crosshair_at_pick() {
+	Game_object* pick = Friend_mode_object_target();
+	if (!pick || friend_object_in_window || !pick->get_chunk()) {
+		return false;
+	}
+	int gx;
+	int gy;
+	gwin->get_shape_location(pick, gx, gy);
+	int sx;
+	int sy;
+	gwin->get_win()->game_to_screen(gx, gy, gwin->get_fastmouse(), sx, sy);
+	SDL_Window* window = gwin->get_win()->get_screen_window();
+	float       wx     = 0;
+	float       wy     = 0;
+	SDL_RenderCoordinatesToWindow(SDL_GetRenderer(window), static_cast<float>(sx), static_cast<float>(sy), &wx, &wy);
+	Controller_aim_pointer(wx, wy);
+	return true;
+}
+
 static bool Get_click(
 		int& x, int& y,
 		char* chr,             // Char. returned if not null.
@@ -12108,6 +12278,21 @@ static bool Get_click(
 					if ((c == SDLK_S) && (event.key.mod & SDL_KMOD_ALT) && (event.key.mod & SDL_KMOD_CTRL)) {
 						make_screenshot(true);
 						break;
+					}
+					// The crosshair, by keys or the pad (controller support): E and
+					// Shift+E (R1 / L1, the D-pad) step through the Target System's
+					// things and aim at the one picked; Space (Cross) clicks on it.
+					const bool crosshair = !chr && Friend_keyboard_targeting
+										   && Mouse::mouse()->get_shape() == Mouse::greenselect;
+					if (crosshair && c == SDLK_E) {
+						Friend_mode_cycle_object((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);
+						Friend_aim_crosshair_at_pick();
+						break;
+					}
+					if (crosshair && c == SDLK_SPACE && !event.key.repeat && Friend_aim_crosshair_at_pick()) {
+						gwin->get_shape_location(Friend_mode_object_target(), x, y);
+						g_waiting_for_click = false;
+						return true;
 					}
 					if (!chr && c == SDLK_SPACE && get_click_space_continues && !event.key.repeat) {
 						x                   = -1;

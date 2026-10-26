@@ -101,7 +101,7 @@ struct Action_name {
 	const char*       name;
 };
 
-constexpr std::array<Action_name, 16> action_names{{
+constexpr std::array<Action_name, 17> action_names{{
 		{Controller_action::none, "NONE"},
 		{Controller_action::shift, "SHIFT"},
 		{Controller_action::alt, "ALT"},
@@ -118,11 +118,13 @@ constexpr std::array<Action_name, 16> action_names{{
 		{Controller_action::close_window, "CLOSE_WINDOW"},
 		{Controller_action::hold_follow, "HOLD_FOLLOW"},
 		{Controller_action::sort_window, "SORT_WINDOW"},
+		{Controller_action::item_menu, "ITEM_MENU"},
 }};
 
 // Held actions (config/gameplay/controller/hold/<button>): a button with
 // one does its own action on a tap (on release) and this one when held.
-constexpr std::array<std::pair<int, const char*>, 2> default_hold_map{{
+constexpr std::array<std::pair<int, const char*>, 3> default_hold_map{{
+		{SDL_GAMEPAD_BUTTON_SOUTH, "ITEM_MENU"},    // Tap acts on the pick, hold: what else.
 		{SDL_GAMEPAD_BUTTON_DPAD_UP, "HOLD_FOLLOW"},
 		{SDL_GAMEPAD_BUTTON_EAST, "SORT_WINDOW"},    // Tap closes the window, hold tidies it.
 }};
@@ -970,6 +972,20 @@ bool Controller_pointer_showing() {
 	return state.showing;
 }
 
+void Controller_aim_pointer(float wx, float wy) {
+	SDL_Window* window = Game_screen_window();
+	if (!window) {
+		return;
+	}
+	Warp_pointer(window, wx, wy);
+	state.pointer_activity = SDL_GetTicks();
+	state.centre_next      = false;
+	if (!state.showing) {
+		state.showing = true;
+		Update_cursor();
+	}
+}
+
 std::string Controller_label(Controller_action action, const char* key_name) {
 	for (const auto& entry : input_names) {
 		const Controller_binding& binding = Binding_of(entry.input);
@@ -1018,6 +1034,8 @@ std::string Describe(const Controller_binding& binding) {
 		return "The party holds or follows";
 	case Controller_action::sort_window:
 		return "Sort the newest window";
+	case Controller_action::item_menu:
+		return "Item menu: give, put in, drop...";
 	case Controller_action::key_binding:
 		if (binding.name == "TOGGLE_COMBAT") {
 			return "Combat on or off";
@@ -1539,4 +1557,86 @@ void Controller_paint_note(const std::string& text, int sx, int sy) {
 
 std::string Controller_button_name(int button) {
 	return Input_label(button);
+}
+
+// A short list to choose from.
+namespace {
+class Choice_button : public Text_button {
+	std::function<void()> on_choose;
+
+public:
+	Choice_button(Gump_Base* parent, const std::string& text, int x, int y, int w, std::function<void()> choose)
+			: Text_button(parent, text, x, y, w, 11), on_choose(std::move(choose)) {}
+
+	bool activate(MouseButton button) override {
+		if (button != MouseButton::Left) {
+			return false;
+		}
+		on_choose();
+		return true;
+	}
+};
+
+class Choice_gump : public Modal_gump {
+	std::string                               title;
+	std::vector<std::unique_ptr<Gump_button>> buttons;
+	int                                       chosen = -1;
+
+public:
+	Choice_gump(std::string heading, const std::vector<std::string>& entries)
+			: Modal_gump(nullptr, -1), title(std::move(heading)) {
+		int widest = font->get_text_width(title.c_str());
+		for (const auto& entry : entries) {
+			widest = std::max(widest, font->get_text_width(entry.c_str()) + 12);
+		}
+		const int width = std::max(100, widest + 2 * label_margin);
+		const int count = static_cast<int>(entries.size());
+		SetProceduralBackground(TileRect(0, 0, width, yForRow(count + 1) + 2), -1);
+		const int margin = label_margin;    // (Passed on by reference: a copy.)
+		for (int i = 0; i < count; ++i) {
+			buttons.push_back(std::make_unique<Choice_button>(
+					this, entries[i], margin, yForRow(i + 1), width - 2 * margin, [this, i]() {
+						chosen = i;
+						done   = true;
+					}));
+		}
+		focus_first();
+	}
+
+	int get_chosen() const {
+		return chosen;
+	}
+
+	void paint() override {
+		Modal_gump::paint();
+		for (auto& button : buttons) {
+			button->paint();
+		}
+		font->paint_text(gwin->get_win()->get_ib8(), title.c_str(), x + label_margin, y + yForRow(0) + 1);
+		paint_focus();
+		gwin->set_painted();
+	}
+
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		add_focus(list, buttons);
+	}
+
+	Gump_button* on_button(int mx, int my) override {
+		for (auto& button : buttons) {
+			if (Gump_button* found = button->on_button(mx, my)) {
+				return found;
+			}
+		}
+		return Modal_gump::on_button(mx, my);
+	}
+};
+}    // namespace
+
+int Controller_choose(const std::string& title, const std::vector<std::string>& entries) {
+	if (entries.empty()) {
+		return -1;
+	}
+	Choice_gump choice(title, entries);
+	Game_window::get_instance()->get_gump_man()->do_modal_gump(&choice, Mouse::hand);
+	return choice.get_chosen();
 }

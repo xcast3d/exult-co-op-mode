@@ -48,6 +48,7 @@ enum class Controller_action {
 	close_window,      // The newest window shuts; with none, the pick clears.
 	hold_follow,       // Y: the party holds or follows (a guest: follow or take over).
 	sort_window,       // Shift+C: tidy the newest window.
+	item_menu,         // Held south: what can be done with the pick (Ctrl+Space).
 	key_binding        // One of Exult's key actions, by name.
 };
 
@@ -103,6 +104,9 @@ bool Controller_shift_held();
 bool Controller_alt_held();
 // Is the pad pointer showing (the triggers are then mouse buttons)?
 bool Controller_pointer_showing();
+// Move the pointer to window point (wx, wy) and show it (the crosshair
+// aimed at the Target System's pick).
+void Controller_aim_pointer(float wx, float wy);
 
 // The radial menus (controller-plan.md, step 6): held Square (skills) and
 // Triangle (utilities) open a ring of up to eight entries round the
@@ -140,6 +144,12 @@ void Controller_ring_paint(int sx, int sy);
 void Controller_paint_note(const std::string& text, int sx, int sy);
 // A pad button's name as printed on the pad (SDL_GAMEPAD_BUTTON_...).
 std::string Controller_button_name(int button);
+
+// A short list to choose from (the item menu, Give to...): a window with
+// 'title' and a button per entry, the first highlighted; up / down and
+// Return (Cross) choose, Escape (Circle, Start) cancels.  The entry's
+// index, or -1.  Waits (a modal window).
+int Controller_choose(const std::string& title, const std::vector<std::string>& entries);
 
 // The game menu's Controller page: every button and what it does, in the
 // pad's own names (Cross or A...), from the live map.

@@ -96,6 +96,11 @@ protected:
 	bool focus_shown() const {
 		return focus >= 0;
 	}
+	void focus_first() {    // Highlight the first at once, keyboard or pad.
+		if (focus < 0) {
+			focus = 0;
+		}
+	}
 	void paint_focus();
 
 private:
