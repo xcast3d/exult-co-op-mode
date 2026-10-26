@@ -107,8 +107,8 @@ or mouse action the Steam test used.
 | D-pad left | paperdoll | |
 | D-pad right | inventory | I |
 | D-pad down | stats | Z |
-| Select / Back | player list | Tab |
-| Start / Menu | game menu, or close the top window | Escape |
+| Select / Back | tap: next window to the front; held: player list (2026-10-26) | Tab |
+| Start / Menu | game menu, or close the top window; held: arrange the open windows (2026-10-26) | Escape |
 
 Notes:
 
@@ -253,10 +253,16 @@ From playing with a PS4 pad, after the menus and prompts were in:
    controller-specific: moved to `feature/friend-mode`
    ([feedback note](feedback-2026-10-25.md)).
 2. **No way to move between open windows without the pointer.** Open one
-   window, then another: going back to the first needs a click. Maybe
-   the triggers cycle through the open windows (bringing each to the
-   front, the Target System's E then starting in it); but the triggers
-   are Shift and Alt now, so this needs another button or a held combo.
+   window, then another: going back to the first needed a click. Built
+   (2026-10-26, untested with a pad): **Share / View tapped** brings the
+   oldest open window to the front (as a click does; tapping goes round
+   them all), says its name ("Iolo's backpack") and picks its first
+   thing, so R1 and Cross work in it; held, it is still the player list.
+   **Options / Menu held** arranges the open windows side by side, none
+   overlapping: paperdolls first, then the rest in the order opened, in
+   rows above the faces and the skill bar; what doesn't fit cascades.
+   Options tapped now acts on release. (`Friend_mode_next_window`,
+   `Friend_mode_arrange_windows` in exult.cc.)
 3. **"Put in..." is a bit confusing.** Left as it is for now; it may go.
 4. **The Join screen didn't move with the D-pad or left stick** between
    its fields (name, code or IP, password); nor the password screen or

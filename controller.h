@@ -49,6 +49,8 @@ enum class Controller_action {
 	hold_follow,       // Y: the party holds or follows (a guest: follow or take over).
 	sort_window,       // Shift+C: tidy the newest window.
 	item_menu,         // Held south: what can be done with the pick (Ctrl+Space).
+	next_window,       // The oldest open window to the front (Back tapped).
+	arrange_windows,   // The open windows laid out side by side (Start held).
 	key_binding        // One of Exult's key actions, by name.
 };
 

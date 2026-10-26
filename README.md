@@ -71,8 +71,8 @@ a second; a tap does the other thing when you let go.
 | Triangle / Y, held | Utilities ring: eat, watch, map, journal, lockpick, keys, hold / follow, spellbook |
 | D-pad up | Next character; held: the party holds or follows |
 | D-pad left / right / down | Paperdoll / next backpack / stats |
-| Share / View | Player list (co-op, held) |
-| Options / Menu | Clear the pick, then close windows, then the game menu |
+| Share / View | The next open window to the front (its first thing picked); held: the player list (co-op) |
+| Options / Menu | Clear the pick, then close windows, then the game menu; held: arrange the open windows side by side |
 
 In menus, the D-pad or left stick moves the highlight, Cross chooses,
 Circle or Options goes back, and left / right change a setting (L1 / R1 by

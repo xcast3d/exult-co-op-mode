@@ -91,7 +91,7 @@ constexpr std::array<std::pair<int, const char*>, 16> default_map{{
 		{SDL_GAMEPAD_BUTTON_DPAD_LEFT, "INVENTORY"},    // The paperdoll (I).
 		{SDL_GAMEPAD_BUTTON_DPAD_RIGHT, "BACKPACK"},
 		{SDL_GAMEPAD_BUTTON_DPAD_DOWN, "STATS"},
-		{SDL_GAMEPAD_BUTTON_BACK, "PLAYER_LIST"},
+		{SDL_GAMEPAD_BUTTON_BACK, "NEXT_WINDOW"},    // Held: the player list (default_hold_map).
 		{SDL_GAMEPAD_BUTTON_START, "CLOSE_OR_MENU"},
 		{SDL_GAMEPAD_BUTTON_RIGHT_STICK, "TOGGLE_COMBAT"},
 }};
@@ -101,7 +101,7 @@ struct Action_name {
 	const char*       name;
 };
 
-constexpr std::array<Action_name, 17> action_names{{
+constexpr std::array<Action_name, 19> action_names{{
 		{Controller_action::none, "NONE"},
 		{Controller_action::shift, "SHIFT"},
 		{Controller_action::alt, "ALT"},
@@ -119,13 +119,17 @@ constexpr std::array<Action_name, 17> action_names{{
 		{Controller_action::hold_follow, "HOLD_FOLLOW"},
 		{Controller_action::sort_window, "SORT_WINDOW"},
 		{Controller_action::item_menu, "ITEM_MENU"},
+		{Controller_action::next_window, "NEXT_WINDOW"},
+		{Controller_action::arrange_windows, "ARRANGE_WINDOWS"},
 }};
 
 // Held actions (config/gameplay/controller/hold/<button>): a button with
 // one does its own action on a tap (on release) and this one when held.
-constexpr std::array<std::pair<int, const char*>, 3> default_hold_map{{
+constexpr std::array<std::pair<int, const char*>, 5> default_hold_map{{
 		{SDL_GAMEPAD_BUTTON_SOUTH, "ITEM_MENU"},    // Tap acts on the pick, hold: what else.
 		{SDL_GAMEPAD_BUTTON_DPAD_UP, "HOLD_FOLLOW"},
+		{SDL_GAMEPAD_BUTTON_BACK, "PLAYER_LIST"},          // Tap: the next window.
+		{SDL_GAMEPAD_BUTTON_START, "ARRANGE_WINDOWS"},     // Tap: clear, close, menu.
 		{SDL_GAMEPAD_BUTTON_EAST, "SORT_WINDOW"},    // Tap closes the window, hold tidies it.
 }};
 constexpr Uint64 hold_ms = 350;    // Held this long: the held action.
@@ -1036,6 +1040,10 @@ std::string Describe(const Controller_binding& binding) {
 		return "Sort the newest window";
 	case Controller_action::item_menu:
 		return "Item menu: give, put in, drop...";
+	case Controller_action::next_window:
+		return "Next window to the front";
+	case Controller_action::arrange_windows:
+		return "Arrange the open windows";
 	case Controller_action::key_binding:
 		if (binding.name == "TOGGLE_COMBAT") {
 			return "Combat on or off";

@@ -8725,6 +8725,107 @@ static void Friend_mode_toggle_running() {
 	Friend_mode_notice(Friend_running ? "Running" : "Walking");
 }
 
+// The open windows (packs, paperdolls, chests, stats...), oldest first: not
+// the HUD's, persistent or modal ones.
+static std::vector<Gump*> Friend_open_windows() {
+	std::vector<Gump*> windows;
+	for (Gump* gump : *gwin->get_gump_man()) {
+		if (gump && !gump->is_persistent() && !gump->is_hud() && !gump->is_modal()) {
+			windows.push_back(gump);
+		}
+	}
+	return windows;
+}
+
+// A window's name for the notices: "Iolo" (a paperdoll), "Iolo's backpack",
+// "chest".
+static std::string Friend_window_name(Gump* gump) {
+	Container_game_object* box = gump->get_container();
+	if (!box) {
+		return "Window";
+	}
+	if (Actor* actor = box->as_actor()) {
+		return Friend_target_name(actor);
+	}
+	Game_object* outer  = box->get_outermost();
+	Actor*       holder = outer && outer != box ? outer->as_actor() : nullptr;
+	return holder ? Friend_target_name(holder) + "'s " + Friend_thing_name(box) : Friend_thing_name(box);
+}
+
+// Controller support (Share / View tapped): the oldest open window comes to
+// the front, as a click on it does, so tapping goes round them all; its
+// name shows at the top, and the Target System picks its first thing (R1 /
+// E go on from there).
+static void Friend_mode_next_window() {
+	const std::vector<Gump*> windows = Friend_open_windows();
+	if (windows.empty()) {
+		Friend_mode_target_notice("No windows open");
+		return;
+	}
+	Gump* window = windows.front();
+	if (windows.size() > 1) {
+		Gump_manager* gumps = gwin->get_gump_man();
+		gumps->remove_gump(window);
+		gumps->add_gump(window);
+		gwin->set_all_dirty();
+	}
+	const std::vector<Game_object*> inside = Friend_window_reading_order(window);
+	if (!inside.empty()) {
+		Friend_mode_pick_thing(inside.front(), true);
+	}
+	Friend_mode_target_notice(Friend_window_name(window));
+}
+
+// Controller support (Options / Menu held): the open windows laid out side
+// by side so none overlaps: paperdolls first, then the rest, each in the
+// order opened, in rows from the top left, above the faces and the skill
+// bar.  What doesn't fit cascades from the top left.  Which is in front
+// doesn't change.
+static void Friend_mode_arrange_windows() {
+	std::vector<Gump*> windows = Friend_open_windows();
+	if (windows.empty()) {
+		Friend_mode_target_notice("No windows open");
+		return;
+	}
+	std::stable_partition(windows.begin(), windows.end(), [](Gump* gump) {
+		return gump->get_container() && gump->get_container()->as_actor();
+	});
+	constexpr int margin   = 4;
+	const int     top      = margin;
+	int           bottom   = Friend_hud_bottom_y() - margin;
+	if (bottom <= top + 40) {
+		bottom = gwin->get_height() - margin;
+	}
+	const int right    = gwin->get_width() - margin;
+	int       x        = margin;
+	int       y        = top;
+	int       row      = 0;    // The tallest in this row.
+	int       overflow = 0;
+	for (Gump* gump : windows) {
+		const TileRect rect = gump->get_rect();
+		const int      dx   = rect.x - gump->get_x();    // The window's box against its position.
+		const int      dy   = rect.y - gump->get_y();
+		if (x > margin && x + rect.w > right) {    // Next row.
+			x = margin;
+			y += row + margin;
+			row = 0;
+		}
+		int px = x;
+		int py = y;
+		if (y + rect.h > bottom) {    // No room left: cascade.
+			px = margin + overflow * 14;
+			py = top + overflow * 14;
+			++overflow;
+		} else {
+			x += rect.w + margin;
+			row = std::max(row, rect.h);
+		}
+		gump->set_pos(px - dx, py - dy);
+	}
+	gwin->set_all_dirty();
+	Friend_mode_target_notice("Windows arranged");
+}
+
 // The item menu (controller-plan.md, "Items and equipment"; Cross held on
 // the pad, Ctrl+Space): what can be done with the pick, the entries that
 // apply only.
@@ -9251,6 +9352,12 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 		if (Friend_keyboard_targeting && !notebook) {
 			Friend_mode_item_menu();
 		}
+		break;
+	case Controller_action::next_window:
+		Friend_mode_next_window();
+		break;
+	case Controller_action::arrange_windows:
+		Friend_mode_arrange_windows();
 		break;
 	case Controller_action::sort_window:
 		if (Friend_sort_key && !notebook && gwin->get_main_actor()) {
