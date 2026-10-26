@@ -65,7 +65,7 @@ a second; a tap does the other thing when you let go.
 | R1 / RB | Next thing (with L2 / LT: previous) |
 | L2 / LT, held | Shift (L2+Cross: take all or split); with the pointer up, the left mouse button (hold to drag) |
 | R2 / RT, held | Alt (R2+Cross: drop some); with the pointer up, the right mouse button |
-| Cross / A | Act on the pick: talk, open, take, use, attack |
+| Cross / A | Act on the pick: talk, open, take, use, attack (in a companion's pack or paperdoll: ready or put away on them); held: the item menu (give, put in, split, drop) |
 | Circle / B | Close the newest window (with none, clear the pick); held: sort it |
 | Square / X, held | Skills ring: push the left stick to an entry, let go to use it |
 | Triangle / Y, held | Utilities ring: eat, watch, map, journal, lockpick, keys, hold / follow, spellbook |
@@ -85,6 +85,11 @@ bookmark, L1 / R1 turn the circles, Cross casts the bookmarked spell at your
 pick (L1 / R1 in the world), and holding Square puts it on one of the spell
 bar's three slots (the left stick picks the slot, letting go puts it there).
 On the keyboard, Ctrl+1 to Ctrl+3 do the same with the book open.
+
+When the game asks you to click on something (a key, a spell with no pick),
+R1 / L1 step through the things nearby and Cross clicks on the one picked.
+On the keyboard: the item menu is Ctrl+Space, and E / Shift+E and Space do
+the stepping and clicking.
 
 The buttons can be changed in `exult.cfg` under
 `config/gameplay/controller/buttons` (and `.../hold` for held actions).

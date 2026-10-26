@@ -222,6 +222,29 @@ From playing with a PS4 pad, after the menus and prompts were in:
 19. **Text entries spread sideways** by their widest name (the slot
     picker's boxes met in the middle), and under the open spellbook a
     note says "Turn the page: L1 / R1" in the pad's own names. (Done.)
+20. **Held directions repeat in menus** (and conversations): after 0.4 s,
+    then every 0.12 s, from the D-pad or the left stick; never in the
+    world. The spellbook's note sits 6 pixels lower. (Done.)
+21. **Step 10, items and equipment** (built 2026-10-25, untested with a
+    pad):
+    - Space in a party member's paperdoll or pack (host, single player)
+      readies, swaps or puts away on that member, or opens a bag;
+      Shift+Space takes the one thing into one's own pack (take all
+      stays for other containers). `Friend_window_member`.
+    - Alt+Space on a worn stack puts some back in the wearer's pack
+      (how many). `Friend_mode_put_some_away`.
+    - The item menu: Cross held (tap still acts, on release) or
+      Ctrl+Space. A short list over the screen (`Controller_choose`,
+      the Modal_gump highlight): what Space would do, Give to..., Put
+      in..., Split, Drop, only those that apply.
+    - Give to...: a list of the party's names rather than a highlight on
+      the portraits (simpler, and the same on the keyboard); within reach
+      or "Too far away", how many of a stack, "No room". Guests don't
+      give, as decided.
+    - Put in...: the open container windows, by name.
+    - The crosshair: E / Shift+E (R1 / L1, the D-pad) step through the
+      Target System's things and aim at the one picked; Space (Cross)
+      clicks on it. Only things for now, not people.
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
