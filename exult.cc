@@ -3864,9 +3864,10 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		}
 		return true;
 	}
-	// Anyone else: Shift+Space attacks, combat mode coming on by itself (a
-	// peaceful person only after asking again).
-	if (!thing && shift) {
+	// Anyone else: a hostile one is attacked by Space, Shift+Space attacks
+	// anyone; combat mode comes on by itself (a peaceful person only after
+	// asking again).
+	if (!thing && (shift || (!fighting && Friend_is_hostile_target(own, target)))) {
 		const bool peaceful = target->get_npc_num() > 0 && !Friend_mode_is_hostile(own, target);
 		if (peaceful && !fighting
 			&& !Friend_confirmed(target, Friend_confirm::attack, "Attack " + Friend_target_name(target) + "? Again")) {
@@ -4067,6 +4068,9 @@ static std::string Friend_space_hint() {
 					return two("Talk", view ? "View Character" : "");
 				}
 				return view ? "View Character (" + Friend_key_label("Shift+Space") + ")" : std::string();
+			}
+			if (Friend_is_hostile_target(own, target)) {
+				return two("Attack", "");    // Space attacks a hostile one.
 			}
 			if (talks) {
 				return two("Talk", "Attack");
