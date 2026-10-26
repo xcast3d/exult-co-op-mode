@@ -58,7 +58,7 @@ a second; a tap does the other thing when you let go.
 | Button | In the world |
 | --- | --- |
 | Left stick | Walk (as fast as R's run or walk allows) |
-| L3 / LS (press the left stick) | Run or walk |
+| L3 / LS (press the left stick) | Run or walk (running by default) |
 | Right stick | The pointer (it hides after 5 seconds) |
 | R3 / RS (press the right stick) | Combat on or off |
 | L1 / LB | Next person or creature (with L2 / LT: previous) |

@@ -6159,7 +6159,7 @@ bool Friend_mode_is_guest() {
 // Keyboard play options (exult.h): WASD movement (Game Input) and the
 // Target System (its own options page).  Each machine keeps its own.
 bool                            Friend_wasd_movement  = true;
-bool                            Friend_running        = false;
+bool                            Friend_running        = true;
 bool                            Friend_keyboard_targeting = true;
 bool                            Friend_targeting_circle      = true;
 bool                            Friend_targeting_party       = true;
@@ -8759,8 +8759,7 @@ static std::string Friend_window_name(Gump* gump) {
 static void Friend_mode_next_window() {
 	const std::vector<Gump*> windows = Friend_open_windows();
 	if (windows.empty()) {
-		Friend_mode_target_notice("No windows open");
-		return;
+		return;    // Nothing to do, nothing to say.
 	}
 	Gump* window = windows.front();
 	if (windows.size() > 1) {
@@ -8784,7 +8783,6 @@ static void Friend_mode_next_window() {
 static void Friend_mode_arrange_windows() {
 	std::vector<Gump*> windows = Friend_open_windows();
 	if (windows.empty()) {
-		Friend_mode_target_notice("No windows open");
 		return;
 	}
 	std::stable_partition(windows.begin(), windows.end(), [](Gump* gump) {
@@ -8793,7 +8791,8 @@ static void Friend_mode_arrange_windows() {
 	// Inside what's on screen (with the fill modes the game view can reach
 	// past it: Gump::isOffscreen's area), a little in from the edges.
 	Image_window* iwin   = gwin->get_win();
-	constexpr int margin = 8;
+	constexpr int margin = 16;    // From the screen's edges.
+	constexpr int gap    = 8;     // Between windows.
 	const int     left   = std::max(0, iwin->get_start_x()) + margin;
 	const int     top    = std::max(0, iwin->get_start_y()) + margin;
 	const int     right  = std::min(gwin->get_width(), iwin->get_start_x() + iwin->get_full_width()) - margin;
@@ -8812,7 +8811,7 @@ static void Friend_mode_arrange_windows() {
 		const int      dy   = rect.y - gump->get_y();
 		if (x > left && x + rect.w > right) {    // Next row.
 			x = left;
-			y += row + margin;
+			y += row + gap;
 			row = 0;
 		}
 		int px = x;
@@ -8822,7 +8821,7 @@ static void Friend_mode_arrange_windows() {
 			py = top + overflow * 14;
 			++overflow;
 		} else {
-			x += rect.w + margin;
+			x += rect.w + gap;
 			row = std::max(row, rect.h);
 		}
 		gump->set_pos(px - dx, py - dy);
@@ -9751,7 +9750,8 @@ static void Init() {
 		bool skip_splash;
 		config->value("config/gameplay/skip_splash", skip_splash);
 		config->value("config/gameplay/wasd_movement", Friend_wasd_movement, true);
-		config->value("config/gameplay/running", Friend_running);
+		// Running by default (2026-10-26); R or L3 toggles walking, kept per machine.
+		config->value("config/gameplay/running", Friend_running, true);
 		Friend_targeting_load_settings();
 		Friend_class_load_settings();
 
