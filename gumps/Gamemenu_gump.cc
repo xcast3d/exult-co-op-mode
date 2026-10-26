@@ -338,6 +338,8 @@ void Gamemenu_gump::createButtons() {
 			this, &Gamemenu_gump::class_options, "Class System", margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_controller] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::controller_page, "Controller", margin, yForRow(y++), preferred_button_width, 11);
+	buttons[id_keys] = std::make_unique<Gamemenu_button>(
+			this, &Gamemenu_gump::keys_page, "Keys", margin, yForRow(y++), preferred_button_width, 11);
 	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest()) {
 		buttons[id_open_coop] = std::make_unique<Gamemenu_button>(
 				this, &Gamemenu_gump::open_coop, "Co-Op Mode", margin, yForRow(y++), preferred_button_width, 11);
@@ -447,6 +449,10 @@ void Gamemenu_gump::class_options() {
 
 void Gamemenu_gump::controller_page() {
 	Controller_options_page();    // Its Buttons... shows the list.
+}
+
+void Gamemenu_gump::keys_page() {
+	Friend_mode_keys_page();
 }
 
 void Gamemenu_gump::paint() {

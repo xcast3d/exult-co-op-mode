@@ -40,6 +40,7 @@ private:
 		id_targeting,
 		id_class_system,
 		id_controller,
+		id_keys,
 		id_open_coop,
 		id_main_menu,
 		id_quit,
@@ -85,6 +86,7 @@ public:
 	void targeting_options();    // Friend Mode: Q, E and Space.
 	void class_options();        // Friend Mode: companion skills.
 	void controller_page();      // Controller support: the pad's buttons.
+	void keys_page();            // Friend Mode's keys.
 	void open_coop();    // Co-Op Mode: host, how guests join, closing.
 
 	static void  do_exult_menu();

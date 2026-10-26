@@ -9321,6 +9321,60 @@ static bool Controller_open_slot_picker() {
 	return true;
 }
 
+// The game menu's Keys page: Friend Mode's keys, a page at a time (the
+// controller's are on its own page).
+void Friend_mode_keys_page() {
+	using Rows = std::vector<std::pair<std::string, std::string>>;
+	std::vector<Rows> pages;
+	pages.push_back({
+			{"Targeting:", ""},
+			{"Q / Shift+Q", "Next / previous person"},
+			{"E / Shift+E", "Next / previous thing"},
+			{"Space", "Act: talk, open, take, use; attack a foe"},
+			{"Shift+Space", "Take all; attack; view a companion"},
+			{"Alt+Space", "How many: split, drop or put some away"},
+			{"Ctrl+Space", "Item menu: give, put in, split, drop"},
+			{"Escape", "Clear the pick, close windows, menu"},
+			{"C", "Combat on or off"},
+	});
+	pages.push_back({
+			{"Moving and the party:", ""},
+			{"W A S D", "Walk (doors open and close)"},
+			{"R", "Run or walk"},
+			{"Shift+Tab", "Lead the next companion"},
+			{"Y", "The party holds or follows"},
+			{"I / 1 to 8", "Paperdolls"},
+			{"Shift+I / Shift+1 to 8", "Backpacks"},
+			{"Shift+C", "Sort the newest window"},
+			{"Ctrl+1 to 3", "Skill or spell bar slots"},
+	});
+	pages.push_back({
+			{"Co-Op:", ""},
+			{"Enter or /", "Chat (/ for commands)"},
+			{"Tab, held", "Who plays whom"},
+			{"L", "Chat log on or off"},
+			{"J", "Choose a companion or spectate"},
+			{"Y", "Follow the Avatar, or take over"},
+			{"X", "Watch the next player"},
+	});
+	Controller_show_pages("Keys", pages);
+}
+
+// The pad's picking and acting go through the Target System: with it off
+// they do nothing, so say why (once in a while).
+static bool Controller_needs_targeting() {
+	if (Friend_keyboard_targeting) {
+		return false;
+	}
+	static uint32 said_at = 0;
+	const uint32  now     = static_cast<uint32>(SDL_GetTicks());
+	if (said_at == 0 || now - said_at > 5000) {
+		said_at = now;
+		Friend_mode_notice("The controller needs the Target System (Game menu)");
+	}
+	return true;
+}
+
 // Controller support: what a pad's button does (controller.cc keeps the
 // map; docs/friend-mode/controller-plan.md).  The same calls as the keys,
 // with the held triggers as Shift and Alt.
@@ -9396,6 +9450,18 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 	}
 	if (!down || friend_chat_active) {
 		return;
+	}
+	switch (binding.action) {
+	case Controller_action::target_person:
+	case Controller_action::target_thing:
+	case Controller_action::target_act:
+	case Controller_action::item_menu:
+		if (Controller_needs_targeting()) {
+			return;
+		}
+		break;
+	default:
+		break;
 	}
 	const bool shift    = Controller_shift_held();
 	const bool alt      = Controller_alt_held();

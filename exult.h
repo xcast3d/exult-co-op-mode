@@ -45,6 +45,7 @@ bool Friend_mode_hosting();
 // ('ask', on a second press on 'asker') if some isn't one's to take
 // (Shift+Space in a window, and a container window's take-all button).
 bool Friend_mode_take_all(Container_game_object* from, Game_object* asker, const std::string& ask);
+void Friend_mode_keys_page();    // The game menu's Keys page.
 void Friend_mode_set_hosting(bool on);
 bool Friend_mode_open_to_coop();
 // Host: the lobby code guests type (empty until the lobby answers).

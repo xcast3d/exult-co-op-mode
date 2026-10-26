@@ -160,6 +160,10 @@ void Controller_options_page();
 // Every button and what it does, in the pad's own names (Cross or A...),
 // from the live map.
 void Controller_buttons_page();
+// A list of (key, what it does) rows, a page at a time (left / right turn
+// them): the buttons list, the game menu's Keys page.
+void Controller_show_pages(
+		const std::string& title, const std::vector<std::vector<std::pair<std::string, std::string>>>& pages);
 
 // Exult's other screens, which wait in loops of their own (menus, the
 // "How many?" slider, Yes/No, signs, conversations): the pad's buttons

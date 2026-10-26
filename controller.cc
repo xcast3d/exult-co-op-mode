@@ -31,6 +31,7 @@
 #include <vector>
 
 extern Configuration* config;
+extern bool           Friend_keyboard_targeting;    // The Target System (exult.cc): the pad's L1, R1, Cross...
 
 namespace {
 // Every input a binding can go on: SDL's buttons, then the two triggers
@@ -1120,6 +1121,7 @@ std::vector<std::vector<Page_row>> Page_rows() {
 class Controller_buttons_gump : public Modal_gump {
 	using Button = CallbackTextButton<Controller_buttons_gump>;
 
+	std::string                          title;
 	std::vector<std::vector<Page_row>>   pages;
 	int                                  page = 0;
 	int                                  label_w = 0;
@@ -1139,7 +1141,11 @@ class Controller_buttons_gump : public Modal_gump {
 	}
 
 public:
-	Controller_buttons_gump() : Modal_gump(nullptr, -1), pages(Page_rows()) {
+	Controller_buttons_gump(std::string heading, std::vector<std::vector<Page_row>> rows)
+			: Modal_gump(nullptr, -1), title(std::move(heading)), pages(std::move(rows)) {
+		if (pages.empty()) {
+			pages.emplace_back();
+		}
 		int desc_w = 0;
 		for (const auto& rows : pages) {
 			for (const auto& [label, desc] : rows) {
@@ -1162,9 +1168,9 @@ public:
 			button->paint();
 		}
 		Image_buffer8*    ib    = gwin->get_win()->get_ib8();
-		const std::string title = "Controller  (page " + std::to_string(page + 1) + " of "
-								  + std::to_string(pages.size()) + ")";
-		font->paint_text(ib, title.c_str(), x + label_margin, y + yForRow(0) + 1);
+		const std::string heading = title + "  (page " + std::to_string(page + 1) + " of "
+									+ std::to_string(pages.size()) + ")";
+		font->paint_text(ib, heading.c_str(), x + label_margin, y + yForRow(0) + 1);
 		int row = 1;
 		for (const auto& [label, desc] : pages[page]) {
 			font->paint_text(ib, label.c_str(), x + label_margin, y + yForRow(row) + 1);
@@ -1204,9 +1210,13 @@ public:
 };
 }    // namespace
 
-void Controller_buttons_page() {
-	Controller_buttons_gump page;
+void Controller_show_pages(const std::string& title, const std::vector<std::vector<std::pair<std::string, std::string>>>& pages) {
+	Controller_buttons_gump page(title, pages);
 	Game_window::get_instance()->get_gump_man()->do_modal_gump(&page, Mouse::hand);
+}
+
+void Controller_buttons_page() {
+	Controller_show_pages("Controller", Page_rows());
 }
 
 // The radial menus.
@@ -1778,6 +1788,10 @@ public:
 		Image_buffer8* ib = gwin->get_win()->get_ib8();
 		for (int i = 0; i < set_count; ++i) {
 			font->paint_text(ib, label(i), x + label_margin, y + yForRow(i) + 1);
+		}
+		if (!Friend_keyboard_targeting) {
+			// The pad picks and acts through the Target System.
+			font->paint_text(ib, "Needs the Target System on", x + label_margin, y + yForRow(set_count + 1) + 1);
 		}
 		paint_focus();
 		gwin->set_painted();
