@@ -245,6 +245,18 @@ From playing with a PS4 pad, after the menus and prompts were in:
     - The crosshair: E / Shift+E (R1 / L1, the D-pad) step through the
       Target System's things and aim at the one picked; Space (Cross)
       clicks on it. Only things for now, not people.
+
+### Next (notes for 2026-10-26)
+
+1. **A backpack's window has no name.** Alone on screen it's not clear
+   whose it is: a title above it ("Iolo's backpack"), at least while the
+   pad is in use.
+2. **No way to move between open windows without the pointer.** Open one
+   window, then another: going back to the first needs a click. Maybe
+   the triggers cycle through the open windows (bringing each to the
+   front, the Target System's E then starting in it); but the triggers
+   are Shift and Alt now, so this needs another button or a held combo.
+3. **"Put in..." is a bit confusing.** Left as it is for now; it may go.
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
