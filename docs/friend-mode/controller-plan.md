@@ -1,26 +1,17 @@
 # Controller support (plan)
 
-**Status:** steps 0 to 2 built on `feature/controller` (2026-10-25) and
-played with a PS4 pad: more pads, buttons to actions, the pad names in
-the hint line, the pad pointer. Then (2026-10-25, untested with a pad):
-the pad in Exult's other screens as the keys they take (the title menu,
-windows, the "How many?" slider with left / right and LB / RB by ten,
-Yes/No, signs and conversation choices, which covers most of steps 3 to
-5 and 8); the face buttons drawn as glyphs in the hint line (the
-PlayStation shapes, the Xbox letters). After a pad test: Cross skips the
-intro and scenes as Space does, the left stick drives menus as the D-pad,
-and step 7's highlight is on the game menu and every page it opens
-(Video, Audio and its Mixer, Game Engine, Game Display, Input, Target
-System, Class System, Co-Op Mode, UI and its layer page, Load/Save: up /
-down pick a save, LB / RB the buttons, a new save named by date). Still
-pointer-only: Audio's Advanced page and character creation. Step 6
-built (2026-10-25, untested with a pad): both rings, with placeholder
-plates drawn in code (a dark disc, gold when highlighted) until the art
-in the Art section is made; the utilities ring has the spellbook where
-chat quick phrases would have gone. Steps 10 and 11's buttons list are built too; step 9 (chat) is dropped; step 11's settings page is built too (2026-10-26). (Plan 2026-10-19; current state and Steam Controller notes added
-2026-10-23; button map and direction from a Steam Input test,
-2026-10-25.) Listed under "Possible future projects" in the
-[project brief](../ultima-7-friend-mode.md).
+**Status: built and tested (2026-10-26)** on `feature/controller`, played
+with a PS4 pad and the Steam Controller (Bluetooth), keyboard and mouse
+alongside; ready to merge into `feature/friend-mode`. Every step below is
+built except step 9 (chat), dropped: see "Chat on the pad: not planned".
+The Windows build compiles (GitHub Actions); not yet played on Windows or
+with an Xbox pad. Still pointer-only: Audio's Advanced page and the
+new-game character creation screen. The rings use placeholder plates
+drawn in code until the art in the Art section is made. What was done,
+in order, is in "Pad test notes" and "Next" below. (Plan 2026-10-19;
+current state and Steam Controller notes added 2026-10-23; button map and
+direction from a Steam Input test, 2026-10-25.) Listed under "Possible
+future projects" in the [project brief](../ultima-7-friend-mode.md).
 
 Goal: play Black Gate, alone or in Co-Op Mode, with a gamepad and no
 keyboard or mouse. The [Target System](targeting-groups.md) (Q, E, Space)
@@ -189,10 +180,9 @@ From playing with a PS4 pad, after the menus and prompts were in:
     crosshair and the map too (it closes them; in a conversation it says
     bye). The left half of the ring couldn't be picked (the stick's angle
     wrapped wrongly: left and down-left picked the top-left entry). (Done.)
-14. **Hold / Follow in the utilities ring has no picture.** Either art
-    for it (see Art: "Follow the Avatar"), or take it out of the ring:
-    D-pad up held already does it, and the ring's place could go to the
-    chat quick phrases. (To decide.)
+14. **Hold / Follow in the utilities ring has no picture.** Taken out of
+    the ring (2026-10-26): D-pad up held already does it. The ring has
+    seven entries now, evenly round. (Done.)
 15. **The skill bar hides while the pad is in use** (the skills ring
     shows its slots; it comes back with the mouse or a key). (Done.)
 16. **The spellbook is the Avatar's only.** While leading a companion
@@ -281,6 +271,13 @@ From playing with a PS4 pad, after the menus and prompts were in:
    effect at once; Cancel or Escape leaves it as it was. Off gives the
    mouse cursor and the hidden buttons back. Remapping stays in the
    config. (`Controller_options_page` in controller.cc.)
+
+7. **The crosshair, people or things.** The game doesn't say what a
+   crosshair wants (the script only asks for a click), so the player
+   chooses: L1 (Q) steps through the Target System's people, R1 (E)
+   through its things, as in the world, and Cross (Space) clicks on the
+   one picked last, aimed at the middle of its picture (its hot spot is
+   a corner). (Done, 2026-10-26.)
 
 ### Chat on the pad: not planned (decided 2026-10-26)
 

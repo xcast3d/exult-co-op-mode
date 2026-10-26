@@ -867,8 +867,11 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 	case SDL_GAMEPAD_BUTTON_DPAD_UP:
 	case SDL_GAMEPAD_BUTTON_LEFT_SHOULDER: {
 		const bool dpad = event.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_UP;
-		key = menu ? (dpad ? SDLK_UP : SDLK_PAGEUP) : SDLK_E;
-		mod = menu ? SDL_KMOD_NONE : SDL_KMOD_LSHIFT;
+		// The crosshair (a click wanted): L1 steps through people (Q), as in
+		// the world; elsewhere (conversations) Shift+E, the highlight back.
+		const bool crosshair = !menu && !dpad && Mouse::mouse() && Mouse::mouse()->get_shape() == Mouse::greenselect;
+		key = menu ? (dpad ? SDLK_UP : SDLK_PAGEUP) : (crosshair ? SDLK_Q : SDLK_E);
+		mod = menu || crosshair ? SDL_KMOD_NONE : SDL_KMOD_LSHIFT;
 		break;
 	}
 	case SDL_GAMEPAD_BUTTON_DPAD_DOWN:

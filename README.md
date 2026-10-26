@@ -71,7 +71,7 @@ a second; a tap does the other thing when you let go.
 | Cross / A | Act on the pick: talk, open, take, use, attack (in a companion's pack or paperdoll: ready or put away on them); held: the item menu (give, put in, split, drop) |
 | Circle / B | Close the newest window (with none, clear the pick); held: sort it |
 | Square / X, held | Skills ring: push the left stick to an entry, let go to use it |
-| Triangle / Y, held | Utilities ring: eat, watch, map, journal, lockpick, keys, hold / follow, spellbook |
+| Triangle / Y, held | Utilities ring: eat, watch, map, journal, lockpick, keys, spellbook |
 | D-pad up | Next character; held: the party holds or follows |
 | D-pad left / right / down | Paperdoll / next backpack / stats |
 | Share / View | The next open window to the front (its first thing picked); held: the player list (co-op) |
@@ -89,10 +89,10 @@ pick (L1 / R1 in the world), and holding Square puts it on one of the spell
 bar's three slots (the left stick picks the slot, letting go puts it there).
 On the keyboard, Ctrl+1 to Ctrl+3 do the same with the book open.
 
-When the game asks you to click on something (a key, a spell with no pick),
-R1 / L1 step through the things nearby and Cross clicks on the one picked.
-On the keyboard: the item menu is Ctrl+Space, and E / Shift+E and Space do
-the stepping and clicking.
+When the game asks you to click on something (a key, a spell with no pick,
+drinking from a pool), L1 steps through the people nearby and R1 through
+the things, and Cross clicks on the one picked. On the keyboard: the item
+menu is Ctrl+Space, and Q, E and Space do the stepping and clicking.
 
 The buttons can be changed in `exult.cfg` under
 `config/gameplay/controller/buttons` (and `.../hold` for held actions).

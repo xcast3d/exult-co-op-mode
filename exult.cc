@@ -9116,16 +9116,8 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 							   Friend_mode_target_notice("No key fits");
 						   }
 					   })});
-	// Y: no picture in the game for it yet (a plate with its name).
-	const std::string follow = !Friend_mode_is_guest() ? (friend_holding ? "Party follows" : "Party holds")
-													   : (friend_following ? "Take over" : "Follow Avatar");
-	const bool        can_follow = !Friend_mode_is_guest() ? gwin->get_party_man()->get_count() > 0
-															: friend_session.connected();
-	entries.push_back({follow, {}, {}, can_follow, or_say(can_follow, "No companions", []() {
-						   Friend_mode_hold_or_follow();
-					   })});
-	// Until the chat quick phrases have their place here.  The Avatar's
-	// only: dimmed while leading a companion (or as a guest).
+	// (Hold / Follow isn't here: D-pad up held does it.)  The spellbook is
+	// the Avatar's only: dimmed while leading a companion (or as a guest).
 	const bool avatar   = gwin->get_controlled_actor() == gwin->get_main_actor();
 	const bool can_cast = avatar && has(761);
 	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, can_cast,
@@ -12277,17 +12269,36 @@ static void Handle_event(SDL_Event& event) {
 // (or turns the page) as a click does.
 static bool get_click_space_continues = false;
 
-// The crosshair (Get_click) aimed at the Target System's thing, if it's
-// on the map: the pointer moved onto it (controller support).  False with
-// none.
+// What the crosshair would click on: the Target System's pick, a person
+// (Q) or a thing (E) on the map (they clear each other), or null.
+static Game_object* Friend_crosshair_pick() {
+	if (Actor* person = gwin->get_action_target(); person && person->get_chunk()) {
+		return person;
+	}
+	Game_object* thing = Friend_mode_object_target();
+	return thing && !friend_object_in_window && thing->get_chunk() ? thing : nullptr;
+}
+
+// The middle of 'obj's picture, game coordinates: where a click finds it
+// (its hot spot is a corner).
+static void Friend_picture_middle(Game_object* obj, int& gx, int& gy) {
+	gwin->get_shape_location(obj, gx, gy);
+	if (Shape_frame* frame = obj->get_shape()) {
+		gx += frame->get_width() / 2 - frame->get_xleft();
+		gy += frame->get_height() / 2 - frame->get_yabove();
+	}
+}
+
+// The crosshair (Get_click) aimed at the pick: the pointer moved onto it
+// (controller support).  False with none.
 static bool Friend_aim_crosshair_at_pick() {
-	Game_object* pick = Friend_mode_object_target();
-	if (!pick || friend_object_in_window || !pick->get_chunk()) {
+	Game_object* pick = Friend_crosshair_pick();
+	if (!pick) {
 		return false;
 	}
 	int gx;
 	int gy;
-	gwin->get_shape_location(pick, gx, gy);
+	Friend_picture_middle(pick, gx, gy);
 	int sx;
 	int sy;
 	gwin->get_win()->game_to_screen(gx, gy, gwin->get_fastmouse(), sx, sy);
@@ -12428,18 +12439,25 @@ static bool Get_click(
 						make_screenshot(true);
 						break;
 					}
-					// The crosshair, by keys or the pad (controller support): E and
-					// Shift+E (R1 / L1, the D-pad) step through the Target System's
-					// things and aim at the one picked; Space (Cross) clicks on it.
+					// The crosshair, by keys or the pad (controller support): Q (L1)
+					// steps through the Target System's people, E (R1) through its
+					// things, Shift going back, and aims at the one picked; Space
+					// (Cross) clicks on it.  The game doesn't say which it wants:
+					// the player does.
 					const bool crosshair = !chr && Friend_keyboard_targeting
 										   && Mouse::mouse()->get_shape() == Mouse::greenselect;
-					if (crosshair && c == SDLK_E) {
-						Friend_mode_cycle_object((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);
+					if (crosshair && (c == SDLK_Q || c == SDLK_E)) {
+						const int step = (event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1;
+						if (c == SDLK_Q) {
+							Friend_mode_cycle_target(step);
+						} else {
+							Friend_mode_cycle_object(step);
+						}
 						Friend_aim_crosshair_at_pick();
 						break;
 					}
 					if (crosshair && c == SDLK_SPACE && !event.key.repeat && Friend_aim_crosshair_at_pick()) {
-						gwin->get_shape_location(Friend_mode_object_target(), x, y);
+						Friend_picture_middle(Friend_crosshair_pick(), x, y);
 						g_waiting_for_click = false;
 						return true;
 					}
