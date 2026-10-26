@@ -52,8 +52,11 @@ keyboard and mouse keep working at the same time. The game menu's
 **Controller** page has the settings (the controller on or off, swap
 Cross and Circle for Nintendo-style layouts, pointer speed, how soon the
 pointer hides) and, under **Buttons...**, the buttons with your pad's own
-names. In
-development: the rings' plates are placeholders until their art is done.
+names. The
+controller picks and acts through the **Target System**, so keep it on
+(Game menu → Target System; it is on by default): with it off, the
+shoulders and Cross do nothing and the game says so. The rings' plates are
+placeholders until their art is done.
 
 PlayStation names first, then Xbox. "Held" means held for about a third of
 a second; a tap does the other thing when you let go.

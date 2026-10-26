@@ -279,6 +279,17 @@ From playing with a PS4 pad, after the menus and prompts were in:
    one picked last, aimed at the middle of its picture (its hot spot is
    a corner). (Done, 2026-10-26.)
 
+8. **The Target System must be on.** The pad picks and acts through it;
+   with it off nothing crashes, but L1, R1, Cross, the item menu, Lockpick
+   and Keys and the crosshair's stepping do nothing. Now the game says so
+   ("The controller needs the Target System (Game menu)", at most every 5
+   seconds) and the Controller page shows "Needs the Target System on".
+   Walking, the pointer, menus and the rings work either way. (Done.)
+9. **A Keys page** in the game menu, beside Controller: the keyboard's
+   Friend Mode keys (targeting, moving and the party, Co-Op), a page at a
+   time, sharing the buttons list's window (`Controller_show_pages`,
+   `Friend_mode_keys_page`). (Done.)
+
 ### Chat on the pad: not planned (decided 2026-10-26)
 
 Step 9 (chat quick phrases) and the on-screen keyboard (Text entry,

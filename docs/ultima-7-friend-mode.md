@@ -1,9 +1,9 @@
 # Ultima VII: Friend Mode
 
-**Status:** In development. Two-player co-op works on Mac, and Mac and Windows have played together  
+**Status:** Feature-complete for a first release (2026-10-26). Co-op on Mac and Windows, tested many times, Mac and Windows together; joining by lobby code (WebRTC, with a TURN relay) or by address; the Class System (companion skills, the Avatar's spell bar, Class AI); the Target System and action controls; full controller support. Next: release builds and packaging  
 **Project type:** Experimental cooperative multiplayer fork of Exult  
 **Initial target:** macOS development, Mac/Windows cross-play  
-**Players:** 2 today; next, one player per eligible party companion plus spectators
+**Players:** the host plus one guest per party companion (built; tested with two players so far), plus spectators
 
 ## Vision
 
@@ -33,11 +33,11 @@ The emphasis is on preserving the original game: its story, handcrafted world, c
 
 ## Joining, party capacity, and spectators
 
-The planned guest flow is:
+The guest flow (built):
 
-1. Select **Connect to Host**.
-2. Enter the host address. The final address/discovery experience is still to
-   be decided.
+1. Choose **Co-Op Mode → Join a Game** on the title menu.
+2. Enter a name, the host's **lobby code** (`MOONGLOW-4271`) or address, and
+   the session password if there is one.
 3. After compatibility and session validation, receive the host's current list
    of eligible, unclaimed party companions.
 4. Select a companion and request control. The host grants the claim
@@ -281,13 +281,14 @@ guest types in.
       (`tools/friend-mode/rtc-session-test/`): connected in about 1.2 s,
       300 KB intact, chat and steps both ways. Tested by hand the same day:
       host and guest on one Mac joined by code through the live lobby and
-      played exactly as over TCP. Still to try on two networks.
-- [ ] A relay (TURN) fallback for the networks where a direct connection fails.
+      played exactly as over TCP. Since then played across networks.
+- [x] A relay (TURN) fallback for the networks where a direct connection
+      fails (the lobby hands out short-lived TURN credentials).
 - [x] Keep direct address entry for LAN play and debugging: the host always
       listens on TCP 1992 as well, and an address in Join a Game uses it.
-- [ ] Windows: lobby codes in the Windows build (a recursive submodule
+- [x] Windows: lobby codes in the Windows build (a recursive submodule
       checkout, `build-rtc.sh` under MSYS2, and a CA bundle shipped with the
-      game); today's Windows build joins by address only.
+      game), built by the `friend-mode-windows` workflow.
 - [x] Optional session password; WebRTC also encrypts the connection.
       Built 2026-10-23 with the Co-Op menu (Lobby code or IP, the code or
       address to share, close to new players) and a kick X in the Tab list;
@@ -296,8 +297,9 @@ guest types in.
       limits on half-open connections, password guessing and renaming):
       see [security](friend-mode/security.md).
 - [x] Windows build ([Windows build plan](friend-mode/windows-build.md));
-      Mac and Windows have played together.
-- [ ] Mac/Windows compatibility testing and builds for release.
+      Mac and Windows have played together, tested many times (2026-10-26).
+- [x] Mac/Windows compatibility testing.
+- [ ] Builds for release (Mac and Windows).
 - [ ] Packaging, compatibility matrix, installation instructions, and
       GPL-compliant distribution.
 
@@ -645,19 +647,21 @@ simulate several regions.
 - [ ] Remove companion-return range restrictions.
 - [ ] Test quests, schedules, sound, pathfinding, and world changes at long distance.
 
-### Controller support
+### Controller support (done)
 
-Plan: [controller support](friend-mode/controller-plan.md) (button map,
-conversation choices by highlight, menus, chat phrases). Play from a
-gamepad, without touching the keyboard. Targeting already
-covers most of it: a stick to walk (as WASD), buttons for Q, E and Space,
-combat mode, the inventory and the game menu. What a gamepad can't do is
-drag: picking up, moving and dropping items needs a "pick up" button on the
-E pick (into the companion's pack) and a way to move items between packs
-and equipment slots without the mouse. Exult already has quick pickups to
-look at. Also needs: picking conversation answers (they take 1-9 and a-z
-today), chat (an on-screen keyboard, or quick phrases), and the menus.
-Only an idea for now (2026-10-19).
+**Built, tested and merged 2026-10-26** ([controller
+plan](friend-mode/controller-plan.md)). Black Gate plays from an Xbox,
+PlayStation or Steam Controller pad with the keyboard and mouse still
+working alongside: targeting on the shoulders (L1 people, R1 things, Cross
+acts, L2 / R2 as Shift and Alt), a pad pointer on the right stick, the
+skills and utilities rings, the spellbook and its slots, the item menu
+(Give to...), every menu and option page, conversations, the Join screen,
+and windows moved between and arranged without the pointer. The button
+names follow the pad (Cross or A). It works through the Target System, so
+that must be on. Chat on a pad is not planned (a chatpad attachment works;
+most players use voice chat). The game menu has a Controller page
+(settings and the buttons list) and a Keys page (the keyboard's Friend
+Mode keys).
 
 ### Exult in the browser
 
@@ -676,7 +680,11 @@ through Emscripten.
 - [ ] Hosting: browsers slow down background tabs, so a host in a hidden tab
       slows everyone. Warn the host, or keep hosting to native builds.
 
-### Companion skills
+### Companion skills (done)
+
+**Built, tested and tuned** (the 2026-10-22 and 10-23 rounds and since):
+the Class System as described below, the skill and spell bars, the Class
+AI, and leading a companion. What follows is the original idea.
 
 Two or three skills per companion, from the class they had in Ultima IV,
 so a guest playing one as their "main" has more to do in a fight than let
@@ -773,18 +781,27 @@ replicate, saves with players in them) were answered while building Phases
 
 ## Next steps
 
-1. **Lobby codes over WebRTC** (Phase 8), the last step before an
-   official release: built and hand-tested on the Mac (`friendrtc.cc`),
-   hardened lobby redeployed; next the Co-Op menu (Lobby or IP, password,
-   close the lobby, kick), two networks, the Windows build, TURN fallback,
-   then release builds and packaging.
-2. **A test with more players:** Phase 6's three-player exit test, two
-   people grabbing the same item, four players, and guests' movement over
-   a real internet connection.
-3. **The Class System:** keys for the skill bars, and balancing over
-   longer play (tested and tuned in the 2026-10-22 and 10-23 rounds).
-4. **The in-game keyboard command list and the webpage feature list**,
-   once the in-game features settle.
+(Updated 2026-10-26.) Co-op, lobby codes, the Class System, the Target
+System and controller support are built and tested; Mac and Windows play
+together.
+
+1. **Release builds and packaging:** Mac and Windows builds for release,
+   installation instructions, a compatibility note (Black Gate only, same
+   build on every machine), and GPL-compliant distribution (source, the
+   licence, no game data).
+2. **A test with more players:** three or four (host and two or three
+   guests), the two-people-grab-one-item check, and long internet sessions
+   (Phase 6's exit criterion).
+3. **The webpage:** the feature list and shortcuts in `ultima7-co-op-site`
+   brought up to date (the controller, the Keys page, the item menu), and
+   the roadmap there (controller support is done).
+4. **Fixes from play,** as they come (the latest are in
+   [feedback 2026-10-25](friend-mode/feedback-2026-10-25.md), all fixed).
+5. **Later, optional:** co-op scaling (only if combat proves too easy), the
+   ring art for the controller, splitting `exult.cc` and the clean
+   branches before a public fork ([branching](friend-mode/branching.md)),
+   offering features to Exult ([upstreaming](friend-mode/upstreaming.md)),
+   Serpent Isle (Phase 10), and the future ideas above.
 
 ---
 
