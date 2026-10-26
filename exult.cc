@@ -6840,6 +6840,7 @@ bool Friend_mode_download_world() {
 		}
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
+			Controller_screen_event(event, true);    // Controller support: the pad as keys.
 			if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_ESCAPE) {
 				friend_session.stop();
 				return false;
@@ -7572,6 +7573,7 @@ bool Friend_mode_edit_password() {
 
 		SDL_Event event;
 		while (SDL_PollEvent(&event)) {
+			Controller_screen_event(event, true);    // Controller support: the pad as keys.
 			if (event.type == SDL_EVENT_TEXT_INPUT) {
 				for (const char* ch = event.text.text; *ch && password.size() < 32; ++ch) {
 					if (static_cast<unsigned char>(*ch) >= 32 && static_cast<unsigned char>(*ch) < 127) {
@@ -7676,6 +7678,7 @@ bool Friend_mode_collect_connection_details() {
 		SDL_Event     event;
 		SDL_Renderer* renderer = SDL_GetRenderer(window);
 		while (SDL_PollEvent(&event)) {
+			Controller_screen_event(event, true);    // Controller support: the pad as keys.
 			if (event.type == SDL_EVENT_TEXT_INPUT) {
 				const std::size_t limit = active == 0 ? 20 : (active == 1 ? 128 : 32);
 				for (const char* ch = event.text.text; *ch && values[active].size() < limit; ++ch) {
@@ -9131,6 +9134,40 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 			gwin->set_all_dirty();
 		}
 		return;
+	}
+	// A guest during the Avatar's conversation: R1 / L1 and the D-pad move
+	// the highlight through the choices, Cross suggests it (as E, Shift+E
+	// and Space do).
+	if (down && Friend_mode_is_guest() && gwin->is_network_dialogue_paused() && !friend_chat_active) {
+		Conversation* conversation = gwin->get_usecode()->get_conversation();
+		if (conversation && conversation->choices_shown()) {
+			int step = 0;
+			switch (binding.action) {
+			case Controller_action::target_thing:
+				step = 1;
+				break;
+			case Controller_action::target_person:
+			case Controller_action::next_character:    // D-pad up.
+				step = -1;
+				break;
+			case Controller_action::key_binding:
+				step = binding.name == "STATS" ? 1 : 0;    // D-pad down.
+				break;
+			case Controller_action::target_act: {
+				const int choice = conversation->get_highlight();
+				if (choice >= 0 && choice < conversation->get_num_answers()) {
+					friend_session.send_suggestion(friend_session.local_player(), conversation->get_answer(choice));
+				}
+				return;
+			}
+			default:
+				break;
+			}
+			if (step != 0) {
+				conversation->move_highlight(step);
+				return;
+			}
+		}
 	}
 	if (binding.action == Controller_action::skills_ring || binding.action == Controller_action::utilities_ring) {
 		// Held: the ring opens; let go: the highlighted entry is used.

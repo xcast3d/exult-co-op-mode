@@ -17,7 +17,7 @@ pointer-only: Audio's Advanced page and character creation. Step 6
 built (2026-10-25, untested with a pad): both rings, with placeholder
 plates drawn in code (a dark disc, gold when highlighted) until the art
 in the Art section is made; the utilities ring has the spellbook where
-chat quick phrases will go. Steps 9 to 11 are still a plan. (Plan 2026-10-19; current state and Steam Controller notes added
+chat quick phrases would have gone. Steps 10 and 11's buttons list are built too; step 9 (chat) is dropped; the settings of step 11 are left. (Plan 2026-10-19; current state and Steam Controller notes added
 2026-10-23; button map and direction from a Steam Input test,
 2026-10-25.) Listed under "Possible future projects" in the
 [project brief](../ultima-7-friend-mode.md).
@@ -257,6 +257,24 @@ From playing with a PS4 pad, after the menus and prompts were in:
    front, the Target System's E then starting in it); but the triggers
    are Shift and Alt now, so this needs another button or a held combo.
 3. **"Put in..." is a bit confusing.** Left as it is for now; it may go.
+4. **The Join screen didn't move with the D-pad or left stick** between
+   its fields (name, code or IP, password); nor the password screen or
+   the "Connecting" wait. Their loops now take the pad as keys (Cross
+   joins, Circle or Options goes back). (Done, 2026-10-26.)
+5. **A guest couldn't suggest a reply from the pad** during the Avatar's
+   conversation: R1 / L1 and the D-pad now move the highlight, Cross
+   suggests it. (Done, 2026-10-26.)
+
+### Chat on the pad: not planned (decided 2026-10-26)
+
+Step 9 (chat quick phrases) and the on-screen keyboard (Text entry,
+options 2 and 3) are dropped. The main game never needs typing; chat is a
+Co-Op feature only, and players who play together this way are mostly on
+Discord (or another voice chat). Anyone who wants to type in chat with a
+pad can use a chatpad attachment (made for both PlayStation and Xbox
+pads), which types as a keyboard. The utilities ring keeps the spellbook
+where the quick phrases would have gone. Save names already get the date
+on the pad, so nothing else needs a keyboard.
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
@@ -444,6 +462,9 @@ of the skill icons):
 
 ## Text entry
 
+**Dropped (2026-10-26):** see "Chat on the pad: not planned" above. What
+follows is kept as it was planned.
+
 Typing (chat, the journal, save names) stays on the keyboard. Options for
 no keyboard, in order of effort:
 
@@ -586,7 +607,7 @@ see it.
      saved without typing.
 8. **Number prompts** ("How many?", the quantity slider): D-pad left /
    right change by one, LB / RB by ten, south accepts, Start cancels.
-9. **Chat.** No keyboard: a short list of quick phrases ("Follow me", "Wait
+9. **Chat.** (Dropped 2026-10-26: see "Chat on the pad: not planned".) No keyboard: a short list of quick phrases ("Follow me", "Wait
    here", "Over here", "Ready", "Thanks") and the emotes (`/wave`,
    `/bow`...), on R3 or in the utilities ring, picked like conversation
    choices. Typing: see Text entry.
@@ -608,7 +629,7 @@ see it.
 3. Step 6: radial menus (skills, utilities).
 4. Steps 7 and 8: menus, option pages, number prompts.
 5. Step 10: items and equipment (Space for the owner, item menu, Give).
-6. Step 9 and Text entry.
+6. Step 9 and Text entry (dropped 2026-10-26).
 7. Step 11: options page and remapping.
 
 ## Testing
