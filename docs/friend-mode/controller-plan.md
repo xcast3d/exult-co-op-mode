@@ -219,6 +219,9 @@ From playing with a PS4 pad, after the menus and prompts were in:
     read at that size. Parchment skill icons carry their own tile, so
     they get no plate behind them (a gold frame when highlighted); colour
     icons keep the plate. (Done.)
+19. **Text entries spread sideways** by their widest name (the slot
+    picker's boxes met in the middle), and under the open spellbook a
+    note says "Turn the page: L1 / R1" in the pad's own names. (Done.)
 9. **Xbox:** every Xbox pad has View where the PS4 has Share (SDL's
    Back); Series pads add a Share button (SDL's MISC1), unmapped.
 
