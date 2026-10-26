@@ -25,7 +25,8 @@ bundle: ${EXE_TARGET}
 	$(INSTALL_DATA) $(srcdir)/COPYING $(bundle_name)/Contents/Documents
 	$(INSTALL_DATA) $(srcdir)/FAQ $(bundle_name)/Contents/Documents
 	$(INSTALL_DATA) $(srcdir)/NEWS $(bundle_name)/Contents/Documents
-	$(INSTALL_DATA) $(srcdir)/README $(bundle_name)/Contents/Documents
+	$(INSTALL_DATA) $(srcdir)/README-exult.txt $(bundle_name)/Contents/Documents
+	$(INSTALL_DATA) $(srcdir)/README.md $(bundle_name)/Contents/Documents
 	$(INSTALL_DATA) $(srcdir)/README.macOS $(bundle_name)/Contents/Documents
 if WITH_OSX_CODE_SIGNATURE
 	  codesign \
