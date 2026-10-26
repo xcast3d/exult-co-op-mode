@@ -8790,30 +8790,35 @@ static void Friend_mode_arrange_windows() {
 	std::stable_partition(windows.begin(), windows.end(), [](Gump* gump) {
 		return gump->get_container() && gump->get_container()->as_actor();
 	});
-	constexpr int margin   = 4;
-	const int     top      = margin;
-	int           bottom   = Friend_hud_bottom_y() - margin;
+	// Inside what's on screen (with the fill modes the game view can reach
+	// past it: Gump::isOffscreen's area), a little in from the edges.
+	Image_window* iwin   = gwin->get_win();
+	constexpr int margin = 8;
+	const int     left   = std::max(0, iwin->get_start_x()) + margin;
+	const int     top    = std::max(0, iwin->get_start_y()) + margin;
+	const int     right  = std::min(gwin->get_width(), iwin->get_start_x() + iwin->get_full_width()) - margin;
+	int bottom = std::min(gwin->get_height(), iwin->get_start_y() + iwin->get_full_height()) - margin;
+	bottom     = std::min(bottom, Friend_hud_bottom_y() - margin);
 	if (bottom <= top + 40) {
 		bottom = gwin->get_height() - margin;
 	}
-	const int right    = gwin->get_width() - margin;
-	int       x        = margin;
-	int       y        = top;
+	int x = left;
+	int y = top;
 	int       row      = 0;    // The tallest in this row.
 	int       overflow = 0;
 	for (Gump* gump : windows) {
 		const TileRect rect = gump->get_rect();
 		const int      dx   = rect.x - gump->get_x();    // The window's box against its position.
 		const int      dy   = rect.y - gump->get_y();
-		if (x > margin && x + rect.w > right) {    // Next row.
-			x = margin;
+		if (x > left && x + rect.w > right) {    // Next row.
+			x = left;
 			y += row + margin;
 			row = 0;
 		}
 		int px = x;
 		int py = y;
 		if (y + rect.h > bottom) {    // No room left: cascade.
-			px = margin + overflow * 14;
+			px = left + overflow * 14;
 			py = top + overflow * 14;
 			++overflow;
 		} else {
