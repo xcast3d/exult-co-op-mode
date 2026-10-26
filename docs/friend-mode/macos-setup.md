@@ -69,3 +69,36 @@ git rebase upstream/master
 
 Friend Mode work belongs on `feature/friend-mode`; avoid mixing upstream-only
 baseline commits with the experimental engine changes.
+
+## Release build (a disk image to share)
+
+How the 2026-10-26 release (`Exult-Friend-Mode-macOS-arm64-617fa85.dmg`)
+was made. Development builds use plain `./configure`, which has no
+optimization; a release needs it:
+
+```sh
+./configure --with-optimization=normal     # -O2
+make clean && make -j8
+rm -rf Exult.app && make bundle_shared      # the app, with Homebrew's libraries copied in (dylibbundler)
+for f in Exult.app/Contents/Resources/lib/*.dylib; do codesign --force --sign - "$f"; done
+codesign --force --sign - Exult.app         # ad-hoc: each library first, then the app
+codesign --verify --deep --strict Exult.app
+```
+
+Sign every library by itself: `dylibbundler` rewrites their paths, which
+breaks their signatures, and `codesign --deep` doesn't reach
+`Contents/Resources/lib`; an unsigned library gets the app killed at launch
+("Code Signature Invalid"). Check nothing still points at Homebrew:
+`otool -L` on the app and each library shouldn't list `/opt/homebrew`.
+
+Then a disk image with `hdiutil`: a folder with `Exult.app`, a link to
+`/Applications`, the Friend Mode `README.md`, `README.macOS`, `COPYING` and
+the commit, made with
+`hdiutil create -volname "Exult Friend Mode" -srcfolder <folder> -format UDZO <name>.dmg`.
+(`make osxdmg` is upstream's "Git Snapshot" image and needs `create-dmg`.)
+
+The build is arm64 only (Homebrew's libraries are), and ad-hoc signed, not
+notarized: on first launch players right-click → Open, or allow it under
+System Settings → Privacy & Security. Notarizing needs an Apple Developer
+ID. The Windows release is the `friend-mode-windows` workflow's artifact
+([Windows build](windows-build.md)).

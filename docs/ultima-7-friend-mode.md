@@ -299,7 +299,10 @@ guest types in.
 - [x] Windows build ([Windows build plan](friend-mode/windows-build.md));
       Mac and Windows have played together, tested many times (2026-10-26).
 - [x] Mac/Windows compatibility testing.
-- [ ] Builds for release (Mac and Windows).
+- [x] Builds for release (Mac and Windows): the first, 2026-10-26, from
+      `617fa85` (an optimized, self-contained Mac disk image, arm64, ad-hoc
+      signed; the Windows workflow's zip). How:
+      [macOS release build](friend-mode/macos-setup.md#release-build-a-disk-image-to-share).
 - [ ] Packaging, compatibility matrix, installation instructions, and
       GPL-compliant distribution.
 
