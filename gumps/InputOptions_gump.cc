@@ -225,6 +225,9 @@ InputOptions_gump::InputOptions_gump() : Modal_gump(nullptr, -1) {
 	// Cancel
 	buttons[id_cancel]
 			= std::make_unique<InputOptions_button>(this, &InputOptions_gump::cancel, Strings::CANCEL(), 75, yForRow(12), 50);
+	// Friend Mode: the Keys page (the keyboard's Friend Mode keys).
+	buttons[id_keys]
+			= std::make_unique<InputOptions_button>(this, &InputOptions_gump::show_keys, "Keys...", label_margin + 0, yForRow(10), 60);
 
 	build_buttons();
 }

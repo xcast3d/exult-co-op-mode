@@ -3593,296 +3593,6 @@ void Paint_circles() {
 }
 
 /*
- *  Effect preview: steps through U7's sprite effects, missile pictures and
- *  sound effects, playing each on one's character, with its number, so a
- *  skill's look can be chosen by number.  Opened from the Class System page;
- *  a HUD panel at the top of the view, so the game keeps running.
- */
-
-class Effect_preview;
-Effect_preview* the_preview = nullptr;
-bool            open_preview = false;    // Asked for from the options page.
-
-enum class Preview_mode { sprites, missiles, sounds };
-
-// The missile pictures weapons and ammunition fly as (shapes.vga).
-const std::vector<int>& Missile_shapes() {
-	static std::vector<int> shapes;
-	if (shapes.empty()) {
-		Vga_file& file = Shape_manager::get_instance()->get_file(SF_SHAPES_VGA);
-		for (int shape = 0; shape < file.get_num_shapes(); ++shape) {
-			const Shape_info& info = ShapeID::get_info(shape);
-			if (const Weapon_info* winf = info.get_weapon_info()) {
-				const int proj = winf->get_projectile();
-				shapes.push_back(proj == -3 ? shape : proj);    // -3: the weapon itself flies.
-			}
-			if (const Ammo_info* ainf = info.get_ammo_info()) {
-				const int sprite = ainf->get_sprite_shape();
-				shapes.push_back(sprite == -3 ? shape : sprite);
-			}
-		}
-		shapes.erase(std::remove_if(shapes.begin(), shapes.end(),
-							 [&file](int shape) {
-								 return shape < 0 || shape >= file.get_num_shapes();
-							 }),
-					 shapes.end());
-		std::sort(shapes.begin(), shapes.end());
-		shapes.erase(std::unique(shapes.begin(), shapes.end()), shapes.end());
-	}
-	return shapes;
-}
-
-class Effect_preview : public Gump {
-	using Button = CallbackTextButton<Effect_preview>;
-	enum { b_mode, b_back10, b_back, b_play, b_next, b_next10, b_close, b_count };
-	std::array<std::unique_ptr<Gump_button>, b_count> buttons;
-	Preview_mode                                      mode  = Preview_mode::sprites;
-	std::array<int, 3>                                place = {0, 0, 0};    // Each mode's position.
-	TileRect                                          region{0, 0, 0, 0};
-	static constexpr int                              width  = 196;
-	static constexpr int                              height = 44;
-
-	int count() const {
-		switch (mode) {
-		case Preview_mode::sprites:
-			return Shape_manager::get_instance()->get_file(SF_SPRITES_VGA).get_num_shapes();
-		case Preview_mode::missiles:
-			return static_cast<int>(Missile_shapes().size());
-		case Preview_mode::sounds: {
-			Audio* audio = Audio::get_ptr();
-			Flex*  sfx   = audio ? audio->get_sfx_file() : nullptr;
-			return sfx ? static_cast<int>(sfx->number_of_objects()) : 0;
-		}
-		}
-		return 0;
-	}
-
-	int& at() {
-		return place[static_cast<int>(mode)];
-	}
-
-	// The number to put in a skill's definition.
-	int number() {
-		if (mode == Preview_mode::missiles) {
-			const auto& shapes = Missile_shapes();
-			return at() < static_cast<int>(shapes.size()) ? shapes[at()] : -1;
-		}
-		return at();
-	}
-
-	void step(int by) {
-		const int n = count();
-		if (n <= 0) {
-			return;
-		}
-		at() = ((at() + by) % n + n) % n;
-		play();
-	}
-
-	void back10() {
-		step(-10);
-	}
-
-	void back() {
-		step(-1);
-	}
-
-	void next() {
-		step(1);
-	}
-
-	void next10() {
-		step(10);
-	}
-
-	void switch_mode() {
-		mode = mode == Preview_mode::sprites    ? Preview_mode::missiles
-			   : mode == Preview_mode::missiles ? Preview_mode::sounds
-												: Preview_mode::sprites;
-		Gwin()->set_all_dirty();
-	}
-
-	void close_preview() {
-		Gwin()->get_gump_man()->close_gump(this);
-	}
-
-public:
-	Effect_preview() : Gump(nullptr, 0, 0, 0, SF_GUMPS_VGA) {
-		buttons[b_mode]   = std::make_unique<Button>(this, &Effect_preview::switch_mode, "Kind", 4, 26, 34, 12);
-		buttons[b_back10] = std::make_unique<Button>(this, &Effect_preview::back10, "<<", 40, 26, 20, 12);
-		buttons[b_back]   = std::make_unique<Button>(this, &Effect_preview::back, "<", 62, 26, 20, 12);
-		buttons[b_play]   = std::make_unique<Button>(this, &Effect_preview::play, "Play", 84, 26, 30, 12);
-		buttons[b_next]   = std::make_unique<Button>(this, &Effect_preview::next, ">", 116, 26, 20, 12);
-		buttons[b_next10] = std::make_unique<Button>(this, &Effect_preview::next10, ">>", 138, 26, 20, 12);
-		buttons[b_close]  = std::make_unique<Button>(this, &Effect_preview::close_preview, "Close", 160, 26, 32, 12);
-		place_panel();
-	}
-
-	~Effect_preview() override {
-		if (the_preview == this) {
-			the_preview = nullptr;
-		}
-		Gwin()->set_all_dirty();
-	}
-
-	bool is_persistent() const override {
-		return true;
-	}
-
-	bool is_draggable() const override {
-		return false;
-	}
-
-	bool is_hud() const override {
-		return true;
-	}
-
-	TileRect get_rect() const override {
-		return region;
-	}
-
-	TileRect get_dirty() override {
-		return region;
-	}
-
-	bool has_point(int mx, int my) const override {
-		return region.has_point(mx, my);
-	}
-
-	Gump_button* on_button(int mx, int my) override {
-		for (auto& button : buttons) {
-			if (Gump_button* found = button->on_button(mx, my)) {
-				return found;
-			}
-		}
-		return nullptr;
-	}
-
-	// Top centre of the view.
-	void place_panel() {
-		Image_window* iwin = Gwin()->get_win();
-		const int     bx   = iwin->get_start_x() + (iwin->get_end_x() - iwin->get_start_x() - width) / 2;
-		const int     by   = iwin->get_start_y() + 4;
-		if (bx != region.x || by != region.y) {
-			region = TileRect(bx, by, width, height);
-			x      = bx;
-			y      = by;
-			Gwin()->set_all_dirty();
-		}
-	}
-
-	// Play the current one on one's character.
-	void play() {
-		Game_window* gwin  = Gwin();
-		Actor*       actor = gwin->get_controlled_actor() ? gwin->get_controlled_actor() : gwin->get_main_actor();
-		const int    num   = number();
-		if (!actor || num < 0) {
-			return;
-		}
-		switch (mode) {
-		case Preview_mode::sprites:
-			// Some numbers are empty (Black Gate's 20 and 25).
-			if (ShapeID(num, 0, SF_SPRITES_VGA).get_num_frames() <= 0) {
-				cout << "Friend Class: preview sprite " << num << " is empty" << endl;
-				Friend_mode_class_notice("Sprite " + std::to_string(num) + " is empty");
-				return;
-			}
-			gwin->get_effects()->add_effect(std::make_unique<Sprites_effect>(num, actor, 0, 0, 0, 0));
-			break;
-		case Preview_mode::missiles: {
-			// At the pick, or six tiles the way the character faces.
-			Actor*     pick = gwin->get_action_target();
-			Tile_coord to   = actor->get_tile();
-			if (pick) {
-				to = pick->get_tile();
-			} else {
-				const int dir = actor->get_dir_facing();    // 0 north, clockwise, by eighths.
-				static const int dx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
-				static const int dy[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
-				to.tx += 6 * dx[dir & 7];
-				to.ty += 6 * dy[dir & 7];
-			}
-			const Tile_coord from = actor->get_tile();
-			gwin->get_effects()->add_effect(std::make_unique<Projectile_effect>(from, to, num, num, -1));
-			Friend_mode_note_projectile(from, to, num, num, -1);
-			break;
-		}
-		case Preview_mode::sounds:
-			if (Audio* audio = Audio::get_ptr()) {
-				audio->play_sound_effect(num, actor);
-			}
-			Friend_mode_note_sound(num, actor);
-			break;
-		}
-		cout << "Friend Class: preview "
-			 << (mode == Preview_mode::sprites ? "sprite " : mode == Preview_mode::missiles ? "missile " : "sound ") << num
-			 << endl;
-		gwin->set_all_dirty();
-	}
-
-	void paint() override {
-		Shape_manager* sman = Shape_manager::get_instance();
-		Image_buffer8* buf  = Gwin()->get_win()->get_ib8();
-		int            sx   = 0;
-		int            sy   = 0;
-		local_to_screen(sx, sy);
-		buf->fill8(0, width, height, sx, sy);
-		const int line = sman->get_special_pixel(PROTECT_PIXEL);
-		buf->fill8(line, width, 1, sx, sy);
-		buf->fill8(line, width, 1, sx, sy + height - 1);
-		buf->fill8(line, 1, height, sx, sy);
-		buf->fill8(line, 1, height, sx + width - 1, sy);
-		const int n   = count();
-		const int num = number();
-		char      text[80];
-		switch (mode) {
-		case Preview_mode::sprites:
-			std::snprintf(text, sizeof(text), "Sprite %d  (%d of %d, %d frames)", num, at() + 1, n,
-						  n > 0 ? sman->get_file(SF_SPRITES_VGA).get_num_frames(num) : 0);
-			break;
-		case Preview_mode::missiles:
-			std::snprintf(text, sizeof(text), "Missile %d  (%d of %d)", num, at() + 1, n);
-			break;
-		case Preview_mode::sounds:
-			if (n > 0) {
-				std::snprintf(text, sizeof(text), "Sound %d  (%d of %d)", num, at() + 1, n);
-			} else {
-				std::snprintf(text, sizeof(text), "No sound effects installed");
-			}
-			break;
-		}
-		sman->paint_text(0, text, sx + 6, sy + 4);
-		sman->paint_text(0, "Kind: sprites, missiles, sounds", sx + 6, sy + 14);
-		for (auto& button : buttons) {
-			button->paint();
-		}
-	}
-};
-
-void Update_preview() {
-	Gump_manager* gumps = Gwin()->get_gump_man();
-	if (the_preview) {
-		bool open = false;
-		for (auto it = gumps->begin(); it != gumps->end(); ++it) {
-			open = open || *it == the_preview;
-		}
-		if (!open) {
-			the_preview = nullptr;
-		}
-	}
-	if (open_preview) {
-		open_preview = false;
-		if (!the_preview && !Gwin()->is_in_exult_menu()) {
-			the_preview = new Effect_preview();
-			gumps->add_gump(the_preview);
-		}
-	}
-	if (the_preview) {
-		the_preview->place_panel();
-	}
-}
-
-/*
  *  The options page.
  */
 
@@ -3891,7 +3601,7 @@ class Class_options_gump : public Modal_gump {
 	// there are items (a story question, decided later).
 	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_foe, set_ai, set_count };
 
-	enum button_ids { id_ok, id_cancel, id_preview, id_first_setting, id_count = id_first_setting + set_count };
+	enum button_ids { id_ok, id_cancel, id_first_setting, id_count = id_first_setting + set_count };
 
 	std::array<int, set_count>                         settings{};
 	std::array<std::unique_ptr<Gump_button>, id_count> buttons;
@@ -3931,15 +3641,13 @@ class Class_options_gump : public Modal_gump {
 
 public:
 	Class_options_gump() : Modal_gump(nullptr, -1) {
-		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 3)), -1);
+		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 2)), -1);
 		settings = {Friend_class_enabled ? 1 : 0, Friend_class_bar_position, Friend_class_icon_style - friend_icons_colour,
 					Friend_class_show_ranges ? 1 : 0, Friend_class_auto_foe ? 1 : 0, Friend_class_ai ? 1 : 0};
 		buttons[id_ok]     = std::make_unique<Button>(this, &Class_options_gump::close, GumpStrings::OK(), 25,
-                                                  yForRow(set_count + 2), 50);
+													  yForRow(set_count + 1), 50);
 		buttons[id_cancel] = std::make_unique<Button>(this, &Class_options_gump::cancel, GumpStrings::CANCEL(), 75,
-													  yForRow(set_count + 2), 50);
-		buttons[id_preview] = std::make_unique<Button>(
-				this, &Class_options_gump::preview, "Effect preview", 25, yForRow(set_count + 1), 100);
+													  yForRow(set_count + 1), 50);
 		const std::vector<std::string> yesNo = {GumpStrings::No(), GumpStrings::Yes()};
 		const std::vector<std::string> places
 				= {"Above status bar", "Bottom left", "Bottom right", "Top left", "Top right", "Left side", "Right side"};
@@ -3977,12 +3685,6 @@ public:
 
 	void cancel() {
 		done = true;
-	}
-
-	// Close the page and open the effect preview panel.
-	void preview() {
-		open_preview = true;
-		done         = true;
 	}
 
 	Gump_button* on_button(int mx, int my) override {
@@ -4280,7 +3982,6 @@ void Friend_class_frame() {
 		}
 	}
 	Update_bar();
-	Update_preview();
 	Paint_circles();
 	Update_marks();
 }

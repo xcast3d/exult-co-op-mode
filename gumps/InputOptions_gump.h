@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #define INPUTOPTIONS_GUMP_H
 
 #include "Modal_gump.h"
+#include "exult.h"
 
 #include <array>
 #include <memory>
@@ -46,6 +47,7 @@ private:
 		id_ok    = id_first,
 		id_help,
 		id_cancel,
+		id_keys,    // Friend Mode: the Keys page.
 		id_first_setting,
 		id_doubleclick = id_first_setting,
 		id_rightclick_close,
@@ -78,6 +80,11 @@ public:
 	void save_settings();
 	void cancel();
 	void help();
+
+	void show_keys() {    // Friend Mode's keys (exult.cc).
+		Friend_mode_keys_page();
+		paint();
+	}
 
 	void toggle_doubleclick(int state) {
 		doubleclick = state;
