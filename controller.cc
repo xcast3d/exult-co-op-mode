@@ -41,6 +41,10 @@ constexpr int input_count   = SDL_GAMEPAD_BUTTON_COUNT + 2;
 // A mouse id of our own for the pointer's pushed button events, so they
 // aren't taken for the real mouse.
 constexpr SDL_MouseID pad_mouse_id = 0x7AD0;
+// And a keyboard id for the menus' repeated keys (a held direction).
+constexpr SDL_KeyboardID pad_keyboard_id = 0x7AD0;
+constexpr Uint64         repeat_first_ms = 400;    // Held this long, it repeats...
+constexpr Uint64         repeat_ms       = 120;    // ...this often.
 
 struct Input_name {
 	int         input;
@@ -168,6 +172,13 @@ struct State {
 	// The left stick in Exult's other screens, as the D-pad: -1, 0 or 1 on
 	// each axis (x, y).
 	std::array<int, 2> stick_dir{0, 0};
+
+	// A direction held in those screens, repeating (SDLK_UNKNOWN: none).
+	SDL_Keycode repeat_key        = SDLK_UNKNOWN;
+	SDL_Keymod  repeat_mod        = SDL_KMOD_NONE;
+	int         repeat_button     = -1;       // The D-pad button (or the stick's way).
+	bool        repeat_from_stick = false;
+	Uint64      repeat_next       = 0;
 };
 
 State state;
@@ -372,6 +383,36 @@ void Controller_tick() {
 
 	if (!pad) {
 		return;
+	}
+	if (state.repeat_key != SDLK_UNKNOWN && now >= state.repeat_next) {
+		// Still held that way?
+		bool held = false;
+		if (state.repeat_from_stick) {
+			const bool    across = state.repeat_button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
+								|| state.repeat_button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+			const bool    minus  = state.repeat_button == SDL_GAMEPAD_BUTTON_DPAD_LEFT
+								|| state.repeat_button == SDL_GAMEPAD_BUTTON_DPAD_UP;
+			const int     value  = SDL_GetGamepadAxis(pad, across ? SDL_GAMEPAD_AXIS_LEFTX : SDL_GAMEPAD_AXIS_LEFTY);
+			constexpr int on     = SDL_JOYSTICK_AXIS_MAX * 3 / 10;
+			held                 = minus ? value < -on : value > on;
+		} else {
+			held = SDL_GetGamepadButton(pad, static_cast<SDL_GamepadButton>(state.repeat_button));
+		}
+		if (!held) {
+			state.repeat_key = SDLK_UNKNOWN;
+		} else {
+			SDL_Event repeat{};
+			repeat.type          = SDL_EVENT_KEY_DOWN;
+			repeat.key.timestamp = SDL_GetTicksNS();
+			repeat.key.windowID  = SDL_GetWindowID(window);
+			repeat.key.which     = pad_keyboard_id;
+			repeat.key.key       = state.repeat_key;
+			repeat.key.scancode  = SDL_GetScancodeFromKey(state.repeat_key, nullptr);
+			repeat.key.mod       = state.repeat_mod;
+			repeat.key.down      = true;
+			SDL_PushEvent(&repeat);
+			state.repeat_next = now + repeat_ms;
+		}
 	}
 	const bool lt = Trigger_down(pad, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, state.trigger[0] != Trigger_use::off);
 	const bool rt = Trigger_down(pad, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, state.trigger[1] != Trigger_use::off);
@@ -658,6 +699,9 @@ static SDL_Keycode Window_key(int input) {
 bool Controller_event(const SDL_Event& event) {
 	switch (event.type) {
 	case SDL_EVENT_KEY_DOWN:
+		if (event.key.which == pad_keyboard_id) {
+			return true;    // A menu's repeat left over after it closed: not for the world.
+		}
 		Set_last_input(false);
 		return false;
 	case SDL_EVENT_MOUSE_BUTTON_DOWN:
@@ -747,9 +791,12 @@ bool Controller_event(const SDL_Event& event) {
 
 void Controller_screen_event(SDL_Event& event, bool menu) {
 	if (event.type == SDL_EVENT_KEY_DOWN) {
-		Set_last_input(false);    // The keyboard, in these screens too.
+		if (event.key.which != pad_keyboard_id) {
+			Set_last_input(false);    // The keyboard, in these screens too.
+		}
 		return;
 	}
+	bool from_stick = false;
 	// The left stick: pushed past half way, a press of the D-pad that way
 	// (back under a third lets go).
 	if (event.type == SDL_EVENT_GAMEPAD_AXIS_MOTION && state.enabled && Is_primary(event.gaxis.which)
@@ -767,9 +814,13 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 		} else if (std::abs(value) < off) {
 			dir = 0;
 		}
+		if (dir == 0 && was != 0 && state.repeat_from_stick) {
+			state.repeat_key = SDLK_UNKNOWN;    // Let go: no more repeats.
+		}
 		if (dir == was || dir == 0) {
 			return;
 		}
+		from_stick = true;
 		SDL_Event press{};
 		press.type              = SDL_EVENT_GAMEPAD_BUTTON_DOWN;
 		press.gbutton.timestamp = event.gaxis.timestamp;
@@ -825,6 +876,19 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 	if (key == SDLK_UNKNOWN) {
 		return;
 	}
+	// A held direction repeats (Controller_tick), till it's let go.
+	const int button = event.gbutton.button;
+	const bool way   = button == SDL_GAMEPAD_BUTTON_DPAD_UP || button == SDL_GAMEPAD_BUTTON_DPAD_DOWN
+					|| button == SDL_GAMEPAD_BUTTON_DPAD_LEFT || button == SDL_GAMEPAD_BUTTON_DPAD_RIGHT;
+	if (way && down) {
+		state.repeat_key        = key;
+		state.repeat_mod        = mod;
+		state.repeat_button     = button;
+		state.repeat_from_stick = from_stick;
+		state.repeat_next       = SDL_GetTicks() + repeat_first_ms;
+	} else if (way && button == state.repeat_button && !state.repeat_from_stick) {
+		state.repeat_key = SDLK_UNKNOWN;
+	}
 	SDL_Window* window = Game_screen_window();
 	SDL_Event   key_event{};
 	key_event.type          = down ? SDL_EVENT_KEY_DOWN : SDL_EVENT_KEY_UP;
@@ -838,6 +902,7 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 }
 
 void Controller_frame() {
+	state.repeat_key = SDLK_UNKNOWN;    // The world: no menu repeats (they'd walk).
 	SDL_Gamepad* pad = Primary_pad();
 	if (!state.enabled || !pad) {
 		return;

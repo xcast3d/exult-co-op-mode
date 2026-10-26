@@ -10778,7 +10778,7 @@ static void Handle_events() {
 				const TileRect area = book->get_rect();
 				int            note_x;
 				int            note_y;
-				gwin->get_win()->game_to_screen(area.x + area.w / 2, area.y + area.h + 2, false, note_x, note_y);
+				gwin->get_win()->game_to_screen(area.x + area.w / 2, area.y + area.h + 8, false, note_x, note_y);
 				Controller_paint_note("Turn the page: " + Controller_button_name(SDL_GAMEPAD_BUTTON_LEFT_SHOULDER) + " / "
 											  + Controller_button_name(SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER),
 									  note_x, note_y);
