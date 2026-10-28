@@ -5805,6 +5805,7 @@ static void Friend_mode_story_flags_pass(bool force) {
 // waits a second, so the steps of one scene don't flicker guests' views.
 static bool   friend_scene_sent   = false;
 static uint32 friend_scene_off_at = 0;    // Ticks the scene seemed over.
+static bool   friend_avatar_hidden_sent = false;
 
 static bool Friend_mode_avatar_in_scene() {
 	Usecode_machine* usecode = gwin->get_usecode();
@@ -5825,9 +5826,15 @@ static void Friend_mode_scene_pass(bool force) {
 		}
 		scene = now - friend_scene_off_at < end_hold_ms;
 	}
-	if (force || scene != friend_scene_sent) {
-		friend_session.send_blob(Friend_mode_session::Blob_kind::scene, {static_cast<unsigned char>(scene ? 1 : 0)});
-		friend_scene_sent = scene;
+	// The Avatar unseen until the opening shows them (Black Gate's
+	// bg_dont_render): only the host's script clears it, so guests are told
+	// (2026-10-28; they never saw the Avatar arrive).
+	const bool hidden = gwin->get_main_actor()->get_flag(Obj_flags::bg_dont_render);
+	if (force || scene != friend_scene_sent || hidden != friend_avatar_hidden_sent) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::scene,
+				{static_cast<unsigned char>(scene ? 1 : 0), static_cast<unsigned char>(hidden ? 1 : 0)});
+		friend_scene_sent         = scene;
+		friend_avatar_hidden_sent = hidden;
 	}
 }
 
@@ -5837,6 +5844,15 @@ static bool friend_host_scene = false;
 
 static void Friend_mode_apply_scene(const std::vector<unsigned char>& data) {
 	friend_host_scene = !data.empty() && data[0] != 0;
+	Main_actor* avatar = gwin->get_main_actor();
+	if (data.size() > 1 && avatar && avatar->get_flag(Obj_flags::bg_dont_render) != (data[1] != 0)) {
+		if (data[1] != 0) {
+			avatar->set_flag(Obj_flags::bg_dont_render);
+		} else {
+			avatar->clear_flag(Obj_flags::bg_dont_render);
+		}
+		gwin->set_all_dirty();
+	}
 }
 
 // Guest: take the host's story flags (after a merchant conversation, if
@@ -11118,7 +11134,7 @@ static void Handle_events() {
 					conversation->remove_face(dialogue_event.a);
 					break;
 				case Friend_mode_session::Dialogue_event_type::message:
-					conversation->show_npc_message(dialogue_event.text.c_str());
+					conversation->show_npc_message(dialogue_event.text.c_str(), true);    // Never waits.
 					break;
 				case Friend_mode_session::Dialogue_event_type::choices:
 					conversation->show_remote_choices(dialogue_event.choices);
@@ -12303,7 +12319,8 @@ static void Handle_event(SDL_Event& event) {
 		break;
 	}
 	case SDL_EVENT_WINDOW_FOCUS_GAINED:
-		if (friend_session.mode() == Friend_mode_session::Mode::off) {
+		// Also in co-op if a pause from before co-op began is still on.
+		if (friend_session.mode() == Friend_mode_session::Mode::off || !gwin->have_focus()) {
 			gwin->get_focus();
 		}
 		break;
@@ -12759,10 +12776,18 @@ static bool Get_click(
 				break;
 			}
 			case SDL_EVENT_WINDOW_FOCUS_GAINED:
-				gwin->get_focus();
+				if (!gwin->have_focus()) {
+					gwin->get_focus();
+				}
 				break;
 			case SDL_EVENT_WINDOW_FOCUS_LOST:
-				gwin->lose_focus();
+				// Never in co-op, as in the main loop: this is where the host
+				// waits during a conversation, and switching to the guest's
+				// window paused the host's world (its scripts and NPCs), which
+				// the main loop never resumed (2026-10-28).
+				if (friend_session.mode() == Friend_mode_session::Mode::off) {
+					gwin->lose_focus();
+				}
 				break;
 			}
 		}

@@ -68,7 +68,9 @@ public:
 	void remove_face(int shape);
 	void remove_slot_face(int slot);    // SI.
 	void remove_last_face();            // SI.
-	void show_npc_message(const char* msg);
+	// 'remote': a Friend Mode guest showing the host's line; it never waits
+	// (the host sends the rest of a long line as it turns the page).
+	void show_npc_message(const char* msg, bool remote = false);
 	bool is_npc_text_pending();
 	void clear_text_pending();
 	void show_avatar_choices();

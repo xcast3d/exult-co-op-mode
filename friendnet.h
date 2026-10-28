@@ -152,7 +152,7 @@ public:
 		class_event     = 33,   // Host: someone used a skill (for its range circle).
 		class_refused   = 34,   // Host: why a guest's skill was refused.
 		class_marks     = 35,   // Host: status icons under people (Class System).
-		scene           = 36    // Host: the Avatar is in a scene (1) or not (0).
+		scene           = 36    // Host: the Avatar is in a scene; the Avatar hidden (opening).
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to = everyone, int except = -1);
 	// 'from' (optional) is the sending player; on a guest always the host.

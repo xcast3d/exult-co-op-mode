@@ -35,6 +35,14 @@ the version files saved with each game.
 - **Scenes and cutscenes:** while the Avatar is in a scene, guests watch the
   Avatar, and their companion waits. When the scene ends, guests get their
   companion back.
+- **The Avatar in the opening:** guests now see the Avatar arrive. Before,
+  the Avatar stayed invisible for them.
+- **Conversations stay in step:** a line too long for the dialogue box no
+  longer stops the guest's game until the guest clicks. Guests turn the page
+  when the host does.
+- **Switching windows:** the host's game no longer pauses when you switch
+  to another window during a conversation. Its world used to stop (scenes,
+  people walking) and sometimes stayed stopped.
 - **Targeting:** trolls and other tall creatures (cyclops, dragons) can be
   targeted. They were treated as hidden under a roof.
 - **Attacking:** Space and Q always make the character you play attack the

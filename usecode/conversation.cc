@@ -561,7 +561,7 @@ void Conversation::remove_slot_face(int slot) {
  *  Show what the NPC had to say.
  */
 
-void Conversation::show_npc_message(const char* msg) {
+void Conversation::show_npc_message(const char* msg, bool remote) {
 	if (last_face_shown <= -1 || size_t(last_face_shown) >= face_info.size() || !face_info[last_face_shown]) {
 		return;
 	}
@@ -571,7 +571,7 @@ void Conversation::show_npc_message(const char* msg) {
 	Friend_mode_note_dialogue_message(msg);
 	// Wait for any sprite effects to finish before showing text.
 	Effects_manager* eman = gwin->get_effects();
-	if (eman->has_active_sprites()) {
+	if (!remote && eman->has_active_sprites()) {
 		// Pause the queue so only 'always' entries fire (no usecode).
 		const uint32 now = SDL_GetTicks();
 		gwin->get_tqueue()->pause(now);
@@ -650,6 +650,13 @@ void Conversation::show_npc_message(const char* msg) {
 		if (height >= 0) {
 			break;    // All of the text fit.
 		}
+		if (remote) {
+			// Friend Mode guest: this page stays until the host turns it
+			// (its next message is the rest).  Waiting for our own click
+			// here held up the whole game behind the host (2026-10-28).
+			height = 0;
+			break;
+		}
 		// More to show: display this page, wait for a click, then continue.
 		info->cur_text = string(msg, -height);
 		int  x;
@@ -678,6 +685,7 @@ void Conversation::show_npc_message(const char* msg) {
 		if (last_face_shown < 0 || size_t(last_face_shown) >= face_info.size() || face_info[last_face_shown] != info) {
 			return;
 		}
+		Friend_mode_note_dialogue_message(msg);    // The next page, for guests.
 	}
 	// All fit?  Store height painted.
 	info->last_text_height = height;
