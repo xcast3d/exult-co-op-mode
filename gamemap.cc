@@ -38,6 +38,7 @@
 #include "effects.h"
 #include "egg.h"
 #include "exceptions.h"
+#include "exult.h"
 #include "fnames.h"
 #include "game.h"
 #include "gamewin.h" /* With some work, could get rid of this. */
@@ -847,6 +848,14 @@ void Read_special_ireg(
 	}
 	auto* buf = data.get();
 	if (type == IREG_UCSCRIPT) {    // Usecode script?
+		if (Friend_mode_is_guest()) {
+			// Friend Mode: scripts run on the host, as eggs do.  A save
+			// taken mid-scene (the opening: Iolo walking up, then his
+			// conversation) would play the scene again on a guest's copy,
+			// with its own conversation (2026-10-28).  What the host's
+			// scene does reaches guests as it happens.
+			return;
+		}
 		IBufferDataView nbuf(buf, len);
 		Usecode_script* scr = Usecode_script::restore(obj, &nbuf);
 		if (scr) {

@@ -49,6 +49,7 @@
 #include "mouse.h"
 #include "palette.h"
 #include "playscene.h"
+#include "qotcversion.h"
 #include "scene_layer.h"
 #include "shapeid.h"
 #include "shapes/miscinf.h"
@@ -739,6 +740,14 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 					font->draw_text(ibuf, gwin->get_width() - tw - 5, gwin->get_height() - th - 5, display_text.c_str());
 				}
 			}
+		}
+
+		{
+			// Quest of the Companions' version, bottom left (a mod's name
+			// goes bottom right).
+			std::shared_ptr<Font> font = fontManager.get_font("MENU_FONT");
+			const std::string     line = QOTC_version_line();
+			font->draw_text(ibuf, 5, gwin->get_height() - font->get_text_height() - 5, line.c_str());
 		}
 
 		int choice = menu->handle_events(gwin);

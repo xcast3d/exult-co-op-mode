@@ -43,6 +43,9 @@ jobs:
         with:
           # libdatachannel and Mbed TLS (and their own submodules) for lobby codes.
           submodules: recursive
+          # Full history: Quest of the Companions' build number counts the
+          # commits since Exult (qotcbuild.h); a shallow clone would make it 0.
+          fetch-depth: 0
       # The WebRTC libraries change only with their pinned submodules, the
       # build script or the Mbed TLS settings, so they are cached on those.
       - name: Lobby libraries key

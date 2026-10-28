@@ -314,6 +314,7 @@ docs/xml/*.txt
 docs/xml/*.dat
 docs/xml/*.html
 gitinfo.h
+qotcbuild.h
 
 #Android
 android/app/build.gradle

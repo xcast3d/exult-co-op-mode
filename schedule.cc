@@ -41,6 +41,7 @@
 #include "actors.h"
 #include "combat.h"
 #include "dir.h"
+#include "exult.h"
 #include "frameseq.h"
 #include "game.h"
 #include "gameclk.h"
@@ -493,6 +494,9 @@ int Schedule::get_actual_type(Actor* npc) const {
 }
 
 bool Schedule::try_proximity_usecode(int odds) {
+	if (Friend_mode_is_guest()) {
+		return false;    // Friend Mode: NPCs' scripts run on the host.
+	}
 	if ((rand() % odds) == 0) {
 		// Note: since we can get here from within usecode, lets not
 		// call the function directly but queue it instead.
@@ -1432,6 +1436,9 @@ void Patrol_schedule::now_what() {
 				// normal proximity usecode.
 				// This is needed for SS Maze: it makes the party wait outside
 				// instead of endlessly looping at the maze's door.
+				if (Friend_mode_is_guest()) {
+					break;    // Friend Mode: NPCs' scripts run on the host.
+				}
 				if (GAME_SI && npc->get_ident() == 31) {
 					(*scr) << Ucscript::usecode2 << SSMazePartyWait << static_cast<int>(Usecode_machine::internal_exec);
 				}
@@ -1616,6 +1623,12 @@ Talk_schedule::Talk_schedule(Actor* n)
  */
 
 void Talk_schedule::now_what() {
+	if (Friend_mode_is_guest()) {
+		// Friend Mode: whoever comes to talk (Iolo in the opening) does it
+		// on the host, whose conversation reaches guests; here it would
+		// start one of the guest's own (2026-10-28).  The host moves it.
+		return;
+	}
 	const int speed = gwin->get_std_delay();
 	// Switch to phase 3 if we are reasonable close
 	if (phase < 3 && npc->distance(gwin->get_main_actor()) < 6) {
@@ -3882,7 +3895,7 @@ void Waiter_schedule::now_what() {
 	}
 	case bring_food:
 		if (customers_ordered.empty()) {    // All done serving them?
-			if (rand() % 3 == 0) {
+			if (rand() % 3 == 0 && !Friend_mode_is_guest()) {    // Friend Mode: the host's.
 				gwin->get_usecode()->call_usecode(npc->get_usecode(), npc, Usecode_machine::npc_proximity);
 			}
 			if (walk_to_counter()) {

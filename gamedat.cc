@@ -39,6 +39,7 @@
 #include "scene_layer.h"
 #include "span.h"
 #include "utils.h"
+#include "qotcversion.h"
 #include "version.h"
 
 #include <array>
@@ -574,6 +575,7 @@ void Game_window::write_saveinfo(bool screenshot) {
 		// Open file; throws an exception - Don't care
 		auto out_stream = U7open_out(GEXULTVER);
 		if (out_stream) {
+			QOTC_write_version(*out_stream);
 			getVersionInfo(*out_stream);
 		}
 	}

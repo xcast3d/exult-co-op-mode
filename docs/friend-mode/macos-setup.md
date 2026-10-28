@@ -72,6 +72,26 @@ baseline commits with the experimental engine changes.
 
 ## Release build (a disk image to share)
 
+### Before a release (Mac and Windows)
+
+1. **No test kits.** Release builds have no test keys or spawners:
+   - Remove any temporary test code: `grep -n TEMPORARY exult.cc`.
+     Since 2026-10-28 that is the ungated **F9**, which places a group of
+     enemies for demo videos, and the spawner it keeps built. Restore the
+     spawner inside the `FRIEND_TEST_KEYS` block it came from.
+   - Don't define `FRIEND_TEST_KEYS` (plain `./configure`, and the Windows
+     workflow, leave it off). The host's F8 / F9 test keys are then left out
+     of the build entirely.
+   - Check: in the release build, F9 does nothing.
+2. **The version.** Set `QOTC_VERSION` in `qotcversion.h` and move
+   CHANGELOG.md's **Unreleased** section under that version, with the date,
+   build number and commit ([CHANGELOG.md](../../CHANGELOG.md) says how
+   versions go up). `./exult --version` shows both.
+3. Build from a commit, with nothing uncommitted, so the build number and
+   the commit in the release's name match what is in it.
+
+### The Mac build
+
 How the 2026-10-26 release (`Exult-Friend-Mode-macOS-arm64-617fa85.dmg`)
 was made. Development builds use plain `./configure`, which has no
 optimization; a release needs it:

@@ -592,6 +592,7 @@ for /f "tokens=* delims=" %%u in ('git ls-remote --get-url') do echo #define GIT
     <ClCompile Include="..\..\usecode\useval.cc" />
     <ClCompile Include="..\..\verify.cc" />
     <ClCompile Include="..\..\version.cc" />
+    <ClCompile Include="..\..\qotcversion.cc" />
     <ClCompile Include="..\..\win32\crash.cc" />
     <ClCompile Include="..\..\gumps\DropDown_widget.cc" />
     <ClCompile Include="..\..\gumps\AdvancedOptions_gump.cc" />
@@ -853,6 +854,7 @@ for /f "tokens=* delims=" %%u in ('git ls-remote --get-url') do echo #define GIT
     <ClInclude Include="..\..\usecode\useval.h" />
     <ClInclude Include="..\..\verify.h" />
     <ClInclude Include="..\..\version.h" />
+    <ClInclude Include="..\..\qotcversion.h" />
     <ClInclude Include="..\..\gumps\AdvancedOptions_gump.h" />
     <ClInclude Include="..\..\gumps\DropDown_widget.h" />
     <ClInclude Include="msvc_include.h" />

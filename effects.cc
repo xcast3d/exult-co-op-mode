@@ -1079,9 +1079,19 @@ TileRect Text_effect::Figure_text_pos() {
 	if (item_obj) {
 		Gump_manager* gumpman = gwin->get_gump_man();
 		// See if it's in a gump.
+		// A label (a name on a click, a remark): its text centred with its
+		// bottom 2 pixels above the picture, for people, things on the map
+		// and things in windows alike (2026-10-28; things' labels floated
+		// higher, and in windows they covered the item).  paint_to_layer
+		// keeps that bottom edge where it is at any text size.
+		auto label_over = [this](TileRect r) {
+			const int text_w = width - 8;
+			const int text_h = height - 8;
+			return TileRect(r.x + (r.w - text_w) / 2, r.y - text_h - 2, width, height);
+		};
 		Gump* gump = gumpman->find_gump(item_obj.get());
 		if (gump) {
-			return gump->get_shape_rect(item_obj.get());
+			return label_over(gump->get_shape_rect(item_obj.get()));
 		} else {
 			Game_object* outer = item_obj->get_outermost();
 			if (!outer->get_chunk()) {
@@ -1090,10 +1100,11 @@ TileRect Text_effect::Figure_text_pos() {
 			TileRect r = gwin->get_shape_rect(outer);
 			r.x -= gwin->get_scrolltx_lo();
 			r.y -= gwin->get_scrollty_lo();
-			// Chat and every other label (names on a click, remarks) are
-			// centred just above the head, not on it at the picture's top
-			// left corner as in Exult (2026-10-25).  A person's shape rect
-			// includes headroom; a thing's doesn't.
+			if (!chat_style) {
+				return label_over(r);
+			}
+			// Chat is centred just above the head (2026-10-25).  A person's
+			// shape rect includes headroom; a thing's doesn't.
 			const int drop = outer->as_actor() ? 16 : 0;
 			r.x += (r.w - width) / 2;
 			r.y -= height + 2 + stack_offset - drop;
@@ -1369,11 +1380,24 @@ void Text_effect::paint_to_layer() {
 	const float f = iwin->get_ui_scale_factor(Image_window::UiLayerTextEffects);
 	int         csx;
 	int         csy;
-	iwin->game_to_screen(pos.x + w / 2, pos.y + h / 2, false, csx, csy);
 	const float dw = static_cast<float>(w) * f;
 	const float dh = static_cast<float>(h) * f;
-	const int   dx = static_cast<int>(static_cast<float>(csx) - dw / 2.0f);
-	const int   dy = static_cast<int>(static_cast<float>(csy) - dh / 2.0f);
+	int         dx;
+	int         dy;
+	if (chat_style || item.expired()) {
+		iwin->game_to_screen(pos.x + w / 2, pos.y + h / 2, false, csx, csy);
+		dx = static_cast<int>(static_cast<float>(csx) - dw / 2.0f);
+		dy = static_cast<int>(static_cast<float>(csy) - dh / 2.0f);
+	} else {
+		// A label: the text (the layer's top left, without the 8 pixels
+		// of padding) keeps its centre and its bottom edge over the item
+		// as it grows (Figure_text_pos).
+		const int text_w = w - 8;
+		const int text_h = h - 8;
+		iwin->game_to_screen(pos.x + text_w / 2, pos.y + text_h, false, csx, csy);
+		dx = static_cast<int>(static_cast<float>(csx) - static_cast<float>(text_w) * f / 2.0f);
+		dy = static_cast<int>(static_cast<float>(csy) - static_cast<float>(text_h) * f);
+	}
 	gwin->layer_set_dest(text_layer, dx, dy, static_cast<int>(dw), static_cast<int>(dh));
 	gwin->layer_set_visible(text_layer, true);
 }

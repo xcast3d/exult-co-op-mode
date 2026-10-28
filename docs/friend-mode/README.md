@@ -45,6 +45,10 @@ kit of usable objects around the Avatar, **F9** and **F8** gather two groups
 of companions into the party (levelled for the Class System, with reagents
 and a full spellbook), **Shift+F9** places a fight (two each of troll,
 headless and skeleton) and **Shift+F8** a rat, a wolf and a rabbit.
+For now (2026-10-28, demo videos) every build has a temporary **F9** that
+places that fight in any game, co-op or not, ahead of the test keys; it is
+removed before a release ([Before a
+release](macos-setup.md#before-a-release-mac-and-windows)).
 The guest-action boundary is defined in the [interaction authority
 policy](interaction-policy.md). The Target System's item groups are in
 [targeting groups](targeting-groups.md); a gamepad plan in [controller

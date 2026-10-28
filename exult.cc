@@ -101,6 +101,7 @@
 #include "ucmachine.h"
 #include "utils.h"
 #include "verify.h"
+#include "qotcversion.h"
 #include "version.h"
 #ifdef HAVE_ZIP_SUPPORT
 #	include "files/zip/unzip.h"
@@ -1549,6 +1550,11 @@ static void Friend_mode_gather_companions(bool second_group) {
 					   + (full ? ", " + std::to_string(full) + " left out: the party is full" : std::string()) + ")");
 }
 
+#endif    // FRIEND_TEST_KEYS
+
+// TEMPORARY (2026-10-28, demo videos): the creature spawner is built always,
+// for the ungated F9 in Handle_event.  Remove with that key after the demos.
+
 // Host debug aid: creatures that appear after a guest joined, for creature
 // sync and the Class System.  Shift+F9: a fight, two each of troll,
 // headless and skeleton (2026-10-23; nothing as strong as a dragon);
@@ -1583,7 +1589,6 @@ static void Friend_mode_spawn_test_creatures(bool small) {
 	gwin->set_all_dirty();
 	Friend_mode_notice(made ? "Test creatures placed" : "No test creatures in this game");
 }
-#endif    // FRIEND_TEST_KEYS
 
 // ---- Item sync (world sync W3) ------------------------------------------
 // The host fingerprints the movable objects (and container contents) in the
@@ -2572,7 +2577,8 @@ bool Friend_mode_guest_local_shape(int shape) {
 	case 284:    // Sundial: says the time.
 	case 770:    // Orrery viewer.
 	case 729:    // Crystal ball.
-	case 944:    // Pot: a remark; frame 0, the spittoon, spits ("ptui!").
+	case 944:    // Pot: a remark.  (Frame 0, the spittoon, goes to the
+				 // host: Friend_mode_guest_item_use.)
 	case 742:    // Stuffed toy: a remark.
 	case 837:    // Easel: a remark (paint on it with brush and pigments).
 	case 644:    // Gold coin: "Call it." heads or tails (closes windows).
@@ -2614,6 +2620,10 @@ Friend_item_use Friend_mode_guest_item_use(int shape, int frame) {
 	case 675:    // Desk items: only the gavel (frame 0), which strikes what
 				 // is clicked ("Hey, that hurt!").
 		return frame == 0 ? Friend_item_use::on_anything : Friend_item_use::none;
+	case 944:    // Pot: only the spittoon (frame 0), whose "ptui!" and sound
+				 // everyone should get (2026-10-28; run on the guest's copy,
+				 // only the guest saw it).  The other pots stay local remarks.
+		return frame == 0 ? Friend_item_use::on_self : Friend_item_use::none;
 	default:
 		return Friend_item_use::none;
 	}
@@ -3078,14 +3088,19 @@ static bool Friend_is_hidden_by_roof(const Game_object* obj) {
 		return false;
 	}
 	chunk->setup_cache();
-	const int roof = chunk->is_roof(outer->get_tx(), outer->get_ty(), outer->get_lift());
+	// is_roof looks 4 lifts up.  A creature taller than that (a troll, a
+	// cyclops, a dragon) blocks there itself and was its own roof, never
+	// pickable (2026-10-28): for people, look above their heads.
+	const int height = outer->get_info().get_3d_height();
+	const int above  = outer->as_actor() ? std::max(0, height - 4) : 0;
+	const int roof   = chunk->is_roof(outer->get_tx(), outer->get_ty(), outer->get_lift() + above);
 	if (roof >= gwin->get_render_skip_lift()) {
 		return false;
 	}
 	// A thing that reaches the roof stands under its eave, outside (a lamp
 	// post by a house, 2026-10-23): seen, not hidden.  People keep the
 	// plain rule.
-	return outer->as_actor() || outer->get_lift() + outer->get_info().get_3d_height() < roof;
+	return outer->as_actor() || outer->get_lift() + height < roof;
 }
 
 // Who Q can pick: on screen, in range, not hidden under a roof; party
@@ -3197,10 +3212,28 @@ void Friend_mode_combat_ended() {
 		Friend_mode_lead_stands(led);
 	}
 	Main_actor* avatar = gwin->get_main_actor();
+	// Held, but put on the combat schedule by an attack (Friend_mode_fight):
+	// toggle_combat leaves the held alone, so it waits again here.
+	if (avatar && Friend_mode_is_held(avatar) && avatar->get_schedule_type() == Schedule::combat) {
+		avatar->set_target(nullptr);
+		avatar->set_schedule_type(Schedule::wait);
+	}
 	if (avatar && friend_saved_attack_mode >= 0 && avatar->get_attack_mode() == Actor::manual) {
 		avatar->set_attack_mode(static_cast<Actor::Attack_mode>(friend_saved_attack_mode), avatar->did_user_set_attack());
 	}
 	friend_saved_attack_mode = -1;
+}
+
+// The one played goes for 'foe': on the combat schedule (a held party's
+// Avatar wasn't put on it when combat mode came on, so it stood while the
+// others fought), with the target, and woken if its fight had gone idle
+// (start does nothing while it is already busy).  2026-10-28.
+static void Friend_mode_fight(Actor* fighter, Actor* foe) {
+	if (fighter->get_schedule_type() != Schedule::combat) {
+		fighter->set_schedule_type(Schedule::combat);
+	}
+	fighter->set_target(foe);
+	fighter->start(gwin->get_std_delay(), 0);
 }
 
 // Attack the picked target (combat mode is on): "Attacking Deer".  False
@@ -3229,17 +3262,14 @@ bool Friend_mode_attack_target(Actor* foe, bool confirmed) {
 		if (led->get_attack_mode() == Actor::flee) {
 			led->set_attack_mode(Actor::nearest);
 		}
-		if (led->get_schedule_type() != Schedule::combat) {
-			led->set_schedule_type(Schedule::combat);
-		}
-		led->set_target(foe);
+		Friend_mode_fight(led, foe);
 	} else {
 		Main_actor* avatar = gwin->get_main_actor();
 		if (!avatar->can_act_charmed()) {
 			return false;
 		}
 		Friend_mode_take_manual();
-		avatar->set_target(foe);    // As a double-click in combat mode.
+		Friend_mode_fight(avatar, foe);    // As a double-click in combat mode.
 	}
 	Friend_mode_target_notice("Attacking " + Friend_target_name(foe), true);
 	friend_attacking_pick = true;
@@ -3838,9 +3868,11 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		return false;
 	}
 	const bool fighting = gwin->in_combat();
-	if (!thing && fighting && !shift
-		&& (!Friend_is_attack_target(own, target)
-			|| (!Friend_mode_is_guest() && gwin->get_main_actor()->get_target() == target))) {
+	// In combat, Space on a foe always (re)starts the attack by whoever one
+	// plays, even if the Avatar already has it (2026-10-28: it bailed out
+	// there, so a led companion never attacked the Avatar's foe, and an
+	// Avatar whose fight had stalled stayed still).
+	if (!thing && fighting && !shift && !Friend_is_attack_target(own, target)) {
 		return false;
 	}
 	if (gwin->network_input_blocked() || !gwin->player_can_act()) {
@@ -5766,6 +5798,47 @@ static void Friend_mode_story_flags_pass(bool force) {
 	}
 }
 
+// Host: whether the Avatar is in a scene (2026-10-28): the opening, until
+// it's done, or a cutscene, which takes the Avatar out of the player's
+// hands (dont_move or dont_render, as Exult's own UI hiding goes by).
+// Guests watch the Avatar meanwhile (Friend_mode_apply_scene).  Ending
+// waits a second, so the steps of one scene don't flicker guests' views.
+static bool   friend_scene_sent   = false;
+static uint32 friend_scene_off_at = 0;    // Ticks the scene seemed over.
+
+static bool Friend_mode_avatar_in_scene() {
+	Usecode_machine* usecode = gwin->get_usecode();
+	return gwin->main_actor_dont_move()
+		   || (GAME_BG && !usecode->get_global_flag_bool(Usecode_machine::did_first_scene))
+		   || (GAME_SI && !usecode->get_global_flag_bool(Usecode_machine::si_did_first_scene));
+}
+
+static void Friend_mode_scene_pass(bool force) {
+	constexpr uint32 end_hold_ms = 1000;
+	const uint32     now         = static_cast<uint32>(SDL_GetTicks());
+	bool             scene       = Friend_mode_avatar_in_scene();
+	if (scene) {
+		friend_scene_off_at = 0;
+	} else if (friend_scene_sent) {
+		if (friend_scene_off_at == 0) {
+			friend_scene_off_at = now;
+		}
+		scene = now - friend_scene_off_at < end_hold_ms;
+	}
+	if (force || scene != friend_scene_sent) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::scene, {static_cast<unsigned char>(scene ? 1 : 0)});
+		friend_scene_sent = scene;
+	}
+}
+
+// Guest: the host's word on a scene.  A guest with a companion watches the
+// Avatar, its keys held, until it ends (the main loop's spectating).
+static bool friend_host_scene = false;
+
+static void Friend_mode_apply_scene(const std::vector<unsigned char>& data) {
+	friend_host_scene = !data.empty() && data[0] != 0;
+}
+
 // Guest: take the host's story flags (after a merchant conversation, if
 // one is open, so its answers don't change under it).
 static void Friend_mode_apply_story_flags(const std::vector<unsigned char>& data) {
@@ -6756,6 +6829,7 @@ static void Friend_mode_send_world(int to = Friend_mode_session::everyone) {
 		Friend_mode_journal_open_pass(true);
 		Friend_mode_send_music();    // Join mid-tune.
 		Friend_mode_story_flags_pass(true);
+		Friend_mode_scene_pass(true);    // Joining mid-scene: watch it.
 		friend_health_sent.clear();
 		friend_player_list_sent.clear();    // The newcomer needs it too.
 	} else {
@@ -7036,6 +7110,8 @@ static void Friend_mode_paint_dialogue_wait() {
 				 "Please wait."};
 	} else if (gwin->is_network_host_paused()) {
 		lines = {"The host has paused the game.", "The host has paused", "the game."};
+	} else if (friend_host_scene && friend_session.connected()) {
+		lines = {"Watching a scene with the Avatar. Please wait.", "Watching a scene", "with the Avatar. Please wait."};
 	} else if (friend_following && friend_session.connected()) {
 		lines = {"Following the Avatar. Move to take over.", "Following the Avatar.", "Move to take over."};
 	} else if (gwin->is_network_spectating() && friend_session.connected()) {
@@ -8532,6 +8608,7 @@ int main(int argc, char* argv[]) {
 	}
 
 	if (showversion) {
+		QOTC_write_version(cerr);    // Ours first, then Exult's own.
 		getVersionInfo(cerr);
 		return 0;
 	}
@@ -8589,6 +8666,7 @@ int main(int argc, char* argv[]) {
 int exult_main(const char* runpath) {
 	string music_path;
 	// output version info
+	QOTC_write_version(cout);
 	getVersionInfo(cout);
 
 #ifndef _WIN32
@@ -10383,6 +10461,7 @@ static void Handle_events() {
 					Friend_mode_creature_pass(false);
 					Friend_mode_health_pass();
 				}
+				Friend_mode_scene_pass(false);
 				if (now >= friend_next_clock_sync) {
 					friend_next_clock_sync = now + friend_clock_sync_ms;
 					Friend_mode_clock_pass(false);
@@ -10728,6 +10807,8 @@ static void Handle_events() {
 					Friend_mode_apply_sound(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::story_flags) {
 					Friend_mode_apply_story_flags(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::scene) {
+					Friend_mode_apply_scene(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::player_list) {
 					Friend_mode_apply_player_list(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::guest_follow) {
@@ -10756,10 +10837,22 @@ static void Handle_events() {
 			}
 			// Without a companion, a guest only watches; it must not move
 			// its local Avatar, which belongs to the host.
-			const bool spectating = guest_assigned_actor < 0 || !gwin->has_network_friend_control();
+			// The host's scenes too (the opening, cutscenes): everyone
+			// watches the Avatar, then plays on (2026-10-28).
+			const bool spectating
+					= guest_assigned_actor < 0 || !gwin->has_network_friend_control() || friend_host_scene;
 			if (spectating != gwin->is_network_spectating()) {
+				Actor* own = gwin->get_controlled_actor();
+				if (spectating && own && own != gwin->get_main_actor()) {
+					own->stop();    // Our walk ends where the scene begins.
+				}
 				gwin->set_network_spectating(spectating);
 				friend_watched_npc = -1;    // Spectating starts (or ends) on the Avatar.
+				if (!spectating && own && own != gwin->get_main_actor()) {
+					// The scene is over: the view goes back to our companion.
+					gwin->set_camera_actor(own);
+					gwin->center_view(own->get_tile());
+				}
 			}
 			if (spectating && friend_watched_npc >= 0) {
 				// Follow the watched player; if they switched, spectate or left,
@@ -11711,7 +11804,7 @@ static void Handle_event(SDL_Event& event) {
 	if (Friend_mode_is_guest() && friend_session.connected() && !friend_chat_active
 		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_X && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()
-		&& gwin->is_network_spectating()) {
+		&& gwin->is_network_spectating() && !friend_host_scene) {    // A scene: the Avatar's.
 		Friend_mode_watch_next();    // X: watch the next player.
 		return;
 	}
@@ -11739,6 +11832,13 @@ static void Handle_event(SDL_Event& event) {
 		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_Y && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
 		Friend_mode_hold_or_follow();    // Y: follow the Avatar, or take over again.
+		return;
+	}
+	// TEMPORARY (2026-10-28, demo videos): F9 places a group of enemies, in
+	// any game, co-op or not.  Remove after the demos.
+	if (!friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9
+		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
+		Friend_mode_spawn_test_creatures(false);    // Two each of troll, headless and skeleton.
 		return;
 	}
 #ifdef FRIEND_TEST_KEYS    // Host test keys (F8, F9, with Shift or Ctrl): not in release builds.

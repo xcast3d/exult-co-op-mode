@@ -60,6 +60,11 @@ installing MSYS2 packages. Starting a new run cancels one still going.
 
 ### Downloading the build
 
+For a release, first go through
+[Before a release](macos-setup.md#before-a-release-mac-and-windows): no
+test kits, and the version set. The workflow builds whatever commit it is
+run on.
+
 1. On GitHub, open the repository's **Actions** tab, then the latest green
    **friend-mode-windows** run.
 2. Under **Artifacts**, download `exult-friend-mode-windows-<commit>` (you

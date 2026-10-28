@@ -42,6 +42,7 @@
 #include "menulist.h"
 #include "mouse.h"
 #include "palette.h"
+#include "qotcversion.h"
 #include "scene_layer.h"
 #include "shapeid.h"
 #include "sigame.h"
@@ -189,6 +190,15 @@ void create_scroller_menu(
 		}
 		xpos += max_width;
 	}
+}
+
+// Quest of the Companions' version, on the line above Exult's own at the
+// bottom right (qotcversion.h).
+static void Draw_qotc_version(Game_window* gwin, const std::shared_ptr<Font>& font) {
+	const std::string line = QOTC_version_line();
+	font->draw_text(
+			gwin->get_win()->get_ib8(), gwin->get_win()->get_end_x() - font->get_text_width(line.c_str()),
+			gwin->get_win()->get_end_y() - 2 * font->get_text_height() - 7, line.c_str());
 }
 
 ExultMenu::ExultMenu(Game_window* gw) {
@@ -409,6 +419,7 @@ BaseGameInfo* ExultMenu::show_mods_menu(ModManager* selgame) {
 		font->draw_text(
 				gwin->get_win()->get_ib8(), gwin->get_win()->get_end_x() - font->get_text_width(VERSION),
 				gwin->get_win()->get_end_y() - font->get_text_height() - 5, VERSION);
+		Draw_qotc_version(gwin, font);    // Ours, above Exult's.
 		const int choice = menu->handle_events(gwin);
 		switch (choice) {
 		case -10:    // The incompatibility notice; do nothing
@@ -561,6 +572,7 @@ BaseGameInfo* ExultMenu::run() {
 		font->draw_text(
 				gwin->get_win()->get_ib8(), gwin->get_win()->get_end_x() - font->get_text_width(VERSION),
 				gwin->get_win()->get_end_y() - font->get_text_height() - 5, VERSION);
+		Draw_qotc_version(gwin, font);    // Ours, above Exult's.
 		const int choice = menu->handle_events(gwin);
 
 		switch (choice) {

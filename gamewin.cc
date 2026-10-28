@@ -84,6 +84,7 @@
 #include "ucsched.h" /* Only used to flush objects. */
 #include "usefuns.h"
 #include "utils.h"
+#include "qotcversion.h"
 #include "version.h"
 #include "virstone.h"
 
@@ -1402,9 +1403,15 @@ void Game_window::enforce_friend_mode_control_safety() {
 		return;
 	}
 	const bool incapacitated = current->get_flag(Obj_flags::asleep) || current->get_flag(Obj_flags::paralyzed);
+	// A knocked-out (or sleeping, paralyzed) Avatar's own script, its fall
+	// to the ground (Actor::lay_down), is no story taking over: the led
+	// companion plays on (2026-10-28; it handed control back to the
+	// Avatar lying there).  Waking ends that script.
+	const bool avatar_down = main_actor->get_flag(Obj_flags::asleep) || main_actor->get_flag(Obj_flags::paralyzed)
+							 || main_actor->is_knocked_out();
 	if ((!network_friend_control
-		 && (main_actor_dont_move() || main_actor->in_usecode_control() || Friend_story_controls(current)
-			 || incapacitated))
+		 && (main_actor_dont_move() || (!avatar_down && main_actor->in_usecode_control())
+			 || Friend_story_controls(current) || incapacitated))
 		|| !current->is_in_party() || current->is_dead()) {
 		release_friend_mode_control();
 	}
@@ -1663,6 +1670,7 @@ bool Game_window::init_gamedat(bool create) {
 		// log version of exult that was used to start this game
 		auto out = U7open_out(GNEWGAMEVER);
 		if (out) {
+			QOTC_write_version(*out);
 			getVersionInfo(*out);
 		}
 	}
