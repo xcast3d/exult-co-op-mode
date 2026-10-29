@@ -20,7 +20,7 @@ routes = [
 [vars]
 ADMIN_HOST = "u7-lobby-admin.xcast3d.com"
 CF_ACCESS_TEAM_DOMAIN = "withered-limit-ab80"
-CF_ACCESS_AUD = ""
+CF_ACCESS_AUD = "58b2c396ae77921d855607843ded4efb90b26c94341a69182c0183d8f1651ca6"
 
 [[durable_objects.bindings]]
 name = "LOBBY"
