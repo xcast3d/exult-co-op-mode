@@ -7,7 +7,20 @@ compatibility_date = "2026-10-01"
 # Worker can move without breaking builds already handed out.
 routes = [
 	{ pattern = "u7-multiplayer-lobby.xcast3d.com", custom_domain = true },
+	{ pattern = "u7-lobby-admin.xcast3d.com", custom_domain = true },
 ]
+
+# The admin page (usage counts; src/admin.js) answers only on ADMIN_HOST,
+# which Cloudflare Access gates as a whole, like Kitty Launcher's admin.
+# Create the Access application for it BEFORE deploying this route.  The
+# other two let the Worker check the login Access forwards; neither is a
+# secret (the team name is a public hostname, the AUD tag names the Access
+# application).  Both are in Zero Trust -> Access -> Applications -> the
+# lobby admin app -> Overview.  Empty = the stats answer 503 to everyone.
+[vars]
+ADMIN_HOST = "u7-lobby-admin.xcast3d.com"
+CF_ACCESS_TEAM_DOMAIN = "withered-limit-ab80"
+CF_ACCESS_AUD = ""
 
 [[durable_objects.bindings]]
 name = "LOBBY"
@@ -18,6 +31,11 @@ class_name = "Lobby"
 name = "HOSTS"
 class_name = "Hosts"
 
+# Usage counts per day (one object for the whole lobby).
+[[durable_objects.bindings]]
+name = "STATS"
+class_name = "Stats"
+
 # SQLite-backed Durable Objects work on Workers' free plan.
 [[migrations]]
 tag = "v1"
@@ -26,6 +44,10 @@ new_sqlite_classes = ["Lobby"]
 [[migrations]]
 tag = "v2"
 new_sqlite_classes = ["Hosts"]
+
+[[migrations]]
+tag = "v3"
+new_sqlite_classes = ["Stats"]
 
 # Per-address rate limits (Workers Rate Limiting): opening games, and
 # joining (which is what someone guessing codes would do).  The period is

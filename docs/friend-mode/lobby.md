@@ -215,6 +215,35 @@ went (`link open directly` or `through the relay`), and
 FRIEND_RTC_RELAY_ONLY=1 /tmp/rtc_session_test
 ```
 
+## Usage stats (admin page)
+
+The lobby counts three things per day (UTC), and nothing else: games opened
+(codes handed out), games at least one guest joined, and guest joins. No
+addresses or codes are kept. The counts live in one Durable Object
+(`Stats`), and `https://u7-lobby-admin.xcast3d.com/admin` shows them. Like
+Kitty Launcher's admin page, that hostname is behind Cloudflare Access, and
+the Worker checks the Access login's signature itself before it answers.
+Without `CF_ACCESS_AUD` it answers 503 to everyone. Counting began on the
+day this shipped; earlier games aren't counted.
+
+One-time setup, before deploying the admin route:
+
+1. Cloudflare dashboard → Zero Trust → Access → Applications → Add an
+   application → Self-hosted. Name it "U7 Lobby Admin", domain
+   `u7-lobby-admin.xcast3d.com`, and give it a policy that allows only your
+   own email.
+2. On the application's Overview, copy the Application Audience (AUD) tag
+   into `CF_ACCESS_AUD` in `tools/lobby/wrangler.toml`. Check that
+   `CF_ACCESS_TEAM_DOMAIN` is your team name (the part before
+   `.cloudflareaccess.com`). It's the same team as Kitty Launcher's admin.
+   Neither value is a secret.
+3. `npx wrangler deploy`. It adds the `u7-lobby-admin.xcast3d.com` custom
+   domain and the `Stats` object (migration v3).
+
+To see the page locally without Access: `npm run dev:admin`, then open
+<http://localhost:8787/admin>. Only on localhost, and only with that
+script's `ADMIN_LOCAL_DEV=1`, which is never in `wrangler.toml`.
+
 ## Trying it locally
 
 ```bash

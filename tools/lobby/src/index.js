@@ -39,7 +39,12 @@
  * - Browsers are turned away (the game sends no Origin header), so a web
  *   page can't use the lobby on a visitor's behalf.
  * - No secrets in the repo: TURN keys are Worker secrets.
+ *
+ * Usage counts (games opened, guests joined, per day) are kept by the Stats
+ * object and shown on an admin page behind Cloudflare Access (admin.js).
  */
+
+import { admin, isAdmin } from "./admin.js";
 
 const PROTOCOL = 1;    // The lobby's own messages (not the game's).
 
@@ -164,6 +169,18 @@ async function iceServers(env) {
 	return servers;
 }
 
+// Adds one to today's count of each of 'what' (see Stats).  A count that
+// fails is lost; the game goes on regardless.
+async function count(env, ...what) {
+	try {
+		const stats = env.STATS.get(env.STATS.idFromName("stats"));
+		const params = new URLSearchParams(what.map((each) => ["what", each]));
+		await stats.fetch(`https://stats/count?${params}`);
+	} catch {
+		// Not counted.
+	}
+}
+
 // "No game with that code", without waking a Durable Object for it.
 function noGame() {
 	const [client, server] = Object.values(new WebSocketPair());
@@ -176,6 +193,9 @@ function noGame() {
 export default {
 	async fetch(request, env) {
 		const url = new URL(request.url);
+		if (isAdmin(url, env)) {
+			return admin(request, env);
+		}
 		if (url.pathname === "/" || url.pathname === "/health") {
 			return new Response(`Friend Mode lobby, protocol ${PROTOCOL}\n`, {
 				headers: { "Content-Type": "text/plain" },
@@ -292,6 +312,7 @@ export class Lobby {
 		this.state.acceptWebSocket(ws, ["host"]);
 		ws.serializeAttachment({ role: "host", windowStart: Date.now(), count: 0 });
 		json(ws, { type: "code", code, ice: game.ice, protocol: PROTOCOL });
+		await count(this.env, "games");
 	}
 
 	async addGuest(ws, game) {
@@ -322,6 +343,8 @@ export class Lobby {
 		}
 		json(ws, { type: "joined", id, ice: game.ice, protocol: PROTOCOL });
 		json(host, { type: "guest", id });
+		// The first guest also counts the game as one guests joined.
+		await count(this.env, ...(id === 1 ? ["guests", "used"] : ["guests"]));
 	}
 
 	// Guests that took too long: closed, and the next alarm set.
@@ -489,5 +512,41 @@ export class Hosts {
 			await this.state.storage.deleteAll();
 		}
 		return new Response("ok");
+	}
+}
+
+// Usage counts, one record per day (UTC): games opened, games at least one
+// guest joined, and guest joins.  Only numbers: no addresses, no codes.
+// One object for the whole lobby; a handful of writes per game.
+const COUNTED = ["games", "used", "guests"];
+
+export class Stats {
+	constructor(state, env) {
+		this.state = state;
+		this.env = env;
+	}
+
+	async fetch(request) {
+		const url = new URL(request.url);
+		if (url.pathname === "/count") {
+			const key = `day:${new Date().toISOString().slice(0, 10)}`;
+			const day = (await this.state.storage.get(key)) || { games: 0, used: 0, guests: 0 };
+			for (const what of url.searchParams.getAll("what")) {
+				if (COUNTED.includes(what)) {
+					day[what]++;
+				}
+			}
+			await this.state.storage.put(key, day);
+			return new Response("ok");
+		}
+		if (url.pathname === "/days") {
+			// Newest first.
+			const days = [];
+			for (const [key, day] of await this.state.storage.list({ prefix: "day:", reverse: true })) {
+				days.push({ day: key.slice(4), ...day });
+			}
+			return new Response(JSON.stringify(days), { headers: { "Content-Type": "application/json" } });
+		}
+		return new Response("Not found", { status: 404 });
 	}
 }
