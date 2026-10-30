@@ -22,8 +22,7 @@ it's heading for.
 This version is ours, kept apart from Exult's (`1.13.1git`, which stays as
 upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
-both: `--version`, the title menu (bottom left), Exult's game picker, and
-the version files saved with each game.
+both in `--version` and the version files saved with each game.
 
 ## Unreleased (0.8.1)
 
@@ -45,9 +44,9 @@ the version files saved with each game.
   Alt+Space takes a bedroll. (For testing, F7 gives you a bedroll; it goes
   before the release.)
 - **Title screen:** a Quest of the Companions title under the Ultima VII
-  logo, with the menu moved down to make room. The version line is gone (it
-  was too large); the version is still in Exult's game picker and
-  `--version`.
+  logo, with the menu moved down to make room. The version line is gone
+  from the title menu and Exult's game picker (it was too large or
+  overlapped the menu); `--version` still shows it.
 - **Targeting things:** E offers things within 18 tiles, and a picked thing
   is dropped once you're more than 18 tiles away or it goes off screen.
   Containers and signs used to be offered anywhere on screen. People keep
