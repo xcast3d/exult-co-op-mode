@@ -106,6 +106,8 @@ bool Controller_shift_held();
 bool Controller_alt_held();
 // Is the pad pointer showing (the triggers are then mouse buttons)?
 bool Controller_pointer_showing();
+// Where the pad pointer is, in window coordinates; false while it's hidden.
+bool Controller_pointer_at(float& wx, float& wy);
 // Move the pointer to window point (wx, wy) and show it (the crosshair
 // aimed at the Target System's pick).
 void Controller_aim_pointer(float wx, float wy);

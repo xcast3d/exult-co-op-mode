@@ -761,8 +761,6 @@ bool Controller_event(const SDL_Event& event) {
 		case Controller_action::shift:    // Read as held (Controller_shift_held).
 		case Controller_action::alt:
 			return true;
-		case Controller_action::target_person:
-		case Controller_action::target_thing:
 		case Controller_action::target_act:
 			if (down) {
 				Hide_pointer();    // Back to targeting.
@@ -773,6 +771,11 @@ bool Controller_event(const SDL_Event& event) {
 		}
 		if (state.runner) {
 			state.runner(binding, down);
+		}
+		// L1 and R1 pick nearest the pointer first (Controller_pointer_at),
+		// then it hides: back to targeting.
+		if (down && (binding.action == Controller_action::target_person || binding.action == Controller_action::target_thing)) {
+			Hide_pointer();
 		}
 		return true;
 	}
@@ -979,6 +982,12 @@ bool Controller_alt_held() {
 
 bool Controller_pointer_showing() {
 	return state.showing;
+}
+
+bool Controller_pointer_at(float& wx, float& wy) {
+	wx = state.px;
+	wy = state.py;
+	return state.enabled && state.showing;
 }
 
 void Controller_aim_pointer(float wx, float wy) {

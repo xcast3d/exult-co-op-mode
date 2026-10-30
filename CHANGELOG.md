@@ -52,8 +52,15 @@ the version files saved with each game.
   is dropped once you're more than 18 tiles away or it goes off screen.
   Containers and signs used to be offered anywhere on screen. People keep
   their longer range.
+- **Controller aiming:** with the pointer showing (right stick), L1 and R1
+  pick the person or thing nearest the pointer first, then go on from
+  there. Flick the stick toward a crowd and press. Without the pointer
+  they still start nearest you.
 
 ### Fixed
+
+- **Controller on Windows:** the right stick moves the pointer, and the
+  triggers work, in the game itself. They only worked in menus.
 
 - **Opening scene in co-op:** a guest who joined during the opening no longer
   plays a separate copy of it with its own conversation. Every scene now

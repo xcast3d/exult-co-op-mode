@@ -3082,6 +3082,47 @@ static bool Friend_cycle_moved(const Actor* own) {
 	return moved;
 }
 
+// With the pad pointer showing, L1 and R1 start at the one nearest it,
+// not nearest the one played: flick it that way, then pick.  The next
+// picks go on in that order (the pointer hides) till one moves.  In game
+// coordinates.
+static bool friend_cycle_aimed  = false;
+static int  friend_cycle_aim_x  = 0;
+static int  friend_cycle_aim_y  = 0;
+
+static void Friend_picture_middle(Game_object* obj, int& gx, int& gy);
+
+// True if Q or E measure from the pointer; 'fresh' if it was just used
+// (the cycle starts again).  'moved': Friend_cycle_moved's answer.
+static bool Friend_cycle_aim(bool moved, bool& fresh) {
+	fresh    = false;
+	float wx = 0;
+	float wy = 0;
+	if (Controller_pointer_at(wx, wy)) {
+		SDL_Window* window = gwin->get_win()->get_screen_window();
+		float       rx     = 0;
+		float       ry     = 0;
+		SDL_RenderCoordinatesFromWindow(SDL_GetRenderer(window), wx, wy, &rx, &ry);
+		gwin->get_win()->screen_to_game(static_cast<int>(rx), static_cast<int>(ry), gwin->get_fastmouse(),
+				friend_cycle_aim_x, friend_cycle_aim_y);
+		friend_cycle_aimed = true;
+		fresh              = true;
+	} else if (moved) {
+		friend_cycle_aimed = false;
+	}
+	return friend_cycle_aimed;
+}
+
+// How far 'obj' is from the pointer's aim, squared, in game pixels.
+static int Friend_aim_distance(Game_object* obj) {
+	int gx;
+	int gy;
+	Friend_picture_middle(obj, gx, gy);
+	const int dx = gx - friend_cycle_aim_x;
+	const int dy = gy - friend_cycle_aim_y;
+	return dx * dx + dy * dy;
+}
+
 // Under a roof that is being drawn: inside a building while we are
 // outside it (or in another one), where the roof hides it, so it can't be
 // seen to be clicked on.  Exult skips drawing roofs at and above the lift
@@ -3154,13 +3195,17 @@ static void Friend_mode_cycle_target(int step) {
 	}
 	// Nearest first; in combat mode hostiles come before everyone else, and
 	// out of it the party comes last: everyone else, then the Avatar, then
-	// the companions.
+	// the companions.  Aimed with the pad pointer: nearest it, the party
+	// too (hostiles still first in combat mode).
+	const bool       moved = Friend_cycle_moved(own);
+	bool             fresh = false;
+	const bool       aimed = Friend_cycle_aim(moved, fresh);
 	const Tile_coord from  = own->get_tile();
 	Actor*           avatar = gwin->get_main_actor();
-	auto             rank  = [avatar](const Actor* actor) {
-		return actor == avatar ? 1 : actor->is_in_party() ? 2 : 0;
+	auto             rank  = [avatar, aimed](const Actor* actor) {
+		return aimed ? 0 : actor == avatar ? 1 : actor->is_in_party() ? 2 : 0;
 	};
-	std::stable_sort(foes.begin(), foes.end(), [&](const Actor* a, const Actor* b) {
+	std::stable_sort(foes.begin(), foes.end(), [&](Actor* a, Actor* b) {
 		const int ra = rank(a);
 		const int rb = rank(b);
 		if (ra != rb) {
@@ -3173,12 +3218,14 @@ static void Friend_mode_cycle_target(int step) {
 				return ha;
 			}
 		}
+		if (aimed) {
+			return Friend_aim_distance(a) < Friend_aim_distance(b);
+		}
 		return from.distance(a->get_tile()) < from.distance(b->get_tile());
 	});
 	// Past the last (or, going back, the first) the pick clears; the next Q
-	// starts again, as does one after walking.
-	const bool moved   = Friend_cycle_moved(own);
-	const auto current = moved ? foes.end() : std::find(foes.begin(), foes.end(), gwin->get_action_target());
+	// starts again, as does one after walking or aiming.
+	const auto current = moved || fresh ? foes.end() : std::find(foes.begin(), foes.end(), gwin->get_action_target());
 	const int  count   = static_cast<int>(foes.size());
 	int        index   = step < 0 ? count - 1 : 0;
 	if (current != foes.end()) {
@@ -4558,8 +4605,16 @@ static void Friend_mode_cycle_object(int step) {
 	const Game_object_shared picked  = friend_object_target.lock();
 	// In windows, start again at the newest one's top left once another
 	// window has opened since the pick (the pick may be in an older one).
+	// In the world, aimed with the pad pointer: nearest it first.
 	const bool moved_on = Friend_cycle_moved(own);
-	const bool moved    = in_window ? friend_object_window != Friend_newest_window() : moved_on;
+	bool       fresh    = false;
+	const bool aimed    = Friend_cycle_aim(moved_on, fresh);
+	if (aimed && !in_window) {
+		std::stable_sort(things.begin(), things.end(), [](Game_object* a, Game_object* b) {
+			return Friend_aim_distance(a) < Friend_aim_distance(b);
+		});
+	}
+	const bool moved = in_window ? friend_object_window != Friend_newest_window() : moved_on || fresh;
 	const auto current = moved ? things.end() : std::find(things.begin(), things.end(), picked.get());
 	const int                count   = static_cast<int>(things.size());
 	int                      index   = step < 0 ? count - 1 : 0;
@@ -11303,6 +11358,12 @@ static void Handle_events() {
 			}
 		}
 #ifdef USE_EXULTSTUDIO
+		// Controller support: Delay's hook (the pad pointer, the triggers)
+		// runs here too.  Windows builds have Exult Studio support, so
+		// without it the pointer and triggers only worked in menus.
+		if (Delay_hook) {
+			Delay_hook();
+		}
 		Server_delay();    // Handle requests.
 #else
 		Delay();    // Wait a fraction of a second.
