@@ -672,10 +672,40 @@ Play from a web page with nothing to install, joining by lobby code. Exult has
 no web build today, but it is C++ on SDL3, which can target the browser
 through Emscripten.
 
-- [ ] Spike: build unmodified single-player Exult with Emscripten.
-- [ ] Exult waits in its own loops (clicks, conversations, delays); a browser
+- [x] Spike: build unmodified single-player Exult with Emscripten.
+- [x] Exult waits in its own loops (clicks, conversations, delays); a browser
       page must keep handing control back. Try Emscripten's Asyncify before
       rewriting any loops, and measure speed and download size.
+
+**Spike results (2026-10-29).** In the `ultima7-friend-mode-web` worktree
+(local branch `web-spike`; `web/build.sh` then `web/serve.sh`), with
+Homebrew's Emscripten 6.0.13 and its SDL3, Ogg/Vorbis and zlib ports. Exult
+compiled for the browser with no source changes except one line, and runs:
+the intro, the title menu, character creation, and the opening in Trinsic
+with its conversations and the world, the paperdoll, the minimap and the
+skill bar.
+
+- Every wait in Exult goes through `Delay()` and `SDL_Delay`, which with
+  Asyncify hands control back to the browser, so no loop needed rewriting.
+- The one change: the browser blends the WebGL canvas with the page by its
+  alpha, and the scalers leave the game image's alpha at 0, so the world
+  showed as black (the layers, at alpha 255, showed). Asking for a canvas
+  with no alpha before the window is made fixes it
+  (`SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0)`, in `imagewin.cc`).
+- Build: `--with-friend-rtc=no` (no WebRTC yet), `-fexceptions` (Exult needs
+  C++ exceptions), Asyncify, 8 MB stack, growable memory. The data folder's
+  tools fail under Emscripten, so the data files and generated headers come
+  from the native checkout.
+- Size: the game is 10.6 MB of WebAssembly (7.3 MB without Asyncify),
+  2.7 MB gzipped. Black Gate's `static` folder is another 39 MB (21 MB
+  gzipped), which players supply themselves.
+- Speed: not measured yet. The opening scene played smoothly in the
+  desktop app's browser pane (Chromium) on an Apple Silicon Mac; walking
+  around and combat weren't tried.
+- Not tried: saving (the spike keeps saves in memory, lost on reload),
+  music (MIDI is off; OGG not installed here), Serpent Isle, Friend Mode.
+- Seen in the log, not looked into: "Und sched. opcode 0x00" five times at
+  the start of the opening.
 - [ ] Game data and saves in browser storage (see Licensing and game data).
 - [ ] Digital (OGG) music first; MIDI synthesizers later, if at all.
 - [ ] Friend Mode on the browser's own WebRTC, through the Phase 8 connection
