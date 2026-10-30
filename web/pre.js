@@ -3,9 +3,13 @@
 // (IndexedDB, mounted at /user) and stay on this computer; saves and the
 // game in progress (gamedat) are kept there too.  Exult's own data comes
 // with the page, in /pkg.
-Module['arguments'] = ['-c', '/pkg/exult.cfg', '--bg', '--nocrc'];
-
 const qotc_user = '/user';
+// Exult's settings, kept with the player's files.  The page's own copy
+// (/pkg) is the starting point, copied over the first time.
+const qotc_config = qotc_user + '/exult.cfg';
+Module['arguments'] = ['-c', qotc_config, '--bg', '--nocrc'];
+// Set while the page reloads itself back to the title menu.
+const qotc_to_menu = 'qotc-to-menu';
 const qotc_static = qotc_user + '/blackgate/static';
 // Files every Black Gate has; Serpent Isle has no endgame.dat.
 const qotc_needed = ['u7chunks', 'u7map', 'shapes.vga', 'usecode', 'initgame.dat', 'endgame.dat'];
@@ -18,12 +22,14 @@ function qotc_have_game() {
 	return qotc_needed.every(name => FS.analyzePath(qotc_static + '/' + name).exists);
 }
 
-// Copies /user to IndexedDB.  One at a time; a call while one runs is
-// picked up by the next.
+// Copies /user to IndexedDB.  One at a time: a call while one runs waits
+// for it, then copies again, so nothing written meanwhile is missed.
 let qotc_saving = false;
+let qotc_waiting = [];
 function qotc_save(done) {
 	if (qotc_saving) {
-		return done && done();
+		qotc_waiting.push(done);
+		return;
 	}
 	qotc_saving = true;
 	FS.syncfs(false, err => {
@@ -32,7 +38,32 @@ function qotc_save(done) {
 			console.error('Saving to browser storage failed', err);
 		}
 		done && done(err);
+		if (qotc_waiting.length) {
+			const waiting = qotc_waiting;
+			qotc_waiting = [];
+			qotc_save(err => waiting.forEach(then => then && then(err)));
+		}
 	});
+}
+
+// Main Menu, and Quit, end the game; Exult can't start again in the same
+// page, so the page reloads, straight back to the title menu, or (to_menu
+// false: Quit on the title menu) to the setup screen.
+function qotc_game_ended(to_menu) {
+	removeEventListener('beforeunload', qotc_ask_before_leaving);
+	try {
+		if (to_menu) {
+			sessionStorage.setItem(qotc_to_menu, '1');
+		}
+	} catch (e) {
+	}
+	qotc_save(() => location.reload());
+}
+
+function qotc_ask_before_leaving(event) {
+	qotc_save();
+	event.preventDefault();
+	event.returnValue = '';
 }
 
 // files: [{path, file}], path relative to the chosen folder.  Finds the
@@ -90,6 +121,9 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 		for (const dir of [qotc_static, qotc_user + '/saves', qotc_user + '/gamedat']) {
 			FS.mkdirTree(dir);
 		}
+		if (!FS.analyzePath(qotc_config).exists) {
+			FS.writeFile(qotc_config, FS.readFile('/pkg/exult.cfg'));
+		}
 		navigator.storage && navigator.storage.persist && navigator.storage.persist();
 		const start = document.getElementById('start');
 		if (qotc_have_game()) {
@@ -100,7 +134,7 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 			qotc_use_files([...event.target.files].map(
 				file => ({path: file.webkitRelativePath || file.name, file})));
 		});
-		start.addEventListener('click', () => {
+		const play = () => {
 			document.getElementById('setup').hidden = true;
 			Module.canvas.hidden = false;
 			Module.canvas.focus();
@@ -108,8 +142,31 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 			// the page is left.
 			setInterval(qotc_save, 5000);
 			addEventListener('pagehide', () => qotc_save());
+			// Leaving the page (a closed tab, Cmd+W, reload) asks first.
+			addEventListener('beforeunload', qotc_ask_before_leaving);
+			// SDL keeps function keys, Tab, arrows and Ctrl combinations
+			// from the browser, but not Cmd combinations while text is
+			// being typed (chat, names).  Cut, copy, paste, select all and
+			// undo still work; the browser never gives up Cmd+W, Q, T, N.
+			addEventListener('keydown', event => {
+				if (event.metaKey && !['a', 'c', 'v', 'x', 'z'].includes(event.key.toLowerCase())) {
+					event.preventDefault();
+				}
+			}, true);
+			document.body.style.overflow = 'hidden';    // Space and arrows don't scroll.
 			removeRunDependency('qotc-setup');
-		});
+		};
+		start.addEventListener('click', play);
+		let to_menu = false;
+		try {
+			to_menu = sessionStorage.getItem(qotc_to_menu) === '1';
+			sessionStorage.removeItem(qotc_to_menu);
+		} catch (e) {
+		}
+		if (to_menu && qotc_have_game()) {
+			Module['arguments'].push('--skip-intro');
+			play();
+		}
 	});
 });
 

@@ -15,6 +15,8 @@
 	#loading { color: #888; font-size: .9em; }
 	/* No border or padding on the canvas, or mouse positions are off. */
 	canvas { display: block; margin: 0 auto; border: 0; background: #000; }
+	/* Room above the game in a window; none in fullscreen. */
+	canvas:not(:fullscreen) { margin-top: 2em; }
 	canvas[hidden] { display: none; }
 </style>
 </head>
@@ -25,7 +27,15 @@
 	(from GOG, Steam, or the original disks). Choose the folder you installed
 	it in. Its files are copied into this browser's storage and are never
 	uploaded anywhere.</p>
-	<p>
+	<div id="touch-only" hidden>
+		<p><b>Phones aren't supported.</b> The game needs a keyboard and a
+		mouse or trackpad, or a game controller, and its text is too small
+		for a phone's screen.</p>
+		<p>On a tablet, connect a keyboard, mouse or controller, then press
+		any key or controller button to go on.</p>
+		<p><a href="#" id="try-anyway">Try anyway</a></p>
+	</div>
+	<p id="choose">
 		<label class="button"><input id="pick" type="file" webkitdirectory multiple hidden>Choose your Ultima VII folder&hellip;</label>
 		<button id="start" disabled>Start</button>
 	</p>
@@ -40,6 +50,26 @@
 		printErr: (...args) => console.error(...args),
 		setStatus: text => { document.getElementById('loading').textContent = text; },
 	};
+	// A touch screen with no mouse or trackpad: say so first.  A tablet with
+	// a trackpad or mouse attached goes straight to the setup.  A browser
+	// can't tell whether a keyboard or controller is attached until it's
+	// used: a key (the page has no text field, so not the on-screen
+	// keyboard) or a controller button goes on, as does Try anyway.
+	if (matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) {
+		document.getElementById('touch-only').hidden = false;
+		document.getElementById('choose').hidden = true;
+		const go_on = event => {
+			event && event.preventDefault();
+			document.getElementById('touch-only').hidden = true;
+			document.getElementById('choose').hidden = false;
+			removeEventListener('keydown', go_on);
+			removeEventListener('gamepadconnected', go_on);
+		};
+		document.getElementById('try-anyway').onclick = go_on;
+		addEventListener('keydown', go_on);
+		// Browsers report a controller once one of its buttons is pressed.
+		addEventListener('gamepadconnected', go_on);
+	}
 	window.onerror = window.onunhandledrejection = () => {
 		document.getElementById('loading').textContent =
 			'Something went wrong; the browser\'s JavaScript console has the details.';

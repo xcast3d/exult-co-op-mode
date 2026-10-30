@@ -135,6 +135,9 @@ protected:
 		std::this_thread::yield();
 	}
 
+	//! Yield while waiting on the synthesizer (in a browser, to the browser)
+	void yield_to_producer();
+
 private:
 	enum Messages {
 		LLMD_MSG_NONE              = 0,

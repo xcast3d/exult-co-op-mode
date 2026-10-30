@@ -678,6 +678,7 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 		entry->set_id(id);
 		menu->add_entry(entry);
 		offset += coop_font->get_text_height() + 3;
+		return entry;
 	};
 
 	do {
@@ -734,7 +735,13 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 					offset += f1->get_ybelow() + 3;
 				}
 				if (i == 2) {    // After Journey Onward.
+#ifdef __EMSCRIPTEN__
+					// No Co-Op in the browser yet (and hosting stays with
+					// the Mac and Windows apps): shown, but not chosen.
+					add_coop_entry("CO-OP MODE: DESKTOP APP ONLY", 8, offset)->set_enabled(false);
+#else
 					add_coop_entry(Friend_mode_hosting() ? "CO-OP MODE: HOSTING" : "CO-OP MODE", 8, offset);
+#endif
 				}
 			}
 			}

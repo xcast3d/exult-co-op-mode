@@ -29,6 +29,10 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include <chrono>
 #include <cstring>
 #include <mutex>
+
+#ifdef __EMSCRIPTEN__
+#	include <SDL3/SDL_timer.h>
+#endif
 // If the time to wait is less than this then we yield instead of waiting on the
 // condition variable This must be great than or equal to 2
 #define LLMD_MINIMUM_YIELD_THRESHOLD 6
@@ -272,7 +276,7 @@ void LowLevelMidiDriver::startSequence(int seq_num, XMidiEventList* eventlist, b
 		// If sequence is still playing then timbres are still loading
 		// so we need to wait and try it again
 		if (isplaying) {
-			yield();
+			yield_to_producer();
 		} else {
 			uploading_timbres = false;
 		}
@@ -438,6 +442,18 @@ void LowLevelMidiDriver::sendComMessage(const ComMessage& message) {
 	cond->notify_one();
 }
 
+// The game waiting for the synthesizer to take its messages.  A software
+// synthesizer (FMOpl) takes them in the audio callback, and in a browser,
+// with no threads, that only runs once control goes back to the browser,
+// which SDL_Delay does there (Asyncify).
+void LowLevelMidiDriver::yield_to_producer() {
+#ifdef __EMSCRIPTEN__
+	SDL_Delay(1);
+#else
+	yield();
+#endif
+}
+
 bool LowLevelMidiDriver::waitTillNoComMessages(std::chrono::milliseconds timeout) {
 	auto end = std::chrono::steady_clock::now() + timeout;
 	while (peekComMessageType(timeout)) {
@@ -445,7 +461,7 @@ bool LowLevelMidiDriver::waitTillNoComMessages(std::chrono::milliseconds timeout
 			std::cerr << __FUNCTION__ << " exceeded timeout of " << timeout.count() << " ms" << std::endl;
 			return false;
 		}
-		yield();
+		yield_to_producer();
 		std::this_thread::sleep_for(std::chrono::milliseconds(1));
 	}
 
@@ -1539,7 +1555,7 @@ void LowLevelMidiDriver::loadTimbreLibrary(IDataSource* ds, TimbreLibraryType ty
 			is_playing = playing[3].load();
 
 			if (is_playing) {
-				yield();
+				yield_to_producer();
 			}
 		} while (is_playing);
 		uploading_timbres = false;

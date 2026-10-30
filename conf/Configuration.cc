@@ -32,6 +32,10 @@
 #include <cstdlib>
 #include <iostream>
 
+#ifdef __EMSCRIPTEN__
+#	include <emscripten.h>
+#endif
+
 using std::atoi;
 using std::endl;
 using std::ostream;
@@ -276,6 +280,17 @@ void Configuration::write_back() {
 		perror("Failed to write configuration file");
 	}
 	ofile << dump() << endl;
+#ifdef __EMSCRIPTEN__
+	// In a browser the file lives in memory until the page copies it to the
+	// browser's storage: do that now, so a page closed straight after a
+	// change keeps it.
+	pOfile.reset();
+	EM_ASM({
+		if (typeof qotc_save === 'function') {
+			qotc_save();
+		}
+	});
+#endif
 }
 
 std::vector<string> Configuration::listkeys(const string& key, bool longformat) {

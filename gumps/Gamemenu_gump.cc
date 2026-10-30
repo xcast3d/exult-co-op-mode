@@ -369,6 +369,9 @@ void Gamemenu_gump::createButtons() {
 // Quit Exult, or (Main Menu) go back to the title menu: Exult starts
 // again there once this game has shut down.
 void Gamemenu_gump::quit(bool return_to_menu) {
+#ifdef __EMSCRIPTEN__
+	return_to_menu = true;    // In a browser, Quit goes back to the title menu too.
+#endif
 	if (!Yesno_gump::ask(return_to_menu ? "Return to the main menu?" : Strings::Doyoureallywanttoquit_())) {
 		return;
 	}

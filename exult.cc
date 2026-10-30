@@ -132,6 +132,9 @@
 #endif    // __GNUC__
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#ifdef __EMSCRIPTEN__
+#	include <emscripten.h>
+#endif
 static const SDL_MouseID EXULT_TOUCH_MOUSEID = SDL_TOUCH_MOUSEID;
 static const SDL_TouchID EXSDL_MOUSE_TOUCHID = SDL_MOUSE_TOUCHID;
 #ifdef __GNUC__
@@ -6492,6 +6495,7 @@ void Friend_mode_request_main_menu() {
 	friend_return_to_menu = true;
 }
 
+#ifndef __EMSCRIPTEN__
 static void Friend_mode_restart_at_menu() {
 	friend_session.stop();    // Guests (or the host) see us leave now.
 	std::vector<std::string> args;
@@ -6518,6 +6522,7 @@ static void Friend_mode_restart_at_menu() {
 	perror("Return to Main Menu: could not start Exult again");
 #endif
 }
+#endif    // !__EMSCRIPTEN__
 
 // Co-Op Mode hosting: chosen on the title menu (or --friend-host) before a
 // game starts, or switched on during play from the game menu.
@@ -8749,9 +8754,11 @@ int main(int argc, char* argv[]) {
 
 	try {
 		result = exult_main(argv[0]);
+#ifndef __EMSCRIPTEN__
 		if (friend_return_to_menu) {
 			Friend_mode_restart_at_menu();
 		}
+#endif
 	} catch (const quit_exception& /*e*/) {
 		Controller_quit();    // Before the window goes: SDL_Quit reports the pads removed.
 		// Your basic "shutup Valgrind" code.
@@ -8790,6 +8797,11 @@ int main(int argc, char* argv[]) {
 		result = e.get_errno();
 	}
 
+#ifdef __EMSCRIPTEN__
+	// A page can't start a program again: it reloads itself instead, to the
+	// title menu (Main Menu) or to its setup screen (Quit on the title menu).
+	EM_ASM({ qotc_game_ended($0); }, friend_return_to_menu);
+#endif
 	return result;
 }
 
@@ -9792,6 +9804,28 @@ bool Handle_device_connection_event(void* userdata, SDL_Event* event) {
 	return true;
 }
 
+#ifdef __EMSCRIPTEN__
+/*
+ *  A browser names a key by what it types: Shift+A comes as 'A', Shift+1 as
+ *  '!', and on a Mac Option+Space as a no-break space.  Exult's keys want the
+ *  key itself with the modifiers apart, as on the desktop.  (Typed text comes
+ *  separately, as SDL_EVENT_TEXT_INPUT, and is unchanged.)
+ */
+static bool Browser_key_as_desktop(void* data, SDL_Event* event) {
+	ignore_unused_variable_warning(data);
+	if (event->type == SDL_EVENT_KEY_DOWN || event->type == SDL_EVENT_KEY_UP) {
+		const SDL_Keycode key = event->key.key;
+		if ((event->key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_ALT)) || (key >= 'A' && key <= 'Z')) {
+			const SDL_Keycode plain = SDL_GetKeyFromScancode(event->key.scancode, SDL_KMOD_NONE, false);
+			if (plain != SDLK_UNKNOWN) {
+				event->key.key = plain;
+			}
+		}
+	}
+	return true;
+}
+#endif
+
 /*
  *  Initialize and create main window.
  */
@@ -9846,6 +9880,9 @@ static void Init() {
 	// many, without needing to modify each individual loop, and to
 	// make sure that SDL_Gamepad objects are always ready.
 	SDL_AddEventWatch(Handle_device_connection_event, nullptr);
+#ifdef __EMSCRIPTEN__
+	SDL_AddEventWatch(Browser_key_as_desktop, nullptr);
+#endif
 
 	// Load games and mods; also stores system paths:
 	gamemanager = new GameManager();
