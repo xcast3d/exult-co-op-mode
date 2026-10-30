@@ -717,8 +717,8 @@ skill bar.
       every 5 seconds and when the page is left; a game in progress survived
       a reload. Not tried yet: the real folder dialog (the test fed files in
       by script), the in-game save menu, browsers other than Chromium.
-- [ ] Export and import of saves; drag and drop of the folder; the page's
-      look.
+- [ ] What's left (saves, audio, keyboard, controller, co-op, hosting) is
+      tracked in [playing in a web browser](friend-mode/web-browser.md).
 - [ ] Digital (OGG) music first; MIDI synthesizers later, if at all.
 - [ ] Friend Mode on the browser's own WebRTC, through the Phase 8 connection
       code.
