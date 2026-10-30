@@ -1,0 +1,5 @@
+# Build output, and local copies of game data: never commit these.
+build/
+pkg/
+out/
+*.log

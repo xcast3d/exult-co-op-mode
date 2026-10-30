@@ -706,7 +706,19 @@ skill bar.
   music (MIDI is off; OGG not installed here), Serpent Isle, Friend Mode.
 - Seen in the log, not looked into: "Und sched. opcode 0x00" five times at
   the start of the opening.
-- [ ] Game data and saves in browser storage (see Licensing and game data).
+- [x] Moved into this repo (2026-10-30): `web/` (`build.sh`, `serve.sh`,
+      `shell.html`, `pre.js`, `exult-web.cfg`). The build works in a copy
+      of the sources, `web/build`, since the native build lives in the
+      source folder; `web/build`, `web/pkg` and `web/out` are git-ignored.
+- [x] Game data and saves in browser storage (see Licensing and game data):
+      the page asks for the player's Ultima VII folder, finds the Black Gate
+      STATIC folder in it, and copies it into IndexedDB (IDBFS at `/user`),
+      then Start runs Exult. Saves and gamedat live there too, written back
+      every 5 seconds and when the page is left; a game in progress survived
+      a reload. Not tried yet: the real folder dialog (the test fed files in
+      by script), the in-game save menu, browsers other than Chromium.
+- [ ] Export and import of saves; drag and drop of the folder; the page's
+      look.
 - [ ] Digital (OGG) music first; MIDI synthesizers later, if at all.
 - [ ] Friend Mode on the browser's own WebRTC, through the Phase 8 connection
       code.

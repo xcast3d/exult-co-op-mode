@@ -605,6 +605,12 @@ bool Image_window::create_scale_surfaces(int w, int h, int bpp) {
 #endif
 		SDL_SetWindowFullscreen(screen_window, fullscreen);
 	} else {
+#ifdef __EMSCRIPTEN__
+		// A browser blends the WebGL canvas with the page by its alpha, and
+		// the scalers leave alpha at 0: the game showed as black.  No alpha
+		// channel for the canvas.
+		SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
+#endif
 		screen_window = SDL_CreateWindow("", w, h, flags);
 #if 0
 		{

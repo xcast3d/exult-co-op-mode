@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quest of the Companions</title>
+<style>
+	body { margin: 0; background: #000; color: #ddd; font: 16px/1.5 system-ui, sans-serif; }
+	#setup { max-width: 34em; margin: 4em auto; padding: 0 1em; }
+	#setup h1 { font-size: 1.6em; margin: 0 0 .5em; }
+	#setup p { margin: .6em 0; }
+	#setup button, #setup label.button { font: inherit; padding: .4em 1em; margin: .4em .5em .4em 0; cursor: pointer; }
+	#setup button:disabled { cursor: default; }
+	#message { min-height: 3em; }
+	#loading { color: #888; font-size: .9em; }
+	/* No border or padding on the canvas, or mouse positions are off. */
+	canvas { display: block; margin: 0 auto; border: 0; background: #000; }
+	canvas[hidden] { display: none; }
+</style>
+</head>
+<body>
+<div id="setup">
+	<h1>Quest of the Companions</h1>
+	<p>To play, you need your own copy of <i>Ultima VII: The Black Gate</i>
+	(from GOG, Steam, or the original disks). Choose the folder you installed
+	it in. Its files are copied into this browser's storage and are never
+	uploaded anywhere.</p>
+	<p>
+		<label class="button"><input id="pick" type="file" webkitdirectory multiple hidden>Choose your Ultima VII folder&hellip;</label>
+		<button id="start" disabled>Start</button>
+	</p>
+	<p id="message"></p>
+	<p id="loading"></p>
+</div>
+<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" hidden></canvas>
+<script>
+	var Module = {
+		canvas: document.getElementById('canvas'),
+		print: (...args) => console.log(...args),
+		printErr: (...args) => console.error(...args),
+		setStatus: text => { document.getElementById('loading').textContent = text; },
+	};
+	window.onerror = window.onunhandledrejection = () => {
+		document.getElementById('loading').textContent =
+			'Something went wrong; the browser\'s JavaScript console has the details.';
+	};
+</script>
+{{{ SCRIPT }}}
+</body>
+</html>
