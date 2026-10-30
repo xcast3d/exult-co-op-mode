@@ -21,6 +21,7 @@ bundle: ${EXE_TARGET}
 	$(INSTALL_DATA) $(srcdir)/data/friend/skills/skill_icons_colour.shp $(bundle_name)/Contents/Resources/data/friend/skills
 	$(INSTALL_DATA) $(srcdir)/data/friend/skills/skill_icons_parchment.shp $(bundle_name)/Contents/Resources/data/friend/skills
 	$(INSTALL_DATA) $(srcdir)/data/friend/skills/CREDITS.txt $(bundle_name)/Contents/Resources/data/friend/skills
+	$(INSTALL_DATA) $(srcdir)/data/friend/title.shp $(bundle_name)/Contents/Resources/data/friend
 	$(INSTALL_DATA) $(srcdir)/AUTHORS $(bundle_name)/Contents/Documents
 	$(INSTALL_DATA) $(srcdir)/COPYING $(bundle_name)/Contents/Documents
 	$(INSTALL_DATA) $(srcdir)/FAQ $(bundle_name)/Contents/Documents

@@ -3437,6 +3437,8 @@ static void Friend_mode_walking_stops_attack() {
 	}
 }
 
+static bool Friend_thing_out_of_range(Actor* own, Game_object* obj);
+
 // Every frame: drop the target once it is dead, gone or far off screen.
 static void Friend_mode_check_target() {
 	Actor* target = gwin->get_action_target();
@@ -3447,7 +3449,7 @@ static void Friend_mode_check_target() {
 		const bool gone = friend_object_in_window
 								  ? !thing->get_owner() || !gwin->get_gump_man()->find_gump(thing.get())
 								  : thing->get_owner() || !thing->get_chunk() || !own
-											|| own->get_tile().distance(thing->get_tile()) > friend_attack_max_tiles + 4;
+											|| Friend_thing_out_of_range(own, thing.get());
 		if (!Friend_keyboard_targeting || !own || gone) {
 			friend_object_target.reset();
 		}
@@ -3499,7 +3501,7 @@ enum class Friend_thing_group { box, loot, decor, furniture, interactive, usable
 // The group of a thing in the world (containers and bodies are 'box').
 static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	static const std::unordered_set<int> loot{
-			159, 178, 194, 285, 295, 296, 298, 330, 340, 377, 444, 581, 583, 584, 585, 616, 627, 640, 641, 642, 644,
+			159, 178, 194, 285, 295, 296, 298, 330, 340, 377, 444, 581, 584, 585, 616, 627, 640, 641, 642, 644,
 			645, 646, 648, 649, 650, 662, 668, 691, 692, 693, 726, 728, 738, 746, 747, 754, 756, 760, 761, 769, 771,
 			772, 785, 786, 790, 797, 827, 838, 839, 842, 877, 914, 915, 916, 921, 937, 955, 981};
 	static const std::unordered_set<int> furniture{
@@ -3507,8 +3509,9 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	// Usable things (2026-10-23; was levers and switches): levers (787),
 	// switches (788), the bucket (810), artist's equipment (823: pigments
 	// and the paint brush) and the easel (837, was furniture); the gavel
-	// below.  Decor is what has no use.
-	static const std::unordered_set<int> usable{787, 788, 810, 823, 837};
+	// below; beds (696, 1011) and the bedroll (583, was loot), 2026-10-29.
+	// Decor is what has no use.
+	static const std::unordered_set<int> usable{583, 696, 787, 788, 810, 823, 837, 1011};
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
 	// walls (828, 845) that slide open.
 	static const std::unordered_set<int> interactive{290, 291, 322, 372, 435, 481, 526, 657, 678, 828, 845, 889};
@@ -3533,6 +3536,18 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 		return Friend_thing_group::loot;
 	}
 	return Friend_thing_group::decor;
+}
+
+// E offers things within this many tiles, and a pick on the map is dropped
+// once one is farther (2026-10-29: 18 for everything; containers and signs
+// were the whole screen, and picks dropped at 44).  People (Q) keep their
+// longer range.
+constexpr int friend_thing_reach_tiles = 18;
+
+static bool Friend_thing_out_of_range(Actor* own, Game_object* obj) {
+	const Tile_coord at = obj->get_tile();
+	return !gwin->get_win_tile_rect().has_point(at.tx, at.ty)
+		   || own->get_tile().distance(at) > friend_thing_reach_tiles;
 }
 
 // Whether the options page lets E offer 'group'.
@@ -4192,16 +4207,30 @@ static std::string Friend_space_hint() {
 		}
 		return two("Drop", "", drop);
 	}
-	// Someone else's window: Shift+Space takes all; Alt+Space takes what
-	// Space reads or opens, and splits a stack.
+	// Someone else's window: Shift+Space takes all ("Steal all" if any of
+	// it would be theft; nothing when it's the only thing there); Alt+Space
+	// takes what Space reads or opens, and splits a stack.
 	if (window) {
+		std::string all;
+		if (Container_game_object* from = obj->get_owner()) {
+			int  count  = 0;
+			bool steals = false;
+			Object_iterator next(from->get_objects());
+			while (Game_object* each = next.get_next()) {
+				++count;
+				steals = steals || Friend_is_theft(each);
+			}
+			if (count > 1) {
+				all = steals ? "Steal all" : "Take all";
+			}
+		}
 		if (Friend_is_readable(obj)) {
-			return two("Read", "Take all", take);
+			return two("Read", all, take);
 		}
 		if (obj->as_container()) {
-			return two("Open", "Take all", take);
+			return two("Open", all, take);
 		}
-		return two(take, "Take all", some);
+		return two(take, all, some);
 	}
 	// The map: Alt+Space takes what Space uses; Shift+Space does nothing.
 	const std::string pick_up = obj->is_dragable() ? take : "";
@@ -4214,8 +4243,12 @@ static std::string Friend_space_hint() {
 		return two("Open", "", pick_up);
 	case Friend_thing_group::sign:
 		return two("Read", "");
-	case Friend_thing_group::interactive:
 	case Friend_thing_group::usable:
+		if (GAME_BG && (obj->get_shapenum() == 583 || obj->get_shapenum() == 696 || obj->get_shapenum() == 1011)) {
+			return two("Sleep", "", pick_up);    // Beds and the bedroll.
+		}
+		return two("Use", "", pick_up);
+	case Friend_thing_group::interactive:
 	case Friend_thing_group::furniture:
 		return two("Use", "", pick_up);
 	default:
@@ -4298,7 +4331,6 @@ static std::vector<Game_object*> Friend_window_candidates() {
 
 // E with no container window open: things in the world, nearest first.
 static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
-	constexpr int      reach_tiles = 18;    // Loose things and fixtures (was 6, the screen, then 12).
 	Game_object_vector nearby;
 	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0);
 	const TileRect            view = gwin->get_win_tile_rect();
@@ -4310,17 +4342,18 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		}
 		const Tile_coord         at    = obj->get_tile();
 		const Friend_thing_group group = Friend_thing_group_of(obj);
-		// Containers, bodies and signs on screen; things one can pick up,
-		// and doors, lamps and levers to use, within 18 tiles (2026-10-23;
-		// were 6, and the whole screen offered far shutters).  All with a
-		// path to them that walls don't block, as Exult lets one take
-		// things.  Pools of water (fountains) are decor that can't be
+		// Containers, bodies, signs, things one can pick up, and doors,
+		// lamps and levers to use, on screen within 18 tiles (2026-10-29;
+		// containers and signs were the whole screen).  All
+		// with a path to them that walls don't block, as Exult lets one
+		// take things.  Pools of water (fountains) are decor that can't be
 		// picked up.
 		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::usable
 							 || (GAME_BG && obj->get_shapenum() == 893);
-		const bool near    = (obj->is_dragable() || fixture) && from.distance(at) <= reach_tiles;
-		const bool far     = group == Friend_thing_group::box || group == Friend_thing_group::sign;
-		if (Friend_thing_group_on(group) && (far || near) && !Friend_is_hidden_by_roof(obj)
+		const bool offered = obj->is_dragable() || fixture || group == Friend_thing_group::box
+							 || group == Friend_thing_group::sign;
+		if (Friend_thing_group_on(group) && offered && from.distance(at) <= friend_thing_reach_tiles
+			&& !Friend_is_hidden_by_roof(obj)
 			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5
 			&& (cheat.in_hack_mover() || Fast_pathfinder_client::is_grabable(own, obj))) {
 			things.push_back(obj);
@@ -11919,6 +11952,22 @@ static void Handle_event(SDL_Event& event) {
 	if (!friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9
 		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
 		Friend_mode_spawn_test_creatures(false);    // Two each of troll, headless and skeleton.
+		return;
+	}
+	// TEMPORARY (2026-10-29, testing the Target System): F7 puts a bedroll
+	// in the pack of the one played.  Remove with F9 above.
+	if (GAME_BG && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F7
+		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
+		constexpr int            bedroll = 583;
+		const Game_object_shared obj     = gwin->get_map()->create_ireg_object(
+                ShapeID::get_info(bedroll), bedroll, 0, 0, 0, 0);
+		obj->set_flag(Obj_flags::okay_to_take);
+		Actor* own = gwin->get_controlled_actor();
+		if (own && Friend_pack_of(own)->add(obj.get(), true)) {
+			Friend_mode_notice("A bedroll, in your pack");
+		} else {
+			Friend_mode_notice("No room for a bedroll");
+		}
 		return;
 	}
 #ifdef FRIEND_TEST_KEYS    // Host test keys (F8, F9, with Shift or Ctrl): not in release builds.

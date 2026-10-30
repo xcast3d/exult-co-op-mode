@@ -49,7 +49,6 @@
 #include "mouse.h"
 #include "palette.h"
 #include "playscene.h"
-#include "qotcversion.h"
 #include "scene_layer.h"
 #include "shapeid.h"
 #include "shapes/miscinf.h"
@@ -587,9 +586,31 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 
 	std::optional<Scene_view> menu_scene;
 	menu_scene.emplace(topx, topy, centerx, centery, ibuf, true);
-	const int menuy = topy + 120;
+	// Quest of the Companions' title (data/friend/title.shp, made by
+	// tools/friend-mode/title_to_shp.py on the intro palette), centred
+	// under Black Gate's logo, which ends at row 96; the choices start just
+	// below it.  Without the file the menu is as it was.
+	static std::unique_ptr<Shape_file> title_file;
+	static bool                        title_tried = false;
+	if (!title_tried) {
+		title_tried = true;
+		if (GAME_BG && U7exists("<DATA>/friend/title.shp")) {
+			title_file = std::make_unique<Shape_file>("<DATA>/friend/title.shp");
+		}
+	}
+	Shape_frame* title   = title_file ? title_file->get_frame(0) : nullptr;
+	constexpr int title_y = 97;
+	const int     menuy   = topy + (title ? title_y + title->get_height() + 3 : 120);
+	auto          top_menu_and_title = [&]() {
+		top_menu();
+		if (title) {
+			Shape_manager::get_instance()->paint_shape(
+					centerx - title->get_width() / 2 + title->get_xleft(), topy + title_y + title->get_yabove(), title);
+			gwin->show(true);
+		}
+	};
 
-	top_menu();
+	top_menu_and_title();
 	MenuList* menu = nullptr;
 	// Check for mod overrides
 	bool force_skip_splash   = false;
@@ -662,7 +683,7 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 	do {
 		if (!menu_scene) {
 			menu_scene.emplace(topx, topy, centerx, centery, ibuf, true);
-			top_menu();
+			top_menu_and_title();
 		}
 		if (menu == nullptr) {
 			menu       = new MenuList();
@@ -740,14 +761,6 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 					font->draw_text(ibuf, gwin->get_width() - tw - 5, gwin->get_height() - th - 5, display_text.c_str());
 				}
 			}
-		}
-
-		{
-			// Quest of the Companions' version, bottom left (a mod's name
-			// goes bottom right).
-			std::shared_ptr<Font> font = fontManager.get_font("MENU_FONT");
-			const std::string     line = QOTC_version_line();
-			font->draw_text(ibuf, 5, gwin->get_height() - font->get_text_height() - 5, line.c_str());
 		}
 
 		int choice = menu->handle_events(gwin);

@@ -245,6 +245,9 @@ flexdir = $(datadir)/exult
 # Friend Mode's skill bar pictures (friendclass.cc), and their credits.
 friendskillsdir = $(datadir)/exult/friend/skills
 friendskills_DATA = friend/skills/skill_icons_colour.shp friend/skills/skill_icons_parchment.shp friend/skills/CREDITS.txt
+# The title menu's Quest of the Companions picture (game.cc).
+friendtitledir = $(datadir)/exult/friend
+friendtitle_DATA = friend/title.shp
 estudionewdir = $(datadir)/exult/estudio/new
 
 if DATA_FILES
@@ -284,7 +287,7 @@ EXTRA_DIST = flx.in $(EXULT_FLX_OBJECTS) $(EXULT_BG_FLX_OBJECTS) \
 	exultmsg.txt bginclude.uc marketpl.mid myusecode.uc \
 	$(EXULT_BG_PAPERDOL_VGA_OBJECTS) $(EXULT_BG_MR_FACES_VGA_OBJECTS) \
 	$(EXULT_FONTS_ORIGINAL_VGA_OBJECTS) $(EXULT_FONTS_SERIF_VGA_OBJECTS) \
-	$(EXULT_SHORTCUTBAR_VGA) $(friendskills_DATA)
+	$(EXULT_SHORTCUTBAR_VGA) $(friendskills_DATA) $(friendtitle_DATA)
 
 if CROSS_COMPILING
 expack = $(EXPACK_PROG)

@@ -78,11 +78,12 @@ baseline commits with the experimental engine changes.
    - Remove any temporary test code: `grep -n TEMPORARY exult.cc`.
      Since 2026-10-28 that is the ungated **F9**, which places a group of
      enemies for demo videos, and the spawner it keeps built. Restore the
-     spawner inside the `FRIEND_TEST_KEYS` block it came from.
+     spawner inside the `FRIEND_TEST_KEYS` block it came from. Since
+     2026-10-29 also the ungated **F7**, which puts a bedroll in one's pack.
    - Don't define `FRIEND_TEST_KEYS` (plain `./configure`, and the Windows
      workflow, leave it off). The host's F8 / F9 test keys are then left out
      of the build entirely.
-   - Check: in the release build, F9 does nothing.
+   - Check: in the release build, F7 and F9 do nothing.
 2. **The version.** Set `QOTC_VERSION` in `qotcversion.h` and move
    CHANGELOG.md's **Unreleased** section under that version, with the date,
    build number and commit ([CHANGELOG.md](../../CHANGELOG.md) says how

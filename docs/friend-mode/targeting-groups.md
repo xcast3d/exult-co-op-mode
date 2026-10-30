@@ -11,9 +11,11 @@ gem are all "breakable", and a cup is the same class as a key. So the groups
 are our own lists, in `Friend_thing_group_of` (exult.cc), made from
 `tools/friend-mode/pickup_items.py`, which lists the 234 shapes that can be
 picked up. Heavy furniture (tables, stools, benches, beds) can't be picked
-up at all, so E never offers it. Containers, bodies and signs are offered
-anywhere on screen; loose things, doors, lamps and levers within 18 tiles
-(2026-10-23; were 6, then the whole screen offered shutters at its edges, then 12).
+up at all, so E never offers it. Everything is offered on screen within 18
+tiles, and a pick is dropped once the player is more than 18 tiles from it
+(2026-10-29; containers, bodies and signs were offered anywhere on screen,
+and loose things, doors, lamps and levers within 18: 6, then the whole
+screen offered shutters at its edges, then 12).
 All need a path that walls don't block, as Exult's picking up does (so a
 thing just inside an open shutter can be offered). Something under a roof
 is hidden unless it reaches the roof: a lamp post under a house's eave
@@ -29,12 +31,12 @@ they go on to the next, then "No target", then round again.
 | Decor | off | takes | anything not in another group |
 | Furniture | off | uses (Shift: picks up) | the list below |
 | Doors, hidden walls, lamps | on | uses | doors, secret walls (828, 845), shutters, sconces, curtains, lamp posts. On by default since 2026-10-24 (was off: with it on, E finds secret walls, which Black Gate means to be found by looking) |
-| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture). Decor is what has no use (2026-10-23) |
+| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture), beds (696, 1011) and the bed roll (583, was loot; Space sleeps, 2026-10-29). Decor is what has no use (2026-10-23) |
 | Signs, plaques, graves | on | reads | sign (379), plaque (820), tombstone (715); picture signs (360, 361) have nothing to read |
 
 **Loot (besides weapons, armour and ammunition):** pocketwatch, cloth map,
 Knight's Bridge piece, cloak, wedding ring, rings of invisibility and
-regeneration, Virtue Stone, potion, food, hood, ammunition, bed roll, kidney
+regeneration, Virtue Stone, potion, food, hood, ammunition, kidney
 belt, shoes, bottle, lockpick, ring, key, book, gold coins, nuggets and bars,
 sleeping powder, venom, sextant, fishing rod, sword blank, lyre, lute,
 whistle, lens, Caddellite chunks, pants, Orrery Crystal, Soul Cage, vial,

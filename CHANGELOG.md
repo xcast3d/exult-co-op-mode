@@ -39,6 +39,19 @@ the version files saved with each game.
   while you have a target, and go as soon as you clear it. They used to
   fade after a few seconds.
 - **Mac keys:** hints and the Keys page say Option instead of Alt.
+- **Take all:** the hint leaves it out when a container has only one thing
+  in it, and says "Steal all" when any of it isn't yours.
+- **Beds and bedrolls:** the Target System offers them. Space sleeps, and
+  Alt+Space takes a bedroll. (For testing, F7 gives you a bedroll; it goes
+  before the release.)
+- **Title screen:** a Quest of the Companions title under the Ultima VII
+  logo, with the menu moved down to make room. The version line is gone (it
+  was too large); the version is still in Exult's game picker and
+  `--version`.
+- **Targeting things:** E offers things within 18 tiles, and a picked thing
+  is dropped once you're more than 18 tiles away or it goes off screen.
+  Containers and signs used to be offered anywhere on screen. People keep
+  their longer range.
 
 ### Fixed
 
