@@ -27,6 +27,19 @@ the version files saved with each game.
 
 ## Unreleased (0.8.1)
 
+### Changed
+
+- **Taking books and bags:** Space reads a book or opens a bag everywhere,
+  including inside a chest or someone's pack, so you can look before you
+  take. Alt+Space (Option+Space on a Mac) takes it. On a stack, Alt+Space
+  still splits. Shift+Space now only means "take all", inside a container.
+- **Item menu (Ctrl+Space):** lists Read, Use or Open, Take and Split, as
+  they apply. "Put in..." is gone.
+- **Target hint:** the target's name and what the keys do stay at the top
+  while you have a target, and go as soon as you clear it. They used to
+  fade after a few seconds.
+- **Mac keys:** hints and the Keys page say Option instead of Alt.
+
 ### Fixed
 
 - **Opening scene in co-op:** a guest who joined during the opening no longer

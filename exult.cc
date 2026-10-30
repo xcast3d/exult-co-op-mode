@@ -2955,6 +2955,10 @@ static std::string Friend_space_hint();
 static std::string friend_hint_shown;            // The hint line showing, if any.
 static uint32      friend_hint_at      = 0;      // When it was set (it fades with the notice).
 static bool        friend_hint_changed = false;
+// The pick's notice and hint: they stay while there is a pick and go with
+// it (2026-10-29: they faded after 4 seconds).  Any other context notice
+// ends this.
+static bool        friend_hint_pinned  = false;
 
 // The context notice near the top (targeting, the hold button, hovering
 // the skill bar): one at a time, each replacing the last, whatever its kind,
@@ -2970,11 +2974,13 @@ static void Friend_mode_context_line(const std::string& text) {
 								 }),
 						 friend_notices.end());
 	friend_context_line = text;
+	friend_hint_pinned  = false;
 	Friend_mode_top_line(text);
 }
 
 static void Friend_mode_target_notice(const std::string& text, bool hint = false) {
 	Friend_mode_context_line(text);
+	friend_hint_pinned  = hint;
 	friend_hint_shown   = hint ? Friend_space_hint() : std::string();
 	friend_hint_at      = static_cast<uint32>(SDL_GetTicks());
 	friend_hint_changed = true;
@@ -3832,14 +3838,16 @@ static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 // A thing (E), 2026-10-22 (docs/friend-mode/feedback-2026-10-22.md, C1):
 // - on the map, a container or body opens; a door, lamp, lever, piece of
 //   furniture, or a thing with a use (Friend_is_usable_thing: books,
-//   scrolls, the gavel, the bucket) is used or read.  Shift takes it
+//   scrolls, the gavel, the bucket) is used or read.  Alt takes it
 //   instead, if it can be taken.  Anything else is taken (Alt: how many).
-// - in someone else's window: Space takes it, books too; Shift+Space
-//   takes everything there; Alt+Space splits a stack (how many).
+//   Shift does nothing on the map.
+// - in someone else's window: a book is read and a bag opens, Alt+Space
+//   takes them; anything else Space takes and Alt+Space splits (how
+//   many); Shift+Space takes everything there (2026-10-29).
 // - one's own: used, read, readied or put away; what has none of those
 //   is dropped at one's feet after asking.  Shift+Space drops at once;
 //   Alt+Space drops some (how many).
-// Not okay to take: asks first.  Alt always means "how many".
+// Not okay to take: asks first.
 //
 // False if Space should do its usual thing.
 // The party for Space: the Avatar and the companions (Exult's party list
@@ -3859,6 +3867,8 @@ static bool Friend_may_view_character(const Actor* own, const Actor* actor) {
 static bool Friend_has_conversation(const Actor* actor) {
 	return actor->get_npc_num() > 0 && gwin->get_usecode()->function_exists(actor->get_usecode());
 }
+
+static std::string Friend_key_label(const std::string& key);
 
 static bool Friend_mode_space(bool shift, bool alt) {
 	Actor*                   own    = gwin->get_controlled_actor();
@@ -3939,10 +3949,10 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		return true;
 	}
 	const bool plain = !shift && !alt;
-	// Something to read: Space reads it on the map and among one's own
-	// things; in someone else's window it is taken like the rest.
+	// Something to read: Space reads it wherever it is, and Alt+Space takes
+	// it (2026-10-29: in a window Space took it).
 	const bool readable = Friend_is_readable(obj);
-	if (readable && plain && (!window || mine)) {
+	if (readable && plain) {
 		gwin->double_clicked_object(obj, window != nullptr || mine);
 		return true;
 	}
@@ -3997,11 +4007,28 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	const bool               use   = !window
 							 && ((group != Friend_thing_group::loot && group != Friend_thing_group::decor)
 								 || Friend_is_usable_thing(obj));
-	if (use && !((shift || alt) && obj->is_dragable())) {
+	// Alt+Space takes what Space opens, reads or uses, whole; on anything
+	// else it splits a stack (2026-10-29: Shift+Space took these, which in
+	// a window means take all).
+	const bool whole = use || readable || obj->as_container();
+	if (use && plain) {
 		if (group == Friend_thing_group::box && obj->as_container()) {
 			Friend_mode_pick_when_open(obj);    // Its first thing, once it opens.
 		}
 		gwin->double_clicked_object(obj);
+		return true;
+	}
+	if (use && !(alt && obj->is_dragable())) {
+		return true;    // Shift, or nothing to take.
+	}
+	// In someone else's window, a bag opens as on the map.
+	if (plain && window && !member && obj->as_container()) {
+		Friend_mode_pick_when_open(obj);
+		gwin->double_clicked_object(obj, true);
+		return true;
+	}
+	// Shift+Space on the map: nothing (take all is a window's).
+	if (shift && !window) {
 		return true;
 	}
 	// Shift in someone else's window: everything there (in a party member's,
@@ -4012,10 +4039,11 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		return true;
 	}
 	Container_game_object* pack = Friend_pack_of(own);
-	if (Friend_is_theft(obj) && !Friend_confirmed(obj, Friend_confirm::take, "Steal? Space again")) {
+	if (Friend_is_theft(obj)
+		&& !Friend_confirmed(obj, Friend_confirm::take, "Steal? " + Friend_key_label(alt ? "Alt+Space" : "Space") + " again")) {
 		return true;
 	}
-	const int         count = Friend_how_many(obj, alt);
+	const int         count = Friend_how_many(obj, alt && !whole);
 	const std::string name  = count < obj->get_quantity()
 									 ? std::to_string(count) + " of " + Friend_thing_name(obj)
 									 : Friend_thing_name(obj);
@@ -4053,8 +4081,14 @@ static std::string Friend_pad_glyph(const std::string& label) {
 // A key named in a hint ("Space", "Shift+Space", "Alt+Space", "C"), or,
 // when the pad was the last thing used, its button: the Cross or A glyph,
 // "L2+" and the glyph (controller.cc names them as printed on the pad).
+// A Mac's keyboard says Option, not Alt.
 static std::string Friend_key_label(const std::string& key) {
 	if (!Controller_last_input_is_pad()) {
+#ifdef __APPLE__
+		if (key.rfind("Alt+", 0) == 0) {
+			return "Option+" + key.substr(4);
+		}
+#endif
 		return key;
 	}
 	const std::string act = Friend_pad_glyph(Controller_label(Controller_action::target_act));
@@ -4134,6 +4168,9 @@ static std::string Friend_space_hint() {
 	if (Actor* member = Friend_window_member(own, obj, window)) {
 		const bool        worn = member->find_readied(obj) >= 0;
 		const std::string some_away = worn && stack ? "Put some away" : some;
+		if (Friend_is_readable(obj)) {
+			return two("Read", take, take);
+		}
 		if (Friend_is_wearable(member, obj)) {
 			return two(worn ? "Put away" : "Ready", take, some_away);
 		}
@@ -4155,22 +4192,32 @@ static std::string Friend_space_hint() {
 		}
 		return two("Drop", "", drop);
 	}
+	// Someone else's window: Shift+Space takes all; Alt+Space takes what
+	// Space reads or opens, and splits a stack.
 	if (window) {
+		if (Friend_is_readable(obj)) {
+			return two("Read", "Take all", take);
+		}
+		if (obj->as_container()) {
+			return two("Open", "Take all", take);
+		}
 		return two(take, "Take all", some);
 	}
+	// The map: Alt+Space takes what Space uses; Shift+Space does nothing.
+	const std::string pick_up = obj->is_dragable() ? take : "";
 	if (Friend_is_usable_thing(obj)) {
 		const char* what = Friend_is_readable(obj) ? "Read" : obj->get_shapenum() == 893 ? "Drink" : "Use";
-		return two(what, obj->is_dragable() ? take : "");
+		return two(what, "", pick_up);
 	}
 	switch (Friend_thing_group_of(obj)) {
 	case Friend_thing_group::box:
-		return two("Open", obj->is_dragable() ? "Pick up" : "");
+		return two("Open", "", pick_up);
 	case Friend_thing_group::sign:
 		return two("Read", "");
 	case Friend_thing_group::interactive:
 	case Friend_thing_group::usable:
 	case Friend_thing_group::furniture:
-		return two("Use", obj->is_dragable() ? "Pick up" : "");
+		return two("Use", "", pick_up);
 	default:
 		return two(take, "", some);
 	}
@@ -7469,12 +7516,50 @@ static void Friend_mode_expire_lines(std::deque<Friend_log_line>& lines, uint32 
 	}
 }
 
+// Each frame: the pick's notice and hint renewed while there is a pick (the
+// hint redone as what Space would do changes), or gone at once when there
+// isn't.
+static void Friend_mode_keep_pick_lines() {
+	if (!friend_hint_pinned) {
+		return;
+	}
+	const uint32 now = static_cast<uint32>(SDL_GetTicks());
+	if (!gwin->get_action_target() && !friend_object_target.lock()) {
+		friend_hint_pinned = false;
+		friend_notices.erase(std::remove_if(friend_notices.begin(), friend_notices.end(),
+									 [](const Friend_log_line& line) {
+										 return line.text == friend_context_line;
+									 }),
+							 friend_notices.end());
+		friend_notices_changed = true;
+		friend_hint_shown.clear();
+		friend_hint_changed = true;
+		return;
+	}
+	for (Friend_log_line& line : friend_notices) {
+		if (line.text == friend_context_line) {
+			line.time = now;
+		}
+	}
+	friend_hint_at = now;
+	static uint32 checked = 0;
+	if (now - checked > 250) {
+		checked                = now;
+		const std::string hint = Friend_space_hint();
+		if (hint != friend_hint_shown) {
+			friend_hint_shown   = hint;
+			friend_hint_changed = true;
+		}
+	}
+}
+
 // The chat log, bottom left: recent lines only, newest at the bottom; and
 // the notices, centred near the top.
 static void Friend_mode_paint_chat_log() {
 	static Friend_pinned_text log{"Chat log"};
 	static Friend_pinned_text notices{"Notices"};
 	const bool                on = friend_session.mode() != Friend_mode_session::Mode::off;
+	Friend_mode_keep_pick_lines();
 	Friend_mode_expire_lines(friend_chat_log, friend_chat_log_ms, friend_chat_log_changed);
 	Friend_mode_expire_lines(friend_notices, friend_notice_ms, friend_notices_changed);
 	// The log's bottom 20 pixels above the bottom of the view, 6 from the
@@ -9081,36 +9166,6 @@ static void Friend_mode_give(Game_object* obj) {
 	}
 }
 
-// Put in...: one of the open container windows (not its own, nor itself).
-static void Friend_mode_put_in(Game_object* obj) {
-	std::vector<Container_game_object*> targets;
-	std::vector<std::string>            names;
-	Gump*                               from = gwin->get_gump_man()->find_gump(obj);
-	for (Gump* gump : *gwin->get_gump_man()) {
-		Container_game_object* box = gump ? gump->get_container() : nullptr;
-		if (!box || box->as_actor() || box == obj || box == obj->get_owner() || gump->is_persistent()) {
-			continue;
-		}
-		Game_object* outer  = box->get_outermost();
-		Actor*       holder = outer && outer != box ? outer->as_actor() : nullptr;
-		targets.push_back(box);
-		names.push_back(holder ? Friend_target_name(holder) + "'s " + Friend_thing_name(box) : Friend_thing_name(box));
-	}
-	if (targets.empty()) {
-		Friend_mode_target_notice("Open a container first");
-		return;
-	}
-	const int chosen = Controller_choose("Put " + Friend_thing_name(obj) + " in", names);
-	if (chosen < 0) {
-		return;
-	}
-	if (gwin->move_object(obj, from, targets[chosen], -1, obj->get_quantity())) {
-		Friend_mode_target_notice("Put " + Friend_thing_name(obj) + " in " + names[chosen]);
-	} else {
-		Friend_mode_target_notice("No room");
-	}
-}
-
 static void Friend_mode_item_menu() {
 	Actor*                   own   = gwin->get_controlled_actor();
 	const Game_object_shared thing = friend_object_target.lock();
@@ -9136,14 +9191,18 @@ static void Friend_mode_item_menu() {
 							   Friend_mode_space(false, false);
 						   }});
 	}
+	// Take, when Space reads, opens or uses it instead: as Alt+Space (in a
+	// party member's window, Shift+Space).  Not one's own.
+	const std::string take = Friend_is_theft(obj) ? "Steal" : "Take";
+	if (first != take && obj->is_dragable() && outer != own) {
+		const bool member = Friend_window_member(own, obj, friend_object_in_window) != nullptr;
+		choices.push_back({take, [member]() {
+							   Friend_mode_space(member, !member);
+						   }});
+	}
 	if (party && !guest && obj->is_dragable()) {
 		choices.push_back({"Give to...", [thing]() {
 							   Friend_mode_give(thing.get());
-						   }});
-	}
-	if (obj->is_dragable() && (party || !guest)) {
-		choices.push_back({"Put in...", [thing]() {
-							   Friend_mode_put_in(thing.get());
 						   }});
 	}
 	if (obj->get_quantity() > 1) {
@@ -9428,15 +9487,20 @@ static bool Controller_open_slot_picker() {
 // controller's are on its own page).
 void Friend_mode_keys_page() {
 	using Rows = std::vector<std::pair<std::string, std::string>>;
+#ifdef __APPLE__
+	const char* alt_space = "Option+Space";    // A Mac's keyboard says Option.
+#else
+	const char* alt_space = "Alt+Space";
+#endif
 	std::vector<Rows> pages;
 	pages.push_back({
 			{"Targeting:", ""},
 			{"Q / Shift+Q", "Next / previous person"},
 			{"E / Shift+E", "Next / previous thing"},
-			{"Space", "Act: talk, open, take, use; attack a foe"},
-			{"Shift+Space", "Take all; attack; view a companion"},
-			{"Alt+Space", "How many: split, drop or put some away"},
-			{"Ctrl+Space", "Item menu: give, put in, split, drop"},
+			{"Space", "Act: talk, open, read, take, use; attack a foe"},
+			{"Shift+Space", "Take all in a window; attack; view a companion"},
+			{alt_space, "Take what Space opens or reads; split a stack"},
+			{"Ctrl+Space", "Item menu: read, use, take, split, give, drop"},
 			{"Escape", "Clear the pick, close windows, menu"},
 			{"C", "Combat on or off"},
 	});
