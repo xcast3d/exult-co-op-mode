@@ -1553,10 +1553,6 @@ static void Friend_mode_gather_companions(bool second_group) {
 					   + (full ? ", " + std::to_string(full) + " left out: the party is full" : std::string()) + ")");
 }
 
-#endif    // FRIEND_TEST_KEYS
-
-// TEMPORARY (2026-10-28, demo videos): the creature spawner is built always,
-// for the ungated F9 in Handle_event.  Remove with that key after the demos.
 
 // Host debug aid: creatures that appear after a guest joined, for creature
 // sync and the Class System.  Shift+F9: a fight, two each of troll,
@@ -1592,6 +1588,8 @@ static void Friend_mode_spawn_test_creatures(bool small) {
 	gwin->set_all_dirty();
 	Friend_mode_notice(made ? "Test creatures placed" : "No test creatures in this game");
 }
+
+#endif    // FRIEND_TEST_KEYS
 
 // ---- Item sync (world sync W3) ------------------------------------------
 // The host fingerprints the movable objects (and container contents) in the
@@ -12043,29 +12041,6 @@ static void Handle_event(SDL_Event& event) {
 		&& event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_Y && !event.key.repeat
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)) && !Notebook_gump::get_instance()) {
 		Friend_mode_hold_or_follow();    // Y: follow the Avatar, or take over again.
-		return;
-	}
-	// TEMPORARY (2026-10-28, demo videos): F9 places a group of enemies, in
-	// any game, co-op or not.  Remove after the demos.
-	if (!friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9
-		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
-		Friend_mode_spawn_test_creatures(false);    // Two each of troll, headless and skeleton.
-		return;
-	}
-	// TEMPORARY (2026-10-29, testing the Target System): F7 puts a bedroll
-	// in the pack of the one played.  Remove with F9 above.
-	if (GAME_BG && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F7
-		&& !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
-		constexpr int            bedroll = 583;
-		const Game_object_shared obj     = gwin->get_map()->create_ireg_object(
-                ShapeID::get_info(bedroll), bedroll, 0, 0, 0, 0);
-		obj->set_flag(Obj_flags::okay_to_take);
-		Actor* own = gwin->get_controlled_actor();
-		if (own && Friend_pack_of(own)->add(obj.get(), true)) {
-			Friend_mode_notice("A bedroll, in your pack");
-		} else {
-			Friend_mode_notice("No room for a bedroll");
-		}
 		return;
 	}
 #ifdef FRIEND_TEST_KEYS    // Host test keys (F8, F9, with Shift or Ctrl): not in release builds.

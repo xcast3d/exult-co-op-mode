@@ -24,10 +24,12 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## Unreleased (0.8.1)
+## 0.8.1, 2026-10-30 (build 219)
 
 ### Changed
 
+- **Co-op:** hosts and guests need the same release (the co-op protocol is
+  now 37).
 - **Taking books and bags:** Space reads a book or opens a bag everywhere,
   including inside a chest or someone's pack, so you can look before you
   take. Alt+Space (Option+Space on a Mac) takes it. On a stack, Alt+Space
@@ -41,8 +43,7 @@ both in `--version` and the version files saved with each game.
 - **Take all:** the hint leaves it out when a container has only one thing
   in it, and says "Steal all" when any of it isn't yours.
 - **Beds and bedrolls:** the Target System offers them. Space sleeps, and
-  Alt+Space takes a bedroll. (For testing, F7 gives you a bedroll; it goes
-  before the release.)
+  Alt+Space takes a bedroll.
 - **Title screen:** a Quest of the Companions title under the Ultima VII
   logo, with the menu moved down to make room. The version line is gone
   from the title menu and Exult's game picker (it was too large or
@@ -90,10 +91,6 @@ both in `--version` and the version files saved with each game.
   covered the item.
 - **Spittoon:** when a guest spits in a spittoon, everyone sees the "ptui!"
   and hears it, not only that guest.
-
-### Changed
-
-- The co-op protocol is now 37: hosts and guests need the same release.
 
 ## 0.8.0, 2026-10-26 (build 205, 617fa85)
 

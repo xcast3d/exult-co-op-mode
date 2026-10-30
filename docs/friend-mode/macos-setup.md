@@ -76,10 +76,8 @@ baseline commits with the experimental engine changes.
 
 1. **No test kits.** Release builds have no test keys or spawners:
    - Remove any temporary test code: `grep -n TEMPORARY exult.cc`.
-     Since 2026-10-28 that is the ungated **F9**, which places a group of
-     enemies for demo videos, and the spawner it keeps built. Restore the
-     spawner inside the `FRIEND_TEST_KEYS` block it came from. Since
-     2026-10-29 also the ungated **F7**, which puts a bedroll in one's pack.
+     (The ungated F9 enemy spawner and F7 bedroll were taken out for
+     0.8.1; the spawner is back inside the `FRIEND_TEST_KEYS` block.)
    - Don't define `FRIEND_TEST_KEYS` (plain `./configure`, and the Windows
      workflow, leave it off). The host's F8 / F9 test keys are then left out
      of the build entirely.
