@@ -100,6 +100,15 @@ code signing for open-source projects, signing builds from public CI) and
 add its step to this workflow. Signing names the publisher; SmartScreen's
 warning can still show until a signed build has some downloads behind it.
 
+Chrome may also block the artifact zip as a "Suspicious download" ("This
+file isn't commonly downloaded"; first seen with 0.8.1, 2026-10-30).
+It isn't this build: the 2026-10-26 zip, which downloaded cleanly then,
+was blocked too when downloaded again on 2026-10-31. So the change is on
+Chrome's side (how it judges unsigned programs in a zip), not in the zip's
+contents or layout (unlike KittyLauncher's Mac zips, whose fix was the
+zip's layout). Zipping it again ourselves wouldn't help. Testers choose
+"Download suspicious file" until builds are signed.
+
 ### Other options
 
 - **A Windows PC or VM with MSYS2.** Follow Exult's `README.windows` (its

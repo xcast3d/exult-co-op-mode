@@ -869,6 +869,8 @@ bool Friend_mode_guest_usable_shape(int shape) {
 	case 845:
 	case 787:    // Lever.
 	case 788:    // Switch.
+	case 949:    // Winches (Trinsic, 2026-10-31).
+	case 950:
 	case 252:    // Grandfather clocks: say the time.
 	case 695:
 	case 889:    // Lamp post (unlit).
@@ -3557,9 +3559,10 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	// Usable things (2026-10-23; was levers and switches): levers (787),
 	// switches (788), the bucket (810), artist's equipment (823: pigments
 	// and the paint brush) and the easel (837, was furniture); the gavel
-	// below; beds (696, 1011) and the bedroll (583, was loot), 2026-10-29.
-	// Decor is what has no use.
-	static const std::unordered_set<int> usable{583, 696, 787, 788, 810, 823, 837, 1011};
+	// below; beds (696, 1011) and the bedroll (583, was loot), 2026-10-29;
+	// winches (949, 950: Trinsic's gate, 2026-10-31).  Decor is what has
+	// no use.
+	static const std::unordered_set<int> usable{583, 696, 787, 788, 810, 823, 837, 949, 950, 1011};
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
 	// walls (828, 845) that slide open.
 	static const std::unordered_set<int> interactive{290, 291, 322, 372, 435, 481, 526, 657, 678, 828, 845, 889};
@@ -8204,6 +8207,35 @@ void Friend_mode_note_dialogue_clear_choices() {
 	}
 }
 
+// The Avatar answers with a number (the slider): guests see its range and
+// the value as it moves, where the choices go, until it is answered.
+static bool friend_number_shown = false;
+static int  friend_number_min   = 0;
+static int  friend_number_max   = 0;
+
+void Friend_mode_note_dialogue_number(int min, int max, int value) {
+	if (friend_host_dialogue_active) {
+		friend_number_shown = true;
+		friend_number_min   = min;
+		friend_number_max   = max;
+		friend_session.send_dialogue_number(min, max, value);
+		friend_session.poll();
+	}
+}
+
+void Friend_mode_note_dialogue_number_value(int value) {
+	if (friend_number_shown && friend_host_dialogue_active) {
+		friend_session.send_dialogue_number(friend_number_min, friend_number_max, value);
+		friend_session.poll();
+	}
+}
+
+void Friend_mode_note_dialogue_number_done() {
+	if (std::exchange(friend_number_shown, false)) {
+		Friend_mode_note_dialogue_clear_choices();
+	}
+}
+
 static std::vector<uint32> Friend_party_members() {
 	std::vector<uint32> members;
 	Party_manager*      party = gwin->get_party_man();
@@ -9091,7 +9123,7 @@ static void SetIcon() {
 // config.
 static void Friend_mode_toggle_running() {
 	Friend_running = !Friend_running;
-	config->set("config/gameplay/running", Friend_running, true);
+	config->set("config/gameplay/running", Friend_running ? "yes" : "no", true);
 	Friend_mode_notice(Friend_running ? "Running" : "Walking");
 }
 
@@ -11328,6 +11360,9 @@ static void Handle_events() {
 					break;
 				case Friend_mode_session::Dialogue_event_type::clear_choices:
 					conversation->clear_avatar_choices();
+					break;
+				case Friend_mode_session::Dialogue_event_type::number:
+					conversation->show_remote_number(dialogue_event.a, dialogue_event.b, dialogue_event.c);
 					break;
 				}
 			}

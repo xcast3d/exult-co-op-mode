@@ -66,7 +66,10 @@ void Configuration::value(const string& key, string& ret, const std::string& def
 void Configuration::value(const string& key, bool& ret, bool defaultvalue) const {
 	const XMLnode* sub = xmltree->subtree(key);
 	if (sub) {
-		ret = (to_uppercase(sub->value()) == "YES");
+		// Friend Mode (2026-10-31): "1" too, as some of our switches were
+		// once saved as numbers and then always read back as off.
+		const std::string text = to_uppercase(sub->value());
+		ret                    = text == "YES" || text == "1";
 	} else {
 		ret = defaultvalue;
 	}

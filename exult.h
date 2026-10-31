@@ -242,6 +242,10 @@ void Friend_mode_note_dialogue_remove_face(int shape);
 void Friend_mode_note_dialogue_message(const char* text);
 void Friend_mode_note_dialogue_choices(const std::vector<std::string>& choices);
 void Friend_mode_note_dialogue_clear_choices();
+// The Avatar answering with a number in a conversation: shown to guests.
+void Friend_mode_note_dialogue_number(int min, int max, int value);
+void Friend_mode_note_dialogue_number_value(int value);    // The slider moved.
+void Friend_mode_note_dialogue_number_done();
 
 /*
  *  Get a click, or, optionally, a keyboard char.

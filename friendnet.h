@@ -26,7 +26,7 @@ class Friend_lobby_host;
 class Friend_mode_session {
 public:
 	enum class Mode { off, host, guest };
-	enum class Dialogue_event_type { begin, end, face, face_frame, remove_face, message, choices, clear_choices };
+	enum class Dialogue_event_type { begin, end, face, face_frame, remove_face, message, choices, clear_choices, number };
 	struct Dialogue_event {
 		Dialogue_event_type type;
 		int a = 0;
@@ -245,6 +245,9 @@ public:
 	void send_dialogue_message(const std::string& text);
 	void send_dialogue_choices(const std::vector<std::string>& choices);
 	void send_dialogue_clear_choices();
+	// The Avatar is answering with a number (input_numeric_value): its range
+	// and the value chosen so far; cleared as choices are.
+	void send_dialogue_number(int min, int max, int value);
 	bool take_dialogue_event(Dialogue_event& event);
 	// Once per connection, after the peer's player name arrives (on the
 	// host, once per guest).

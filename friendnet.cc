@@ -13,7 +13,7 @@
 #include <random>
 
 namespace {
-constexpr unsigned short protocol_version = 37;
+constexpr unsigned short protocol_version = 38;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -36,6 +36,7 @@ constexpr unsigned char  dialogue_remove_face_packet = 21;
 constexpr unsigned char  dialogue_choices_begin_packet = 24;
 constexpr unsigned char  dialogue_choices_show_packet = 26;
 constexpr unsigned char  dialogue_clear_choices_packet = 27;
+constexpr unsigned char  dialogue_number_packet = 28;
 constexpr unsigned char  party_begin_packet = 32;
 constexpr unsigned char  party_member_packet = 33;
 constexpr unsigned char  party_end_packet = 34;
@@ -764,6 +765,14 @@ void Friend_mode_session::send_dialogue_clear_choices() {
 	deliver(everyone);
 }
 
+void Friend_mode_session::send_dialogue_number(int min, int max, int value) {
+	unsigned char* packet = stage_packet(dialogue_number_packet);
+	write_u32(packet + 8, static_cast<uint32>(min));
+	write_u32(packet + 12, static_cast<uint32>(max));
+	write_u32(packet + 16, static_cast<uint32>(value));
+	deliver(everyone);
+}
+
 bool Friend_mode_session::take_dialogue_event(Dialogue_event& event) {
 	if (dialogue_events.empty()) {
 		return false;
@@ -1091,6 +1100,9 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 		pending_dialogue_choices.clear();
 	} else if (guest && ready && type == dialogue_clear_choices_packet) {
 		dialogue_events.push_back({Dialogue_event_type::clear_choices});
+	} else if (guest && ready && type == dialogue_number_packet) {
+		dialogue_events.push_back({Dialogue_event_type::number, static_cast<int>(game), static_cast<int>(second),
+				static_cast<int>(third)});
 	} else if (!valid_header) {
 		// Something other than Exult (e.g. a local port probe) connected.
 		std::cerr << "Friend Mode: closed non-Friend Mode connection" << std::endl;

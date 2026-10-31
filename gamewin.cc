@@ -3057,10 +3057,12 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 	Actor* controlled = get_controlled_actor();
 	if (gump && controlled && controlled != main_actor && !obj->as_actor()) {
 		Container_game_object* container = obj->as_container();
-		// A guest's own packs; the host leading a companion, any party
-		// member's (the game master).
+		// A guest's own packs, and a bag in a chest or body on the map (its
+		// window is open, so it was reached; 2026-10-31: an X); the host
+		// leading a companion, any party member's too (the game master).
 		Actor* holder = obj->get_outermost()->as_actor();
-		if (container && (holder == controlled || (!network_friend_control && holder && holder->is_in_party()))
+		if (container
+			&& (!holder || holder == controlled || (!network_friend_control && holder->is_in_party()))
 			&& container->show_gump()) {
 			effects->remove_text_effects();
 			return;

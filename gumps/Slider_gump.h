@@ -32,12 +32,24 @@ class Slider_gump : public Modal_gump, Slider_widget::ICallback {
 protected:
 	std::unique_ptr<Slider_widget> widget;
 	bool                           allow_escape = false;
+	bool                           read_only    = false;    // Friend Mode guest: the host's, to watch.
 
 public:
 	Slider_gump(int mival, int mxval, int step, int defval, bool allow_escape);
 
 	int get_val() {    // Get last value set.
 		return widget->getselection();
+	}
+
+	// Friend Mode guest: a copy of the Avatar's slider, moved by the host,
+	// that can't be used or dragged here.
+	void make_read_only() {
+		read_only   = true;
+		no_dragging = true;
+	}
+
+	void show_val(int value) {
+		widget->set_val(value);
 	}
 
 	// Paint it and its contents.

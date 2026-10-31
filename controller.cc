@@ -1775,8 +1775,8 @@ public:
 
 	// OK (and the checkmark): saved and in use at once.
 	void close() override {
-		config->set("config/gameplay/controller/enabled", settings[set_enabled], false);
-		config->set("config/gameplay/controller/swap_south_east", settings[set_swap], false);
+		config->set("config/gameplay/controller/enabled", settings[set_enabled] ? "yes" : "no", false);
+		config->set("config/gameplay/controller/swap_south_east", settings[set_swap] ? "yes" : "no", false);
 		config->set("config/gameplay/controller/pointer_speed", speed_values[settings[set_speed]], false);
 		config->set("config/gameplay/controller/pointer_hide_ms", hide_values[settings[set_hide]], true);
 		Controller_read_config();

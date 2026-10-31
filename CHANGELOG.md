@@ -24,6 +24,31 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.2)
+
+### Changed
+
+- **Co-op:** hosts and guests need the same release (the co-op protocol is
+  now 38).
+- **Winches:** the Target System offers them with levers and switches, and
+  Space turns them.
+
+### Fixed
+
+- **Skill range while the Avatar talks:** a guest hovering the skill bar
+  during a conversation no longer leaves a range circle stuck on screen.
+  The bar ignores the mouse until the conversation ends.
+- **Number answers in conversations:** when the Avatar answers with a
+  number (how many to buy, for instance), guests now see the Avatar's
+  slider move as the host sets it, instead of an empty space. Guests can't
+  use it.
+- **Bags inside chests:** guests can open a bag or box inside a chest or
+  body. They used to get a red X.
+- **Running is remembered:** after R switched to walking once, every
+  start walked, even when you'd switched back to running. The controller
+  page's "Enabled" and "Swap" choices had the same problem and now stick
+  too.
+
 ## 0.8.1, 2026-10-30 (build 219)
 
 ### Changed

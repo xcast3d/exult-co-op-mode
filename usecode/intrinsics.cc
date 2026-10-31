@@ -225,8 +225,10 @@ USECODE_INTRINSIC(select_from_menu2) {
 
 USECODE_INTRINSIC(input_numeric_value) {
 	// Ask for # (min, max, step, default).  Be sure to show conversation.
+	Friend_mode_note_dialogue_number(parms[0].get_int_value(), parms[1].get_int_value(), parms[3].get_int_value());
 	Usecode_value ret(gumpman->prompt_for_number(
 			parms[0].get_int_value(), parms[1].get_int_value(), parms[2].get_int_value(), parms[3].get_int_value(), conv, nullptr));
+	Friend_mode_note_dialogue_number_done();
 	conv->clear_text_pending();    // Answered a question.
 	return ret;
 }

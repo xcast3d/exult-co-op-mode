@@ -32,6 +32,7 @@
 class Npc_face_info;
 class Usecode_value;
 class Game_window;
+class Slider_gump;
 
 class Conversation : public Game_singletons, public Paintable {
 public:
@@ -46,6 +47,7 @@ private:
 	int                           conv_layer      = -1;              // Overlay layer with faces/text.
 	int                           conv_bg_layer   = -1;              // Overlay layer with translucent text backgrounds.
 	bool                          choices_active  = false;           // Avatar choices are being shown.
+	Slider_gump*                  remote_slider   = nullptr;         // Friend Mode guest: the Avatar's slider, shown.
 
 	std::vector<std::string>             answers;
 	std::deque<std::vector<std::string>> answer_stack;
@@ -76,6 +78,10 @@ public:
 	void show_avatar_choices();
 	void clear_avatar_choices();
 	void show_remote_choices(const std::vector<std::string>& choices);
+	// Friend Mode guest: the Avatar is choosing a number; its slider shows
+	// here, moving as the host's does, but can't be used.
+	void show_remote_number(int min, int max, int value);
+	void hide_remote_number();
 	// Friend Mode: draw 'choice' in palette color 'color' (one choice per
 	// color, so a player's new suggestion replaces their last).  False if
 	// 'choice' isn't being offered.

@@ -31,7 +31,7 @@ they go on to the next, then "No target", then round again.
 | Decor | off | takes | anything not in another group |
 | Furniture | off | uses (Shift: picks up) | the list below |
 | Doors, hidden walls, lamps | on | uses | doors, secret walls (828, 845), shutters, sconces, curtains, lamp posts. On by default since 2026-10-24 (was off: with it on, E finds secret walls, which Black Gate means to be found by looking) |
-| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture), beds (696, 1011) and the bed roll (583, was loot; Space sleeps, 2026-10-29). Decor is what has no use (2026-10-23) |
+| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture), beds (696, 1011) and the bed roll (583, was loot; Space sleeps, 2026-10-29), winches (949, 950; 2026-10-31). Decor is what has no use (2026-10-23) |
 | Signs, plaques, graves | on | reads | sign (379), plaque (820), tombstone (715); picture signs (360, 361) have nothing to read |
 
 **Loot (besides weapons, armour and ammunition):** pocketwatch, cloth map,

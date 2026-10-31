@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 
 #include "Gump_button.h"
 #include "Gump_manager.h"
+#include "exult.h"
 #include "game.h"
 #include "gamewin.h"
 #include "misc_buttons.h"
@@ -41,12 +42,16 @@ Slider_gump::Slider_gump(
 			this, 24, 6, ShapeID(game->get_shape("gumps/slider_left"), 0, SF_GUMPS_VGA),
 			ShapeID(game->get_shape("gumps/slider_right"), 0, SF_GUMPS_VGA),
 			ShapeID(game->get_shape("gumps/slider_diamond"), 0, SF_GUMPS_VGA), mival, mxval, step, defval, 64);
+	// The widget's own lookup can't see the (private) callback base, so
+	// value changes never came here (Friend Mode needs them, 2026-10-31).
+	widget->setCallback(this);
 
 	set_object_area(TileRect(0, 0, 0, 0), 22, 18);
 }
 
 void Slider_gump::OnSliderValueChanged(Slider_widget* sender, int newvalue) {
-	ignore_unused_variable_warning(sender, newvalue);
+	ignore_unused_variable_warning(sender);
+	Friend_mode_note_dialogue_number_value(newvalue);    // Guests see it move.
 	gwin->add_dirty(get_rect());
 }
 
@@ -73,6 +78,9 @@ void Slider_gump::paint() {
 bool Slider_gump::mouse_down(
 		int mx, int my, MouseButton button    // Position in window.
 ) {
+	if (read_only) {
+		return true;
+	}
 	if (button != MouseButton::Left) {
 		return Modal_gump::mouse_down(mx, my, button);
 	}
@@ -102,6 +110,9 @@ bool Slider_gump::mouse_down(
 bool Slider_gump::mouse_up(
 		int mx, int my, MouseButton button    // Position in window.
 ) {
+	if (read_only) {
+		return true;
+	}
 	if (button != MouseButton::Left) {
 		return Modal_gump::mouse_up(mx, my, button);
 	}
@@ -128,6 +139,9 @@ bool Slider_gump::mouse_up(
 bool Slider_gump::mouse_drag(
 		int mx, int my    // Where mouse is.
 ) {
+	if (read_only) {
+		return true;
+	}
 	if (widget->mouse_drag(mx, my)) {
 		return true;
 	}
@@ -139,6 +153,9 @@ bool Slider_gump::mouse_drag(
  */
 
 bool Slider_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
+	if (read_only) {
+		return true;
+	}
 	switch (chr) {
 	case SDLK_RETURN:
 		done = true;
@@ -158,6 +175,9 @@ bool Slider_gump::key_down(SDL_Keycode chr, SDL_Keycode unicode) {
 }
 
 bool Slider_gump::mousewheel_up(int mx, int my) {
+	if (read_only) {
+		return true;
+	}
 	if (widget->mousewheel_up(mx, my)) {
 		return true;
 	}
@@ -166,6 +186,9 @@ bool Slider_gump::mousewheel_up(int mx, int my) {
 }
 
 bool Slider_gump::mousewheel_down(int mx, int my) {
+	if (read_only) {
+		return true;
+	}
 	if (widget->mousewheel_down(mx, my)) {
 		return true;
 	}

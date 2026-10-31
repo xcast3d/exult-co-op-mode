@@ -27,6 +27,7 @@
 #include "Face_stats.h"
 #include "Gump_manager.h"
 #include "ShortcutBar_gump.h"
+#include "Slider_gump.h"
 #include "actors.h"
 #include "ucmachine.h"
 #include "data/exult_bg_flx.h"
@@ -199,6 +200,7 @@ void Conversation::init_faces() {
 	num_faces       = 0;
 	last_face_shown = -1;
 	choices_active  = false;
+	hide_remote_number();
 	if (conv_layer >= 0) {    // Hide any leftover faces/text.
 		gwin->layer_set_visible(conv_layer, false);
 		gwin->layer_set_dirty(conv_layer);
@@ -924,6 +926,7 @@ void Conversation::clear_avatar_choices() {
 	Friend_mode_note_dialogue_clear_choices();
 	suggestions.clear();
 	choices_active = false;
+	hide_remote_number();
 	highlight      = -1;
 	avatar_face.w  = 0;
 	repaint_conversation();    // Repaint the faces without the choices.
@@ -937,6 +940,38 @@ void Conversation::show_remote_choices(const std::vector<std::string>& choices) 
 	choices_active = true;
 	highlight      = -1;
 	repaint_conversation();
+}
+
+// The slider we showed, if it is still open (it can be closed with the
+// other windows).
+static bool Is_open(Gump_manager* gumps, Gump* gump) {
+	for (auto it = gumps->begin(); it != gumps->end(); ++it) {
+		if (*it == gump) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void Conversation::show_remote_number(int min, int max, int value) {
+	if (remote_slider && !Is_open(gumpman, remote_slider)) {
+		remote_slider = nullptr;
+	}
+	if (!remote_slider) {
+		remote_slider = new Slider_gump(min, max, 1, value, false);
+		remote_slider->make_read_only();
+		gumpman->add_gump(remote_slider);
+	}
+	remote_slider->show_val(value);
+	gwin->set_all_dirty();
+}
+
+void Conversation::hide_remote_number() {
+	if (remote_slider && Is_open(gumpman, remote_slider)) {
+		gumpman->close_gump(remote_slider);
+		gwin->set_all_dirty();
+	}
+	remote_slider = nullptr;
 }
 
 /*

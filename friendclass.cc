@@ -3263,8 +3263,10 @@ void Hover_hint(const Bar_slot& slot, int index) {
 	Friend_mode_class_hint(slot.name, hint);
 }
 
-// Show, refresh or hide this machine's bar.
-void Update_bar() {
+// Show, refresh or hide this machine's bar.  'paused': the game waits on
+// a conversation or a menu, so nothing is hovered (the Class clock stops
+// then, and a hover's circle would stay until it went on).
+void Update_bar(bool paused) {
 	Game_window*  gwin  = Gwin();
 	Gump_manager* gumps = gwin->get_gump_man();
 	Actor*        actor = Bar_actor();
@@ -3301,7 +3303,7 @@ void Update_bar() {
 	}
 	// The mouse over a slot: its name, and its range around the user.
 	int hovered = -1;
-	if (!gumps->modal_gump_mode()) {
+	if (!paused && !gumps->modal_gump_mode()) {
 		const int mx = Mouse::mouse()->get_mousex();
 		const int my = Mouse::mouse()->get_mousey();
 		if (gumps->find_gump(mx, my) == the_bar) {
@@ -3316,6 +3318,15 @@ void Update_bar() {
 	if (hovered != the_bar->get_hovered()) {
 		if (const Bar_slot* slot = the_bar->slot(hovered)) {
 			Hover_hint(*slot, hovered);
+		} else if (the_bar->get_hovered() >= 0) {
+			// Off the bar: its circle goes now (a skill's longer one stays).
+			const int    npc  = actor->get_npc_num();
+			const uint32 soon = Now() + 100;
+			circles.erase(std::remove_if(circles.begin(), circles.end(),
+								  [npc, soon](const Range_circle& c) {
+									  return c.npc == npc && c.at.tx < 0 && c.until <= soon;
+								  }),
+						  circles.end());
 		}
 	}
 	the_bar->set_hovered(hovered);
@@ -3955,8 +3966,9 @@ void Friend_class_frame() {
 	if (!gwin->get_main_actor()) {
 		return;
 	}
-	Tick_clock(gwin->get_tqueue()->is_paused()
-			   || (Is_guest() && (gwin->is_network_host_paused() || gwin->is_network_dialogue_paused())));
+	const bool paused = gwin->get_tqueue()->is_paused()
+						|| (Is_guest() && (gwin->is_network_host_paused() || gwin->is_network_dialogue_paused()));
+	Tick_clock(paused);
 	if (!Is_guest()) {
 		Expire();
 		if (Friend_class_active()) {
@@ -3973,7 +3985,7 @@ void Friend_class_frame() {
 			Use_slot(copy, index);
 		}
 	}
-	Update_bar();
+	Update_bar(paused);
 	Paint_circles();
 	Update_marks();
 }
