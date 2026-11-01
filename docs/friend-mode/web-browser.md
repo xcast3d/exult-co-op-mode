@@ -199,8 +199,9 @@ shortcut may land on a different key: check.
       lobby messages as the desktop guest, so hosts need nothing new.
       Tested: the Mac app hosted through a local lobby (`wrangler dev`) and
       the browser joined by code, linked directly, got the world and was in
-      the game. Not yet tried through the live lobby, the TURN relay, or
-      another computer.
+      the game. Then the player's own Chrome joined a Mac host by code
+      through the live lobby (2026-11-01). Not yet tried through the TURN
+      relay or from another computer.
 - [x] The lobby lets the game's own pages join, never host
       (`BROWSER_ORIGINS` in `tools/lobby/wrangler.toml`:
       `https://xcast3d.com` and the local test server). A browser can't fake
