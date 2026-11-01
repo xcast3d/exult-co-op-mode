@@ -28,8 +28,14 @@ never put Black Gate's files in them: players bring their own.
 
 Under the hood: Asyncify lets Exult's own loops hand control back to the
 browser (every wait goes through `SDL_Delay`); C++ exceptions are on
-(`-fexceptions`); the canvas has no alpha channel, or the browser blends
-the world away (`imagewin.cc`).
+(`-fexceptions`). Exult draws with SDL's software renderer on a 2D canvas
+the game's own size (`imagewin.cc`), which the page scales up with square
+pixels. It used WebGL at first, but a browser may take a WebGL context back
+while the page is out of sight, and SDL never redraws after that: the game
+went black for good after switching away from it in fullscreen
+(2026-11-01). A reset 2D canvas is painted again by the next frame. The
+page makes the 2D context without alpha (`pre.js`), or the browser blends
+the world away (the scalers leave alpha at 0).
 
 ## Done
 

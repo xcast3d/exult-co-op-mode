@@ -162,6 +162,9 @@ async function qotc_use_files(files) {
 // Just before Exult starts (the data package is in by then; on a first
 // visit, storage is read before it is): the settings start as the page's.
 Module['onRuntimeInitialized'] = () => {
+	// Exult draws on a 2D canvas (imagewin.cc); made here first, without
+	// alpha, so the game's pixels are opaque.
+	Module.canvas.getContext('2d', {alpha: false});
 	if (!FS.analyzePath(qotc_config).exists) {
 		FS.writeFile(qotc_config, FS.readFile('/pkg/exult.cfg'));
 	}
