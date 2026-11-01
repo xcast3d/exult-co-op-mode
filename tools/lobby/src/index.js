@@ -37,7 +37,9 @@
  *   connection ends after 60 s (it needs a few to connect); codes end when
  *   the host leaves or after 12 hours.
  * - Browsers are turned away (the game sends no Origin header), so a web
- *   page can't use the lobby on a visitor's behalf.
+ *   page can't use the lobby on a visitor's behalf.  The one exception is
+ *   the game's own web build: pages from BROWSER_ORIGINS (wrangler.toml,
+ *   exact sites) may join a game by code, never host or ask /ip.
  * - No secrets in the repo: TURN keys are Worker secrets.
  *
  * Usage counts (games opened, guests joined, per day) are kept by the Stats
@@ -190,6 +192,13 @@ function noGame() {
 	return new Response(null, { status: 101, webSocket: client });
 }
 
+// The game's web build, which may join (BROWSER_ORIGINS: exact origins,
+// space-separated).  A browser always sends its page's real origin, so no
+// other site's page gets past this.
+function browserOrigin(origin, env) {
+	return (env.BROWSER_ORIGINS || "").split(/\s+/).includes(origin);
+}
+
 export default {
 	async fetch(request, env) {
 		const url = new URL(request.url);
@@ -201,7 +210,8 @@ export default {
 				headers: { "Content-Type": "text/plain" },
 			});
 		}
-		if (request.headers.get("Origin")) {
+		const origin = request.headers.get("Origin");
+		if (origin && !(browserOrigin(origin, env) && /^\/join\/[^/]+$/.test(url.pathname))) {
 			return new Response("Not for browsers", { status: 403 });
 		}
 		if (url.pathname === "/ip" && request.method === "GET") {

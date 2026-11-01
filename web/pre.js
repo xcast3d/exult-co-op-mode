@@ -80,6 +80,9 @@ function qotc_frame() {
 async function qotc_toggle_fullscreen() {
 	try {
 		if (document.fullscreenElement) {
+			if (navigator.keyboard && navigator.keyboard.unlock) {
+				navigator.keyboard.unlock();
+			}
 			await document.exitFullscreen();
 		} else {
 			await qotc_frame().requestFullscreen({navigationUI: 'hide'});
@@ -162,9 +165,6 @@ async function qotc_use_files(files) {
 // Just before Exult starts (the data package is in by then; on a first
 // visit, storage is read before it is): the settings start as the page's.
 Module['onRuntimeInitialized'] = () => {
-	// Exult draws on a 2D canvas (imagewin.cc); made here first, without
-	// alpha, so the game's pixels are opaque.
-	Module.canvas.getContext('2d', {alpha: false});
 	if (!FS.analyzePath(qotc_config).exists) {
 		FS.writeFile(qotc_config, FS.readFile('/pkg/exult.cfg'));
 	}
@@ -208,6 +208,29 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 		});
 		addEventListener('resize', qotc_fit_fullscreen);
 		new ResizeObserver(qotc_fit_fullscreen).observe(Module.canvas);
+		// Switching away from fullscreen (Cmd+Tab, another Space) once left a
+		// black fullscreen Space that held the keyboard, and only a new
+		// desktop got out of it.  So the Escape lock is let go whenever the
+		// window loses focus (taken back on return), and fullscreen ends
+		// when the page is hidden.
+		addEventListener('blur', () => {
+			if (navigator.keyboard && navigator.keyboard.unlock) {
+				navigator.keyboard.unlock();
+			}
+		});
+		addEventListener('focus', () => {
+			if (document.fullscreenElement && navigator.keyboard && navigator.keyboard.lock) {
+				navigator.keyboard.lock(['Escape']).catch(() => {});
+			}
+		});
+		document.addEventListener('visibilitychange', () => {
+			if (document.hidden && document.fullscreenElement) {
+				if (navigator.keyboard && navigator.keyboard.unlock) {
+					navigator.keyboard.unlock();
+				}
+				document.exitFullscreen().catch(() => {});
+			}
+		});
 		// In fullscreen, Escape (still the game's) and the mouse in the top
 		// right corner show the Exit Fullscreen button for a moment.
 		addEventListener('keydown', event => {

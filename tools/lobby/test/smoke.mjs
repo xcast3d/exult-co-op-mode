@@ -113,17 +113,21 @@ try {
 	// A browser's handshake carries an Origin; fetch won't send Upgrade, so
 	// by hand.
 	const { request } = await import(base.startsWith("wss") ? "node:https" : "node:http");
-	const status = await new Promise((resolve) => {
-		const req = request(base.replace(/^ws/, "http") + "/host", {
-			headers: { Connection: "Upgrade", Upgrade: "websocket", Origin: "https://example.com",
+	const status = (path, origin) => new Promise((resolve) => {
+		const req = request(base.replace(/^ws/, "http") + path, {
+			headers: { Connection: "Upgrade", Upgrade: "websocket", Origin: origin,
 				"Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==" },
 		});
 		req.on("response", (res) => resolve(res.statusCode));
-		req.on("upgrade", () => resolve(101));
+		req.on("upgrade", (res, socket) => { socket.destroy(); resolve(101); });
 		req.on("error", () => resolve(0));
 		req.end();
 	});
-	check("browsers are turned away", status === 403);
+	check("browsers are turned away", await status("/host", "https://example.com") === 403);
+	check("other sites' pages can't join", await status("/join/NOWHERE-0000", "https://example.com") === 403);
+	// The game's web build (BROWSER_ORIGINS) joins, and only joins.
+	check("the web build may join", await status("/join/NOWHERE-0000", "http://127.0.0.1:8642") === 101);
+	check("the web build can't host", await status("/host", "http://127.0.0.1:8642") === 403);
 	const asked = await fetch(base.replace(/^ws/, "http") + "/ip");
 	check("the caller's own address is given", asked.ok && (await asked.text()).endsWith("\n"));
 

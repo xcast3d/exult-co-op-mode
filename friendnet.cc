@@ -199,6 +199,13 @@ bool Friend_mode_session::start_guest(
 		}
 		std::cout << "Friend Mode: joining " << address << " through " << lobby_url << std::endl;
 	} else {
+#ifdef __EMSCRIPTEN__
+		// A browser can't open a connection to an address, only through
+		// the lobby.
+		link_problem = "In a browser, join with the host's lobby code";
+		std::cerr << "Friend Mode: " << link_problem << std::endl;
+		return false;
+#endif
 		link = Friend_tcp_connect(address, port, 5000);
 		if (!link) {
 			std::cerr << "Friend Mode: could not connect to " << address << ':' << port << std::endl;

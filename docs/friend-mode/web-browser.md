@@ -28,14 +28,11 @@ never put Black Gate's files in them: players bring their own.
 
 Under the hood: Asyncify lets Exult's own loops hand control back to the
 browser (every wait goes through `SDL_Delay`); C++ exceptions are on
-(`-fexceptions`). Exult draws with SDL's software renderer on a 2D canvas
-the game's own size (`imagewin.cc`), which the page scales up with square
-pixels. It used WebGL at first, but a browser may take a WebGL context back
-while the page is out of sight, and SDL never redraws after that: the game
-went black for good after switching away from it in fullscreen
-(2026-11-01). A reset 2D canvas is painted again by the next frame. The
-page makes the 2D context without alpha (`pre.js`), or the browser blends
-the world away (the scalers leave alpha at 0).
+(`-fexceptions`); the canvas has no alpha channel, or the browser blends
+the world away (`imagewin.cc`). SDL's software renderer on a 2D canvas was
+tried (2026-11-01) and reverted the same day: in Chrome and Safari the
+game world came out black (only the overlays drew), though the app's own
+test browser showed it.
 
 ## Done
 
@@ -69,14 +66,60 @@ the world away (the scalers leave alpha at 0).
 - [ ] Test saving and loading from the in-game save menu (same storage, not
       tried yet: the opening scene blocks saving until it ends, and a test
       on 2026-10-30 stopped before that).
-- [ ] Export and import buttons, so saves can be backed up or moved to
-      another computer or browser.
-- [ ] Storage that may be cleared: the page asks the browser to keep its
-      storage (`navigator.storage.persist()`), but Safari deletes a site's
-      storage after 7 days without a visit, unless the page is added to the
-      Home Screen or Dock. Tell Safari players, and make export easy.
 - [ ] A save written while the page is closed mid-sync can be lost; check
       what happens if the tab is closed during a save.
+
+Only single player and hosting have saves to lose: a co-op guest plays in
+the host's world, which the host saves. (Browsers don't host.)
+
+**What browsers do with a page's storage.** The page asks to keep it
+(`navigator.storage.persist()`, at startup), but:
+
+- Chrome and Edge usually grant that, more readily for a site that is
+  bookmarked or visited often, and then delete only when the disk is
+  nearly full.
+- Firefox asks the player once; kept if they allow it.
+- Safari deletes a site's storage after 7 days without a visit, unless the
+  page is added to the Dock (Mac) or the Home Screen (iPad).
+- Everywhere: "Clear browsing data", private windows and cleaner apps wipe
+  it regardless.
+
+**The plan, most useful first:**
+
+- [ ] Export and Import. Export downloads one `.zip` (saves, the game in
+      progress, settings); Import puts it back, in any browser or on
+      another computer. Works everywhere; the real safety net. Show "Last
+      backup: 3 days ago" on the setup page and in the game menu, so a
+      player is nudged without being nagged.
+- [ ] Say whether storage is kept: on the setup page, "This browser will
+      keep your saves" or "This browser may delete your saves", with the
+      Add to Dock hint in Safari.
+- [ ] A saves folder on disk (Chrome and Edge only, the File System Access
+      API): the player chooses a folder once (next to their Ultima VII
+      files, say) and every save is also written there as ordinary
+      `.sav` files, like the desktop app's. Browser storage is then only a
+      working copy. After a browser restart Chrome asks for one click to
+      allow the folder again. Safari and Firefox can't do this.
+- [ ] Installable web app (a manifest and a service worker): what Safari
+      needs to stop the 7-day deletion, and the game would open like an
+      app. More work; later.
+
+**Cloud saves: much later, if at all.** The nicest end state (2026-11-01):
+sign in with Google (or similar) on any browser on any machine and the
+saves are just there. But it means keeping players' data on our side,
+accounts, and abuse limits, against keeping the lobby small and locked down
+([security](security.md)). If it happens: a Worker of its own (not the
+lobby), sign-in through an identity provider so we never hold passwords,
+saves in R2 keyed by the provider's account id, a size cap per player
+(say 20 MB) and per-account rate limits, and Export/Import kept as the
+way out. The storage itself would be cheap. Measured 2026-11-01: a Black Gate save is about 190 KB
+(Exult zips it; early game, so later saves will be larger, perhaps up to
+1 MB as more of the map is visited), and the game in progress is 770 KB
+unzipped, about 190 KB zipped. Ten slots plus the autosaves is about 2 MB
+early on, perhaps 10 MB late in the game, so 2-10 MB a player. Cloudflare
+R2's free tier (10 GB) would hold about 1,000-5,000 players; past that,
+$0.015 per GB a month, about 15 cents a month for 1,000 players at 10 MB
+each.
 
 ### Audio
 
@@ -149,24 +192,32 @@ shortcut may land on a different key: check.
 
 ### Co-op (WebRTC)
 
-- [ ] The browser build is made with `--with-friend-rtc=no` today. Friend
-      Mode's connection code (`friendrtc.cc`, libdatachannel) has to use
-      the browser's own WebRTC instead, through JavaScript. The lobby
-      (Cloudflare Worker) can stay as it is, with its rules in
-      [security](security.md).
-- [ ] Hosting stays on the Mac and Windows builds; browsers join
+- [x] Joining by lobby code (2026-11-01). The browser build joins with the
+      browser's own WebSocket and WebRTC (`friendrtc.cc`, the
+      `__EMSCRIPTEN__` section: JavaScript keeps each connection and queues
+      what arrives, and the game polls it, as with libdatachannel). Same
+      lobby messages as the desktop guest, so hosts need nothing new.
+      Tested: the Mac app hosted through a local lobby (`wrangler dev`) and
+      the browser joined by code, linked directly, got the world and was in
+      the game. Not yet tried through the live lobby, the TURN relay, or
+      another computer.
+- [x] The lobby lets the game's own pages join, never host
+      (`BROWSER_ORIGINS` in `tools/lobby/wrangler.toml`:
+      `https://xcast3d.com` and the local test server). A browser can't fake
+      the site it sends, so other sites' pages are still turned away. Needs
+      the lobby redeployed to work against the live one.
+- [x] Hosting stays on the Mac and Windows builds; browsers join
       (2026-10-30). Browsers slow down hidden tabs, so a host in a
       background tab would slow every player, while a guest in one only
-      stalls their own character. The browser build already knows it's a
-      browser (`__EMSCRIPTEN__`), so no new setting: in the Co-Op Mode
-      menu, Host is greyed out with a line saying hosting needs the Mac or
-      Windows app (greyed, not hidden, so players know where to go), and
-      the lobby only ever sees browsers joining. Keep it in one place in
-      the code, so it can be turned on if hosting in a browser ever proves
-      reliable.
-- [x] Until co-op works in the browser, the title menu shows "Co-Op Mode:
-      Desktop App Only", which can't be chosen (`game.cc`, 2026-10-30). It
-      looks like the other entries; a darker font would read as greyed.
+      stalls their own character. In the browser: the title's Co-Op Mode
+      shows "Host: Desktop App Only" (can't be chosen; it looks like the
+      other entries, a darker font would read as greyed) and Join Game;
+      Join asks for a Code (a browser can't connect to an address, so no
+      IP); the game menu has no Co-Op Mode page (it's the host's).
+- [ ] A guest in a background tab: check the host doesn't drop them, and
+      that they catch up on return.
+- [ ] A wrong code goes back to the Co-Op menu without saying why (the
+      desktop app too?).
 
 ### Page and hosting
 

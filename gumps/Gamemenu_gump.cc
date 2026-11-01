@@ -339,10 +339,13 @@ void Gamemenu_gump::createButtons() {
 	buttons[id_controller] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::controller_page, "Controller", margin, yForRow(y++), preferred_button_width, 11);
 
+	// The host's page; a browser only joins (from the title menu).
+#ifndef __EMSCRIPTEN__
 	if (!gwin->is_in_exult_menu() && !Friend_mode_is_guest()) {
 		buttons[id_open_coop] = std::make_unique<Gamemenu_button>(
 				this, &Gamemenu_gump::open_coop, "Co-Op Mode", margin, yForRow(y++), preferred_button_width, 11);
 	}
+#endif
 #if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
 	if (!gwin->is_in_exult_menu()) {
 		buttons[id_main_menu] = std::make_unique<Gamemenu_button>(

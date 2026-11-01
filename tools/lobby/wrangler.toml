@@ -21,6 +21,10 @@ routes = [
 ADMIN_HOST = "u7-lobby-admin.xcast3d.com"
 CF_ACCESS_TEAM_DOMAIN = "withered-limit-ab80"
 CF_ACCESS_AUD = "58b2c396ae77921d855607843ded4efb90b26c94341a69182c0183d8f1651ca6"
+# The game's web build (web/), which may join by code (never host): the
+# live page and the local test server (web/serve.sh).  Exact origins,
+# space-separated.
+BROWSER_ORIGINS = "https://xcast3d.com http://127.0.0.1:8642"
 
 [[durable_objects.bindings]]
 name = "LOBBY"

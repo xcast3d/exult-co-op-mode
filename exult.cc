@@ -87,6 +87,7 @@
 #include "keys.h"
 #include "menulist.h"
 #include "mouse.h"
+#include "scene_layer.h"
 #include "monsters.h"
 #include "palette.h"
 #include "party.h"
@@ -6995,6 +6996,21 @@ static void Friend_mode_send_world(int to = Friend_mode_session::everyone) {
 	U7remove(friend_world_file);
 }
 
+// The Co-Op screens reached from the title menu (joining, the password,
+// the world download) draw through a full-screen scene layer, as the title
+// menu itself does, rather than onto the game window: before a game is
+// loaded the game window isn't reliably shown, and in a browser these
+// screens came up black (only the mouse pointer drawn).  Held for as long
+// as the screen is up; 320x240 fits their rows.
+struct Friend_title_scene {
+	int            topx    = 0;
+	int            topy    = 0;
+	int            centerx = 0;
+	int            centery = 0;
+	Image_buffer8* ibuf    = nullptr;
+	Scene_view     view{topx, topy, centerx, centery, ibuf, true, 320, 240};
+};
+
 static void Friend_mode_show_status(const std::string& line1, const std::string& line2) {
 	auto font = fontManager.get_font("MENU_FONT");
 	if (!font) {
@@ -7078,6 +7094,7 @@ void Friend_mode_background_poll() {
 }
 
 bool Friend_mode_download_world() {
+	const Friend_title_scene scene;
 	friend_session.set_local_player_name(friend_player_name.empty() ? "Player" : friend_player_name);
 	friend_session.set_password(friend_join_password);
 	const bool by_code = Friend_is_lobby_code(arg_friend_join);
@@ -7911,6 +7928,7 @@ std::string Friend_mode_display_name(const Game_object* object, const std::strin
 // Host: the Co-Op password, typed on its own screen (title menu).  Empty
 // for none.  Kept in exult.cfg (this computer only).
 bool Friend_mode_edit_password() {
+	const Friend_title_scene scene;
 	auto font = fontManager.get_font("MENU_FONT");
 	if (!font) {
 		return false;
@@ -7965,6 +7983,7 @@ bool Friend_mode_edit_password() {
 }
 
 bool Friend_mode_collect_connection_details() {
+	const Friend_title_scene scene;
 	auto font = fontManager.get_font("MENU_FONT");
 	if (!font) {
 		return true;
@@ -7974,7 +7993,11 @@ bool Friend_mode_collect_connection_details() {
 	std::string last_name;
 	std::string last_host;
 	config->value("config/friend/player_name", last_name, "");
+#ifdef __EMSCRIPTEN__
+	config->value("config/friend/last_host", last_host, "");    // Codes only.
+#else
 	config->value("config/friend/last_host", last_host, "127.0.0.1");
+#endif
 	// The password isn't kept: typed again each time (empty for none).
 	std::array<std::string, 3> values{friend_player_name.empty() ? last_name : friend_player_name,
 			arg_friend_join.empty() ? last_host : arg_friend_join, friend_join_password};
@@ -7983,7 +8006,11 @@ bool Friend_mode_collect_connection_details() {
 	SDL_StartTextInput(window);
 	// Fields, then Join Game and Back as the title menu's own text entries
 	// (its fonts: plain, and lit under the mouse); game-view coordinates.
+#ifdef __EMSCRIPTEN__
+	const std::array<const char*, 3> labels{"Your Name", "Code", "Password"};    // No IP in a browser.
+#else
 	const std::array<const char*, 3> labels{"Your Name", "Code/IP", "Password"};
+#endif
 	auto entry_font = fontManager.get_font("CREDITS_FONT");
 	auto entry_lit  = fontManager.get_font("HOT_FONT");
 	if (!entry_font || !entry_lit) {

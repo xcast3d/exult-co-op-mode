@@ -583,15 +583,8 @@ void Image_window::create_surface(unsigned int w, unsigned int h) {
  */
 
 bool Image_window::create_scale_surfaces(int w, int h, int bpp) {
-	int hwdepth = bpp;
-#ifdef __EMSCRIPTEN__
-	// In a browser the canvas is the game's own size; the page scales it
-	// up with square pixels (shell.html), the same picture for a quarter of
-	// the pixels drawn each frame (see the renderer below).
-	uint32 flags = 0;
-#else
-	uint32 flags = SDL_WINDOW_HIGH_PIXEL_DENSITY;
-#endif
+	int    hwdepth = bpp;
+	uint32 flags   = SDL_WINDOW_HIGH_PIXEL_DENSITY;
 	hwdepth        = Get_best_bpp(w, h, hwdepth);
 	if (!hwdepth) {
 		return false;
@@ -612,6 +605,12 @@ bool Image_window::create_scale_surfaces(int w, int h, int bpp) {
 #endif
 		SDL_SetWindowFullscreen(screen_window, fullscreen);
 	} else {
+#ifdef __EMSCRIPTEN__
+		// A browser blends the WebGL canvas with the page by its alpha, and
+		// the scalers leave alpha at 0: the game showed as black.  No alpha
+		// channel for the canvas.
+		SDL_GL_SetAttribute(SDL_GL_ALPHA_SIZE, 0);
+#endif
 		screen_window = SDL_CreateWindow("", w, h, flags);
 #if 0
 		{
@@ -630,18 +629,7 @@ bool Image_window::create_scale_surfaces(int w, int h, int bpp) {
 		cout << "Couldn't create window: " << SDL_GetError() << std::endl;
 	}
 	if (screen_renderer == nullptr) {
-#ifdef __EMSCRIPTEN__
-		// SDL's software renderer, drawn on a 2D canvas.  A browser may take
-		// a WebGL context back while the page is out of sight (another
-		// Space, a hidden tab, short of graphics memory), and SDL never
-		// redraws after that: the game went black for good.  A 2D canvas
-		// that is reset is simply painted again by the next frame.  The page
-		// makes its 2D context without alpha (pre.js), as the scalers leave
-		// alpha at 0.
-		screen_renderer = SDL_CreateRenderer(screen_window, SDL_SOFTWARE_RENDERER);
-#else
 		screen_renderer = SDL_CreateRenderer(screen_window, nullptr);
-#endif
 	}
 	if (screen_renderer == nullptr) {
 		cout << "Couldn't create renderer: " << SDL_GetError() << std::endl;

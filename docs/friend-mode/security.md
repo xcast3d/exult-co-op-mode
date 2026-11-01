@@ -37,7 +37,10 @@ do in the world).
   other fields.
 - **Browsers are turned away:** a request with an `Origin` header (every
   browser sends one; the game doesn't) gets 403, so a web page can't use
-  the lobby on a visitor's behalf.
+  the lobby on a visitor's behalf. The one exception is the game's own web
+  build: pages from the exact sites in `BROWSER_ORIGINS` (wrangler.toml)
+  may join a game by code, never host or ask `/ip` (2026-11-01). A browser
+  always sends its page's real site, so no other site's page gets past.
 - **Idle guests can't fill a game:** a guest's lobby connection ends after
   60 seconds.
 - **Limits:** 8 guests a code, 16 KB a message, 240 messages a minute a
@@ -183,7 +186,7 @@ player identity are not worth more work for a co-op game among friends.
 ## Checking
 
 - **Lobby:** `node test/smoke.mjs wss://u7-multiplayer-lobby.xcast3d.com`
-  in `tools/lobby` (19 checks: codes, signals, refusals, browsers, `/ip`).
+  in `tools/lobby` (23 checks: codes, signals, refusals, browsers and the web build, `/ip`).
 - **Session:** `tools/friend-mode/rtc-session-test/build.sh`, then
   `/tmp/rtc_session_test` (26 checks: joining by code and by IP, password,
   the guessing brake, kick, half-open connections, stopping hosting).

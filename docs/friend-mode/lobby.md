@@ -132,7 +132,7 @@ codes end when the host leaves or after 12 hours.
 Anyone on the internet can reach the lobby. What it and the game protect,
 the sweep of 2026-10-24 and what is still open: [security](security.md).
 In short: hard-to-guess codes with rate limits, checked signals, no
-browsers, certificates always checked, encryption between the players, no
+browsers but the game's own web build (joining only), certificates always checked, encryption between the players, no
 secrets in the repo.
 
 ## Deploying (the host's one-time step)

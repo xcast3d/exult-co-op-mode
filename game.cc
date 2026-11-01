@@ -702,7 +702,14 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 				add_coop_entry("JOURNEY ONWARD", 9, offset);
 				add_coop_entry("BACK", 12, offset);
 			} else if (coop_menu) {
+#ifdef __EMSCRIPTEN__
+				// Hosting stays with the Mac and Windows apps: browsers slow
+				// down hidden tabs, which would slow every player.  Shown,
+				// but not chosen.
+				add_coop_entry("HOST: DESKTOP APP ONLY", 14, offset)->set_enabled(false);
+#else
 				add_coop_entry("HOST GAME", 14, offset);
+#endif
 				add_coop_entry("JOIN GAME", 7, offset);
 				add_coop_entry("BACK", 10, offset);
 			} else {
@@ -735,13 +742,7 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 					offset += f1->get_ybelow() + 3;
 				}
 				if (i == 2) {    // After Journey Onward.
-#ifdef __EMSCRIPTEN__
-					// No Co-Op in the browser yet (and hosting stays with
-					// the Mac and Windows apps): shown, but not chosen.
-					add_coop_entry("CO-OP MODE: DESKTOP APP ONLY", 8, offset)->set_enabled(false);
-#else
 					add_coop_entry(Friend_mode_hosting() ? "CO-OP MODE: HOSTING" : "CO-OP MODE", 8, offset);
-#endif
 				}
 			}
 			}
@@ -894,6 +895,9 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			break;
 		case 8:    // Co-Op Mode: host or join.
 			coop_menu = true;
+#ifdef __EMSCRIPTEN__
+			coop_selection = 1;    // Join Game: Host can't be chosen here.
+#endif
 			clear_menu_area();    // The lists are different lengths.
 			delete menu;
 			menu = nullptr;

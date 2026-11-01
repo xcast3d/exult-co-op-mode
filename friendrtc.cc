@@ -11,7 +11,8 @@
  * libdatachannel calls back on its own threads; everything they touch sits
  * behind a mutex, and the game only polls.  Built when configure finds the
  * libraries tools/friend-mode/build-rtc.sh makes (FRIEND_RTC); otherwise
- * lobby codes report that this build has none, and TCP still works.
+ * lobby codes report that this build has none, and TCP still works.  The
+ * web build joins with the browser's own WebRTC instead (__EMSCRIPTEN__).
  */
 #ifdef HAVE_CONFIG_H
 #	include <config.h>
@@ -20,6 +21,7 @@
 #include "friendconn.h"
 
 #include <cctype>
+#include <string>
 
 namespace {
 // Lobby codes are a word and a number ("MOONGLOW-42", "moonglow 42");
@@ -41,6 +43,47 @@ bool looks_like_code(const std::string& text) {
 	}
 	return i == text.size() && i > digits && i - digits <= 4;
 }
+
+// "wss://lobby/" -> "wss://lobby"; a bare host name gets wss://.  Only
+// wss:// (encrypted, and the lobby's certificate checked), except plain
+// ws:// to a lobby on this machine (wrangler dev); empty when refused.
+[[maybe_unused]] std::string lobby_base(std::string url, std::string& problem) {
+	while (!url.empty() && (url.back() == '/' || std::isspace(static_cast<unsigned char>(url.back())))) {
+		url.pop_back();
+	}
+	if (url.find("://") == std::string::npos) {
+		url = "wss://" + url;
+	}
+	if (url.rfind("wss://", 0) == 0) {
+		return url;
+	}
+	for (const char* local : {"ws://127.0.0.1", "ws://localhost", "ws://[::1]"}) {
+		const std::string prefix = local;
+		if (url.rfind(prefix, 0) == 0 && (url.size() == prefix.size() || url[prefix.size()] == ':')) {
+			return url;
+		}
+	}
+	problem = "The lobby address must start with wss://";
+	return {};
+}
+
+// The code as typed, for the lobby's /join/ path: it takes any case, a
+// space or a dash, or none ("keg5960").  Empty when it's too long to be one.
+[[maybe_unused]] std::string join_path(const std::string& code) {
+	std::string path;
+	for (const char ch : code) {
+		if (std::isalnum(static_cast<unsigned char>(ch))) {
+			if (std::isdigit(static_cast<unsigned char>(ch)) && !path.empty()
+				&& std::isalpha(static_cast<unsigned char>(path.back()))) {
+				path.push_back('-');    // The lobby wants the dash.
+			}
+			path.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+		} else if ((ch == ' ' || ch == '-') && !path.empty() && path.back() != '-') {
+			path.push_back('-');
+		}
+	}
+	return path.size() > 32 ? std::string() : path;
+}
 }    // namespace
 
 bool Friend_is_lobby_code(const std::string& text) {
@@ -52,7 +95,322 @@ bool Friend_is_lobby_code(const std::string& text) {
 	return start != std::string::npos && looks_like_code(trimmed.substr(start));
 }
 
-#ifndef FRIEND_RTC
+#ifdef __EMSCRIPTEN__
+
+// The web build joins with the browser's own WebSocket and WebRTC (it never
+// hosts: browsers slow down hidden tabs, which would slow every player).
+// The same lobby messages as the desktop guest below; the JavaScript keeps
+// each connection in Module.qotcRtc and queues what arrives, and the game
+// polls it.  The lobby lets only the game's own pages in (BROWSER_ORIGINS
+// in tools/lobby/wrangler.toml).
+
+#	include <emscripten.h>
+
+#	include <algorithm>
+
+namespace {
+// Opens /join/<code> on the lobby at 'url'; gives up after 'timeout_ms'.
+// Returns the connection's id.
+// clang-format off
+EM_JS(int, qotc_rtc_open, (const char* url_text, int timeout_ms), {
+	const rtc = Module.qotcRtc || (Module.qotcRtc = {next: 1, conns: new Map()});
+	const id = rtc.next++;
+	const c = {incoming: [], size: 0, open: false, closed: false, problem: "",
+	           ws: null, pc: null, dc: null, pending: [], remoteSet: false};
+	rtc.conns.set(id, c);
+	c.fail = why => {
+		if (!c.open && !c.problem) {
+			c.problem = why;
+		}
+		c.closed = true;
+	};
+	// The lobby going away is only a problem before the channel opens.
+	const lobbyLost = why => {
+		if (!c.open) {
+			c.fail(why);
+		}
+	};
+	const send = message => {
+		if (c.ws && c.ws.readyState === WebSocket.OPEN) {
+			c.ws.send(JSON.stringify(message));
+		}
+	};
+	// Text from the lobby shown to the player: printable, and short.
+	const lobbyText = (m, fallback) => {
+		const text = (typeof m.message === 'string' ? m.message : "").replace(/[^ -~]/g, "").slice(0, 80);
+		return text || fallback;
+	};
+	setTimeout(() => {
+		if (!c.open && !c.closed) {
+			c.fail('Could not connect through the lobby (timed out)');
+		}
+	}, timeout_ms);
+	const joined = async m => {
+		// The lobby's STUN and TURN servers; Cloudflare's STUN when none.
+		const iceServers = [];
+		for (const server of Array.isArray(m.ice) ? m.ice : []) {
+			const urls = [].concat(server && server.urls || []).filter(u => typeof u === 'string');
+			const turn = urls.filter(u => u.startsWith('turn') && server.username);
+			const stun = urls.filter(u => u.startsWith('stun'));
+			if (turn.length) {
+				iceServers.push({urls: turn, username: String(server.username), credential: String(server.credential || "")});
+			}
+			if (stun.length) {
+				iceServers.push({urls: stun});
+			}
+		}
+		if (!iceServers.some(s => s.urls.some(u => u.startsWith('stun')))) {
+			iceServers.push({urls: ['stun:stun.cloudflare.com:3478']});
+		}
+		const pc = c.pc = new RTCPeerConnection({iceServers});
+		pc.onicecandidate = event => {
+			if (event.candidate && event.candidate.candidate) {
+				send({type: 'signal', data: {candidate: 'a=' + event.candidate.candidate, mid: event.candidate.sdpMid}});
+			}
+		};
+		pc.onconnectionstatechange = () => {
+			if (pc.connectionState === 'failed') {
+				c.fail('No direct connection could be made to the host');
+			}
+		};
+		// Reliable and ordered, as TCP is.
+		const dc = c.dc = pc.createDataChannel('game');
+		dc.binaryType = 'arraybuffer';
+		dc.onopen = async () => {
+			c.open = true;
+			if (c.ws) {
+				c.ws.close();    // Done with the lobby.
+				c.ws = null;
+			}
+			// Which way the link went: straight between the players, or
+			// through the TURN relay.
+			try {
+				const stats = await pc.getStats();
+				let route = 'directly';
+				stats.forEach(pair => {
+					if (pair.type === 'candidate-pair' && pair.nominated && pair.state === 'succeeded') {
+						const local = stats.get(pair.localCandidateId);
+						const remote = stats.get(pair.remoteCandidateId);
+						if ((local && local.candidateType === 'relay') || (remote && remote.candidateType === 'relay')) {
+							route = 'through the relay';
+						}
+					}
+				});
+				console.log('Friend Mode: link open ' + route);
+			} catch (e) {
+			}
+		};
+		dc.onmessage = event => {
+			const bytes = typeof event.data === 'string' ? new TextEncoder().encode(event.data) : new Uint8Array(event.data);
+			// A peer sending far more than the world download is cut off.
+			if (c.size + bytes.length > 64 * 1024 * 1024) {
+				console.error('Friend Mode: peer sent too much; closing');
+				c.incoming = [];
+				c.size = 0;
+				c.closed = true;
+				return;
+			}
+			c.incoming.push(bytes);
+			c.size += bytes.length;
+		};
+		dc.onclose = () => c.fail('The connection closed');
+		dc.onerror = () => c.fail('Connection error');
+		await pc.setLocalDescription(await pc.createOffer());
+		send({type: 'signal', data: {sdp: pc.localDescription.sdp, kind: pc.localDescription.type}});
+		console.log('Friend Mode: joined the lobby as guest ' + (m.id | 0) + '; connecting');
+	};
+	const signal = async data => {
+		const pc = c.pc;
+		if (!pc || !data || typeof data !== 'object') {
+			return;
+		}
+		if (typeof data.sdp === 'string' && typeof data.kind === 'string') {
+			await pc.setRemoteDescription({type: data.kind, sdp: data.sdp});
+			c.remoteSet = true;
+			for (const candidate of c.pending.splice(0)) {
+				await pc.addIceCandidate(candidate);
+			}
+		} else if (typeof data.candidate === 'string' && typeof data.mid === 'string') {
+			const candidate = {candidate: data.candidate.replace(/^a=/, ""), sdpMid: data.mid};
+			if (c.remoteSet) {
+				await pc.addIceCandidate(candidate);
+			} else {
+				c.pending.push(candidate);
+			}
+		}
+	};
+	try {
+		c.ws = new WebSocket(UTF8ToString(url_text));
+	} catch (e) {
+		c.fail('Could not reach the lobby');
+		return id;
+	}
+	c.ws.onmessage = async event => {
+		let m;
+		try {
+			m = JSON.parse(event.data);
+		} catch (e) {
+			return;
+		}
+		if (!m || typeof m !== 'object' || c.closed) {
+			return;
+		}
+		try {
+			if (m.type === 'joined') {
+				await joined(m);
+			} else if (m.type === 'signal') {
+				await signal(m.data);
+			} else if (m.type === 'error') {
+				c.fail(lobbyText(m, 'Lobby error'));
+			} else if (m.type === 'closed') {
+				c.fail('The host stopped hosting');
+			}
+		} catch (e) {
+			console.error('Friend Mode: ignored a bad lobby message', e);
+		}
+	};
+	c.ws.onerror = () => lobbyLost('Could not reach the lobby');
+	c.ws.onclose = () => lobbyLost('The lobby closed the connection');
+	return id;
+})
+
+// Bytes sent (at most 16 KB, a size any WebRTC peer takes), 0 while still
+// connecting or with 1 MB still queued, -1 once closed.
+EM_JS(int, qotc_rtc_write, (int id, const unsigned char* data, int size), {
+	const c = Module.qotcRtc && Module.qotcRtc.conns.get(id);
+	if (!c || c.closed) {
+		return -1;
+	}
+	if (!c.open || !c.dc || c.dc.bufferedAmount > 1024 * 1024) {
+		return 0;
+	}
+	const count = Math.min(size, 16 * 1024);
+	try {
+		c.dc.send(HEAPU8.slice(data, data + count));
+	} catch (e) {
+		c.fail('Send failed');
+		return -1;
+	}
+	return count;
+})
+
+// Bytes read into 'out', 0 when nothing has arrived, -1 once closed.
+EM_JS(int, qotc_rtc_read, (int id, unsigned char* out, int size), {
+	const c = Module.qotcRtc && Module.qotcRtc.conns.get(id);
+	if (!c) {
+		return -1;
+	}
+	if (!c.size) {
+		return c.closed ? -1 : 0;
+	}
+	let count = 0;
+	while (count < size && c.incoming.length) {
+		const head = c.incoming[0];
+		const take = Math.min(size - count, head.length);
+		HEAPU8.set(head.subarray(0, take), out + count);
+		count += take;
+		if (take === head.length) {
+			c.incoming.shift();
+		} else {
+			c.incoming[0] = head.subarray(take);
+		}
+	}
+	c.size -= count;
+	return count;
+})
+
+// Why it closed or never opened, into 'out' (at most 'size' bytes).
+EM_JS(void, qotc_rtc_problem, (int id, char* out, int size), {
+	const c = Module.qotcRtc && Module.qotcRtc.conns.get(id);
+	stringToUTF8(c ? c.problem : "", out, size);
+})
+
+// Closes the channel, the peer connection and the lobby socket; 'forget'
+// also drops what the page keeps of it.
+EM_JS(void, qotc_rtc_close, (int id, bool forget), {
+	const rtc = Module.qotcRtc;
+	const c = rtc && rtc.conns.get(id);
+	if (!c) {
+		return;
+	}
+	c.closed = true;
+	for (const part of [c.dc, c.pc, c.ws]) {
+		try {
+			if (part) {
+				part.close();
+			}
+		} catch (e) {
+		}
+	}
+	c.dc = c.pc = c.ws = null;
+	if (forget) {
+		rtc.conns.delete(id);
+	}
+})
+// clang-format on
+
+class Web_connection : public Friend_connection {
+public:
+	explicit Web_connection(int id) : id(id) {}
+
+	~Web_connection() override {
+		qotc_rtc_close(id, true);
+	}
+
+	int write(const unsigned char* data, std::size_t size) override {
+		return qotc_rtc_write(id, data, static_cast<int>(std::min<std::size_t>(size, 1 << 30)));
+	}
+
+	int read(unsigned char* data, std::size_t size) override {
+		return qotc_rtc_read(id, data, static_cast<int>(std::min<std::size_t>(size, 1 << 30)));
+	}
+
+	void close() override {
+		qotc_rtc_close(id, false);
+	}
+
+	std::string problem() const override {
+		char text[256];
+		qotc_rtc_problem(id, text, sizeof(text));
+		return text;
+	}
+
+private:
+	int id;
+};
+}    // namespace
+
+// Only the desktop builds ask for their internet address (for hosting by IP).
+void Friend_ask_public_ip(const std::string& /*lobby_url*/) {}
+
+std::string Friend_public_ip() {
+	return {};
+}
+
+bool Friend_public_ip_done() {
+	return true;
+}
+
+std::unique_ptr<Friend_lobby_host> Friend_rtc_host(const std::string& /*lobby_url*/, std::string& problem) {
+	problem = "Hosting needs the Mac or Windows app";
+	return nullptr;
+}
+
+std::unique_ptr<Friend_connection> Friend_rtc_connect(
+		const std::string& lobby_url, const std::string& code, int timeout_ms, std::string& problem) {
+	const auto url = lobby_base(lobby_url, problem);
+	if (url.empty()) {
+		return nullptr;
+	}
+	const std::string path = join_path(code);
+	if (path.empty()) {
+		problem = "That code is too long";
+		return nullptr;
+	}
+	return std::make_unique<Web_connection>(qotc_rtc_open((url + "/join/" + path).c_str(), timeout_ms));
+}
+
+#elif !defined(FRIEND_RTC)
 
 void Friend_ask_public_ip(const std::string& /*lobby_url*/) {}
 
@@ -133,29 +491,6 @@ void start_logging() {
 		rtc::InitLogger(rtc::LogLevel::Warning);
 		started = true;
 	}
-}
-
-// "wss://lobby/" -> "wss://lobby"; a bare host name gets wss://.  Only
-// wss:// (encrypted, and the lobby's certificate checked), except plain
-// ws:// to a lobby on this machine (wrangler dev); empty when refused.
-std::string lobby_base(std::string url, std::string& problem) {
-	while (!url.empty() && (url.back() == '/' || std::isspace(static_cast<unsigned char>(url.back())))) {
-		url.pop_back();
-	}
-	if (url.find("://") == std::string::npos) {
-		url = "wss://" + url;
-	}
-	if (url.rfind("wss://", 0) == 0) {
-		return url;
-	}
-	for (const char* local : {"ws://127.0.0.1", "ws://localhost", "ws://[::1]"}) {
-		const std::string prefix = local;
-		if (url.rfind(prefix, 0) == 0 && (url.size() == prefix.size() || url[prefix.size()] == ':')) {
-			return url;
-		}
-	}
-	problem = "The lobby address must start with wss://";
-	return {};
 }
 
 // The lobby's 'ice' list ([{urls, username?, credential?}]) as WebRTC's
@@ -945,16 +1280,8 @@ std::unique_ptr<Friend_connection> Friend_rtc_connect(
 				channel->lobby_lost("The lobby closed the connection");
 			}
 		});
-		// The code as typed: the lobby takes any case, a space or a dash.
-		std::string path;
-		for (const char ch : code) {
-			if (std::isalnum(static_cast<unsigned char>(ch))) {
-				path.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
-			} else if ((ch == ' ' || ch == '-') && !path.empty() && path.back() != '-') {
-				path.push_back('-');
-			}
-		}
-		if (path.size() > 32) {
+		const std::string path = join_path(code);
+		if (path.empty()) {
 			problem = "That code is too long";
 			return nullptr;
 		}
