@@ -56,6 +56,8 @@
 	#saves-storage { color:var(--muted); font-size:.78rem; }
 	#saves.due #saves-storage { color:var(--gold); }
 	#saves-message:not(:empty) { color:#c9c1af; font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; font-size:.74rem; }
+	#folder-status { margin:1rem 0 0; color:var(--muted); font-size:.78rem; line-height:1.55; }
+	.save-actions button.quiet { border-color:#3d3b36; background:transparent; box-shadow:none; color:var(--muted); }
 	.save-actions { display:flex; flex-wrap:wrap; gap:.75rem; margin-top:.9rem; }
 	.save-actions button,.save-actions label.button { min-height:2.6rem; padding:.55rem .95rem; font-size:.78rem; }
 	.setup-footer { display:flex; justify-content:space-between; gap:1rem; margin:1.2rem .3rem 0; color:#72757d; font-size:.65rem; letter-spacing:.06em; text-transform:uppercase; }
@@ -119,6 +121,12 @@
 				<div class="save-actions">
 					<button id="backup" type="button" hidden>Back up saves</button>
 					<label class="button"><input id="restore" type="file" accept=".zip,application/zip" hidden>Restore a backup&hellip;</label>
+				</div>
+				<p id="folder-status" hidden></p>
+				<div class="save-actions">
+					<button id="folder-choose" type="button" hidden>Keep saves in a folder&hellip;</button>
+					<button id="folder-reconnect" type="button" hidden>Reconnect saves folder</button>
+					<button id="folder-forget" type="button" class="quiet" hidden>Stop using the folder</button>
 				</div>
 				<p id="saves-message" role="status" aria-live="polite"></p>
 			</div>

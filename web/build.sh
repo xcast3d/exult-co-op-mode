@@ -59,7 +59,7 @@ cp "$MAIN/web/exult-web.cfg" "$PKG/exult.cfg"
 LINK=$(grep 'libtool: link: .*-o exult ' "$MAIN/web/make.log" | sed "s/^libtool: link: //; s| -o exult | -o $OUT/exult.html |")
 sh -c "$LINK -fexceptions -sASYNCIFY -sASYNCIFY_STACK_SIZE=131072 -sALLOW_MEMORY_GROWTH=1 \
 	-sINITIAL_MEMORY=268435456 -sSTACK_SIZE=8388608 -sFORCE_FILESYSTEM=1 -lidbfs.js \
-	--shell-file $MAIN/web/shell.html --pre-js $MAIN/web/pre.js --pre-js $MAIN/web/backup.js --preload-file $PKG@/pkg"
+	--shell-file $MAIN/web/shell.html --pre-js $MAIN/web/pre.js --pre-js $MAIN/web/backup.js --pre-js $MAIN/web/savefolder.js --preload-file $PKG@/pkg"
 cp "$MAIN/web/quest-of-the-companions-title.avif" "$OUT/"
 # Exult's own icon, the ankh, as the page's (desktop/, win32/).
 cp "$MAIN/desktop/info.exult.exult.svg" "$OUT/favicon.svg"

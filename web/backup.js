@@ -311,6 +311,7 @@ async function qotc_restore(file) {
 		qotc_saves_message(err ? 'Restored, but the browser wouldn\'t keep it: back up again after playing.'
 		                       : `Restored ${what}.`);
 		qotc_show_backup_state();
+		qotc_folder_push();    // The saves folder too, if there is one.
 	});
 }
 
@@ -371,6 +372,7 @@ function qotc_backup_setup() {
 		restore.value = '';
 	});
 	qotc_show_backup_state();
+	qotc_folder_setup();    // savefolder.js
 	// New saves while playing: the game page's button notices.
 	setInterval(qotc_show_backup_state, 60000);
 }

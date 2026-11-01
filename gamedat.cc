@@ -52,6 +52,10 @@
 #include <fstream>
 #include <sstream>
 
+#ifdef __EMSCRIPTEN__
+#	include <emscripten.h>
+#endif
+
 #ifdef _WIN32
 #	include <io.h>
 #endif
@@ -448,6 +452,13 @@ void Game_window::save_gamedat(
 		// Update name
 		save_names[num] = savename;
 	}
+#ifdef __EMSCRIPTEN__
+	// In a browser the save is in memory until the page copies it to the
+	// browser's storage: now, rather than on its 5-second timer, so a page
+	// closed straight after saving keeps it; and into the saves folder, if
+	// the player chose one (web/pre.js, web/savefolder.js).
+	emscripten_run_script("if (typeof qotc_saved_game === 'function') qotc_saved_game();");
+#endif
 }
 
 /*

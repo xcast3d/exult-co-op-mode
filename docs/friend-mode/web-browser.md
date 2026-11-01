@@ -66,8 +66,13 @@ test browser showed it.
 - [ ] Test saving and loading from the in-game save menu (same storage, not
       tried yet: the opening scene blocks saving until it ends, and a test
       on 2026-10-30 stopped before that).
-- [ ] A save written while the page is closed mid-sync can be lost; check
-      what happens if the tab is closed during a save.
+- [x] A save reaches browser storage the moment it is made: Exult's
+      `save_gamedat` calls the page (`qotc_saved_game`), which copies it at
+      once instead of on the 5-second timer, so closing the tab straight
+      after saving keeps it (2026-11-01). The game in progress still goes
+      every 5 seconds and when the page closes.
+- [x] Back up and Restore tested in Chrome: after clearing the saves
+      (console), and after clearing all site data (2026-11-01).
 
 Only single player and hosting have saves to lose: a co-op guest plays in
 the host's world, which the host saves. (Browsers don't host.)
@@ -109,12 +114,22 @@ the host's world, which the host saves. (Browsers don't host.)
       to keep them", or in Safari the 7-day warning with Add to Dock, or
       elsewhere "may delete them... Back up now and then" (gold while a
       backup is due).
-- [ ] A saves folder on disk (Chrome and Edge only, the File System Access
-      API): the player chooses a folder once (next to their Ultima VII
-      files, say) and every save is also written there as ordinary
-      `.sav` files, like the desktop app's. Browser storage is then only a
-      working copy. After a browser restart Chrome asks for one click to
-      allow the folder again. Safari and Firefox can't do this.
+- [x] A saves folder on disk (`web/savefolder.js`, 2026-11-01; Chrome and
+      Edge only, the File System Access API, so the buttons don't show in
+      Safari, Firefox or Brave). "Keep saves in a folder…" in "Your
+      saves": every save is then also written there as an ordinary `.sav`
+      file the moment it is made (and after a Restore), only when it has
+      changed. The folder is remembered (its handle in the page's own
+      IndexedDB, `qotc-saves-folder`); after a browser restart Chrome may
+      want one click, "Reconnect saves folder". When the folder is
+      allowed, saves the browser lacks, or has a copy over a minute older
+      of, come back from it, so deleted storage refills itself. "Stop using
+      the folder" forgets it (the files stay). The game in progress isn't
+      kept there. Tested in the app's browser with the page's private
+      storage standing in for a folder (the picker is a system dialog):
+      written, read back after deleting, changed saves rewritten, unchanged
+      ones not. Then tried by the player in Chrome with a real folder:
+      works.
 - [ ] Installable web app (a manifest and a service worker): what Safari
       needs to stop the 7-day deletion, and the game would open like an
       app. More work; later.
