@@ -439,6 +439,9 @@ void ActionInventory(const int* params) {
 //  { ActionTryKeys, 0, "Try keys", normal_keys, NONE },
 void ActionTryKeys(const int* params) {
 	ignore_unused_variable_warning(params);
+	if (Friend_mode_try_keys_on_pick()) {    // The Target System's pick.
+		return;
+	}
 	Game_window* gwin = Game_window::get_instance();
 	int          x;
 	int          y;    // Allow dragging.

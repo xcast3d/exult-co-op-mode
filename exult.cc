@@ -536,17 +536,22 @@ struct Friend_emote_pose {
 	int    frame;    // The frame set, with direction.
 	uint32 until;
 };
-static std::vector<Friend_emote_pose> friend_emote_poses;    // Host: quick gestures to end.
+static std::vector<Friend_emote_pose> friend_emote_poses;    // Quick gestures to end.
 
 static void Friend_mode_show_chat(Actor* speaker, const std::string& sender, const std::string& text);
 
-// Host: pose 'actor' for 'player' and tell everyone.
-static void Friend_mode_emote(Actor* actor, int player, const Friend_emote& emote) {
+// Pose 'actor' for an emote; a quick gesture ends by itself.
+static void Friend_mode_pose(Actor* actor, const Friend_emote& emote) {
 	const int frame = actor->get_dir_framenum(emote.frame);
 	actor->change_frame(frame);
 	if (emote.ms > 0) {
 		friend_emote_poses.push_back({actor->get_npc_num(), frame, static_cast<uint32>(SDL_GetTicks()) + emote.ms});
 	}
+}
+
+// Host: pose 'actor' for 'player' and tell everyone.
+static void Friend_mode_emote(Actor* actor, int player, const Friend_emote& emote) {
+	Friend_mode_pose(actor, emote);
 	Friend_mode_show_chat(actor, friend_session.player_name(player), emote.text);
 	if (friend_session.connected()) {
 		friend_session.send_chat(static_cast<uint32>(actor->get_npc_num()), player, emote.text);
@@ -695,7 +700,7 @@ static void Friend_mode_complete_chat(std::string& text) {
 	friend_complete_result = text;
 }
 
-// Host, every frame: quick gestures go back to standing.
+// Every frame: quick gestures go back to standing.
 static void Friend_mode_end_emotes() {
 	const uint32 now = static_cast<uint32>(SDL_GetTicks());
 	for (auto it = friend_emote_poses.begin(); it != friend_emote_poses.end();) {
@@ -3561,9 +3566,21 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	// switches (788), the bucket (810), artist's equipment (823: pigments
 	// and the paint brush) and the easel (837, was furniture); the gavel
 	// below; beds (696, 1011) and the bedroll (583, was loot), 2026-10-29;
-	// winches (949, 950: Trinsic's gate, 2026-10-31).  Decor is what has
-	// no use.
-	static const std::unordered_set<int> usable{583, 696, 787, 788, 810, 823, 837, 949, 950, 1011};
+	// winches (949, 950: Trinsic's gate, 2026-10-31).  2026-11-01, from a
+	// scan of every shape with a script that E never offered (fixed in the
+	// map, so not something to pick up): the mining machine (410, the
+	// mines' ore extractor), loom (261), spinning wheel (651), bellows
+	// (431), wells (470, 740), water troughs (719, 741), keg and cask (258,
+	// 434), chicken coop (210), laboratory burner (307), grandfather clocks
+	// (252, 695), sundial (284), telescope (744), crystal ball (729), mirror
+	// (848), harpsichord, xylophone and harp (689, 690, 745), the fair's
+	// strength tester, Virtue Roulette Wheel, Triples and Rat Race (743,
+	// 725, 809, 763), puppet show (503), stocks (708), guillotines (709,
+	// 734) and archery target (735).  Decor is what has no use.
+	static const std::unordered_set<int> usable{
+			583, 696, 787, 788, 810, 823, 837, 949, 950, 1011, 410, 261, 651, 431, 470, 740, 719, 741,
+			258, 434, 210, 307, 252, 695, 284, 744, 729, 848, 689, 690, 745, 743, 725, 809, 763, 503,
+			708, 709, 734, 735};
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
 	// walls (828, 845) that slide open.
 	static const std::unordered_set<int> interactive{290, 291, 322, 372, 435, 481, 526, 657, 678, 828, 845, 889};
@@ -3580,6 +3597,9 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	}
 	if (info.is_door() || interactive.count(shape)) {
 		return Friend_thing_group::interactive;
+	}
+	if ((shape == 595 || shape == 701) && !obj->is_dragable()) {
+		return Friend_thing_group::interactive;    // A torch fixed on a wall: lit or put out.
 	}
 	if (furniture.count(shape)) {
 		return Friend_thing_group::furniture;
@@ -3937,6 +3957,106 @@ static bool Friend_has_conversation(const Actor* actor) {
 
 static std::string Friend_key_label(const std::string& key);
 
+// Locks (2026-11-01): a locked chest or door picked with E.  Space unlocks
+// it with a key that fits (K does too), else picks the lock with a
+// lockpick where Black Gate's lockpick works on it.
+enum class Friend_lock { none, key, pick, locked };
+
+// The key or lockpick 'own' would use: a guest only its own, the host and
+// single player anyone's in the party (as Try_keys_on).
+static Game_object* Friend_lock_tool(Actor* own, int shape, int quality) {
+	Game_object_vector found;
+	if (Friend_mode_is_guest()) {
+		return own && own->get_objects(found, shape, quality, c_any_framenum) ? found[0] : nullptr;
+	}
+	Actor*    party[10];
+	const int count = gwin->get_party(&party[0], 1);
+	for (int i = 0; i < count; ++i) {
+		found.clear();
+		if (party[i]->get_objects(found, shape, quality, c_any_framenum)) {
+			for (Game_object* each : found) {
+				if (!each->inside_locked()) {
+					return each;
+				}
+			}
+		}
+	}
+	return nullptr;
+}
+
+static Friend_lock Friend_lock_of(Actor* own, Game_object* obj) {
+	if (!GAME_BG || !own || !obj) {
+		return Friend_lock::none;
+	}
+	const Shape_info& info  = obj->get_info();
+	const bool        chest = info.is_container_locked();
+	const int         state = obj->get_framenum() % 4;
+	if (!chest && !(info.is_door() && state >= 2)) {
+		return Friend_lock::none;
+	}
+	const int quality = obj->get_quality();
+	if (Friend_lock_tool(own, 641, quality)) {
+		return Friend_lock::key;
+	}
+	// The lockpick's script (shape 627): the locked chest (522) of quality
+	// 0 or 255 (trapped), and locked doors (frame 2 of 4) of quality 0.
+	const int  shape    = obj->get_shapenum();
+	const bool pickable = chest ? shape == 522 && (quality == 0 || quality == 255)
+								: state == 2 && quality == 0
+										  && (shape == 270 || shape == 376 || shape == 432 || shape == 433);
+	if (pickable && Friend_lock_tool(own, 627, c_any_qual)) {
+		return Friend_lock::pick;
+	}
+	return Friend_lock::locked;
+}
+
+// Space on a lock: the key, or the lockpick.  False if it isn't locked.
+static bool Friend_mode_unlock(Actor* own, Game_object* obj) {
+	switch (Friend_lock_of(own, obj)) {
+	case Friend_lock::none:
+		return false;
+	case Friend_lock::key:
+		if (!Try_keys_on(obj)) {
+			Friend_mode_target_notice("No key fits");
+		}
+		return true;
+	case Friend_lock::pick: {
+		Game_object* pick = Friend_lock_tool(own, 627, c_any_qual);
+		if (Friend_mode_is_guest()) {
+			Friend_mode_request_item_use(pick, obj);
+		} else {
+			Usecode_machine* usecode = gwin->get_usecode();
+			Game_object*     old_target;
+			Tile_coord*      old_tile;
+			usecode->save_intercept(old_target, old_tile);
+			usecode->intercept_click_on_item(obj);    // The lockpick's "on what?".
+			pick->activate();
+			usecode->restore_intercept(old_target, old_tile);
+		}
+		return true;
+	}
+	case Friend_lock::locked:
+		Friend_mode_target_notice("Locked");
+		return true;
+	}
+	return false;
+}
+
+// K with a thing picked: the party's keys on it, with no crosshair.  False
+// with no pick, so K asks for a click as in Exult.
+bool Friend_mode_try_keys_on_pick() {
+	const Game_object_shared thing = friend_object_target.lock();
+	if (!thing) {
+		return false;
+	}
+	if (!Try_keys_on(thing.get())) {
+		Friend_mode_target_notice(Friend_lock_of(gwin->get_controlled_actor(), thing.get()) == Friend_lock::none
+										  ? "Not locked"
+										  : "No key fits");
+	}
+	return true;
+}
+
 static bool Friend_mode_space(bool shift, bool alt) {
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
@@ -4078,6 +4198,9 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	// else it splits a stack (2026-10-29: Shift+Space took these, which in
 	// a window means take all).
 	const bool whole = use || readable || obj->as_container();
+	if (use && plain && Friend_mode_unlock(own, obj)) {
+		return true;
+	}
 	if (use && plain) {
 		if (group == Friend_thing_group::box && obj->as_container()) {
 			Friend_mode_pick_when_open(obj);    // Its first thing, once it opens.
@@ -4286,6 +4409,16 @@ static std::string Friend_space_hint() {
 	}
 	// The map: Alt+Space takes what Space uses; Shift+Space does nothing.
 	const std::string pick_up = obj->is_dragable() ? take : "";
+	switch (Friend_lock_of(own, obj)) {
+	case Friend_lock::key:
+		return two("Unlock", "", pick_up);
+	case Friend_lock::pick:
+		return "Locked  " + two("Pick Lock", "", pick_up);
+	case Friend_lock::locked:
+		return pick_up.empty() ? "Locked" : "Locked  " + pick_up + " (" + Friend_key_label("Alt+Space") + ")";
+	case Friend_lock::none:
+		break;
+	}
 	if (Friend_is_usable_thing(obj)) {
 		const char* what = Friend_is_readable(obj) ? "Read" : obj->get_shapenum() == 893 ? "Drink" : "Use";
 		return two(what, "", pick_up);
@@ -4400,7 +4533,10 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		// with a path to them that walls don't block, as Exult lets one
 		// take things.  Pools of water (fountains) are decor that can't be
 		// picked up.
+		// Furniture fixed in the map (a cradle, a chair) can't be picked
+		// up but is used (2026-11-01: it was never offered).
 		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::usable
+							 || group == Friend_thing_group::furniture || Friend_is_usable_thing(obj)
 							 || (GAME_BG && obj->get_shapenum() == 893);
 		const bool offered = obj->is_dragable() || fixture || group == Friend_thing_group::box
 							 || group == Friend_thing_group::sign;
@@ -7729,6 +7865,15 @@ static bool Friend_mode_take_chats() {
 			}
 			continue;
 		}
+		if (!hosting && speaker) {
+			// An emote: pose it here too.  The host's frame for a guest's own
+			// companion comes with the step it echoes, which the guest ignores.
+			for (const Friend_emote& emote : friend_emotes) {
+				if (incoming_chat == emote.text) {
+					Friend_mode_pose(speaker, emote);
+				}
+			}
+		}
 		Friend_mode_show_chat(speaker, Friend_mode_player_name(incoming_player), incoming_chat);
 		if (hosting) {
 			// Pass it on to the other guests, with the speaker we know.
@@ -9346,7 +9491,10 @@ static void Friend_mode_item_menu() {
 	};
 	std::vector<Choice> choices;
 	// What Space would do, by its hint ("Ready (Space)  Take (Shift+Space)").
-	const std::string hint  = Friend_space_hint();
+	std::string hint = Friend_space_hint();
+	if (hint.rfind("Locked", 0) == 0) {
+		hint = hint.substr(std::min(hint.size(), std::string("Locked  ").size()));    // Not a choice.
+	}
 	const std::string first = hint.substr(0, hint.find(" ("));
 	if (!first.empty()) {
 		choices.push_back({first, []() {
@@ -11018,6 +11166,7 @@ static void Handle_events() {
 				}
 			}
 		} else if (!arg_friend_join.empty()) {
+			Friend_mode_end_emotes();
 			if (friend_session.take_peer_joined()) {
 				Friend_mode_notice("Joined " + friend_session.remote_player_name_value() + "'s world");
 			}

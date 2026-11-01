@@ -32,6 +32,16 @@ both in `--version` and the version files saved with each game.
   now 38).
 - **Winches:** the Target System offers them with levers and switches, and
   Space turns them.
+- **Locks:** with a locked chest or door targeted, Space says Unlock and
+  uses the party's key that fits. With no key it says Locked, and offers
+  Pick Lock when you carry lockpicks and the lock can be picked. K (Try
+  Keys) uses your target too, with no crosshair.
+- **More things to use:** the Target System now offers the mining
+  machine, loom, spinning wheel, bellows, wells, water troughs, kegs,
+  chicken coops, clocks, the sundial, telescope, crystal ball, mirror,
+  instruments, the fair's games, stocks and more, with levers and
+  switches. Torches on walls come with lamps, and furniture fixed in
+  place (cradles, chairs) is offered when Furniture is on.
 - **No mods:** the game plays Black Gate as it shipped, so every co-op
   player runs the same game. Mods are no longer listed or started; for
   mods, use Exult itself. Your installed mods stay where they are.
@@ -47,6 +57,8 @@ both in `--version` and the version files saved with each game.
   use it.
 - **Bags inside chests:** guests can open a bag or box inside a chest or
   body. They used to get a red X.
+- **Emotes on guests:** a guest's own /wave, /bow and the like now show on
+  their own screen. Before, only the other players saw them.
 - **Running is remembered:** after R switched to walking once, every
   start walked, even when you'd switched back to running. The controller
   page's "Enabled" and "Swap" choices had the same problem and now stick
