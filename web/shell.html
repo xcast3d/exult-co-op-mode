@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#050609">
 <title>Quest of the Companions</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="icon" href="favicon.ico" sizes="any">
 <style>
 	:root { color-scheme: dark; --night:#000; --ink:#080b14; --paper:#efe3c6; --muted:#a9a394; --blue:#8b9edf; --gold:#d9a441; --green:#4fd06a; --line:#34332c; font-family:Georgia,"Times New Roman",serif; font-size:18px; }
 	* { box-sizing: border-box; }
@@ -47,13 +49,26 @@
 	#message { color:#c9c1af; }
 	#message:not(:empty)::before { content:"◆"; margin-right:.65rem; color:var(--gold); font-size:.6rem; }
 	#loading { margin-top:.35rem; color:#777b88; }
+	#saves { margin-top:1.2rem; padding-top:1rem; border-top:1px solid var(--line); }
+	#saves>.eyebrow { margin:0 0 .6rem; }
+	#saves-status,#saves-storage,#saves-message { margin:.35rem 0 0; font-size:.86rem; line-height:1.55; }
+	#saves-status { color:#d1c7b2; }
+	#saves-storage { color:var(--muted); font-size:.78rem; }
+	#saves.due #saves-storage { color:var(--gold); }
+	#saves-message:not(:empty) { color:#c9c1af; font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; font-size:.74rem; }
+	.save-actions { display:flex; flex-wrap:wrap; gap:.75rem; margin-top:.9rem; }
+	.save-actions button,.save-actions label.button { min-height:2.6rem; padding:.55rem .95rem; font-size:.78rem; }
 	.setup-footer { display:flex; justify-content:space-between; gap:1rem; margin:1.2rem .3rem 0; color:#72757d; font-size:.65rem; letter-spacing:.06em; text-transform:uppercase; }
 	#game-shell { min-height:100svh; padding:1rem clamp(1rem,3vw,2.5rem); background:radial-gradient(circle at 50% 0,#171b2e 0,transparent 32rem),#030304; }
 	.game-bar { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; min-height:4.5rem; gap:1rem; border-bottom:1px solid #24252a; }
 	.game-brand { grid-column:2; }
 	.game-brand img { display:block; width:min(52vw,380px); height:auto; filter:drop-shadow(0 8px 14px #000); }
-	#fullscreen { grid-column:3; justify-self:end; min-height:2.4rem; padding:.5rem .85rem; border-color:#59699e; background:#17192a; box-shadow:inset 0 0 0 2px #0d0f19; font-size:.72rem; }
-	#fullscreen:hover { border-color:var(--blue); background:#222640; }
+	.game-tools { grid-column:3; justify-self:end; display:flex; gap:.6rem; }
+	#fullscreen,#backup-game { min-height:2.4rem; padding:.5rem .85rem; border-color:#59699e; background:#17192a; box-shadow:inset 0 0 0 2px #0d0f19; font-size:.72rem; }
+	#fullscreen:hover,#backup-game:hover { border-color:var(--blue); background:#222640; }
+	/* A backup is due: a gold mark on the button (its title says why). */
+	#backup-game.due { border-color:var(--gold); }
+	#backup-game.due::after { content:""; width:.45rem; height:.45rem; margin-left:.5rem; border-radius:50%; background:var(--gold); }
 	.fullscreen-icon { margin-right:.5rem; color:var(--gold); font-size:1rem; line-height:0; }
 	.game-frame { width:max-content; max-width:100%; margin:1rem auto 0; padding:6px; border:1px solid #9a7548; background:#281b10; box-shadow:inset 0 0 0 2px #0b0906,0 18px 55px #000c; }
 	.game-footer { display:flex; justify-content:space-between; gap:1rem; max-width:1100px; margin:.8rem auto 0; color:#666971; font: .62rem/1.4 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; letter-spacing:.06em; text-transform:uppercase; }
@@ -70,7 +85,7 @@
 	#exit-fullscreen:hover { border-color:var(--blue); background:#222640ee; }
 	.game-frame:not(:fullscreen) #exit-fullscreen { display:none; }
 	canvas[hidden],[hidden] { display:none !important; }
-	@media (max-width:560px) { #setup { place-items:start center; } .actions { grid-template-columns:1fr; } #start { min-width:0; } .setup-footer { display:block; line-height:1.6; text-align:center; } .setup-footer span { display:block; } #game-shell { padding:.5rem; } .game-bar { grid-template-columns:minmax(0,1fr) auto; min-height:3.5rem; } .game-brand { grid-column:1; } .game-brand img { width:min(58vw,300px); } #fullscreen { grid-column:2; } .game-footer span:first-child { display:none; } .game-footer { justify-content:flex-end; } }
+	@media (max-width:560px) { #setup { place-items:start center; } .actions { grid-template-columns:1fr; } #start { min-width:0; } .setup-footer { display:block; line-height:1.6; text-align:center; } .setup-footer span { display:block; } #game-shell { padding:.5rem; } .game-bar { grid-template-columns:minmax(0,1fr) auto; min-height:3.5rem; } .game-brand { grid-column:1; } .game-brand img { width:min(58vw,300px); } .game-tools { grid-column:2; } #backup-game { display:none; } .game-footer span:first-child { display:none; } .game-footer { justify-content:flex-end; } }
 	@media (prefers-reduced-motion:no-preference) { #setup::after { animation:drift 9s ease-in-out infinite alternate; } @keyframes drift { to { transform:translateY(-22px); opacity:.25; } } }
 </style>
 </head>
@@ -97,6 +112,16 @@
 				<p id="message"></p>
 				<p id="loading"></p>
 			</div>
+			<div id="saves" hidden>
+				<p class="eyebrow">Your saves</p>
+				<p id="saves-status"></p>
+				<p id="saves-storage"></p>
+				<div class="save-actions">
+					<button id="backup" type="button" hidden>Back up saves</button>
+					<label class="button"><input id="restore" type="file" accept=".zip,application/zip" hidden>Restore a backup&hellip;</label>
+				</div>
+				<p id="saves-message" role="status" aria-live="polite"></p>
+			</div>
 		</section>
 		<footer class="setup-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D</span></footer>
 	</div>
@@ -104,7 +129,10 @@
 <main id="game-shell" hidden>
 	<header class="game-bar">
 		<div class="game-brand"><img src="quest-of-the-companions-title.avif" alt="Quest of the Companions" width="2172" height="343"></div>
-		<button id="fullscreen" type="button" aria-pressed="false"><span class="fullscreen-icon" aria-hidden="true">⛶</span><span class="fullscreen-label">Fullscreen</span></button>
+		<div class="game-tools">
+			<button id="backup-game" type="button"><span class="backup-label">Back up</span></button>
+			<button id="fullscreen" type="button" aria-pressed="false"><span class="fullscreen-icon" aria-hidden="true">⛶</span><span class="fullscreen-label">Fullscreen</span></button>
+		</div>
 	</header>
 	<div class="game-frame">
 		<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" hidden></canvas>

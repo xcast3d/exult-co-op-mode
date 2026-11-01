@@ -86,14 +86,29 @@ the host's world, which the host saves. (Browsers don't host.)
 
 **The plan, most useful first:**
 
-- [ ] Export and Import. Export downloads one `.zip` (saves, the game in
-      progress, settings); Import puts it back, in any browser or on
-      another computer. Works everywhere; the real safety net. Show "Last
-      backup: 3 days ago" on the setup page and in the game menu, so a
-      player is nudged without being nagged.
-- [ ] Say whether storage is kept: on the setup page, "This browser will
-      keep your saves" or "This browser may delete your saves", with the
-      Add to Dock hint in Safari.
+- [x] Back up and Restore (`web/backup.js`, 2026-11-01). Back up downloads
+      `quest-of-the-companions-backup-<date>.zip`: `saves/`, `gamedat/`
+      (the game in progress), `exult.cfg` and a README, stored without
+      compression (the saves are zipped already). Restore, on the setup
+      page, reads one back (stored or deflated, so an archive re-zipped by
+      Finder or Windows works, even with a folder above `saves/`) and
+      replaces the saves and game in progress, after asking if there are
+      any. Only `saves/`, `gamedat/` and `exult.cfg` are taken, names are
+      checked (no `..`, no hidden files, `__MACOSX` skipped), and archives
+      over 256 MB or 5,000 files are refused. Tested: a backup reads back
+      byte for byte and passes Python's and `unzip`'s checks; a Finder-style
+      zip restored, its `../` entry refused.
+- [x] Where it shows: the setup page has a "Your saves" box (how many
+      saved games, "Last backup: today / 3 days ago / never", Back up and
+      Restore); the game page has a Back up button by Fullscreen, with a
+      gold dot when a backup is due (something to back up, and none in 7
+      days). The last backup's date is kept in `/user/backup.json`, so it
+      goes if the storage goes. Back up while playing holds the game as
+      last saved or written by Exult.
+- [x] Whether storage is kept, under the count: "This browser has agreed
+      to keep them", or in Safari the 7-day warning with Add to Dock, or
+      elsewhere "may delete them... Back up now and then" (gold while a
+      backup is due).
 - [ ] A saves folder on disk (Chrome and Edge only, the File System Access
       API): the player chooses a folder once (next to their Ultima VII
       files, say) and every save is also written there as ordinary

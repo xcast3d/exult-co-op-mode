@@ -182,7 +182,10 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 		for (const dir of [qotc_static, qotc_user + '/saves', qotc_user + '/gamedat']) {
 			FS.mkdirTree(dir);
 		}
-		navigator.storage && navigator.storage.persist && navigator.storage.persist();
+		// Ask the browser to keep the storage, then show what there is to
+		// keep and whether it agreed (backup.js).
+		Promise.resolve(navigator.storage && navigator.storage.persist && navigator.storage.persist())
+			.catch(() => {}).then(qotc_backup_setup);
 		const start = document.getElementById('start');
 		if (qotc_have_game()) {
 			qotc_message('The Black Gate is ready. (To use other game files, choose their folder.)');
