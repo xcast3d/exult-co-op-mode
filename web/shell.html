@@ -3,46 +3,105 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#050609">
 <title>Quest of the Companions</title>
 <style>
-	body { margin: 0; background: #000; color: #ddd; font: 16px/1.5 system-ui, sans-serif; }
-	#setup { max-width: 34em; margin: 4em auto; padding: 0 1em; }
-	#setup h1 { font-size: 1.6em; margin: 0 0 .5em; }
-	#setup p { margin: .6em 0; }
-	#setup button, #setup label.button { font: inherit; padding: .4em 1em; margin: .4em .5em .4em 0; cursor: pointer; }
-	#setup button:disabled { cursor: default; }
-	#message { min-height: 3em; }
-	#loading { color: #888; font-size: .9em; }
+	:root { color-scheme: dark; --night:#000; --ink:#080b14; --paper:#efe3c6; --muted:#a9a394; --blue:#8b9edf; --gold:#d9a441; --green:#4fd06a; --line:#34332c; font-family:Georgia,"Times New Roman",serif; font-size:18px; }
+	* { box-sizing: border-box; }
+	body { margin:0; min-width:280px; min-height:100svh; background:var(--night); color:var(--paper); }
+	button,input { font:inherit; }
+	button,label.button { -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+	button:focus-visible,a:focus-visible,input:focus-visible,label.button:has(input:focus-visible) { outline:2px solid var(--gold); outline-offset:5px; }
+	a { color:var(--blue); }
+	a:hover { color:#c7d4ff; }
+	#setup { position:relative; isolation:isolate; display:grid; place-items:center; min-height:100svh; padding:clamp(1.25rem,5vw,4rem) 1rem; overflow:hidden; background:radial-gradient(circle at 50% 5%,#20233a 0,transparent 34rem),linear-gradient(180deg,var(--ink),#030304 75%); }
+	#setup::before { content:""; position:absolute; z-index:-2; inset:0; background-image:linear-gradient(#ffffff06 1px,transparent 1px),linear-gradient(90deg,#ffffff04 1px,transparent 1px); background-size:54px 54px; mask-image:linear-gradient(to bottom,#000,transparent 70%); }
+	#setup::after { content:"✦"; position:absolute; z-index:-1; top:8%; right:10%; color:#9a803f; font-size:.75rem; box-shadow:-72vw 18vh 0 #9a803f,-14vw 62vh 0 #665a3a,-58vw 72vh 0 #665a3a; opacity:.55; }
+	.setup-shell { width:min(100%,760px); text-align:center; }
+	.eyebrow,.privacy,#message,#loading,button,label.button,.setup-footer { font-family:ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; }
+	.eyebrow { margin:0 0 clamp(1.5rem,4vw,2.5rem); color:var(--gold); font-size:.78rem; letter-spacing:.16em; line-height:1.4; text-transform:uppercase; }
+	h1 { margin:0; }
+	.title-logo { display:block; width:min(100%,680px); height:auto; margin:0 auto; filter:drop-shadow(0 14px 24px #000b); }
+	.tagline { margin:1.2rem 0 2.25rem; color:#bcb4a4; font-size:clamp(1.05rem,3vw,1.35rem); }
+	.tagline em { color:var(--paper); }
+	.setup-card { position:relative; padding:clamp(1.35rem,4vw,2.4rem); border:5px solid #4b321d; background:linear-gradient(145deg,#261a10f2,#0d0e12f5 68%); box-shadow:0 0 0 1px #9a7548,inset 0 0 0 1px #89653c,0 24px 70px #000a; text-align:left; }
+	.setup-card::before,.setup-card::after { content:"◆"; position:absolute; top:.65rem; color:#8c6a3f; font-size:.55rem; }
+	.setup-card::before { left:.75rem; }
+	.setup-card::after { right:.75rem; }
+	.setup-card>.eyebrow { margin-bottom:1rem; }
+	.intro { margin:0; color:#d1c7b2; line-height:1.65; }
+	.intro i { color:var(--paper); }
+	.privacy { display:flex; gap:.7rem; align-items:flex-start; margin:1.1rem 0 0; padding:.85rem 0 0; border-top:1px solid #59472f; color:var(--muted); font-size:.72rem; line-height:1.5; }
+	.privacy span { color:var(--green); }
+	#touch-only { margin-top:1.25rem; padding:1rem 1.1rem; border-left:2px solid var(--gold); background:#101117; }
+	#touch-only p { margin:0 0 .75rem; line-height:1.55; }
+	#touch-only p:last-child { margin-bottom:0; }
+	.actions { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:.75rem; margin:1.6rem 0 0; }
+	button,label.button { display:inline-flex; min-height:3.35rem; align-items:center; justify-content:center; padding:.8rem 1.15rem; border:1px solid #8a7047; background:#342617; box-shadow:inset 0 0 0 3px #1a130c; color:var(--paper); font-size:.92rem; line-height:1.25; text-align:center; text-transform:uppercase; letter-spacing:.025em; cursor:pointer; }
+	button:hover,label.button:hover { border-color:var(--gold); background:#45321d; color:#fff; }
+	#start { min-width:8rem; border-color:#59699e; background:#17192a; box-shadow:inset 0 0 0 3px #0d0f19; }
+	#start:not(:disabled):hover { border-color:var(--blue); background:#222640; }
+	button:disabled { color:#6f6c66; border-color:#3d3b36; background:#171612; cursor:not-allowed; }
+	.status { min-height:4.5rem; margin-top:1.2rem; border-top:1px solid var(--line); padding-top:1rem; }
+	#message,#loading { margin:0; font-size:.78rem; line-height:1.5; }
+	#message { color:#c9c1af; }
+	#message:not(:empty)::before { content:"◆"; margin-right:.65rem; color:var(--gold); font-size:.6rem; }
+	#loading { margin-top:.35rem; color:#777b88; }
+	.setup-footer { display:flex; justify-content:space-between; gap:1rem; margin:1.2rem .3rem 0; color:#72757d; font-size:.65rem; letter-spacing:.06em; text-transform:uppercase; }
+	#game-shell { min-height:100svh; padding:1rem clamp(1rem,3vw,2.5rem); background:radial-gradient(circle at 50% 0,#171b2e 0,transparent 32rem),#030304; }
+	.game-bar { display:grid; grid-template-columns:1fr auto 1fr; align-items:center; min-height:4.5rem; gap:1rem; border-bottom:1px solid #24252a; }
+	.game-brand { grid-column:2; }
+	.game-brand img { display:block; width:min(52vw,380px); height:auto; filter:drop-shadow(0 8px 14px #000); }
+	#fullscreen { grid-column:3; justify-self:end; min-height:2.4rem; padding:.5rem .85rem; border-color:#59699e; background:#17192a; box-shadow:inset 0 0 0 2px #0d0f19; font-size:.72rem; }
+	#fullscreen:hover { border-color:var(--blue); background:#222640; }
+	.fullscreen-icon { margin-right:.5rem; color:var(--gold); font-size:1rem; line-height:0; }
+	.game-frame { width:max-content; max-width:100%; margin:1rem auto 0; padding:6px; border:1px solid #9a7548; background:#281b10; box-shadow:inset 0 0 0 2px #0b0906,0 18px 55px #000c; }
+	.game-footer { display:flex; justify-content:space-between; gap:1rem; max-width:1100px; margin:.8rem auto 0; color:#666971; font: .62rem/1.4 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; letter-spacing:.06em; text-transform:uppercase; }
 	/* No border or padding on the canvas, or mouse positions are off. */
-	canvas { display: block; margin: 0 auto; border: 0; background: #000; }
-	/* Room above the game in a window; none in fullscreen. */
-	canvas:not(:fullscreen) { margin-top: 2em; }
-	canvas[hidden] { display: none; }
+	canvas { display:block; margin:0 auto; border:0; background:#000; }
+	canvas:fullscreen { width:100vw; height:100vh; object-fit:contain; background:#000; }
+	canvas[hidden],[hidden] { display:none !important; }
+	@media (max-width:560px) { #setup { place-items:start center; } .actions { grid-template-columns:1fr; } #start { min-width:0; } .setup-footer { display:block; line-height:1.6; text-align:center; } .setup-footer span { display:block; } #game-shell { padding:.5rem; } .game-bar { grid-template-columns:minmax(0,1fr) auto; min-height:3.5rem; } .game-brand { grid-column:1; } .game-brand img { width:min(58vw,300px); } #fullscreen { grid-column:2; } .game-footer span:first-child { display:none; } .game-footer { justify-content:flex-end; } }
+	@media (prefers-reduced-motion:no-preference) { #setup::after { animation:drift 9s ease-in-out infinite alternate; } @keyframes drift { to { transform:translateY(-22px); opacity:.25; } } }
 </style>
 </head>
 <body>
-<div id="setup">
-	<h1>Quest of the Companions</h1>
-	<p>To play, you need your own copy of <i>Ultima VII: The Black Gate</i>
-	(from GOG, Steam, or the original disks). Choose the folder you installed
-	it in. Its files are copied into this browser's storage and are never
-	uploaded anywhere.</p>
-	<div id="touch-only" hidden>
-		<p><b>Phones aren't supported.</b> The game needs a keyboard and a
-		mouse or trackpad, or a game controller, and its text is too small
-		for a phone's screen.</p>
-		<p>On a tablet, connect a keyboard, mouse or controller, then press
-		any key or controller button to go on.</p>
-		<p><a href="#" id="try-anyway">Try anyway</a></p>
+<main id="setup">
+	<div class="setup-shell">
+		<p class="eyebrow">An Exult build for Ultima VII: The Black Gate</p>
+		<h1><img class="title-logo" src="quest-of-the-companions-title.avif" alt="Quest of the Companions" width="2172" height="343"></h1>
+		<p class="tagline">One Avatar. One Britannia. <em>Bring a friend.</em></p>
+		<section class="setup-card" aria-labelledby="setup-heading">
+			<p class="eyebrow" id="setup-heading">Enter Britannia</p>
+			<p class="intro">To play, you need your own copy of <i>Ultima VII: The Black Gate</i> (from GOG, Steam, or the original disks). Choose the folder where it is installed.</p>
+			<p class="privacy"><span aria-hidden="true">◆</span> Your game files are copied into this browser's private storage. Nothing is uploaded.</p>
+			<div id="touch-only" hidden>
+				<p><b>Phones aren't supported.</b> The game needs a keyboard and a mouse or trackpad, or a game controller, and its text is too small for a phone's screen.</p>
+				<p>On a tablet, connect a keyboard, mouse or controller, then press any key or controller button to go on.</p>
+				<p><a href="#" id="try-anyway">Try anyway</a></p>
+			</div>
+			<div class="actions" id="choose">
+				<label class="button"><input id="pick" type="file" webkitdirectory multiple hidden>Choose game folder&hellip;</label>
+				<button id="start" type="button" disabled>Start game</button>
+			</div>
+			<div class="status" role="status" aria-live="polite" aria-atomic="true">
+				<p id="message"></p>
+				<p id="loading"></p>
+			</div>
+		</section>
+		<footer class="setup-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D</span></footer>
 	</div>
-	<p id="choose">
-		<label class="button"><input id="pick" type="file" webkitdirectory multiple hidden>Choose your Ultima VII folder&hellip;</label>
-		<button id="start" disabled>Start</button>
-	</p>
-	<p id="message"></p>
-	<p id="loading"></p>
-</div>
-<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" hidden></canvas>
+</main>
+<main id="game-shell" hidden>
+	<header class="game-bar">
+		<div class="game-brand"><img src="quest-of-the-companions-title.avif" alt="Quest of the Companions" width="2172" height="343"></div>
+		<button id="fullscreen" type="button" aria-pressed="false"><span class="fullscreen-icon" aria-hidden="true">⛶</span><span class="fullscreen-label">Fullscreen</span></button>
+	</header>
+	<div class="game-frame">
+		<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" hidden></canvas>
+	</div>
+	<footer class="game-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D</span></footer>
+</main>
 <script>
 	var Module = {
 		canvas: document.getElementById('canvas'),
@@ -50,11 +109,10 @@
 		printErr: (...args) => console.error(...args),
 		setStatus: text => { document.getElementById('loading').textContent = text; },
 	};
-	// A touch screen with no mouse or trackpad: say so first.  A tablet with
-	// a trackpad or mouse attached goes straight to the setup.  A browser
+	// A touch screen with no mouse or trackpad: say so first. A tablet with
+	// a trackpad or mouse attached goes straight to the setup. A browser
 	// can't tell whether a keyboard or controller is attached until it's
-	// used: a key (the page has no text field, so not the on-screen
-	// keyboard) or a controller button goes on, as does Try anyway.
+	// used: a key or a controller button goes on, as does Try anyway.
 	if (matchMedia('(pointer: coarse)').matches && !matchMedia('(any-pointer: fine)').matches) {
 		document.getElementById('touch-only').hidden = false;
 		document.getElementById('choose').hidden = true;
@@ -67,12 +125,10 @@
 		};
 		document.getElementById('try-anyway').onclick = go_on;
 		addEventListener('keydown', go_on);
-		// Browsers report a controller once one of its buttons is pressed.
 		addEventListener('gamepadconnected', go_on);
 	}
 	window.onerror = window.onunhandledrejection = () => {
-		document.getElementById('loading').textContent =
-			'Something went wrong; the browser\'s JavaScript console has the details.';
+		document.getElementById('loading').textContent = 'Something went wrong; the browser\'s JavaScript console has the details.';
 	};
 </script>
 {{{ SCRIPT }}}

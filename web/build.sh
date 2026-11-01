@@ -60,4 +60,5 @@ LINK=$(grep 'libtool: link: .*-o exult ' "$MAIN/web/make.log" | sed "s/^libtool:
 sh -c "$LINK -fexceptions -sASYNCIFY -sASYNCIFY_STACK_SIZE=131072 -sALLOW_MEMORY_GROWTH=1 \
 	-sINITIAL_MEMORY=268435456 -sSTACK_SIZE=8388608 -sFORCE_FILESYSTEM=1 -lidbfs.js \
 	--shell-file $MAIN/web/shell.html --pre-js $MAIN/web/pre.js --preload-file $PKG@/pkg"
+cp "$MAIN/web/quest-of-the-companions-title.avif" "$OUT/"
 ls -la "$OUT"

@@ -134,8 +134,30 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 			qotc_use_files([...event.target.files].map(
 				file => ({path: file.webkitRelativePath || file.name, file})));
 		});
+		const fullscreen = document.getElementById('fullscreen');
+		fullscreen.addEventListener('click', async () => {
+			try {
+				if (document.fullscreenElement) {
+					await document.exitFullscreen();
+				} else {
+					await Module.canvas.requestFullscreen({navigationUI: 'hide'});
+				}
+			} catch (err) {
+				console.error('Fullscreen failed', err);
+			}
+			Module.canvas.focus();
+		});
+		document.addEventListener('fullscreenchange', () => {
+			const active = document.fullscreenElement === Module.canvas;
+			fullscreen.setAttribute('aria-pressed', active);
+			fullscreen.querySelector('.fullscreen-label').textContent = active ? 'Exit fullscreen' : 'Fullscreen';
+			if (!active) {
+				Module.canvas.focus();
+			}
+		});
 		const play = () => {
 			document.getElementById('setup').hidden = true;
+			document.getElementById('game-shell').hidden = false;
 			Module.canvas.hidden = false;
 			Module.canvas.focus();
 			// Saves and the game in progress, every few seconds and when
