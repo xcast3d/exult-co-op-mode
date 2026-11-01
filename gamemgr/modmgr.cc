@@ -634,6 +634,13 @@ ModManager::ModManager(const string& name, const string& menu, bool needtitle, b
 
 void ModManager::gather_mods() {
 	modlist.clear();    // Just to be on the safe side.
+	// Quest of the Companions plays Black Gate as it shipped, with no mods:
+	// they change the scripts and map that co-op, skills and targeting rely
+	// on, and a mod's saves could never go co-op.  So none are looked for,
+	// and Exult's game menu lists only the games.  Players who want mods
+	// use Exult itself (docs/ultima-7-friend-mode.md, "No mods").  Exult's
+	// own code below is left as it is.
+	return;
 
 	FileList     filenames;
 	const string pathname("<" + path_prefix + "_MODS>");

@@ -8839,6 +8839,11 @@ int main(int argc, char* argv[]) {
 		exit(1);
 	}
 
+	// No mods in Quest of the Companions (ModManager::gather_mods).
+	if (arg_modname != "default" || !arg_installmod.empty()) {
+		cerr << "Quest of the Companions plays Black Gate without mods. For mods, use Exult itself." << endl;
+		exit(1);
+	}
 	if (arg_modname != "default" && !gameparam) {
 		cerr << "Error: You must also specify the game to be used!" << endl;
 		exit(1);

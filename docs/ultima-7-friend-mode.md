@@ -799,6 +799,35 @@ git push -u origin feature/friend-mode
 
 Keep project planning in `docs/friend-mode/` within the source tree. Track upstream changes separately and avoid broad refactors until the first local possession experiment works. Add Windows builds in CI once the project has a working baseline.
 
+## No mods
+
+Decided 2026-11-01: Quest of the Companions plays Black Gate (with Forge of
+Virtue) as it shipped, with no mods. Mods such as Marzo Junior's Keyring
+change the game's scripts, map and items, which co-op, skills, targeting,
+merchants and the opening's scenes all rely on, so any of them could break
+these systems in ways that look like our bugs. Allowing mods in single
+player only would leave a mod's saves unable to go co-op later; allowing
+them in co-op would mean checking mods on join and testing each one. Not
+worth it: every save, single player or co-op, is plain Black Gate.
+
+- The game never looks for mods (`ModManager::gather_mods`), so Exult's
+  game menu lists only the games, and `--mod` and `--installmod` are
+  refused with a reason (`exult.cc`). Mods already installed stay on disk,
+  untouched.
+- Players who want mods, or Exult as it is, download Exult itself; the
+  two can sit side by side.
+- What players liked in mods comes in as our own features, built and
+  tested for co-op. Using keys without hunting for them was the main
+  wish, and Exult already has it: **K** (Try Keys), then click a locked
+  door or chest, uses any matching key in the party, guests' own keys
+  too.
+- [ ] The website says so: mods are off, so every co-op player runs the
+      same game; for mods, use Exult.
+- [ ] Before a public release: our own settings and saves folder (for
+      example `Library/Application Support/Quest of the Companions` on a
+      Mac). Today it shares Exult's (`Library/Application Support/Exult`),
+      so the two apps share a settings file and saves.
+
 ## Licensing and game data
 
 - Exult is open source under GPL terms; confirm the exact repository license and bundled component licenses before distributing modified builds.
@@ -838,8 +867,9 @@ together.
    guests), the two-people-grab-one-item check, and long internet sessions
    (Phase 6's exit criterion).
 3. **The webpage:** the feature list and shortcuts in `ultima7-co-op-site`
-   brought up to date (the controller, the Keys page, the item menu), and
-   the roadmap there (controller support is done).
+   brought up to date (the controller, the Keys page, the item menu), the
+   roadmap there (controller support is done), and a line that mods are
+   off so every co-op player runs the same game (see "No mods").
 4. **Fixes from play,** as they come (the latest are in
    [feedback 2026-10-25](friend-mode/feedback-2026-10-25.md), all fixed).
 5. **Later, optional:** co-op scaling (only if combat proves too easy), the

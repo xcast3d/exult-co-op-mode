@@ -32,6 +32,9 @@ both in `--version` and the version files saved with each game.
   now 38).
 - **Winches:** the Target System offers them with levers and switches, and
   Space turns them.
+- **No mods:** the game plays Black Gate as it shipped, so every co-op
+  player runs the same game. Mods are no longer listed or started; for
+  mods, use Exult itself. Your installed mods stay where they are.
 
 ### Fixed
 
