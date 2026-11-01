@@ -57,6 +57,10 @@
 
 #include <SDL3/SDL.h>
 
+#ifdef __EMSCRIPTEN__
+#	include <emscripten.h>
+#endif
+
 namespace {
 	class Strings {
 	public:
@@ -275,6 +279,10 @@ void ActionDarker(const int* params) {
 //  { ActionFullscreen, 0, "Toggle fullscreen", normal_keys, NONE },
 void ActionFullscreen(const int* params) {
 	ignore_unused_variable_warning(params);
+#ifdef __EMSCRIPTEN__
+	// The page's fullscreen, which scales the game to fit the screen.
+	emscripten_run_script("qotc_toggle_fullscreen()");
+#else
 	Game_window* gwin = Game_window::get_instance();
 	setup_video(!gwin->get_win()->is_fullscreen(), TOGGLE_FULLSCREEN);
 	const char* msg;
@@ -288,6 +296,7 @@ void ActionFullscreen(const int* params) {
 	} else {
 		setup_video(!gwin->get_win()->is_fullscreen(), TOGGLE_FULLSCREEN);
 	}
+#endif
 }
 
 //  { ActionUseItem, 3, "Use item", dont_show, NONE },

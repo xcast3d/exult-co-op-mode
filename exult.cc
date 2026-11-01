@@ -9982,6 +9982,11 @@ static void Init() {
 		Image_window8::set_gamma(atof(gr.c_str()), atof(gg.c_str()), atof(gb.c_str()));
 		string fullscreenstr;    // Check config. for fullscreen mode.
 		config->value("config/video/fullscreen", fullscreenstr, "no");
+#ifdef __EMSCRIPTEN__
+		// In a browser the page does fullscreen (Alt+Enter or its button):
+		// Exult always runs in its canvas, which the page scales to fit.
+		fullscreenstr = "no";
+#endif
 		const bool fullscreen = (fullscreenstr == "yes");
 		config->set("config/video/fullscreen", fullscreen ? "yes" : "no", false);
 

@@ -66,6 +66,56 @@ function qotc_ask_before_leaving(event) {
 	event.returnValue = '';
 }
 
+// Fullscreen: the game's frame fills the screen and the canvas is scaled up
+// to fit, whatever window size is chosen in Video Options.  The page's
+// button and Alt+Enter in the game (keyactions.cc) both come here.
+// Escape stays the game's key: where the browser allows (Chrome, Edge) the
+// page keeps it while in fullscreen, and it shows an Exit Fullscreen button
+// in the corner instead; holding Escape still leaves.  Safari and Firefox
+// always leave fullscreen on Escape.
+function qotc_frame() {
+	return document.querySelector('.game-frame');
+}
+
+async function qotc_toggle_fullscreen() {
+	try {
+		if (document.fullscreenElement) {
+			await document.exitFullscreen();
+		} else {
+			await qotc_frame().requestFullscreen({navigationUI: 'hide'});
+			if (navigator.keyboard && navigator.keyboard.lock) {
+				navigator.keyboard.lock(['Escape']).catch(() => {});
+			}
+		}
+	} catch (err) {
+		console.error('Fullscreen failed', err);
+	}
+	Module.canvas.focus();
+}
+
+function qotc_fit_fullscreen() {
+	const canvas = Module.canvas;
+	const frame = qotc_frame();
+	if (document.fullscreenElement === frame && canvas.offsetWidth && canvas.offsetHeight) {
+		const scale = Math.min(frame.clientWidth / canvas.offsetWidth, frame.clientHeight / canvas.offsetHeight);
+		canvas.style.transform = `scale(${scale})`;
+	} else {
+		canvas.style.transform = '';
+	}
+}
+
+let qotc_exit_shown_until = 0;
+function qotc_show_exit_button(ms) {
+	const button = document.getElementById('exit-fullscreen');
+	button.classList.add('shown');
+	qotc_exit_shown_until = Math.max(qotc_exit_shown_until, performance.now() + ms);
+	setTimeout(() => {
+		if (performance.now() >= qotc_exit_shown_until - 10) {
+			button.classList.remove('shown');
+		}
+	}, ms);
+}
+
 // files: [{path, file}], path relative to the chosen folder.  Finds the
 // Black Gate static folder anywhere in it, then copies that folder.
 async function qotc_use_files(files) {
@@ -109,6 +159,14 @@ async function qotc_use_files(files) {
 	});
 }
 
+// Just before Exult starts (the data package is in by then; on a first
+// visit, storage is read before it is): the settings start as the page's.
+Module['onRuntimeInitialized'] = () => {
+	if (!FS.analyzePath(qotc_config).exists) {
+		FS.writeFile(qotc_config, FS.readFile('/pkg/exult.cfg'));
+	}
+};
+
 // Added to, not replaced: the data package has its own step there.
 Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 	addRunDependency('qotc-setup');    // Exult waits for Start.
@@ -121,9 +179,6 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 		for (const dir of [qotc_static, qotc_user + '/saves', qotc_user + '/gamedat']) {
 			FS.mkdirTree(dir);
 		}
-		if (!FS.analyzePath(qotc_config).exists) {
-			FS.writeFile(qotc_config, FS.readFile('/pkg/exult.cfg'));
-		}
 		navigator.storage && navigator.storage.persist && navigator.storage.persist();
 		const start = document.getElementById('start');
 		if (qotc_have_game()) {
@@ -135,24 +190,31 @@ Module['preRun'] = [].concat(Module['preRun'] || [], () => {
 				file => ({path: file.webkitRelativePath || file.name, file})));
 		});
 		const fullscreen = document.getElementById('fullscreen');
-		fullscreen.addEventListener('click', async () => {
-			try {
-				if (document.fullscreenElement) {
-					await document.exitFullscreen();
-				} else {
-					await Module.canvas.requestFullscreen({navigationUI: 'hide'});
-				}
-			} catch (err) {
-				console.error('Fullscreen failed', err);
-			}
-			Module.canvas.focus();
-		});
+		fullscreen.addEventListener('click', qotc_toggle_fullscreen);
+		document.getElementById('exit-fullscreen').addEventListener('click', qotc_toggle_fullscreen);
 		document.addEventListener('fullscreenchange', () => {
-			const active = document.fullscreenElement === Module.canvas;
+			const active = document.fullscreenElement === qotc_frame();
 			fullscreen.setAttribute('aria-pressed', active);
 			fullscreen.querySelector('.fullscreen-label').textContent = active ? 'Exit fullscreen' : 'Fullscreen';
-			if (!active) {
+			qotc_fit_fullscreen();
+			if (active) {
+				qotc_show_exit_button(3000);
+			} else {
 				Module.canvas.focus();
+			}
+		});
+		addEventListener('resize', qotc_fit_fullscreen);
+		new ResizeObserver(qotc_fit_fullscreen).observe(Module.canvas);
+		// In fullscreen, Escape (still the game's) and the mouse in the top
+		// right corner show the Exit Fullscreen button for a moment.
+		addEventListener('keydown', event => {
+			if (event.key === 'Escape' && document.fullscreenElement) {
+				qotc_show_exit_button(3000);
+			}
+		}, true);
+		addEventListener('mousemove', event => {
+			if (document.fullscreenElement && event.clientY < 80 && event.clientX > innerWidth - 240) {
+				qotc_show_exit_button(1500);
 			}
 		});
 		const play = () => {

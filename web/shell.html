@@ -59,7 +59,16 @@
 	.game-footer { display:flex; justify-content:space-between; gap:1rem; max-width:1100px; margin:.8rem auto 0; color:#666971; font: .62rem/1.4 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; letter-spacing:.06em; text-transform:uppercase; }
 	/* No border or padding on the canvas, or mouse positions are off. */
 	canvas { display:block; margin:0 auto; border:0; background:#000; }
-	canvas:fullscreen { width:100vw; height:100vh; object-fit:contain; background:#000; }
+	/* Fullscreen is the frame, not the canvas, so the Exit Fullscreen button
+	   can sit on top; pre.js scales the canvas to fit (a transform, which
+	   SDL's mouse positions follow). */
+	.game-frame { position:relative; }
+	.game-frame:fullscreen { display:flex; align-items:center; justify-content:center; width:100vw; height:100vh; max-width:none; margin:0; padding:0; border:0; background:#000; box-shadow:none; overflow:hidden; }
+	.game-frame:fullscreen canvas { flex:none; image-rendering:pixelated; }
+	#exit-fullscreen { position:absolute; z-index:1; top:1rem; right:1rem; min-height:2.4rem; padding:.5rem .85rem; border-color:#59699e88; background:#17192acc; box-shadow:none; font-size:.72rem; opacity:0; pointer-events:none; transition:opacity .25s; }
+	#exit-fullscreen.shown { opacity:1; pointer-events:auto; }
+	#exit-fullscreen:hover { border-color:var(--blue); background:#222640ee; }
+	.game-frame:not(:fullscreen) #exit-fullscreen { display:none; }
 	canvas[hidden],[hidden] { display:none !important; }
 	@media (max-width:560px) { #setup { place-items:start center; } .actions { grid-template-columns:1fr; } #start { min-width:0; } .setup-footer { display:block; line-height:1.6; text-align:center; } .setup-footer span { display:block; } #game-shell { padding:.5rem; } .game-bar { grid-template-columns:minmax(0,1fr) auto; min-height:3.5rem; } .game-brand { grid-column:1; } .game-brand img { width:min(58vw,300px); } #fullscreen { grid-column:2; } .game-footer span:first-child { display:none; } .game-footer { justify-content:flex-end; } }
 	@media (prefers-reduced-motion:no-preference) { #setup::after { animation:drift 9s ease-in-out infinite alternate; } @keyframes drift { to { transform:translateY(-22px); opacity:.25; } } }
@@ -99,6 +108,7 @@
 	</header>
 	<div class="game-frame">
 		<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" hidden></canvas>
+		<button id="exit-fullscreen" type="button" tabindex="-1">Exit fullscreen</button>
 	</div>
 	<footer class="game-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D</span></footer>
 </main>

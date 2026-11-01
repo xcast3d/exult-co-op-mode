@@ -120,8 +120,12 @@ shortcut may land on a different key: check.
 - [ ] Keys that can't be blocked: Ctrl/Cmd+W, Ctrl/Cmd+T, Ctrl/Cmd+N,
       Cmd+Q, Ctrl+Tab, Alt+F4, Cmd+Tab, and Escape leaving fullscreen. None
       of the game's keys should need them.
-- [ ] Fullscreen with the Keyboard Lock API (Chromium only) captures most of
-      the second list too, including Escape. Worth a Fullscreen button.
+- [x] Fullscreen keeps Escape for the game in Chrome and Edge (Keyboard
+      Lock): Escape, or the mouse in the top right corner, shows an "Exit
+      fullscreen" button for a moment; holding Escape also leaves. Safari
+      and Firefox have no Keyboard Lock, so Escape leaves fullscreen there
+      (2026-11-01). Not yet tried in a real browser (the test browser
+      doesn't go fullscreen).
 - [x] Leaving the page while a game runs (closing the tab, Cmd+W, reload)
       asks first (2026-10-30).
 - [ ] Option+Space on a Mac: fixed as above, not yet tried with a real Mac
@@ -160,9 +164,19 @@ shortcut may land on a different key: check.
 
 ### Page and hosting
 
-- [ ] The page's look, the canvas filling the window, and a Fullscreen
-      button. A little room above the game in a window, none in fullscreen
-      (2026-10-30).
+- [x] The page's look: the setup page, and the game in a frame between the
+      title and a footer (2026-11-01).
+- [x] One fullscreen: the page's Fullscreen button and Alt+Enter in the game
+      both put the game's frame in fullscreen and scale the game up to fit
+      the screen, the whole picture with black bars, whatever window size is
+      set in Video Options. The scaling is a CSS transform, which SDL's mouse
+      positions follow (checked: clicks land). Exult's own Full Screen
+      setting is gone from Video Options in the browser, as on iPhone and
+      Android: it could only pick from the browser's two screen sizes and
+      cropped the picture (2026-11-01).
+- [x] First visit: the settings file is copied once the page's data has
+      loaded. Before, an empty browser stopped the setup with an error and
+      Start never worked (2026-11-01).
 - [ ] Hosting as a static site (Cloudflare Pages), built from `web/out`.
       The page files should be sent compressed (2.7 MB instead of 11 MB for
       the game).

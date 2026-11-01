@@ -499,7 +499,9 @@ VideoOptions_gump::VideoOptions_gump() : Modal_gump(nullptr, -1), startup_fill_m
 	const std::vector<std::string> enabledtext = {Strings::Disabled(), Strings::Enabled()};
 
 	fullscreen = gwin->get_win()->is_fullscreen();
-#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
+	// No Full Screen here in a browser: the page does it (Alt+Enter or its
+	// button), scaling the window to fit the screen.
+#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID) && !defined(__EMSCRIPTEN__)
 	buttons[id_fullscreen] = std::make_unique<VideoTextToggle>(
 			this, &VideoOptions_gump::toggle_fullscreen, enabledtext, fullscreen, get_button_pos_for_label(Strings::FullScreen_()),
 			yForRow(0), 74);
@@ -507,7 +509,7 @@ VideoOptions_gump::VideoOptions_gump() : Modal_gump(nullptr, -1), startup_fill_m
 	config->value("config/video/share_video_settings", share_settings, false);
 
 	std::vector<std::string> yesNO = {Strings::No(), Strings::Yes()};
-#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
+#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID) && !defined(__EMSCRIPTEN__)
 	buttons[id_share_settings] = std::make_unique<VideoTextToggle>(
 			this, &VideoOptions_gump::toggle_share_settings, std::move(yesNO), share_settings,
 			get_button_pos_for_label(Strings::andfullscreen_()), yForRow(11), 40);
@@ -650,7 +652,7 @@ void VideoOptions_gump::paint() {
 #else
 	const char* resolution_label = Strings::Resolution_();
 #endif
-#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
+#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID) && !defined(__EMSCRIPTEN__)
 	font->paint_text(iwin->get_ib8(), Strings::FullScreen_(), x + label_margin, y + yForRow(0) + 1);
 	font->paint_text(iwin->get_ib8(), resolution_label, x + label_margin, y + yForRow(1) + 1);
 #else
@@ -676,7 +678,7 @@ void VideoOptions_gump::paint() {
 	if (buttons[id_has_ac] != nullptr) {
 		font->paint_text(iwin->get_ib8(), Strings::ARCorrection_(), x + label_margin, y + yForRow(9) + 1);
 	}
-#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
+#if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID) && !defined(__EMSCRIPTEN__)
 	font->paint_text(iwin->get_ib8(), Strings::Samesettingsforwindow(), x + label_margin, y + yForRow(10) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::andfullscreen_(), x + label_margin, y + yForRow(11) + 1);
 #endif
