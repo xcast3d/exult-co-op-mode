@@ -577,17 +577,27 @@ bool Gump::sort_objects() {
 		}
 		return a->get_framenum() < b->get_framenum();
 	});
-	// Rows across the whole area, left to right, then the next row down;
-	// when the area is full, round again a little lower, overlapping.
-	// Look-alikes (same shape and frame) lie on top of each other, each a
-	// pixel or two further, so they read as a stack.
-	constexpr int gap   = 0;    // Between neighbours.
-	constexpr int fan   = 2;    // Between the pieces of a stack.
-	constexpr int fan_max = 4;    // Pieces drawn apart; the rest share the last spot.
-	int           x     = 0;
-	int           y     = 0;
-	int           row_h = 0;
-	int           round = 0;
+	// Each in the first free place, top to bottom and left to right, where
+	// its picture touches no other (2026-11-01: rows as tall as their
+	// tallest thing left gaps under short ones and wrapped early, so a few
+	// pieces of food piled up while half the window was empty).  Only when
+	// nothing fits does it go where it overlaps least.  Look-alikes (same
+	// shape and frame) lie on top of each other, each a pixel or two
+	// further, so they read as a stack.
+	constexpr int         fan     = 2;    // Between the pieces of a stack.
+	constexpr int         fan_max = 4;    // Pieces drawn apart; the rest share the last spot.
+	constexpr int         step    = 2;    // Pixels between places tried.
+	std::vector<TileRect> taken;
+	auto overlap = [&taken](const TileRect& spot) {
+		int area = 0;
+		for (const TileRect& other : taken) {
+			if (spot.intersects(other)) {
+				const TileRect both = spot.intersect(other);
+				area += both.w * both.h;
+			}
+		}
+		return area;
+	};
 	for (size_t i = 0; i < items.size();) {
 		// The run of look-alikes starting here.
 		size_t end = i + 1;
@@ -595,28 +605,29 @@ bool Gump::sort_objects() {
 			   && items[end]->get_framenum() == items[i]->get_framenum()) {
 			++end;
 		}
-		Shape_frame* shape = items[i]->get_shape();
+		Shape_frame* shape  = items[i]->get_shape();
 		const int    pieces = std::min(static_cast<int>(end - i), fan_max) - 1;
 		const int    w      = std::min(shape->get_width() + fan * pieces, static_cast<int>(object_area.w));
 		const int    h      = std::min(shape->get_height() + fan * pieces, static_cast<int>(object_area.h));
-		if (x > 0 && x + w > object_area.w) {    // Next row.
-			x = 0;
-			y += row_h + gap;
-			row_h = 0;
+		int          best_x = 0;
+		int          best_y = 0;
+		int          least  = -1;
+		for (int py = 0; least != 0 && py + h <= object_area.h; py += step) {
+			for (int px = 0; least != 0 && px + w <= object_area.w; px += step) {
+				const int covered = overlap(TileRect(px, py, w, h));
+				if (least < 0 || covered < least) {
+					least  = covered;
+					best_x = px;
+					best_y = py;
+				}
+			}
 		}
-		if (y > 0 && y + h > object_area.h) {    // Full: round again.
-			++round;
-			x = 2 * round;
-			y = 2 * round;
-			row_h = 0;
-		}
+		taken.emplace_back(best_x, best_y, w, h);
 		for (size_t j = i; j < end; ++j) {
 			const int k = std::min(static_cast<int>(j - i), fan_max - 1);
-			items[j]->set_shape_pos(x + fan * k + shape->get_xleft(), y + fan * k + shape->get_yabove());
+			items[j]->set_shape_pos(best_x + fan * k + shape->get_xleft(), best_y + fan * k + shape->get_yabove());
 		}
-		x += w + gap;
-		row_h = std::max(row_h, h);
-		i     = end;
+		i = end;
 	}
 	gwin->set_all_dirty();
 	return true;
@@ -736,22 +747,36 @@ void Gump::paint() {
 		}
 		bool found = false;
 		if (!placed(obj, shape) && smart_placement) {
-			// The first free place in a loose grid, top to bottom and left
-			// to right; neighbours may overlap by a pixel or two.
-			const int w = shape->get_width();
-			const int h = shape->get_height();
-			for (int py = 0; !found && py + h <= object_area.h; py += 4) {
-				for (int px = 0; !found && px + w <= object_area.w; px += 4) {
+			// The first free place, top to bottom and left to right, where
+			// it touches nothing; with none, where it overlaps least
+			// (2026-11-01: a crowded window fell back to the old flow below,
+			// piling things up at the top left).
+			const int w     = shape->get_width();
+			const int h     = shape->get_height();
+			int       least = -1;
+			int       best_x = 0;
+			int       best_y = 0;
+			for (int py = 0; least != 0 && py + h <= object_area.h; py += 2) {
+				for (int px = 0; least != 0 && px + w <= object_area.w; px += 2) {
 					const TileRect spot(px, py, w, h);
-					found = std::none_of(taken.begin(), taken.end(), [&spot](TileRect other) {
-						other.enlarge(-2);
-						return other.w > 0 && other.h > 0 && spot.intersects(other);
-					});
-					if (found) {
-						obj->set_shape_pos(px + shape->get_xleft(), py + shape->get_yabove());
-						taken.push_back(spot);
+					int            covered = 0;
+					for (const TileRect& other : taken) {
+						if (spot.intersects(other)) {
+							const TileRect both = spot.intersect(other);
+							covered += both.w * both.h;
+						}
+					}
+					if (least < 0 || covered < least) {
+						least  = covered;
+						best_x = px;
+						best_y = py;
 					}
 				}
+			}
+			if (least >= 0) {
+				found = true;
+				obj->set_shape_pos(best_x + shape->get_xleft(), best_y + shape->get_yabove());
+				taken.emplace_back(best_x, best_y, w, h);
 			}
 		}
 		if (!found && !placed(obj, shape)) {

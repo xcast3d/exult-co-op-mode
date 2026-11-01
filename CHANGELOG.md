@@ -42,6 +42,27 @@ both in `--version` and the version files saved with each game.
   instruments, the fair's games, stocks and more, with levers and
   switches. Torches on walls come with lamps, and furniture fixed in
   place (cradles, chairs) is offered when Furniture is on.
+- **Shared experience:** every kill's experience is shared by the party
+  members near it (alive and awake), divided among them with a small
+  bonus for each extra member, so healers and support companions level
+  with the fighters. Kills by Katrina's traps and summoned creatures now
+  count too. Game menu → Class System → Experience switches back to
+  "Killing blow", Black Gate's own rule.
+- **Doors and the party:** a door the party walks through stays open
+  until the last of them is through, then closes. Companions used to shut
+  it on each other and get stuck inside. Near a door the party walks in
+  single file, so no one steps behind the open door. A companion still caught behind
+  a closed door opens it after a moment and follows, and one boxed in
+  behind an open door walks round it (or, with no way round, catches up
+  beside you).
+- **Tidier containers:** Sort, and things dropped into a bag, go in the
+  first free place where they touch nothing, and overlap only once the
+  bag is full.
+- **Abacus:** guests can use it, and the controller's utilities ring has
+  it whenever anyone in the party carries one. Guests' ring no longer
+  shows the Spellbook.
+- **Guests and the Avatar's conversations:** when the Avatar starts
+  talking, a guest's target clears and their windows close.
 - **No mods:** the game plays Black Gate as it shipped, so every co-op
   player runs the same game. Mods are no longer listed or started; for
   mods, use Exult itself. Your installed mods stay where they are.
@@ -57,6 +78,22 @@ both in `--version` and the version files saved with each game.
   use it.
 - **Bags inside chests:** guests can open a bag or box inside a chest or
   body. They used to get a red X.
+- **Cloaks after loading:** with Serpent Isle paperdolls, a worn cloak
+  showed as a plain item after loading a game, until worn again.
+- **Ready with Space:** a cloak, two-handed weapon or heavy gloves readied
+  from the Target System goes in its proper spot.
+- **Skill range while the game waits:** a range circle no longer stays on
+  screen through the host's conversation or a pause, and the skill bar
+  can't be used then.
+- **Controller rings during conversations:** a guest's rings don't open
+  while the host talks or pauses.
+- **E with nothing in reach:** no more half-second stall. The Target
+  System's keys no longer flash the red X, which froze the game for a
+  moment; the line at the top says what happened.
+- **Take all button:** it took nothing ("Nothing taken") from a body or
+  chest; it now takes everything, as Shift+Space does.
+- **Guest hints:** people a guest can't talk to no longer say "Avatar
+  only".
 - **Emotes on guests:** a guest's own /wave, /bow and the like now show on
   their own screen. Before, only the other players saw them.
 - **Running is remembered:** after R switched to walking once, every

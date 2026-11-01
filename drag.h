@@ -79,6 +79,13 @@ class Dragging_info : public Game_singletons {
 	bool drop_on_map(int x, int y, Game_object* to_drop);
 
 public:
+	// Friend Mode: an object is being dragged (not a button press, which
+	// is a drag with no object until the mouse comes up).
+	bool has_object() const {
+		return obj != nullptr;
+	}
+
+
 	friend class Game_window;
 	// Create for dropping new object.
 	Dragging_info(Game_object_shared newobj);

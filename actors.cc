@@ -3803,8 +3803,10 @@ bool Actor::add_readied(
 	else if ((alt1 == scabbard || alt2 == scabbard) && index == belt) {
 		use_scabbard = true;
 	}
-	// Must use neck entirely
-	else if (prefered == neck && index == amulet) {
+	// Must use neck entirely.  (Friend Mode: neck may be an alternate, as
+	// Black Gate's cloak has it with Serpent Isle paperdolls; checking only
+	// the prefered spot left a loaded cloak drawn as a plain item.)
+	else if ((prefered == neck || alt1 == neck || alt2 == neck) && index == amulet) {
 		use_neck = true;
 	}
 
@@ -4225,8 +4227,8 @@ int Actor::figure_hit_points(
 		}
 	}
 
-	if (expval > 0 && npc != nullptr) {    // Give experience.
-		npc->set_property(static_cast<int>(exp), npc->get_property(static_cast<int>(exp)) + expval);
+	if (expval > 0 && npc != nullptr) {    // Give experience (Friend Mode: maybe shared).
+		Friend_class_give_experience(npc, this, expval);
 	}
 
 	// Weapon usecode comes last of all.

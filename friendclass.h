@@ -27,6 +27,14 @@ extern int  Friend_class_icon_style;       // Friend_class_icons (parchment).
 extern bool Friend_class_ai;               // Companions nobody plays use skills (on).
 extern bool Friend_class_require_items;    // Skills need the class item (off).
 extern bool Friend_class_auto_foe;         // A skill on one foe with no pick chooses (off: the crosshair).
+extern bool Friend_class_shared_exp;       // A kill's experience shared by the party near it (on).
+
+// Host and single player: 'expval', the experience for 'killer' defeating
+// 'victim' (Actor::attacked).  With shared experience, a kill by the party
+// (or a creature one of them summoned) goes to everyone in the party
+// near it, divided, with a small bonus per member; otherwise, and for
+// anyone else's kills, all to the killer as in Exult.
+void Friend_class_give_experience(Actor* killer, Actor* victim, int expval);
 
 enum Friend_class_bar_place {
 	friend_bar_above_status = 0,

@@ -990,7 +990,9 @@ bool Dragging_info::place(Container_game_object* dest, int spot, int count) {
  */
 
 bool Game_window::move_object(Game_object* object, Gump* from, Container_game_object* dest, int spot, int count) {
-	if (!object || dragging) {
+	// A window's button (Take all) runs inside the click's drag, which has
+	// no object: moving is fine then (2026-11-01: it took nothing).
+	if (!object || (dragging && dragging->has_object())) {
 		return false;
 	}
 	Dragging_info info(object, from);

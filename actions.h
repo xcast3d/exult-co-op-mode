@@ -121,6 +121,7 @@ private:
 	bool             from_offscreen = false;      // Walking from offscreen.
 	Actor_action*    subseq         = nullptr;    // For opening doors.
 	Game_object_weak door_obj;                    // Store the door object
+	Tile_coord       door_from;                   // Friend Mode: where it was opened from.
 	bool             handling_door          = false;
 	bool             door_sequence_complete = false;
 	unsigned char    blocked                = 0;    // Blocked-tile retries.

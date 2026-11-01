@@ -2567,7 +2567,7 @@ static void Friend_mode_perform_guest_move(
 // host runs it with that click already answered: the guest's own companion
 // for food and potions, or the door or chest the guest picked.
 
-bool Friend_mode_guest_local_shape(int shape) {
+bool Friend_mode_guest_local_shape(int shape, int frame) {
 	if (!GAME_BG) {
 		return false;    // Serpent Isle shapes not reviewed yet.
 	}
@@ -2592,6 +2592,9 @@ bool Friend_mode_guest_local_shape(int shape) {
 	case 837:    // Easel: a remark (paint on it with brush and pigments).
 	case 644:    // Gold coin: "Call it." heads or tails (closes windows).
 		return true;
+	case 675:    // Desk items: the abacus (frame 11) says the party's gold
+				 // (2026-11-01).  The gavel (frame 0) goes to the host.
+		return frame == 11;
 	default:
 		return false;
 	}
@@ -2685,7 +2688,7 @@ bool Friend_mode_guest_activate(Game_object* item) {
 	if (Friend_mode_guest_use_item(item)) {
 		return true;
 	}
-	if (Friend_mode_guest_local_shape(item->get_shapenum())) {    // Shows something, here only.
+	if (Friend_mode_guest_local_shape(item->get_shapenum(), item->get_framenum())) {    // Shows something, here only.
 		gwin->get_usecode()->init_conversation();
 		Actor* const before = Friend_mode_set_usecode_walker(own);    // We stand in for the Avatar.
 		item->activate();
@@ -3184,7 +3187,6 @@ static void Friend_mode_cycle_target(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
 		|| !gwin->player_can_act()) {
-		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
 	friend_range_shown_until     = SDL_GetTicks() + 2000;
@@ -3196,7 +3198,6 @@ static void Friend_mode_cycle_target(int step) {
 		// on a big screen something at the far edge may be out of it.
 		Friend_mode_clear_target();
 		Friend_mode_target_notice("No target in range");
-		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
 	// Nearest first; in combat mode hostiles come before everyone else, and
@@ -3785,7 +3786,7 @@ static bool Friend_is_usable_thing(const Game_object* obj) {
 	}
 	return Friend_is_readable(obj) || (shape == 675 && obj->get_framenum() == 0)    // Gavel (a desk item).
 		   || shape == 810 || shape == 893                                          // Bucket, pool of water.
-		   || Friend_mode_guest_local_shape(shape) || Friend_mode_guest_usable_shape(shape);
+		   || Friend_mode_guest_local_shape(shape, obj->get_framenum()) || Friend_mode_guest_usable_shape(shape);
 }
 
 // Readying: an item meant to be worn or wielded.  Anything can be held in
@@ -3810,7 +3811,20 @@ static int Friend_free_spot(Actor* own, Game_object* obj) {
 	own->get_prefered_slots(obj, prefered, alt1, alt2);
 	for (const int spot : {prefered, alt1, alt2}) {
 		if (spot >= 0 && own->fits_in_spot(obj, spot)) {
-			return spot;
+			// The real spot of one that fills two (a cloak's neck is the
+			// amulet's); add_readied knows the rest from the item.
+			switch (spot) {
+			case both_hands:
+				return lhand;
+			case lrgloves:
+				return lfinger;
+			case neck:
+				return amulet;
+			case scabbard:
+				return belt;
+			default:
+				return spot;
+			}
 		}
 	}
 	return -1;
@@ -4073,7 +4087,6 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		return false;
 	}
 	if (gwin->network_input_blocked() || !gwin->player_can_act()) {
-		Mouse::mouse()->flash_shape(Mouse::redx);
 		return true;
 	}
 	// Picked outside, then went indoors: the roof hides it now.
@@ -4132,7 +4145,6 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	const bool        mine   = obj->get_outermost() == own;
 	if (!cheat.in_hack_mover() && !mine && !Fast_pathfinder_client::is_grabable(own, obj->get_outermost())) {
 		Friend_mode_target_notice("Too far away");
-		Mouse::mouse()->flash_shape(Mouse::outofrange);
 		return true;
 	}
 	const bool plain = !shift && !alt;
@@ -4338,8 +4350,9 @@ static std::string Friend_space_hint() {
 			if (talks) {
 				return two("Talk", "Attack");
 			}
-			// A guest talks only to merchants and trainers (the Avatar does).
-			return Friend_has_conversation(target) ? "Avatar only  " + attack : attack;
+			// A guest talks only to merchants and trainers (the Avatar does):
+			// just the action there is (2026-11-01: was "Avatar only" first).
+			return attack;
 		}
 		if (!Friend_is_attack_target(own, target)) {
 			return {};
@@ -4514,8 +4527,72 @@ static std::vector<Game_object*> Friend_window_candidates() {
 	return things;
 }
 
+// The tiles 'own' can walk to near it, found once per E press: Exult's
+// reach check (is_grabable) runs up to five path searches per thing, and
+// each fails slowly for one behind a wall, so a room of things out of
+// reach stalled E for half a second (2026-11-01).  A thing with no
+// walkable tile within grabbing distance can't be reached; only the rest
+// get the real check.  Steps as the fast pathfinder takes them (a tile's
+// height, up or down one), within a square a path the pathfinder would
+// try can't leave.
+class Friend_walkable_area {
+public:
+	explicit Friend_walkable_area(Actor* own) : origin(own->get_tile()), seen(side * side, false) {
+		const int          flags = own->get_type_flags();
+		std::deque<Tile_coord> open{origin};
+		seen[index(origin.tx, origin.ty)] = true;
+		while (!open.empty()) {
+			const Tile_coord at = open.front();
+			open.pop_front();
+			for (int dy = -1; dy <= 1; ++dy) {
+				for (int dx = -1; dx <= 1; ++dx) {
+					const int tx = at.tx + dx;
+					const int ty = at.ty + dy;
+					if ((dx == 0 && dy == 0) || !inside(tx, ty) || seen[index(tx, ty)]) {
+						continue;
+					}
+					Tile_coord step(tx, ty, at.tz);
+					if (Map_chunk::is_blocked(step, 1, flags, 1, 1)) {
+						continue;
+					}
+					seen[index(tx, ty)] = true;
+					open.push_back(step);
+				}
+			}
+		}
+	}
+
+	// A walkable tile within 'reach' of 'obj''s footprint?
+	bool near(Game_object* obj, int reach) const {
+		const Block box = obj->get_block();
+		for (int ty = box.y - reach; ty < box.y + box.d + reach; ++ty) {
+			for (int tx = box.x - reach; tx < box.x + box.w + reach; ++tx) {
+				if (inside(tx, ty) && seen[index(tx, ty)]) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+private:
+	static constexpr int radius = 30;
+	static constexpr int side   = 2 * radius + 1;
+	Tile_coord           origin;
+	std::vector<bool>    seen;
+
+	bool inside(int tx, int ty) const {
+		return std::abs(tx - origin.tx) <= radius && std::abs(ty - origin.ty) <= radius;
+	}
+
+	int index(int tx, int ty) const {
+		return (ty - origin.ty + radius) * side + (tx - origin.tx + radius);
+	}
+};
+
 // E with no container window open: things in the world, nearest first.
 static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
+	const Friend_walkable_area walkable(own);
 	Game_object_vector nearby;
 	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0);
 	const TileRect            view = gwin->get_win_tile_rect();
@@ -4543,7 +4620,8 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		if (Friend_thing_group_on(group) && offered && from.distance(at) <= friend_thing_reach_tiles
 			&& !Friend_is_hidden_by_roof(obj)
 			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5
-			&& (cheat.in_hack_mover() || Fast_pathfinder_client::is_grabable(own, obj))) {
+			&& (cheat.in_hack_mover()
+				|| (walkable.near(obj, 5) && Fast_pathfinder_client::is_grabable(own, obj)))) {    // 5: as is_grabable.
 			things.push_back(obj);
 		}
 	}
@@ -4690,7 +4768,6 @@ static void Friend_mode_sort_window() {
 static void Friend_mode_backpack_key(int member) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || gwin->network_input_blocked()) {
-		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
 	if (Friend_mode_is_guest()) {    // A guest: its companion's only.
@@ -4728,7 +4805,6 @@ static void Friend_mode_cycle_object(int step) {
 	Actor* own = gwin->get_controlled_actor();
 	if (!own || (Friend_mode_is_guest() && !gwin->has_network_friend_control()) || gwin->network_input_blocked()
 		|| !gwin->player_can_act()) {
-		Mouse::mouse()->flash_shape(Mouse::redx);
 		return;
 	}
 	if (gwin->get_action_target()) {
@@ -4761,10 +4837,9 @@ static void Friend_mode_cycle_object(int step) {
 	}
 	if (things.empty() || index < 0 || index >= count) {
 		friend_object_target.reset();
+		// No red X (2026-11-01): Exult's flash stops the whole game for
+		// 0.6 seconds, felt as a stutter; the notice says it.
 		Friend_mode_target_notice(things.empty() ? "No target in range" : "No target");
-		if (things.empty()) {
-			Mouse::mouse()->flash_shape(Mouse::redx);
-		}
 		return;
 	}
 	Friend_mode_pick_thing(things[index], in_window);
@@ -9690,12 +9765,30 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 							   Friend_mode_target_notice("No key fits");
 						   }
 					   })});
+	// The abacus (desk items, frame 11) says the party's gold, whoever in
+	// the party carries it (2026-11-01).  A guest runs it on its own copy.
+	const bool abacus = has(675, 11);
+	entries.push_back({"Abacus", Controller_shape_picture(675, 11, SF_SHAPES_VGA), {}, abacus,
+					   or_say(abacus, "No abacus", []() {
+						   Game_object* found = is_party_item(675, 11);
+						   if (!found) {
+							   return;
+						   }
+						   if (Friend_mode_is_guest()) {
+							   Friend_mode_guest_activate(found);
+						   } else {
+							   found->activate();
+						   }
+					   })});
 	// (Hold / Follow isn't here: D-pad up held does it.)  The spellbook is
-	// the Avatar's only: dimmed while leading a companion (or as a guest).
-	const bool avatar   = gwin->get_controlled_actor() == gwin->get_main_actor();
-	const bool can_cast = avatar && has(761);
-	entries.push_back({"Spellbook", Controller_bar_picture(3), {}, can_cast,
-					   or_say(can_cast, avatar ? "No spellbook" : "Avatar only", item(761, c_any_framenum))});
+	// the Avatar's only: dimmed while leading a companion, left out on a
+	// guest (2026-11-01).
+	if (!Friend_mode_is_guest()) {
+		const bool avatar   = gwin->get_controlled_actor() == gwin->get_main_actor();
+		const bool can_cast = avatar && has(761);
+		entries.push_back({"Spellbook", Controller_bar_picture(3), {}, can_cast,
+						   or_say(can_cast, avatar ? "No spellbook" : "Avatar only", item(761, c_any_framenum))});
+	}
 	return entries;
 }
 
@@ -9905,7 +9998,9 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 			Controller_ring_close();
 			return;
 		}
-		if (friend_chat_active || Notebook_gump::get_instance() || Controller_ring_is_open()) {
+		// Not while the game waits on the host (its conversation, a pause).
+		if (friend_chat_active || Notebook_gump::get_instance() || Controller_ring_is_open()
+			|| gwin->is_network_dialogue_paused() || gwin->is_network_host_paused()) {
 			return;
 		}
 		if (binding.action == Controller_action::skills_ring && Controller_open_slot_picker()) {
@@ -11524,6 +11619,12 @@ static void Handle_events() {
 				case Friend_mode_session::Dialogue_event_type::begin:
 					gwin->set_network_dialogue_paused(true);
 					conversation->init_faces();
+					// The Avatar talks: our picks clear and our windows close,
+					// as the host's do (2026-11-01).
+					gwin->set_action_target(nullptr);
+					friend_object_target.reset();
+					gwin->get_gump_man()->close_all_gumps();
+					gwin->set_all_dirty();
 					break;
 				case Friend_mode_session::Dialogue_event_type::end:
 					conversation->init_faces();
@@ -11836,7 +11937,11 @@ static void Handle_events() {
 			}
 		}
 		{
-			// Controller support: a radial menu, round the Avatar.
+			// Controller support: a radial menu, round the Avatar.  One open
+			// as the host's conversation or pause begins closes, unused.
+			if (Controller_ring_is_open() && (gwin->is_network_dialogue_paused() || gwin->is_network_host_paused())) {
+				Controller_ring_cancel();
+			}
 			int ring_x;
 			int ring_y;
 			gwin->get_win()->game_to_screen(gwin->get_width() / 2, gwin->get_height() / 2, false, ring_x, ring_y);

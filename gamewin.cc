@@ -2071,23 +2071,29 @@ Gump* Game_window::get_dragging_gump() {
  *  'tile' has a closed door (opened now, asked for, or locked).
  */
 
-// A door opened by walking into it (WASD, arrow keys): closed again once
-// the walker is through it, as a mouse walk does (Path_walking_actor_action).
+// Doors the party walked through, closed once the last of them is through
+// (2026-11-01).  A door opened by walking into it (WASD, arrow keys), and
+// one a party member's walk opened (Path_walking_actor_action, which
+// closed it at once behind each, shutting it on the next one and leaving
+// companions stuck inside), waits here.  It closes when no one of the
+// party near it is still on the side it was opened from or in the
+// doorway: so the last one through closes it.  Anyone else's doors close
+// behind them as in Exult.
 namespace {
-struct Door_behind {
+struct Door_closing {
 	Game_object_weak door;
-	Game_object_weak walker;
-	Tile_coord       tile;          // The door's tile when closed.
-	TileRect         foot;          // Its footprint when closed.
+	Game_object_weak walker;    // Who opened it; it must be through first.
+	Tile_coord       tile;      // The door's tile when closed.
+	TileRect         foot;      // Its footprint when closed.
 	bool             horizontal = false;
-	int              side       = 0;    // The walker's side when it opened: -1 or 1.
+	int              side       = 0;    // The side it was opened from: -1 or 1.
 	uint32           opened     = 0;
 };
 
-Door_behind door_behind;
+std::vector<Door_closing> doors_closing;
 
 // Which side of the door a tile is on: -1 or 1, or 0 in the doorway.
-int Door_side(const Door_behind& d, const Tile_coord& t) {
+int Door_side(const Door_closing& d, const Tile_coord& t) {
 	const int at    = d.horizontal ? t.ty : t.tx;
 	const int start = d.horizontal ? d.foot.y : d.foot.x;
 	const int size  = d.horizontal ? d.foot.h : d.foot.w;
@@ -2106,37 +2112,81 @@ void Toggle_door(Game_window* gwin, Actor* actor, Game_object* door) {
 	door->activate();
 	door->set_quality(savequal);
 }
-}    // namespace
 
-void Friend_close_door_behind() {
-	if (!door_behind.side) {
-		return;
+// Remember 'door', opened by 'walker' from 'from', to close later.
+void Close_later(Actor* walker, Game_object* door, const Tile_coord& from) {
+	Door_closing closing;
+	closing.door       = weak_from_obj(door);
+	closing.walker     = weak_from_obj(walker);
+	closing.tile       = door->get_tile();
+	closing.foot       = door->get_footprint();
+	closing.horizontal = closing.foot.w > closing.foot.h;
+	closing.side       = Door_side(closing, from);
+	closing.opened     = SDL_GetTicks();
+	if (!closing.side) {
+		return;    // Opened from the doorway: no side to wait on.
 	}
-	auto   walker = door_behind.walker.lock();
-	Actor* actor  = walker ? walker->as_actor() : nullptr;
-	if (!actor || SDL_GetTicks() - door_behind.opened > 20000
-		|| actor->get_tile().distance_2d(door_behind.tile) > 8) {
-		door_behind = Door_behind();    // Gone the other way, or away.
-		return;
-	}
-	if (Door_side(door_behind, actor->get_tile()) != -door_behind.side) {
-		return;    // Not through yet.
-	}
-	// Not on anyone standing in the doorway.
-	Actor_vector near;
-	Game_object::find_nearby_actors(near, door_behind.tile, c_any_shapenum, 4);
-	for (const auto* other : near) {
-		const Tile_coord t = other->get_tile();
-		if (!other->is_dead() && door_behind.foot.has_point(t.tx, t.ty)) {
+	for (Door_closing& each : doors_closing) {
+		if (each.tile == closing.tile) {
+			each = closing;    // Opened again: wait anew.
 			return;
 		}
 	}
-	Game_object_shared door = door_behind.door.lock();
+	doors_closing.push_back(closing);
+}
+
+// The party: whoever is still to come through counts (not the dead, the
+// sleeping, the paralyzed, or ones far off, held back or left behind).
+bool Party_still_coming(const Door_closing& d) {
+	Game_window* gwin = Game_window::get_instance();
+	Actor*       party[10];
+	const int    count = gwin->get_party(&party[0], 1);
+	for (int i = 0; i < count; ++i) {
+		Actor* each = party[i];
+		if (!each || each->is_dead() || each->get_flag(Obj_flags::asleep) || each->get_flag(Obj_flags::paralyzed)
+			|| !each->get_chunk()) {
+			continue;
+		}
+		const Tile_coord t = each->get_tile();
+		if (t.distance_2d(d.tile) > 12 || std::abs(t.tz - d.tile.tz) > 4) {
+			continue;
+		}
+		if (Door_side(d, t) != -d.side) {
+			return true;    // On the near side, or in the doorway.
+		}
+	}
+	return false;
+}
+
+// One waiting door: true once it is closed or given up on.
+bool Close_if_through(Door_closing& d) {
+	auto   walker = d.walker.lock();
+	Actor* actor  = walker ? walker->as_actor() : nullptr;
+	if (!actor || SDL_GetTicks() - d.opened > 30000) {
+		return true;    // Given up (the door stays open).
+	}
+	if (Door_side(d, actor->get_tile()) != -d.side) {
+		// The opener never went through: gone the other way.
+		return actor->get_tile().distance_2d(d.tile) > 8;
+	}
+	if (Party_still_coming(d)) {
+		return false;
+	}
+	// Not on anyone else standing in the doorway.
+	Actor_vector near;
+	Game_object::find_nearby_actors(near, d.tile, c_any_shapenum, 4);
+	for (const auto* other : near) {
+		const Tile_coord t = other->get_tile();
+		if (!other->is_dead() && d.foot.has_point(t.tx, t.ty)) {
+			return false;
+		}
+	}
+	Game_object_shared door = d.door.lock();
 	if (!door) {
 		// A guest's world may have been refreshed from the host's: the
 		// open door nearest where it was.
 		Game_object_vector found;
-		Game_object::find_nearby(found, door_behind.tile, c_any_shapenum, 2, 0);
+		Game_object::find_nearby(found, d.tile, c_any_shapenum, 2, 0);
 		for (auto* obj : found) {
 			if (obj->get_info().is_door() && !obj->is_closed_door() && !obj->get_owner()) {
 				door = obj->shared_from_this();
@@ -2144,10 +2194,128 @@ void Friend_close_door_behind() {
 			}
 		}
 	}
-	door_behind = Door_behind();
 	if (door && door->get_info().is_door() && !door->is_closed_door()) {
 		Toggle_door(Game_window::get_instance(), actor, door.get());
 	}
+	return true;
+}
+// Followers step after the leader and never open a door themselves (only a
+// long walk's path does), so one shut in when the leader is just outside
+// stood behind the door for good.  Host and single player, every frame: a
+// follower that hasn't moved for 2 seconds, with a closed door beside it
+// and the one it follows on the other side, gets the door opened, to close
+// once the party is through (2026-11-01).  One boxed in beside an open
+// door walks round it, or with no way round is put beside its leader.
+void Unstick_followers() {
+	Game_window* gwin = Game_window::get_instance();
+	if (Friend_mode_is_guest()) {
+		return;    // The host's companions follow on the host.
+	}
+	// Stuck: no nearer the one it follows for 2.5 seconds (a trapped
+	// follower may shuffle on the spot, so standing still isn't the test).
+	struct Progress {
+		int    best  = 0;    // Nearest it has come (tiles).
+		uint32 since = 0;
+	};
+	static std::vector<std::pair<int, Progress>> progress;    // By NPC number.
+	const uint32 now        = SDL_GetTicks();
+	Actor*       leaders[2] = {gwin->get_main_actor(), gwin->get_controlled_actor()};
+	Actor*       leader     = leaders[1] ? leaders[1] : leaders[0];
+	Actor*       party[10];
+	const int    count = gwin->get_party(&party[0], 1);
+	// How far 'at' is from the nearest tile of 'door'.
+	auto door_distance = [](Game_object* door, const Tile_coord& at) {
+		const TileRect foot = door->get_footprint();
+		const int      dx   = std::max({foot.x - at.tx, at.tx - (foot.x + foot.w - 1), 0});
+		const int      dy   = std::max({foot.y - at.ty, at.ty - (foot.y + foot.h - 1), 0});
+		return std::max(dx, dy);
+	};
+	for (int i = 0; i < count; ++i) {
+		Actor* each = party[i];
+		if (!each || !leader || each == leaders[0] || each == leaders[1] || each->is_dead() || !each->get_chunk()
+			|| each->get_schedule_type() != Schedule::follow_avatar || Friend_mode_is_held(each)
+			|| gwin->is_remote_friend(each) || each->get_flag(Obj_flags::asleep)
+			|| each->get_flag(Obj_flags::paralyzed)) {
+			continue;
+		}
+		const int  npc   = each->get_npc_num();
+		auto       found = std::find_if(progress.begin(), progress.end(), [npc](const auto& entry) {
+            return entry.first == npc;
+        });
+		const Tile_coord at       = each->get_tile();
+		const int        distance = leader->get_tile().distance_2d(at);
+		if (found == progress.end()) {
+			progress.push_back({npc, {distance, now}});
+			continue;
+		}
+		if (distance < found->second.best || distance <= 2) {
+			found->second = {distance, now};    // Coming on, or there.
+			continue;
+		}
+		if (now - found->second.since < 2500) {
+			continue;
+		}
+		found->second = {distance, now};    // Whatever happens, wait again.
+		Game_object_vector near;
+		Game_object::find_nearby(near, at, c_any_shapenum, 6, 0);
+		// Beside an open door: its leaf can box a follower into the corner
+		// by the doorway, and following steps never find the way round.  A
+		// real walk to the one it follows; with no way at all, beside them.
+		const bool by_open = std::any_of(near.begin(), near.end(), [&](Game_object* door) {
+			return door->get_info().is_door() && !door->is_closed_door() && !door->get_owner()
+				   && door_distance(door, at) <= 2;
+		});
+		if (by_open) {
+			if (each->walk_path_to_tile(leader->get_tile(), 125, 0, 2)) {
+				cout << "Friend Mode: " << each->get_name() << " walks round an open door" << endl;
+			} else {
+				const Tile_coord spot = Map_chunk::find_spot(leader->get_tile(), 3, each);
+				if (spot.tx >= 0) {
+					cout << "Friend Mode: " << each->get_name() << " was boxed in by an open door" << endl;
+					each->move(spot);
+				}
+			}
+			continue;
+		}
+		for (Game_object* door : near) {
+			if (!door->get_info().is_door() || !door->is_closed_door() || door->get_owner()
+				|| door->get_framenum() % 4 >= 2 || door_distance(door, at) > 2) {
+				continue;    // Not a closed door beside it (or a locked one).
+			}
+			Door_closing d;
+			d.foot       = door->get_footprint();
+			d.horizontal = d.foot.w > d.foot.h;
+			const int mine = Door_side(d, at);
+			bool      across = false;
+			for (Actor* other : leaders) {
+				const int theirs = other ? Door_side(d, other->get_tile()) : 0;
+				across = across || (mine && theirs && mine != theirs && other->get_tile().distance_2d(at) <= 16);
+			}
+			if (!across) {
+				continue;
+			}
+			cout << "Friend Mode: opening a door for " << each->get_name() << ", shut in" << endl;
+			Close_later(each, door, at);
+			Toggle_door(gwin, each, door);
+			break;
+		}
+	}
+}
+}    // namespace
+
+void Friend_close_door_behind() {
+	doors_closing.erase(std::remove_if(doors_closing.begin(), doors_closing.end(), Close_if_through),
+						doors_closing.end());
+	Unstick_followers();
+}
+
+bool Friend_door_passed(Actor* walker, Game_object* door, const Tile_coord& from) {
+	Game_window* gwin = Game_window::get_instance();
+	if (!walker || !door || (walker != gwin->get_main_actor() && !walker->is_in_party())) {
+		return false;    // Not the party's: closed at once, as in Exult.
+	}
+	Close_later(walker, door, from);
+	return true;
 }
 
 static bool Open_door_ahead(Game_window* gwin, Actor* actor, const Tile_coord& tile) {
@@ -2169,14 +2337,8 @@ static bool Open_door_ahead(Game_window* gwin, Actor* actor, const Tile_coord& t
 		gwin->get_effects()->add_text("Locked", door);
 		return true;
 	}
-	// Remember it, to close it behind the walker.
-	door_behind.door       = weak_from_obj(door);
-	door_behind.walker     = weak_from_obj(actor);
-	door_behind.tile       = door->get_tile();
-	door_behind.foot       = door->get_footprint();
-	door_behind.horizontal = door_behind.foot.w > door_behind.foot.h;
-	door_behind.side       = Door_side(door_behind, actor->get_tile());
-	door_behind.opened     = now;
+	// Remember it, to close it once the party is through.
+	Close_later(actor, door, actor->get_tile());
 	Toggle_door(gwin, actor, door);
 	return true;
 }
@@ -3112,7 +3274,7 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 			effects->add_text("Locked", obj);    // A key or lockpick opens it.
 			return;
 		}
-		if (!clicked_actor && Friend_mode_guest_local_shape(obj->get_shapenum())) {
+		if (!clicked_actor && Friend_mode_guest_local_shape(obj->get_shapenum(), obj->get_framenum())) {
 			effects->remove_text_effects();    // Only shows something: run it here.
 			usecode->init_conversation();
 			// Our companion stands in for the Avatar (the spittoon's "ptui!").
@@ -3158,7 +3320,7 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 		}
 		const Friend_item_use lead_use
 				= clicked_actor ? Friend_item_use::none : Friend_mode_guest_item_use(shape, obj->get_framenum());
-		if (!clicked_actor && (lead_use != Friend_item_use::none || Friend_mode_guest_local_shape(shape))) {
+		if (!clicked_actor && (lead_use != Friend_item_use::none || Friend_mode_guest_local_shape(shape, obj->get_framenum()))) {
 			// Food, potions, keys and lockpicks, the gavel, the bucket and
 			// pools of water; signs, books and the like.  What a guest uses
 			// on itself is used by the one led (a drink from a pool).

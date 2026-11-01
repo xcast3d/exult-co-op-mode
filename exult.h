@@ -175,9 +175,14 @@ bool Friend_mode_lead_talk_to_merchant(Actor* npc);
 bool Friend_mode_is_held(const Actor* actor);
 // Guest: ask the host to use a door or other guest-usable object.
 void Friend_mode_request_object_use(Game_object* object);
-// A door opened by walking into it (WASD, arrow keys) closes once the
-// walker is through and the doorway is clear (gamewin.cc); every frame.
+// Doors the party opened (WASD, or a member's walk) close once the last
+// of the party near them is through and the doorway is clear
+// (gamewin.cc); every frame.
 void Friend_close_door_behind();
+// A party member's walk went through 'door', opened from 'from': it closes
+// once the party is through.  False if 'walker' isn't the party's (close
+// it at once).
+bool Friend_door_passed(Actor* walker, Game_object* door, const Tile_coord& from);
 // Items guests may use: food, potions, the bucket and pools of water on
 // their own companion; keys and lockpicks on a door or chest they pick; the
 // gavel on anything in reach.  'frame' matters for some shapes (the gavel
@@ -186,7 +191,7 @@ enum class Friend_item_use { none, on_self, on_target, on_anything };
 Friend_item_use Friend_mode_guest_item_use(int shape, int frame = -1);
 // Read-only objects (signs, books, map, telescope...): a guest uses them on
 // its own copy of the world, and only the guest sees the result.
-bool Friend_mode_guest_local_shape(int shape);
+bool Friend_mode_guest_local_shape(int shape, int frame = -1);
 // Guest: ask the host to use 'item' on 'target'.
 void Friend_mode_request_item_use(Game_object* item, Game_object* target, Game_object* second = nullptr);
 // Guest: use an allowed item (picking its targets); false if not allowed.

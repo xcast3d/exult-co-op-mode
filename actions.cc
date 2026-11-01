@@ -215,7 +215,9 @@ int Path_walking_actor_action::handle_event(Actor* actor) {
 		if (!door_sequence_complete) {
 			// Activate the door after walking past it
 			Game_object_shared door_ptr = door_obj.lock();
-			if (door_ptr) {
+			// Friend Mode: the party's doors close once the last of them is
+			// through (Friend_door_passed), not on the next one.
+			if (door_ptr && !Friend_door_passed(actor, door_ptr.get(), door_from)) {
 				const int savequal = door_ptr->get_quality();
 				door_ptr->set_quality(0);
 				door_ptr->activate();
@@ -369,6 +371,7 @@ bool Path_walking_actor_action::open_door(Actor* actor, Game_object* door) {
 	door_obj      = weak_from_obj(door);    // Store the door
 
 	const Tile_coord cur = actor->get_tile();
+	door_from            = cur;
 	// Get door's footprint in tiles.
 	const TileRect foot = door->get_footprint();
 	// Open it, but kludge quality to

@@ -36,6 +36,7 @@
 #include "ignore_unused_variable_warning.h"
 #include "schedule.h"
 
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <string>
@@ -329,6 +330,9 @@ void Party_manager::move_followers(
 ) const {
 	ignore_unused_variable_warning(vindex);
 	const int        id   = formation_slot(npc);    // (-1 if the leader).
+	if (id == -1 && single_file(npc, dir)) {
+		return;
+	}
 	const Tile_coord pos  = npc->get_tile();
 	const int        lnum = followers[1 + id][0];
 	const int        rnum = followers[1 + id][1];
@@ -353,6 +357,72 @@ void Party_manager::move_followers(
 	if (rdir >= 0 && !rnpc->is_dead()) {
 		move_followers(rnpc, rnum, rdir);
 	}
+}
+
+/*
+ *  Friend Mode (2026-11-01): through doorways in single file.  The
+ *  formation's spots, two tiles behind and to each side, could land in the
+ *  pocket between an open door's leaf and the wall, and a follower there
+ *  stayed behind (followers take steps, they don't find paths).  While a
+ *  door (open or closed) is within 3 tiles of the leader or a follower,
+ *  each follower instead steps into the tile the one ahead of it just
+ *  left, so the party threads through behind the leader.
+ *
+ *  Output: false (formation as usual) with no door near.
+ */
+
+bool Party_manager::single_file(Actor* leader, int dir) const {
+	// How far 'at' is from the nearest tile of 'door'.
+	auto door_distance = [](Game_object* door, const Tile_coord& at) {
+		const TileRect foot = door->get_footprint();
+		const int      dx   = std::max({foot.x - at.tx, at.tx - (foot.x + foot.w - 1), 0});
+		const int      dy   = std::max({foot.y - at.ty, at.ty - (foot.y + foot.h - 1), 0});
+		return std::max(dx, dy);
+	};
+	const Tile_coord   pos = leader->get_tile();
+	Game_object_vector found;
+	Game_object::find_nearby(found, pos, c_any_shapenum, 12, 0);
+	std::vector<Game_object*> doors;
+	for (Game_object* obj : found) {
+		if (obj->get_info().is_door() && !obj->get_owner()) {
+			doors.push_back(obj);
+		}
+	}
+	auto near_door = [&](const Actor* who) {
+		const Tile_coord at = who->get_tile();
+		return std::any_of(doors.begin(), doors.end(), [&](Game_object* door) {
+			return std::abs(door->get_lift() - at.tz) <= 4 && door_distance(door, at) <= 3;
+		});
+	};
+	bool any = near_door(leader);
+	for (size_t i = 0; !any && i < validcnt; ++i) {
+		any = valid[i] != leader && near_door(valid[i]);
+	}
+	if (!any) {
+		return false;
+	}
+	// The order: the formation's (its slots, nearest the leader first).
+	std::vector<Actor*> line;
+	for (size_t i = 0; i < validcnt; ++i) {
+		if (valid[i] != leader && !valid[i]->is_dead()) {
+			line.push_back(valid[i]);
+		}
+	}
+	std::stable_sort(line.begin(), line.end(), [this](const Actor* a, const Actor* b) {
+		return formation_slot(a) < formation_slot(b);
+	});
+	Actor*     ahead = leader;
+	Tile_coord left  = pos.get_neighbor((dir + 4) % 8);    // Where the leader came from.
+	for (Actor* each : line) {
+		const Tile_coord was = each->get_tile();
+		step(each, ahead, each->get_direction(left), left);
+		if (each->is_dead()) {
+			break;
+		}
+		left  = was;
+		ahead = each;
+	}
+	return true;
 }
 
 /*

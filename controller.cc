@@ -1412,6 +1412,11 @@ void Controller_ring_open(
 	ring.painted.clear();
 }
 
+void Controller_ring_cancel() {
+	ring.highlight = -1;
+	Controller_ring_close();
+}
+
 void Controller_ring_close() {
 	if (!ring.open) {
 		return;

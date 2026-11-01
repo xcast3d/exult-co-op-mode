@@ -122,7 +122,12 @@ A skill on foes gives its range, and `true` to draw it:
 Levels (2026-10-22, were 1, 3, 6): the first skill at level 1, the second
 at 4, the third at 7 (`level_second`, `level_third` in friendclass.cc). U7's
 level is 1 + log2(experience / 50), so level 7 takes 3200 experience and
-level 8 would be near the end of Black Gate.
+level 8 would be near the end of Black Gate. With shared experience
+(2026-11-01, on by default; [feedback round](feedback-2026-11-01.md) item
+11) each kill is split among the party near it, plus 15% per extra
+member, so the third skill comes later in a big party: watch whether
+level 7 is still reached in a normal playthrough, and lower
+`level_third` or raise the bonus if not.
 
 **Cooldowns** (after testing with testers, 2026-10-20): by place on the
 bar, 30 seconds for the first skill, 60 for the second and 90 for the third,

@@ -138,6 +138,8 @@ void Controller_ring_open(
 		std::function<std::vector<Controller_ring_entry>()> refresh = {});
 // Letting go of the button: the highlighted entry is used (if usable).
 void Controller_ring_close();
+// Closed with nothing used (the host's conversation began, say).
+void Controller_ring_cancel();
 bool Controller_ring_is_open();
 // Each frame, from the game's overlays: the ring centred on screen point
 // (sx, sy), or hidden.
