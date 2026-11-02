@@ -19,7 +19,7 @@
 // an update replaces.
 void QOTC_start_updates();
 
-// Whether updates started, so "Check for Updates" can be offered.
+// Whether updates started, so the game menu can offer "Check Updates".
 bool QOTC_updates_on();
 
 // Check now, showing the updater's window either way.

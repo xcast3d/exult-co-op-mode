@@ -350,7 +350,7 @@ void Gamemenu_gump::createButtons() {
 #ifdef QOTC_UPDATES
 	if (QOTC_updates_on()) {
 		buttons[id_updates] = std::make_unique<Gamemenu_button>(
-				this, &Gamemenu_gump::check_for_updates, "Check for Updates", margin, yForRow(y++),
+				this, &Gamemenu_gump::check_for_updates, "Check Updates", margin, yForRow(y++),
 				preferred_button_width, 11);
 	}
 #endif

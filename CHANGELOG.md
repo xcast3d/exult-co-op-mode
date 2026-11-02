@@ -31,7 +31,7 @@ both in `--version` and the version files saved with each game.
 - **Updates:** the game checks for a new build once a day, so there's no
   more downloading each release. On a Mac it installs when you quit. On
   Windows it asks first, then closes the game (you're asked to quit as
-  usual), updates and starts it again. Game menu → Check for Updates checks
+  usual), updates and starts it again. Game menu → Check Updates checks
   right away (on a Mac, also the app menu (exult) → Check for Updates…).
   Your saves and settings aren't touched. (This build is the last one to
   download by hand.)

@@ -19,7 +19,7 @@ Only `Exult.app` is replaced. Saves and game data
 (checked in the test below).
 
 On Windows the same feed idea, `appcast-windows.xml`: WinSparkle checks it
-daily, and the game menu has **Check for Updates** (on both platforms).
+daily, and the game menu has **Check Updates** (on both platforms).
 Install downloads our installer, checks its signature and runs it quietly
 (`/SILENT`): the game asks "really quit?", and once it has closed the
 installer replaces the install and starts the game again. It installs where
@@ -144,7 +144,7 @@ the live site with Gatekeeper's quarantine.
 On Windows (not done yet), the same way: install a build, make a second
 installer from a later commit, serve a feed for it locally, and run the
 installed game with `QOTC_UPDATE_FEED=http://<this PC>:8650/appcast-windows.xml`.
-Then the game menu's Check for Updates.
+Then the game menu's Check Updates.
 
 ## Windows: where players' data lives
 
