@@ -1559,6 +1559,32 @@ Built, not tested.
 - [x] The Class AI (nobody playing Jaana or Dupre) still heals the most
       hurt and shields on its own.
 
+## Vehicles (protocol 39, 2026-11-01)
+
+Ships, carts and the flying carpet. Desktop host and desktop guest passed
+2026-11-01; still to try with a browser guest (`web/build.sh`, then
+`web/serve.sh`) and over the internet. On the host, **Alt+F8** (Option+fn+F8
+on a Mac) takes the party to the carpet, then a ship (with its deed), then
+a cart (with its title).
+
+- [ ] Host: E finds each vehicle once (not every piece of the carpet or
+      cart), and Space says Fly/Land, Set Sail/Furl Sails, Lower/Raise
+      Gangplank, Drive/Stop to match. Guests aren't offered them.
+- [ ] A ride sets off: the guest gets the Follow bar, and its companion
+      rides in its seat.
+- [ ] Guest's screen during the ride: the vehicle and riders move
+      together, the view keeps the guest's companion on screen, and the
+      ship stays whole (it lies across a chunk border at Britain).
+- [ ] Stop, then walk on the guest: the companion is the guest's again,
+      and the Avatar walking away doesn't pull it along. After the carpet
+      lands, the host's log may say "was set to follow; waits for them
+      again" (the landing script); that's expected.
+- [ ] Browser guest: the same ride, with the tab in front. Then switch tabs
+      for a few seconds mid-ride and back: the guest catches up (vehicle,
+      riders and view) without half a ship or a stuck companion.
+- [ ] Over the internet: the ride stays smooth for a guest some distance
+      away (one step message per frame while the vehicle moves).
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".
