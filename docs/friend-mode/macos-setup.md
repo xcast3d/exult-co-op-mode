@@ -96,6 +96,7 @@ was made. Development builds use plain `./configure`, which has no
 optimization; a release needs it:
 
 ```sh
+tools/friend-mode/get-sparkle.sh           # once: the updater (docs: updates.md)
 ./configure --with-optimization=normal     # -O2
 make clean && make -j8
 rm -rf Exult.app && make bundle_shared      # the app, with Homebrew's libraries copied in (dylibbundler)
@@ -109,6 +110,9 @@ breaks their signatures, and `codesign --deep` doesn't reach
 `Contents/Resources/lib`; an unsigned library gets the app killed at launch
 ("Code Signature Invalid"). Check nothing still points at Homebrew:
 `otool -L` on the app and each library shouldn't list `/opt/homebrew`.
+Sparkle.framework (in `Contents/Frameworks`) keeps its own signature; signing
+the app without `--deep` leaves it alone. To put the build online, and in
+the update feed, see [updates](updates.md#releasing-a-mac-build).
 
 Then a disk image with `hdiutil`: a folder with `Exult.app`, a link to
 `/Applications`, the Friend Mode `README.md`, `README.macOS`, `COPYING` and

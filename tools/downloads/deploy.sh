@@ -12,13 +12,73 @@
 #   u7-qotc/              a page listing every build, newest first
 #   u7-qotc/latest/macos  redirects to the newest macOS build
 #   u7-qotc/latest/windows  ... and Windows build (for the website's buttons)
+#   u7-qotc/appcast-macos.xml  the update feed installed Mac builds check
+#     (Sparkle): each new macOS .dmg whose app has the updater gets an
+#     "-update.zip" of that app, signed and added to the feed.  Its build
+#     number must be higher than every build already in the feed.
 #
-# Needs wrangler logged in to the xcast3d.com account (npx wrangler login).
+# Needs wrangler logged in to the xcast3d.com account (npx wrangler login),
+# Sparkle's tools (tools/friend-mode/get-sparkle.sh) and the private update
+# key: ~/.u7-qotc/sparkle-private-key, or SPARKLE_KEY_FILE.  See
+# docs/friend-mode/updates.md.
 set -euo pipefail
 
 here="$(cd "$(dirname "$0")" && pwd)"
 builds="$here/public/u7-qotc"
 max_bytes=$((25 * 1024 * 1024))
+sparkle_bin="${SPARKLE_BIN:-$here/../../third_party/build/sparkle/bin}"
+key_file="${SPARKLE_KEY_FILE:-$HOME/.u7-qotc/sparkle-private-key}"
+feed="$builds/appcast-macos.xml"
+
+add_file() {
+	if [ "$(stat -f %z "$1")" -gt "$max_bytes" ]; then
+		echo "Too big for Cloudflare (25 MiB a file): $1" >&2
+		exit 1
+	fi
+	cp "$1" "$builds/"
+	echo "Added $(basename "$1")"
+}
+
+# A macOS .dmg's app, zipped for Sparkle and added to the feed.  ditto zips
+# the way Finder does; other zippers can leave files in Sparkle.framework
+# that Gatekeeper rejects.
+add_mac_update() {
+	local dmg="$1" mount app build newest zip work
+	mount="$(mktemp -d)"
+	hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$mount" "$dmg"
+	app="$(find "$mount" -maxdepth 1 -name '*.app' | head -1)"
+	if [ -z "$app" ] || ! /usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist" >/dev/null 2>&1; then
+		hdiutil detach -quiet "$mount"
+		echo "$(basename "$dmg") has no updater: not added to the feed"
+		return
+	fi
+	codesign --verify --deep --strict "$app"
+	build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")"
+	newest="$(grep -oE '<sparkle:version>[0-9]+' "$feed" 2>/dev/null | grep -oE '[0-9]+' | sort -n | tail -1 || true)"
+	if [ -n "$newest" ] && [ "$build" -le "$newest" ]; then
+		hdiutil detach -quiet "$mount"
+		echo "$(basename "$dmg") is build $build, but the feed already has build $newest." >&2
+		exit 1
+	fi
+	zip="$builds/$(basename "${dmg%.dmg}")-update.zip"
+	ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
+	hdiutil detach -quiet "$mount"
+
+	# Only the existing feed and the new zip, so older builds aren't rescanned.
+	work="$(mktemp -d)"
+	[ -f "$feed" ] && cp "$feed" "$work/"
+	cp "$zip" "$work/"
+	(cd "$work" && "$sparkle_bin/generate_appcast" . \
+		--ed-key-file "$key_file" \
+		--download-url-prefix "https://downloads.xcast3d.com/u7-qotc/" \
+		--full-release-notes-url "https://xcast3d.com/u7-quest-of-the-companions/changelog.html" \
+		--link "https://xcast3d.com/u7-quest-of-the-companions/" \
+		--maximum-deltas 0 \
+		-o appcast-macos.xml)
+	cp "$work/appcast-macos.xml" "$feed"
+	rm -rf "$work"
+	echo "Added build $build to appcast-macos.xml"
+}
 
 mkdir -p "$builds"
 for file in "$@"; do
@@ -26,13 +86,18 @@ for file in "$@"; do
 		echo "No such file: $file" >&2
 		exit 1
 	fi
-	if [ "$(stat -f %z "$file")" -gt "$max_bytes" ]; then
-		echo "Too big for Cloudflare (25 MiB a file): $file" >&2
-		exit 1
-	fi
-	cp "$file" "$builds/"
-	echo "Added $(basename "$file")"
 done
+# The feed first: a build it refuses isn't copied either.
+for file in "$@"; do
+	case "$file" in
+	*macOS*.dmg) add_mac_update "$file" ;;
+	esac
+	add_file "$file"
+done
+if [ -f "$feed" ] && [ "$(stat -f %z "$feed")" -eq 0 ]; then
+	echo "appcast-macos.xml is empty" >&2
+	exit 1
+fi
 
 # Never upload an empty folder: that would take every build offline.
 shopt -s nullglob
@@ -46,8 +111,8 @@ fi
 newest() {
 	ls -t "$builds"/$1 2>/dev/null | head -1 | xargs basename 2>/dev/null || true
 }
-mac="$(newest '*macOS*')"
-win="$(newest '*Windows*')"
+mac="$(newest '*macOS*.dmg')"
+win="$(newest '*Windows*.zip')"
 
 {
 	echo "/ https://xcast3d.com/u7-quest-of-the-companions/ 302"
@@ -66,13 +131,13 @@ win="$(newest '*Windows*')"
 	<p><a href="https://xcast3d.com/u7-quest-of-the-companions/">About the project</a></p>
 	<ul>
 	EOF
-	ls -t "$builds" | grep -E '\.(dmg|zip)$' | while read -r name; do
+	ls -t "$builds" | grep -E '\.(dmg|zip)$' | grep -v -- '-update\.zip$' | while read -r name; do
 		size="$(stat -f %z "$builds/$name")"
 		echo "<li><a href=\"$name\">$name</a> <small>$((size / 1024 / 1024)) MB</small></li>"
 	done
 	echo "</ul>"
 } >"$builds/index.html"
 
-echo "Deploying ${#files[@]} builds (newest: ${mac:-no macOS}, ${win:-no Windows})"
+echo "Deploying ${#files[@]} files (newest: ${mac:-no macOS}, ${win:-no Windows})"
 cd "$here"
 npx wrangler deploy

@@ -26,6 +26,14 @@ both in `--version` and the version files saved with each game.
 
 ## Unreleased (0.8.2)
 
+### Added
+
+- **Updates on Mac:** the game checks for a new build once a day and
+  installs it when you quit, so there's no more downloading each release.
+  The app menu (exult) → Check for Updates… checks right away. Your saves
+  and settings aren't touched. (This build is the last one to download by
+  hand.)
+
 ### Changed
 
 - **Co-op:** hosts and guests need the same release (the co-op protocol is

@@ -472,6 +472,41 @@ AC_SUBST(FRIEND_RTC_CPPFLAGS)
 AC_SUBST(FRIEND_RTC_LIBS)
 
 # ---------------------------------------------------------------------
+# Quest of the Companions updates on macOS: Sparkle.framework, which
+# tools/friend-mode/get-sparkle.sh puts in third_party/build/sparkle/.
+# Without it the app builds as before, with no update checks.
+# ---------------------------------------------------------------------
+
+AC_ARG_WITH(sparkle, AS_HELP_STRING([--with-sparkle=DIR], [macOS: folder holding Sparkle.framework, for update checks @<:@default third_party/build/sparkle@:>@]),,with_sparkle=auto)
+SPARKLE_DIR=""
+SPARKLE_CPPFLAGS=""
+SPARKLE_LIBS=""
+if test "x$ARCH" = xmacosx -a "x$with_sparkle" != xno; then
+	sparkle_dir="$with_sparkle"
+	if test "x$sparkle_dir" = xauto -o "x$sparkle_dir" = xyes; then
+		sparkle_dir="`cd "$srcdir" && pwd`/third_party/build/sparkle"
+	fi
+	AC_MSG_CHECKING([for Sparkle.framework in $sparkle_dir])
+	if test -d "$sparkle_dir/Sparkle.framework"; then
+		AC_MSG_RESULT(yes)
+		SPARKLE_DIR="$sparkle_dir"
+		SPARKLE_CPPFLAGS="-DQOTC_SPARKLE -F$sparkle_dir"
+		dnl The rpath is for ./exult in the build folder; the app bundle
+		dnl points the binary at its own copy (macosx/macosx.am).
+		SPARKLE_LIBS="-F$sparkle_dir -framework Sparkle -framework AppKit -Wl,-rpath,$sparkle_dir"
+	else
+		AC_MSG_RESULT([no (run tools/friend-mode/get-sparkle.sh for update checks)])
+		if test "x$with_sparkle" != xauto; then
+			AC_MSG_ERROR([Sparkle.framework not found in $sparkle_dir])
+		fi
+	fi
+fi
+AM_CONDITIONAL(QOTC_SPARKLE, test "x$SPARKLE_DIR" != x)
+AC_SUBST(SPARKLE_DIR)
+AC_SUBST(SPARKLE_CPPFLAGS)
+AC_SUBST(SPARKLE_LIBS)
+
+# ---------------------------------------------------------------------
 # Statically link libraries?
 # ---------------------------------------------------------------------
 

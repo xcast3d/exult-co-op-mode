@@ -3,6 +3,15 @@ bundle_name = Exult.app
 studio_name = Exult_Studio.app
 exult_studio = $(top_builddir)/mapedit/exult_studio$(EXEEXT)
 
+# Quest of the Companions updates (Sparkle; docs/friend-mode/updates.md).
+# Builds compare CFBundleVersion, which is QOTC_BUILD, so a newer build is
+# always a higher number.  The feed address is in every build handed out:
+# never change it.  The key is the public half of the signing key (private
+# half: login keychain, account "u7-qotc"); losing the private half means
+# installed builds can't verify an update again.
+QOTC_FEED_URL = https://downloads.xcast3d.com/u7-qotc/appcast-macos.xml
+QOTC_ED_KEY = 0yHVSoBe8ELk7KcI/CkUiW4dHvXbtCVbbor4rA99/4w=
+
 $(top_builddir)/mapedit/exult_studio$(EXEEXT):
 	+(cd $(top_builddir)/mapedit;$(MAKE) exult_studio$(EXEEXT))
 
@@ -29,6 +38,23 @@ bundle: ${EXE_TARGET}
 	$(INSTALL_DATA) $(srcdir)/README-exult.txt $(bundle_name)/Contents/Documents
 	$(INSTALL_DATA) $(srcdir)/README.md $(bundle_name)/Contents/Documents
 	$(INSTALL_DATA) $(srcdir)/README.macOS $(bundle_name)/Contents/Documents
+if QOTC_SPARKLE
+	rm -rf $(bundle_name)/Contents/Frameworks/Sparkle.framework
+	mkdir -p $(bundle_name)/Contents/Frameworks
+	ditto "$(SPARKLE_DIR)/Sparkle.framework" $(bundle_name)/Contents/Frameworks/Sparkle.framework
+	install_name_tool -change @rpath/Sparkle.framework/Versions/B/Sparkle \
+	  @executable_path/../Frameworks/Sparkle.framework/Versions/B/Sparkle \
+	  $(bundle_name)/Contents/MacOS/$(bin_PROGRAMS)
+	build=`sed -n 's/^#define QOTC_BUILD //p' qotcbuild.h`; \
+	version=`sed -n 's/^#define QOTC_VERSION "\(.*\)"/\1/p' $(srcdir)/qotcversion.h`; \
+	/usr/libexec/PlistBuddy \
+	  -c "Set :CFBundleVersion $$build" \
+	  -c "Set :CFBundleShortVersionString $$version" \
+	  -c "Add :SUFeedURL string $(QOTC_FEED_URL)" \
+	  -c "Add :SUPublicEDKey string $(QOTC_ED_KEY)" \
+	  -c "Add :SUEnableAutomaticChecks bool true" \
+	  $(bundle_name)/Contents/Info.plist
+endif
 if WITH_OSX_CODE_SIGNATURE
 	  codesign \
 	  --options runtime \
@@ -45,6 +71,14 @@ bundle_shared: bundle
 	  -d $(bundle_name)/Contents/Resources/lib \
 	  -p @executable_path/../Resources/lib \
 	  -i /usr/lib
+if QOTC_SPARKLE
+# dylibbundler turns every rpath into its own, and dyld won't start a binary
+# with the same rpath twice: keep one.
+	exe=$(bundle_name)/Contents/MacOS/$(bin_PROGRAMS); \
+	while test `otool -l $$exe | grep -c 'path @executable_path/../Resources/lib/ '` -gt 1; do \
+	  install_name_tool -delete_rpath @executable_path/../Resources/lib/ $$exe || exit 1; \
+	done
+endif
 if WITH_OSX_CODE_SIGNATURE
 	  codesign \
 	  --options runtime \
@@ -335,6 +369,7 @@ endif
 endif
 
 clean-local:
+	-rm -f macosx/qotcupdates.$(OBJEXT)
 	-rm -f Exult-snapshot.dmg
 	-rm -f ExultStudio-snapshot.dmg
 	-rm -f tmpicnsE.rsrc

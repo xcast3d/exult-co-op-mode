@@ -163,9 +163,22 @@ EXULTLIBADD = \
 	$(EXULTLIBS) $(PNG_LIBS) \
 	$(SDL_LIBS) $(SYSLIBS) $(x_libraries) $(ICON_FILE) \
 	$(ZLIB_LIBS) $(OGG_LIBS) $(MT32EMU_LIBS) $(FLUID_LIBS) $(ALSA_LIBS) \
-	$(FRIEND_RTC_LIBS)
+	$(FRIEND_RTC_LIBS) $(SPARKLE_LIBS)
 
 EXULTDEPENDENCIES = $(ICON_FILE) $(EXULTLIBS)
+
+# Update checks on macOS (configure finds Sparkle; see docs/friend-mode/updates.md).
+# One Objective-C++ file, built with the C++ compiler, so automake needs no
+# Objective-C++ support on other systems.
+if QOTC_SPARKLE
+QOTC_UPDATES_OBJ = macosx/qotcupdates.$(OBJEXT)
+EXULTLIBADD += $(QOTC_UPDATES_OBJ)
+EXULTDEPENDENCIES += $(QOTC_UPDATES_OBJ)
+
+$(QOTC_UPDATES_OBJ): $(srcdir)/macosx/qotcupdates.mm $(srcdir)/macosx/qotcupdates.h qotcbuild.h
+	@mkdir -p macosx
+	$(CXX) -x objective-c++ -fobjc-arc $(DEFS) $(DEFAULT_INCLUDES) $(exult_CPPFLAGS) $(CXXFLAGS) -c -o $@ $(srcdir)/macosx/qotcupdates.mm
+endif
 
 # If we've been asked to build exult as a library...
 if BUILD_LIBEXULT
@@ -185,7 +198,7 @@ exult_DEPENDENCIES = $(EXULTDEPENDENCIES)
 
 # Workaround for automake issue with using the same sources for both a library and an executable.
 # See https://www.gnu.org/software/automake/manual/html_node/Objects-created-both-with-libtool-and-without.html
-exult_CPPFLAGS = $(AM_CPPFLAGS) $(FRIEND_RTC_CPPFLAGS)
+exult_CPPFLAGS = $(AM_CPPFLAGS) $(FRIEND_RTC_CPPFLAGS) $(SPARKLE_CPPFLAGS)
 else # !BUILD_EXULT
 bin_PROGRAMS =
 endif
@@ -219,6 +232,8 @@ EXTRA_DIST = 	\
 	win32/glib-xp.patch \
 	win32/README-SDL.txt \
 	macosx/exult.icns \
+	macosx/qotcupdates.h \
+	macosx/qotcupdates.mm \
 	macosx/exult_studio_info.plist.in \
 	macosx/diskback.png \
 	macosx/DS_Store \
