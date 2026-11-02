@@ -74,6 +74,9 @@ baseline commits with the experimental engine changes.
 
 ### Before a release (Mac and Windows)
 
+The whole release, both builds and the deploy, step by step:
+[releasing](releasing.md).
+
 1. **No test kits.** Release builds have no test keys or spawners:
    - Remove any temporary test code: `grep -n TEMPORARY exult.cc`.
      (The ungated F9 enemy spawner and F7 bedroll were taken out for

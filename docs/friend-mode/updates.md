@@ -1,8 +1,9 @@
 # Updates
 
-Status: **Mac built and tested locally 2026-11-02** (Sparkle 2.10.1); not
-in a release yet. **Windows written 2026-11-02** (WinSparkle 0.9.4, an
-Inno Setup installer), not yet built or tried. The web build needs none: a
+Status (2026-11-02): **Mac** (Sparkle 2.10.1) built and tested locally;
+**Windows** (WinSparkle 0.9.4, an Inno Setup installer) built on GitHub
+and a real update tried on a PC. Neither is in a release yet: the feeds
+start with 0.8.2. The web build needs none: a
 redeploy is the update.
 
 ## How it works for players
@@ -84,6 +85,9 @@ GitHub Actions secret, passed with `--ed-key-file -`.
 
 ## Releasing
 
+The steps from commit to deploy are in [releasing](releasing.md); this is
+what deploy.sh does with the builds.
+
 The usual release build ([macOS setup](macos-setup.md#the-mac-build)),
 after `tools/friend-mode/get-sparkle.sh` once, then:
 
@@ -147,7 +151,8 @@ Not tried yet: the interactive path (Check for Updates… → Install and
 Relaunch), Sparkle's windows over a fullscreen game, and a download from
 the live site with Gatekeeper's quarantine.
 
-On Windows (not done yet), the same way: install a build, make a second
+On Windows (done 2026-11-02, from a test feed on the downloads site;
+[releasing](releasing.md#trying-an-update-before-a-release)), the same way: install a build, make a second
 installer from a later commit, serve a feed for it locally, and run the
 installed game with `QOTC_UPDATE_FEED=http://<this PC>:8650/appcast-windows.xml`.
 Then the game menu's Check Updates.
