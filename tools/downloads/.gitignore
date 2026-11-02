@@ -1,0 +1,4 @@
+.wrangler/
+# The builds, and the files deploy.sh makes from them.
+public/u7-qotc/
+public/_redirects

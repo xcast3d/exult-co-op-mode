@@ -1,0 +1,21 @@
+# Release downloads at downloads.xcast3d.com (Cloudflare Worker, static
+# files only, no code).  Deploy with tools/downloads/deploy.sh, never by
+# hand from another folder: wrangler reads the wrangler.toml of the folder
+# it runs in.
+#
+# This address is compiled into builds (the update feed, later), so it
+# must keep working whatever happens to the website.
+name = "xcast3d-downloads"
+compatibility_date = "2026-10-01"
+workers_dev = false
+preview_urls = false
+
+routes = [
+	{ pattern = "downloads.xcast3d.com", custom_domain = true },
+]
+
+# Files up to 25 MiB each.  public/u7-qotc/ holds the builds (git-ignored);
+# a deploy replaces everything, so that folder must keep every file that
+# should stay online.
+[assets]
+directory = "./public"

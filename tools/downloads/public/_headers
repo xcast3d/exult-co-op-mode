@@ -1,0 +1,6 @@
+# Lists that change with every release are always checked again; the
+# builds themselves never change once uploaded (each name has its commit).
+/u7-qotc/
+  Cache-Control: no-cache
+/u7-qotc/*.xml
+  Cache-Control: no-cache
