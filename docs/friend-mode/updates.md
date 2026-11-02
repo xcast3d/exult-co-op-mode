@@ -14,10 +14,10 @@ A Mac build checks
 feed has a higher build, Sparkle downloads it, checks its signature and
 offers it; installed on quit or with Install and Relaunch.
 
-Only `Exult.app` is replaced. Saves and game data
-(`~/Library/Application Support/Exult`) and settings
-(`~/Library/Preferences/exult.cfg`) are outside the app and untouched
-(checked in the test below).
+Only `Exult.app` is replaced. Saves, settings (`exult.cfg`) and game
+data in `~/Library/Application Support/Quest of the Companions` are
+outside the app and untouched (checked in the test below, when they were
+still in Exult's folders; see [Our own folder](#our-own-folder)).
 
 On Windows the same feed idea, `appcast-windows.xml`: WinSparkle checks it
 daily, and the game menu has **Check Updates** (on both platforms).
@@ -161,7 +161,8 @@ Then the game menu's Check Updates.
 
 Checked on Windows 11 with the 0.8.1 build (2026-11-02), and in the code
 (`Get_home()` in files/utils.cc): everything the game writes goes under
-`%LOCALAPPDATA%\Exult`, not the install folder:
+`%LOCALAPPDATA%\Quest of the Companions` (`%LOCALAPPDATA%\Exult` until
+2026-11-02, [Our own folder](#our-own-folder)), not the install folder:
 
 - `exult.cfg`, and the logs `stdout.txt` / `stderr.txt`;
 - `blackgate\` and `serpentisle\`: saves, `gamedat\` (the current game),
@@ -177,5 +178,28 @@ folder, and an update that replaces it would take the saves with it. (An
 `exult.cfg` beside the exe doesn't switch it on; nor does our build define
 `PORTABLE_EXULT_WIN32`, which would.) WinSparkle should not run in portable
 mode, or should keep the folder's data. A real save (2026-11-02) wrote
-`exult00bg.sav` to `%LOCALAPPDATA%\Exult\blackgate\` and nothing to the
-install folder.
+`exult00bg.sav` to `%LOCALAPPDATA%\Exult\blackgate\` (now our own folder)
+and nothing to the install folder.
+
+## Our own folder
+
+Since 2026-11-02 (before 0.8.2, the first updating release) the game keeps
+its settings and saves in a folder of its own, not Exult's, so the two
+apps don't share a settings file or saves (`files/utils.cc`):
+
+- Mac: `~/Library/Application Support/Quest of the Companions`, the
+  settings file too (Exult keeps its in `~/Library/Preferences`). A new
+  player's game data goes there as well, in `blackgate/static` (Exult's
+  default was the computer's `/Library/Application Support/Exult`, which
+  needs an administrator); settings that name a data folder keep it.
+- Windows: `%LOCALAPPDATA%\Quest of the Companions`.
+
+The first launch with no such folder copies Exult's over: the Mac's
+`~/Library/Application Support/Exult` and
+`~/Library/Preferences/exult.cfg`, or Windows' `%LOCALAPPDATA%\Exult`.
+The copy goes to a `.copying` folder renamed into place when complete (one
+cut short is redone), and the settings file's paths into Exult's folder
+are pointed at ours, so a game under way goes on. Exult's folder is left
+as it was. A new player gets an empty folder. The browser build, Linux and
+portable mode (`-p`) are unchanged.
+

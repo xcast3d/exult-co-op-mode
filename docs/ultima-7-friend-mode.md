@@ -823,10 +823,11 @@ worth it: every save, single player or co-op, is plain Black Gate.
   too.
 - [ ] The website says so: mods are off, so every co-op player runs the
       same game; for mods, use Exult.
-- [ ] Before a public release: our own settings and saves folder (for
-      example `Library/Application Support/Quest of the Companions` on a
-      Mac). Today it shares Exult's (`Library/Application Support/Exult`),
-      so the two apps share a settings file and saves.
+- [x] Before a public release: our own settings and saves folder
+      (2026-11-02: `~/Library/Application Support/Quest of the Companions`
+      on a Mac, `%LOCALAPPDATA%\Quest of the Companions` on Windows;
+      Exult's copied there on the first launch;
+      [updates](friend-mode/updates.md#our-own-folder)).
 
 ## Licensing and game data
 

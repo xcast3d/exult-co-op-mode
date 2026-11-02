@@ -43,6 +43,16 @@ both in `--version` and the version files saved with each game.
 
 ### Changed
 
+- **Our own folder:** settings and saves now live in a folder of the
+  game's own, apart from Exult's: on a Mac
+  `~/Library/Application Support/Quest of the Companions`, on Windows
+  `%LOCALAPPDATA%\Quest of the Companions`. The first time you start this
+  build, your settings and saves are copied over from Exult's folder, so
+  your game goes on where you left it. Exult's folder isn't touched, and
+  from then on the two keep their own. New on a Mac: put the game's
+  `STATIC` folder in that folder's `blackgate` folder
+  (`~/Library/Application Support/Quest of the Companions/blackgate/static`);
+  no administrator password needed.
 - **Co-op:** hosts and guests need the same release (the co-op protocol is
   now 39).
 - **Winches:** the Target System offers them with levers and switches, and

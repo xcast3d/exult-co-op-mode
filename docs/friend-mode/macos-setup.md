@@ -36,7 +36,9 @@ The initial baseline used Exult `1.13.1git`, Apple Clang 21, SDL 3.4.18,
 libpng 1.6.59, Vorbis 1.3.7, FluidSynth 2.6.1, and MT32emu 2.8.3.
 
 To launch the unmodified Black Gate baseline after configuring a valid
-game-data path in `~/Library/Preferences/exult.cfg`:
+game-data path in `~/Library/Application Support/Quest of the Companions/exult.cfg`
+(Exult's own settings, `~/Library/Preferences/exult.cfg`, are copied there
+on the first launch; [updates](updates.md#our-own-folder)):
 
 ```sh
 ./exult --bg

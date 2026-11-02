@@ -33,13 +33,17 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cassert>
 #include <cctype>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <exception>
+#include <filesystem>
 #include <fstream>
+#include <iostream>
+#include <sstream>
 #include <list>
 #include <map>
 #include <string>
@@ -757,6 +761,17 @@ void cleanup_output(const char* prefix) {
 #	endif    // USE_CONSOLE
 #endif        // _WIN32
 
+// Quest of the Companions keeps its settings and saves apart from Exult's
+// (2026-11-02), so the two apps don't share a settings file or saves: on a
+// Mac all in ~/Library/Application Support/Quest of the Companions (the
+// settings file too), on Windows in %LOCALAPPDATA%\Quest of the Companions.
+// The first time, Exult's are copied there (Copy_exult_folders), so a game
+// under way goes on.  On a Mac the game data is looked for there too.
+#if defined(MACOSX) || (defined(_WIN32) && !defined(PORTABLE_EXULT_WIN32))
+#	define QOTC_OWN_FOLDERS
+static const char qotc_folder[] = "Quest of the Companions";
+#endif
+
 static std::string home_directory;
 
 void U7set_home(std::string home) {
@@ -777,7 +792,8 @@ string Get_home() {
 		shell32_wrapper shell32;
 		home_directory = shell32.Get_local_appdata();
 		if (!home_directory.empty()) {
-			home_directory += "\\Exult";
+			home_directory += "\\";
+			home_directory += qotc_folder;
 		} else {
 			home_directory = ".";
 		}
@@ -932,7 +948,8 @@ static string Get_config_dir(const string& home_dir) {
 	return IOSGetDocumentsDir();
 #elif defined(MACOSX)
 	string config_dir(home_dir);
-	config_dir += "/Library/Preferences";
+	config_dir += "/Library/Application Support/";
+	config_dir += qotc_folder;
 	return config_dir;
 #elif defined(SDL_PLATFORM_HAIKU)
 	string config_dir(home_dir);
@@ -952,7 +969,8 @@ static string Get_savehome_dir(const string& home_dir, const string& config_dir)
 #elif defined(MACOSX)
 	ignore_unused_variable_warning(config_dir);
 	string savehome_dir(home_dir);
-	savehome_dir += "/Library/Application Support/Exult";
+	savehome_dir += "/Library/Application Support/";
+	savehome_dir += qotc_folder;
 	return savehome_dir;
 #elif defined(SDL_PLATFORM_HAIKU)
 	ignore_unused_variable_warning(config_dir);
@@ -977,8 +995,13 @@ static string Get_gamehome_dir(const string& home_dir, const string& config_dir)
 	gamehome_dir += "/game";
 	return gamehome_dir;
 #elif defined(MACOSX)
-	ignore_unused_variable_warning(home_dir, config_dir);
-	return "/Library/Application Support/Exult";
+	// Beside the saves, in one's own Library: no administrator needed
+	// (Exult's is the computer's /Library/Application Support/Exult).
+	ignore_unused_variable_warning(config_dir);
+	string gamehome_dir(home_dir);
+	gamehome_dir += "/Library/Application Support/";
+	gamehome_dir += qotc_folder;
+	return gamehome_dir;
 #elif defined(SDL_PLATFORM_HAIKU)
 	ignore_unused_variable_warning(config_dir);
 	string gamehome_dir(home_dir);
@@ -993,6 +1016,79 @@ static string Get_gamehome_dir(const string& home_dir, const string& config_dir)
 #endif
 }
 
+#ifdef QOTC_OWN_FOLDERS
+// The first launch: Exult's settings and saves copied into our folder
+// (whole, by way of a folder renamed into place once complete, so a copy
+// cut short is done again), and the settings' paths into Exult's folder
+// pointed at ours.  Nothing is done once our folder is there, nor for a
+// new player.  Exult's own folder is left as it was.
+static void Copy_exult_folders(const string& home_dir, const string& savehome_dir, const string& config_dir) {
+	namespace fs = std::filesystem;
+	std::error_code error;
+	const fs::path  ours = fs::u8path(savehome_dir);
+	if (home_dir == "." || fs::exists(ours, error)) {
+		return;
+	}
+#	ifdef MACOSX
+	const fs::path exults     = fs::u8path(home_dir + "/Library/Application Support/Exult");
+	const fs::path exults_cfg = fs::u8path(home_dir + "/Library/Preferences/" USER_CONFIGURATION_FILE);
+#	else
+	const fs::path exults     = ours.parent_path() / "Exult";
+	const fs::path exults_cfg = exults / USER_CONFIGURATION_FILE;
+#	endif
+	const bool had_folder = fs::is_directory(exults, error);
+	const bool had_cfg    = fs::is_regular_file(exults_cfg, error);
+	if (!had_folder && !had_cfg) {
+		return;
+	}
+	fs::path copying = ours;
+	copying += ".copying";
+	fs::remove_all(copying, error);
+	if (had_folder) {
+		fs::copy(exults, copying, fs::copy_options::recursive | fs::copy_options::copy_symlinks, error);
+		if (error) {
+			std::cerr << "Couldn't copy Exult's folder " << exults.u8string() << ": " << error.message() << std::endl;
+			fs::remove_all(copying, error);
+			return;
+		}
+	} else {
+		fs::create_directories(copying, error);
+	}
+	// The settings file, its paths into Exult's folder now into ours.
+	const fs::path cfg_in  = had_folder && !had_cfg ? copying / USER_CONFIGURATION_FILE : exults_cfg;
+	const fs::path cfg_out = copying / fs::u8path(config_dir).lexically_relative(ours) / USER_CONFIGURATION_FILE;
+	if (std::ifstream in(cfg_in, std::ios::binary); in) {
+		std::ostringstream text;
+		text << in.rdbuf();
+		in.close();
+		string cfg = text.str();
+		string from = exults.u8string();
+		string to   = ours.u8string();
+		for (int pass = 0; pass < 2; ++pass) {    // Windows paths both ways round.
+			for (size_t at = cfg.find(from); at != string::npos; at = cfg.find(from, at + to.size())) {
+				cfg.replace(at, from.size(), to);
+			}
+			std::replace(from.begin(), from.end(), '\\', '/');
+			std::replace(to.begin(), to.end(), '\\', '/');
+		}
+		std::ofstream out(cfg_out, std::ios::binary | std::ios::trunc);
+		out << cfg;
+		if (!out) {
+			std::cerr << "Couldn't write " << cfg_out.u8string() << std::endl;
+			fs::remove_all(copying, error);
+			return;
+		}
+	}
+	fs::rename(copying, ours, error);
+	if (error) {
+		std::cerr << "Couldn't finish copying Exult's folder: " << error.message() << std::endl;
+		fs::remove_all(copying, error);
+		return;
+	}
+	std::cout << "Copied Exult's settings and saves to " << ours.u8string() << std::endl;
+}
+#endif
+
 void setup_program_paths() {
 	const string home_dir(Get_home());
 	const string config_dir(Get_config_dir(home_dir));
@@ -1002,6 +1098,9 @@ void setup_program_paths() {
 	if (!is_system_path_defined("<HOME>") || get_system_path("<HOME>") != ".") {
 		add_system_path("<HOME>", home_dir);
 	}
+#ifdef QOTC_OWN_FOLDERS
+	Copy_exult_folders(home_dir, savehome_dir, config_dir);
+#endif
 	add_system_path("<CONFIG>", config_dir);
 	add_system_path("<SAVEHOME>", savehome_dir);
 	add_system_path("<GAMEHOME>", gamehome_dir);
