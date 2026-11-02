@@ -175,8 +175,9 @@ void Controller_show_pages(
 // the game's windows): the D-pad the arrows, south Return, east and Start
 // Escape, the shoulders Page Up / Down.  Otherwise (Get_click: signs,
 // conversations, the crosshair, the map): south Space, east and Start Escape, the
-// shoulders and D-pad up / down E and Shift+E (the conversation highlight),
-// D-pad left / right the arrows.  The left stick, pushed, as the D-pad.
+// shoulders E and Shift+E (the conversation highlight), the D-pad the
+// arrows (a conversation's highlight along and between rows).  The left
+// stick, pushed, as the D-pad.
 // Rewrites 'event' in place; others are left alone.
 void Controller_screen_event(SDL_Event& event, bool menu);
 

@@ -92,6 +92,9 @@ public:
 	// Friend Mode: E and Shift+E move a highlight through the choices (round
 	// the ends; the first E takes the first); Space picks it.  -1: none.
 	void move_highlight(int by);
+	// The D-pad's up and down: to the nearest choice on the row above or
+	// below (round the ends), or along the one row as E does.
+	void move_highlight_row(int by);
 	int  get_highlight() const {
 		return highlight;
 	}

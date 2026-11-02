@@ -67,6 +67,15 @@ both in `--version` and the version files saved with each game.
   bar, and walking didn't end it. On a guest's screen the vehicle now
   moves in step with the host, its riders aboard, instead of lagging
   behind with the riders snapping into place.
+- **Conversations and scenes:** the skill bar, the minimap, the
+  Follow / Stop button, and the notices and targeting line at the top
+  hide while anyone talks and during scenes (the opening too), so they
+  no longer pile up over the conversation. The chat log stays.
+- **Conversation choices:** the D-pad's left and right (and the arrow
+  keys) move along the choices; up and down move to the row above or
+  below. With one row, up and down move along it as before.
+- **Shortcut bar:** with Exult's shortcut bar on, the targeting line
+  and its hint sit just under it instead of covering it.
 - **Fountains:** pools of water are in the Target System's Usable group
   (with levers and switches) instead of Decor, so they're offered without
   turning Decor on.
@@ -96,6 +105,19 @@ both in `--version` and the version files saved with each game.
   mods, use Exult itself. Your installed mods stay where they are.
 
 ### Fixed
+
+- **Talking while leading a companion:** on the host or in single
+  player, Space on a party member talked to nobody and showed their
+  character, and other people said "The Avatar must do this". Now you
+  talk to them as the Avatar would, and go back to leading after.
+  Merchants and trainers talk to the Avatar too (before, they traded with
+  the companion you led); only a guest's companion shops for itself.
+- **Guests target the party:** Q now picks the other companions too, not
+  just the Avatar and your own, for items and skills on them.
+- **Guests' Talk:** Space now talks only to the merchants and trainers a
+  guest may visit; with anyone else there's no Talk to try.
+- **Conversations at night:** the highlighted choice shows white again
+  at night (and in other darkened light), where it looked unhighlighted.
 
 - **Skill range while the Avatar talks:** a guest hovering the skill bar
   during a conversation no longer leaves a range circle stuck on screen.

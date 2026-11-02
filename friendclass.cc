@@ -2487,7 +2487,7 @@ struct Bar_slot {
 // Avatar.
 Actor* Bar_actor() {
 	Game_window* gwin = Gwin();
-	if (!Friend_class_active() || gwin->is_in_exult_menu() || !gwin->get_main_actor()) {
+	if (!Friend_class_active() || gwin->is_in_exult_menu() || !gwin->get_main_actor() || Friend_mode_hud_hidden()) {
 		return nullptr;
 	}
 	if (Is_guest()) {

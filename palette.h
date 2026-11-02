@@ -130,6 +130,10 @@ public:
 
 	void set_palette(const unsigned char palnew[768]);
 
+	// The day palette, loaded once.  A layer that keeps it at night (the
+	// conversation's) has its colours picked in this one.
+	const Palette& day_palette();
+
 	int get_palette_index() const {
 		return palette;
 	}

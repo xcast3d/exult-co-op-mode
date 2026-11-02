@@ -166,10 +166,6 @@ bool Friend_mode_lead_actor(Actor* target);
 // it walks for scripts that path someone there, and doors toggle as for a
 // guest (their own toggle only).
 void Friend_mode_lead_use_object(Game_object* object, Actor* actor);
-// The companion one leads talks to a merchant or trainer, as a guest's
-// does (on the real world; story flags are put back).  False if 'npc' is
-// none, or nobody is led.
-bool Friend_mode_lead_talk_to_merchant(Actor* npc);
 // Y on the host and in single player holds the party: this one is held
 // (waiting where it stands).
 bool Friend_mode_is_held(const Actor* actor);
@@ -266,6 +262,13 @@ void Friend_mode_note_dialogue_number_done();
  *      Chr gets keyboard char., or 0 if it's was a mouse click.
  */
 extern bool g_waiting_for_click;
+
+// The char Get_click gives for an arrow key (the D-pad's too): a
+// conversation moves its highlight with them (2026-11-02).
+constexpr char Get_click_left  = '\x1c';
+constexpr char Get_click_right = '\x1d';
+constexpr char Get_click_up    = '\x1e';
+constexpr char Get_click_down  = '\x1f';
 
 extern bool Get_click(
 		int& x, int& y,                                 // Location returned (if not ESC).

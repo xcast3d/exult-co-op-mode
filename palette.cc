@@ -231,6 +231,19 @@ static int ui_palette_mode_to_number(int mode) {
 	}
 }
 
+const Palette& Palette::day_palette() {
+	static std::unique_ptr<Palette> day;
+	if (!day) {
+		day = std::make_unique<Palette>(this);
+		try {
+			day->load(PALETTES_FLX, PATCH_PALETTES, PALETTE_DAY);
+		} catch (...) {
+			// palettes.flx not available: the copy of this one stands in.
+		}
+	}
+	return *day;
+}
+
 void Palette::update_ui_layer_palettes() {
 	if (win == nullptr) {
 		return;

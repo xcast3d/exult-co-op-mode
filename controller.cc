@@ -873,15 +873,17 @@ void Controller_screen_event(SDL_Event& event, bool menu) {
 		const bool dpad = event.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_UP;
 		// The crosshair (a click wanted): L1 steps through people (Q), as in
 		// the world; elsewhere (conversations) Shift+E, the highlight back.
+		// The D-pad is the arrow: a conversation's row up, the crosshair's
+		// things back (2026-11-02).
 		const bool crosshair = !menu && !dpad && Mouse::mouse() && Mouse::mouse()->get_shape() == Mouse::greenselect;
-		key = menu ? (dpad ? SDLK_UP : SDLK_PAGEUP) : (crosshair ? SDLK_Q : SDLK_E);
-		mod = menu || crosshair ? SDL_KMOD_NONE : SDL_KMOD_LSHIFT;
+		key = dpad ? SDLK_UP : (menu ? SDLK_PAGEUP : (crosshair ? SDLK_Q : SDLK_E));
+		mod = menu || crosshair || dpad ? SDL_KMOD_NONE : SDL_KMOD_LSHIFT;
 		break;
 	}
 	case SDL_GAMEPAD_BUTTON_DPAD_DOWN:
 	case SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER: {
 		const bool dpad = event.gbutton.button == SDL_GAMEPAD_BUTTON_DPAD_DOWN;
-		key = menu ? (dpad ? SDLK_DOWN : SDLK_PAGEDOWN) : SDLK_E;
+		key = dpad ? SDLK_DOWN : (menu ? SDLK_PAGEDOWN : SDLK_E);
 		break;
 	}
 	default:

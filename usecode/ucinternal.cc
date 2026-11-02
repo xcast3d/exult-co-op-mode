@@ -1830,6 +1830,14 @@ int Usecode_internal::get_user_choice_num() {
 			// the choices and Space picks it, so E no longer picks the 14th.
 			conv->move_highlight(chr == 'E' ? -1 : 1);
 			choice_num = -1;
+		} else if (chr == Get_click_left || chr == Get_click_right) {
+			// The arrows and the D-pad (2026-11-02): left and right along the
+			// choices, up and down a row.
+			conv->move_highlight(chr == Get_click_left ? -1 : 1);
+			choice_num = -1;
+		} else if (chr == Get_click_up || chr == Get_click_down) {
+			conv->move_highlight_row(chr == Get_click_up ? -1 : 1);
+			choice_num = -1;
 		} else if (chr == ' ') {
 			choice_num = conv->get_highlight();    // -1 (none yet): wait on.
 		} else if (chr) {       // key pressed

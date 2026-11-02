@@ -806,6 +806,10 @@ int Friend_mode_controller_color(const Actor* actor) {
 // Where every player is, for the corner minimap: the Avatar, and each
 // player's companion (just the Avatar in single player).
 static void Friend_mode_paint_maps() {
+	if (Friend_mode_hud_hidden()) {
+		Friend_map_hide();
+		return;
+	}
 	std::vector<Friend_map_dot> dots;
 	auto add = [&](Actor* actor, int player) {
 		if (!actor || actor->get_map() != gwin->get_main_actor()->get_map()) {
@@ -3216,8 +3220,9 @@ static void Friend_mode_clear_target() {
 	Friend_mode_stop_attack();
 }
 
-// Out of combat the Avatar may also pick a party member (to talk to); a
-// guest's companions are the Avatar's business.
+// Out of combat the party may be picked too: the Avatar talks to them, a
+// guest uses items and skills on them (2026-11-02: a guest picked only the
+// Avatar and itself).
 // Q cycling for the crosshair (Get_click): the party and oneself are
 // offered in combat too, and a pick there is never attacked.
 static bool friend_crosshair_cycle = false;
@@ -3229,11 +3234,11 @@ static bool Friend_is_party_pick(const Actor* own, const Actor* actor) {
 	}
 	// Oneself (2026-10-26): potions, a healing pool, an item.  The Avatar
 	// too (not in Exult's party list), for a companion one leads or a
-	// guest.  A guest picks only those, not other companions.
+	// guest.
 	if (actor == own || actor == gwin->get_main_actor()) {
 		return true;
 	}
-	return !Friend_mode_is_guest() && actor->is_in_party();
+	return actor->is_in_party();
 }
 
 // Anyone Q may pick just now.
@@ -4178,6 +4183,15 @@ static bool Friend_has_conversation(const Actor* actor) {
 	return actor->get_npc_num() > 0 && gwin->get_usecode()->function_exists(actor->get_usecode());
 }
 
+static bool Friend_is_merchant(int npc_num);
+
+// Space may talk to them: the Avatar (the host, single player, leading a
+// companion or not) to anyone with a conversation; a guest only to the
+// merchants and trainers (2026-11-02: others said "The Avatar must do this").
+static bool Friend_may_talk(const Actor* actor) {
+	return Friend_has_conversation(actor) && (!Friend_mode_is_guest() || Friend_is_merchant(actor->get_npc_num()));
+}
+
 static std::string Friend_key_label(const std::string& key);
 
 // Locks (2026-11-01): a locked chest or door picked with E.  Space unlocks
@@ -4317,7 +4331,7 @@ static bool Friend_mode_space(bool shift, bool alt) {
 			}
 			return true;
 		}
-		if (!fighting && Friend_has_conversation(target)) {
+		if (!fighting && Friend_may_talk(target)) {
 			gwin->double_clicked_object(target);
 		}
 		return true;
@@ -4341,7 +4355,7 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		if (!fighting) {
 			// Talk.  A deer or a rabbit has nothing to say: Space does nothing
 			// (a guest's double-click there said "The Avatar must do this").
-			if (Friend_has_conversation(target)) {
+			if (Friend_may_talk(target)) {
 				gwin->double_clicked_object(target);
 			}
 		} else {
@@ -4543,8 +4557,7 @@ static std::string Friend_space_hint() {
 	}
 	if (!thing) {
 		if (!gwin->in_combat()) {
-			const bool talks = Friend_has_conversation(target)
-							   && (!Friend_mode_is_guest() || Friend_is_merchant(target->get_npc_num()));
+			const bool talks = Friend_may_talk(target);
 			const std::string attack = "Attack (" + Friend_key_label("Shift+Space") + ")";
 			if (Friend_is_party_or_avatar(target)) {
 				const bool view = Friend_may_view_character(own, target);
@@ -6130,47 +6143,6 @@ bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
 	return true;
 }
 
-// The host or a single player: the companion one leads talks to a merchant
-// or trainer as a guest's does (the shop's own answers, its portrait,
-// purchases into its pack, training for it alone, spells the Avatar's).
-// This is the real world, so the story flags the talk changed, and whether
-// the merchant has met the party, are put back after.
-bool Friend_mode_lead_talk_to_merchant(Actor* npc) {
-	Actor* own = Friend_mode_led_companion();
-	if (!GAME_BG || !npc || !own || !friend_merchants.count(npc->get_npc_num())) {
-		return false;
-	}
-	Usecode_machine*  usecode = gwin->get_usecode();
-	const int         count   = static_cast<int>(usecode->get_num_global_flags());
-	std::vector<bool> flags(count);
-	for (int i = 0; i < count; ++i) {
-		flags[i] = usecode->get_global_flag_unsafe(i);
-	}
-	const bool met = npc->get_flag(Obj_flags::met);
-	usecode->set_friend_shopper(own);
-	const auto answers = friend_merchant_answers.find(npc->get_npc_num());
-	if (answers != friend_merchant_answers.end()) {
-		usecode->set_friend_answers(npc->get_usecode(), answers->second);
-	}
-	gwin->get_effects()->remove_text_effects();
-	usecode->init_conversation();
-	npc->activate();
-	usecode->set_friend_shopper(nullptr);
-	usecode->set_friend_answers(-1, {});
-	const int now = static_cast<int>(usecode->get_num_global_flags());
-	for (int i = 0; i < now; ++i) {
-		const bool was = i < count && flags[i];    // Flags the talk added were off.
-		if (usecode->get_global_flag_unsafe(i) != was) {
-			usecode->set_global_flag_unsafe(i, was);
-		}
-	}
-	if (!met) {
-		npc->clear_flag(Obj_flags::met);
-	}
-	cout << "Friend Mode: " << own->get_npc_name() << " talked to " << npc->get_npc_name() << endl;
-	return true;
-}
-
 // Y on the host and in single player: the party holds (step 3 of
 // docs/friend-mode/leading-companions.md).  Everyone but the one played
 // waits where it stands (the Avatar too, while a companion is led; a
@@ -6441,6 +6413,20 @@ static void Friend_mode_scene_pass(bool force) {
 // Guest: the host's word on a scene.  A guest with a companion watches the
 // Avatar, its keys held, until it ends (the main loop's spectating).
 static bool friend_host_scene = false;
+
+// A conversation (one's own, or the Avatar's watched by a guest) or a
+// scene (the opening too): the skill bar, the minimap and the Follow / Stop
+// button step aside (2026-11-02).
+bool Friend_mode_hud_hidden() {
+	Conversation* conversation = gwin->get_usecode() ? gwin->get_usecode()->get_conversation() : nullptr;
+	if ((conversation && conversation->get_num_faces_on_screen() > 0) || gwin->is_network_dialogue_paused()) {
+		return true;
+	}
+	if (Friend_mode_is_guest()) {
+		return friend_host_scene && friend_session.connected();
+	}
+	return gwin->get_main_actor() && Friend_mode_avatar_in_scene();
+}
 
 static void Friend_mode_apply_scene(const std::vector<unsigned char>& data) {
 	friend_host_scene = !data.empty() && data[0] != 0;
@@ -7976,7 +7962,7 @@ static void Friend_mode_paint_hint(int sx, int sy) {
 	Image_window*             iwin = gwin->get_win();
 	auto                      font = fontManager.get_font("MENU_FONT");
 	const bool                shown
-			= font && !friend_hint_shown.empty()
+			= font && !friend_hint_shown.empty() && !Friend_mode_hud_hidden()
 			  && static_cast<uint32>(SDL_GetTicks()) - friend_hint_at < friend_notice_ms;
 	if (!shown) {
 		if (pinned.layer >= 0 && iwin->layer_is_visible(pinned.layer)) {
@@ -8124,12 +8110,45 @@ static void Friend_mode_keep_pick_lines() {
 	}
 }
 
+// The notices near the top and the pick's hint, all gone (till the
+// conversation or scene ends: Friend_mode_paint_chat_log brings the pick's
+// back).
+static bool friend_top_lines_cleared = false;
+
+static void Friend_mode_clear_top_lines() {
+	friend_top_lines_cleared = true;
+	friend_notices.clear();
+	friend_notices_changed = true;
+	friend_context_line.clear();
+	friend_hint_pinned = false;
+	friend_hint_shown.clear();
+	friend_hint_changed = true;
+}
+
 // The chat log, bottom left: recent lines only, newest at the bottom; and
-// the notices, centred near the top.
-static void Friend_mode_paint_chat_log() {
+// the notices, centred near the top.  'restore': the pick's lines may come
+// back after a conversation (not while one is starting, its face not yet up).
+static void Friend_mode_paint_chat_log(bool restore = true) {
 	static Friend_pinned_text log{"Chat log"};
 	static Friend_pinned_text notices{"Notices"};
 	const bool                on = friend_session.mode() != Friend_mode_session::Mode::off;
+	// A conversation or a scene: the notices and the hint go, and stay
+	// away till it ends (2026-11-02: they stacked over the conversation).
+	static bool hud_was_hidden = false;
+	const bool  hud_hidden     = Friend_mode_hud_hidden();
+	if (hud_hidden && !hud_was_hidden) {
+		Friend_mode_clear_top_lines();
+	}
+	hud_was_hidden = hud_hidden;
+	if (restore && !hud_hidden && std::exchange(friend_top_lines_cleared, false)) {
+		// Over: the pick, still held, shows its notice and hint again.
+		if (Actor* pick = gwin->get_action_target()) {
+			Friend_mode_target_notice(
+					(friend_attacking_pick ? "Attacking " : "Targeting ") + Friend_target_name(pick), true);
+		} else if (const Game_object_shared thing = friend_object_target.lock()) {
+			Friend_mode_target_notice("Targeting " + Friend_thing_name(thing.get()), true);
+		}
+	}
 	Friend_mode_keep_pick_lines();
 	Friend_mode_expire_lines(friend_chat_log, friend_chat_log_ms, friend_chat_log_changed);
 	Friend_mode_expire_lines(friend_notices, friend_notice_ms, friend_notices_changed);
@@ -8145,11 +8164,19 @@ static void Friend_mode_paint_chat_log() {
 	}
 	bottom = std::min(bottom, Friend_hud_bottom_y() - 4);    // Above the faces and the skill bar.
 	Friend_mode_paint_pinned(log, friend_chat_log, friend_chat_log_changed, on && !friend_chat_log_hidden, 6, bottom, false);
-	Friend_mode_paint_pinned(notices, friend_notices, friend_notices_changed, true, gwin->get_width() / 2, 4, true);
+	// The notices near the top, under Exult's shortcut bar when it shows
+	// (2026-11-02: the targeting line covered it).
+	int notices_y = 4;
+	if (g_shortcutBar && ShortcutBar_gump::Visible()) {
+		const TileRect bar = g_shortcutBar->get_rect();
+		notices_y          = std::max(notices_y, bar.y + bar.h + 3);
+	}
+	Friend_mode_paint_pinned(
+			notices, friend_notices, friend_notices_changed, !hud_hidden, gwin->get_width() / 2, notices_y, true);
 	// The hint just under the notices as they are on screen.
 	int top_x;
 	int top_y;
-	gwin->get_win()->game_to_screen(gwin->get_width() / 2, 4, false, top_x, top_y);
+	gwin->get_win()->game_to_screen(gwin->get_width() / 2, notices_y, false, top_x, top_y);
 	if (!friend_notices.empty() && notices.layer >= 0) {
 		top_y = notices.dest[1] + notices.dest[3] + 2;
 	}
@@ -8658,6 +8685,9 @@ void Friend_mode_note_dialogue_reset() {
 }
 
 void Friend_mode_note_dialogue_face(int shape, int frame, int slot) {
+	Friend_class_hide_overlays();    // The host's main loop waits till it ends (Friend_mode_hud_hidden).
+	Friend_mode_clear_top_lines();    // The notices and the hint too.
+	Friend_mode_paint_chat_log(false);
 	Friend_mode_lead_talk_begins();
 	Friend_mode_ensure_dialogue();
 	if (friend_host_dialogue_active) {
@@ -10208,8 +10238,8 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 		return;
 	}
 	// A guest during the Avatar's conversation: R1 / L1 and the D-pad move
-	// the highlight through the choices, Cross suggests it (as E, Shift+E
-	// and Space do).
+	// the highlight through the choices (the D-pad's up and down a row),
+	// Cross suggests it (as E, Shift+E, the arrows and Space do).
 	if (down && Friend_mode_is_guest() && gwin->is_network_dialogue_paused() && !friend_chat_active) {
 		Conversation* conversation = gwin->get_usecode()->get_conversation();
 		if (conversation && conversation->choices_shown()) {
@@ -10219,11 +10249,17 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 				step = 1;
 				break;
 			case Controller_action::target_person:
-			case Controller_action::next_character:    // D-pad up.
 				step = -1;
 				break;
+			case Controller_action::next_character:    // D-pad up.
+				conversation->move_highlight_row(-1);
+				return;
 			case Controller_action::key_binding:
-				step = binding.name == "STATS" ? 1 : 0;    // D-pad down.
+				if (binding.name == "STATS") {    // D-pad down.
+					conversation->move_highlight_row(1);
+					return;
+				}
+				step = binding.name == "BACKPACK" ? 1 : binding.name == "INVENTORY" ? -1 : 0;    // Right, left.
 				break;
 			case Controller_action::target_act: {
 				const int choice = conversation->get_highlight();
@@ -12463,16 +12499,23 @@ static void Handle_event(SDL_Event& event) {
 	if (Controller_event(event)) {
 		return;    // Controller support: a pad's button (Controller_run).
 	}
-	// A guest during the Avatar's conversation: E and Shift+E move a
-	// highlight through the choices, Space suggests it (as a click does).
+	// A guest during the Avatar's conversation: E and Shift+E (or the
+	// arrows, up and down a row) move a highlight through the choices,
+	// Space suggests it (as a click does).
+	const SDL_Scancode dialogue_keys[]
+			= {SDL_SCANCODE_E, SDL_SCANCODE_SPACE, SDL_SCANCODE_LEFT, SDL_SCANCODE_RIGHT, SDL_SCANCODE_UP, SDL_SCANCODE_DOWN};
 	if (Friend_mode_is_guest() && event.type == SDL_EVENT_KEY_DOWN && !event.key.repeat && !friend_chat_active
 		&& gwin->is_network_dialogue_paused()
-		&& (event.key.scancode == SDL_SCANCODE_E || event.key.scancode == SDL_SCANCODE_SPACE)
+		&& std::find(std::begin(dialogue_keys), std::end(dialogue_keys), event.key.scancode) != std::end(dialogue_keys)
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
 		Conversation* conversation = gwin->get_usecode()->get_conversation();
 		if (conversation && conversation->choices_shown()) {
 			if (event.key.scancode == SDL_SCANCODE_E) {
 				conversation->move_highlight((event.key.mod & SDL_KMOD_SHIFT) ? -1 : 1);
+			} else if (event.key.scancode == SDL_SCANCODE_LEFT || event.key.scancode == SDL_SCANCODE_RIGHT) {
+				conversation->move_highlight(event.key.scancode == SDL_SCANCODE_LEFT ? -1 : 1);
+			} else if (event.key.scancode == SDL_SCANCODE_UP || event.key.scancode == SDL_SCANCODE_DOWN) {
+				conversation->move_highlight_row(event.key.scancode == SDL_SCANCODE_UP ? -1 : 1);
 			} else {
 				const int choice = conversation->get_highlight();
 				if (choice >= 0 && choice < conversation->get_num_answers()) {
@@ -13511,7 +13554,10 @@ static bool Get_click(
 				case SDLK_SCROLLLOCK:
 					break;
 				default:
-					if (keybinder->IsMotionEvent(event)) {
+					// The arrows (walking keys) go to a conversation, which moves
+					// its highlight with them.
+					if (keybinder->IsMotionEvent(event)
+						&& !(chr && (c == SDLK_LEFT || c == SDLK_RIGHT || c == SDLK_UP || c == SDLK_DOWN))) {
 						break;
 					}
 					if ((c == SDLK_S) && (event.key.mod & SDL_KMOD_ALT) && (event.key.mod & SDL_KMOD_CTRL)) {
@@ -13537,6 +13583,11 @@ static bool Get_click(
 						Friend_aim_crosshair_at_pick();
 						break;
 					}
+					if (crosshair && (c == SDLK_UP || c == SDLK_DOWN)) {    // The D-pad: as Shift+E and E.
+						Friend_mode_cycle_object(c == SDLK_UP ? -1 : 1);
+						Friend_aim_crosshair_at_pick();
+						break;
+					}
 					if (crosshair && c == SDLK_SPACE && !event.key.repeat && Friend_aim_crosshair_at_pick()) {
 						Friend_picture_middle(Friend_crosshair_pick(), x, y);
 						g_waiting_for_click = false;
@@ -13549,7 +13600,23 @@ static bool Get_click(
 						return true;
 					}
 					if (chr) {    // Looking for a character?
-						*chr                = (event.key.mod & SDL_KMOD_SHIFT) ? toupper(c) : c;
+						switch (c) {
+						case SDLK_LEFT:
+							*chr = Get_click_left;
+							break;
+						case SDLK_RIGHT:
+							*chr = Get_click_right;
+							break;
+						case SDLK_UP:
+							*chr = Get_click_up;
+							break;
+						case SDLK_DOWN:
+							*chr = Get_click_down;
+							break;
+						default:
+							*chr = (event.key.mod & SDL_KMOD_SHIFT) ? toupper(c) : c;
+							break;
+						}
 						g_waiting_for_click = false;
 						return true;
 					}

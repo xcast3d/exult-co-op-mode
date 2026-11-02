@@ -46,6 +46,7 @@
 #include "palette.h"
 
 #include <algorithm>
+#include <cstdlib>
 
 using std::size_t;
 using std::string;
@@ -852,7 +853,9 @@ void Conversation::show_avatar_choices(int num_choices, char** choices) {
 			sman->paint_text(0, text, conv_choices[i].x, conv_choices[i].y);
 			continue;
 		}
-		const Palette*      pal   = gwin->get_pal();
+		// In the day palette, which this layer keeps at night (2026-11-02:
+		// the night one's colours left the highlight unseen).
+		const Palette*      pal   = &gwin->get_pal()->day_palette();
 		const unsigned char color = i == highlight ? static_cast<unsigned char>(pal->find_color(63, 63, 63))
 												   : suggested->second;
 		unsigned char       recolor[256];
@@ -908,6 +911,43 @@ void Conversation::move_highlight(int by) {
 		highlight = ((highlight + by) % count + count) % count;
 	}
 	repaint_conversation();
+}
+
+void Conversation::move_highlight_row(int by) {
+	const int count = static_cast<int>(answers.size());
+	if (!choices_active || count == 0 || !conv_choices) {
+		return;
+	}
+	// The rows' tops, in order (conv_choices ends with an empty rectangle).
+	std::vector<int> rows;
+	for (int i = 0; i < count && conv_choices[i].w > 0; ++i) {
+		if (std::find(rows.begin(), rows.end(), conv_choices[i].y) == rows.end()) {
+			rows.push_back(conv_choices[i].y);
+		}
+	}
+	std::sort(rows.begin(), rows.end());
+	if (rows.size() < 2 || highlight < 0 || highlight >= count) {
+		move_highlight(by);
+		return;
+	}
+	const TileRect& from = conv_choices[highlight];
+	const int       row  = static_cast<int>(std::find(rows.begin(), rows.end(), from.y) - rows.begin());
+	const int       n    = static_cast<int>(rows.size());
+	const int       to_y = rows[((row + by) % n + n) % n];
+	const int       mid  = from.x + from.w / 2;
+	int             best = -1;
+	for (int i = 0; i < count && conv_choices[i].w > 0; ++i) {
+		if (conv_choices[i].y == to_y
+			&& (best < 0
+				|| std::abs(conv_choices[i].x + conv_choices[i].w / 2 - mid)
+						   < std::abs(conv_choices[best].x + conv_choices[best].w / 2 - mid))) {
+			best = i;
+		}
+	}
+	if (best >= 0) {
+		highlight = best;
+		repaint_conversation();
+	}
 }
 
 bool Conversation::suggest_choice(const std::string& choice, unsigned char color) {

@@ -22,10 +22,13 @@ guest does, use its skill bar, and have the party follow it.
   Shamino for every script that looks for him.
 - **The Avatar stays the story actor.** A companion you lead follows the
   guests' rules ([interaction policy](interaction-policy.md)): doors,
-  levers, containers and items work; merchants and trainers talk to the
-  companion; other people and story objects say "The Avatar must do this".
-  (First decided "only the Avatar talks to anyone", then changed the same
-  day to match guests exactly.)
+  levers, containers and items work; story objects say "The Avatar must
+  do this". People are talked to as the Avatar (2026-11-02: everyone with
+  a conversation, merchants, trainers and the party too; the Avatar takes
+  over for the conversation and the companion is led again after). Only a
+  guest's companion shops and trains for itself. (First decided "only the
+  Avatar talks to anyone", then the same day to match guests exactly,
+  then on 2026-11-02 back to the Avatar.)
 - **Fighting anyone, as guests may** (2026-10-21): creatures and hostiles
   at once, peaceful people after confirming ("Attack Finnigan? Again to
   attack"), the same as a guest's companion.
@@ -191,7 +194,8 @@ guest does, use its skill bar, and have the party follow it.
      face while a companion is led (someone speaks to the Avatar, a
      scene), the Avatar takes over for it, and the companion is led again
      once the outermost script ends (`Friend_mode_lead_talk_begins`,
-     `_ends`). Not for the companion's own merchant talk.
+     `_ends`). Talking to anyone while leading works this way too
+     (2026-11-02).
    - **Losing the one led** (Phase 1's safety check gives the Avatar back):
      "Iolo has fallen", "has left the party" or "is out of the fight";
      leading the Avatar.
@@ -207,9 +211,9 @@ guest does, use its skill bar, and have the party follow it.
 
 ## Open questions
 
-None for now. Answered 2026-10-21: merchants and trainers talk to the
-companion one leads, as to a guest's (on the host it is the real
-conversation, so `Friend_mode_lead_talk_to_merchant` puts the story flags
-and the merchant's "met" back after); the Avatar fights by U7's own combat
+None for now. Answered 2026-10-21 (the first changed 2026-11-02, see
+above): merchants and trainers talked to the companion one leads, as to a
+guest's (with the story flags and "met" put back after; that code is
+gone); the Avatar fights by U7's own combat
 while it follows; a guest's companion in follow mode follows the leader,
 and holds with the party.

@@ -155,6 +155,8 @@ bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe, bool peace
 int Friend_mode_player_playing(const Actor* actor);
 // Guest: its companion is in follow mode (the host's AI drives it).
 bool Friend_mode_guest_following();
+// A conversation or a scene: the skill bar, minimap and hold button hide.
+bool Friend_mode_hud_hidden();
 // Network identities for actors: (0, NPC number) or (1, creature number).
 bool   Friend_mode_actor_net_id(const Actor* actor, int& kind, uint32& id);
 Actor* Friend_mode_actor_by_net_id(int kind, uint32 id);

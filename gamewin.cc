@@ -3232,10 +3232,12 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 		}
 	}
 	Actor* clicked_actor = obj->as_actor();
-	if (!gump && controlled && controlled != main_actor && clicked_actor && clicked_actor->is_in_party()) {
+	if (!gump && controlled && controlled != main_actor && clicked_actor && clicked_actor->is_in_party()
+		&& (network_friend_control || clicked_actor == controlled)) {
 		// A guest can inspect only its own paperdoll.  The host (and single
-		// player), leading a companion or not, is the game master: all of them.
-		if (clicked_actor == controlled || !network_friend_control) {
+		// player) leading a companion talks to the others as the Avatar
+		// would (below; 2026-11-02: this showed their character instead).
+		if (clicked_actor == controlled) {
 			effects->remove_text_effects();
 			clicked_actor->show_inventory();
 		} else {
@@ -3340,11 +3342,17 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 			}
 			return;
 		}
-		// Merchants and trainers talk to the companion, as to a guest's.
-		if (clicked_actor && Friend_mode_lead_talk_to_merchant(clicked_actor)) {
+		// People talk to the Avatar, merchants and trainers too (only a
+		// guest's companion shops for itself): control goes to the Avatar
+		// for the conversation and back after (Friend_mode_lead_talk_begins).
+		if (clicked_actor) {
+			effects->remove_text_effects();
+			usecode->init_conversation();
+			clicked_actor->activate(1);
+			npc_prox->wait(4);
 			return;
 		}
-		if (clicked_actor || usecode->function_exists(obj->get_usecode())) {
+		if (usecode->function_exists(obj->get_usecode())) {
 			effects->add_text("The Avatar must do this", obj);
 		} else {
 			Mouse::mouse()->flash_shape(Mouse::redx);
