@@ -100,3 +100,26 @@ live one. How it was tested on 2026-11-02:
 Not tried yet: the interactive path (Check for Updates… → Install and
 Relaunch), Sparkle's windows over a fullscreen game, and a download from
 the live site with Gatekeeper's quarantine.
+
+## Windows: where players' data lives
+
+Checked on Windows 11 with the 0.8.1 build (2026-11-02), and in the code
+(`Get_home()` in files/utils.cc): everything the game writes goes under
+`%LOCALAPPDATA%\Exult`, not the install folder:
+
+- `exult.cfg`, and the logs `stdout.txt` / `stderr.txt`;
+- `blackgate\` and `serpentisle\`: saves, `gamedat\` (the current game),
+  `gamedat.coop\` (the Friend Mode world) and each mod's `gamedat`/`saves`.
+
+The install folder holds only what we ship (its `gamedat` folders are the
+copied game data, untouched by play). So a WinSparkle update can replace
+the whole install folder.
+
+The exception is **portable mode**: started with `-p`, Exult keeps
+everything in the working folder (`<HOME>` is `.`), usually the install
+folder, and an update that replaces it would take the saves with it. (An
+`exult.cfg` beside the exe doesn't switch it on; nor does our build define
+`PORTABLE_EXULT_WIN32`, which would.) WinSparkle should not run in portable
+mode, or should keep the folder's data. A real save (2026-11-02) wrote
+`exult00bg.sav` to `%LOCALAPPDATA%\Exult\blackgate\` and nothing to the
+install folder.
