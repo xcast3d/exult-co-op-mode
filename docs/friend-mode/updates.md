@@ -98,8 +98,14 @@ For a macOS dmg whose app has the updater, deploy.sh zips the app (with
 `ditto`, as Finder does: other zippers leave files in Sparkle.framework that
 Gatekeeper rejects) as `<name>-update.zip`, signs it, and adds it to
 `appcast-macos.xml`. It refuses a build number that isn't higher than every
-build already in the feed, before copying anything. The update window links
-to the site's changelog.
+build already in the feed, before copying anything.
+
+**Release notes:** both feeds carry the notes the update window shows, as
+plain HTML: `tools/downloads/release-notes.py` takes the newest release in
+CHANGELOG.md at the build's commit (Unreleased, until the release steps
+move it under its version). The website's changelog page isn't used, so
+the window doesn't get the site's look and cursor. The Mac feed still
+links the full changelog for Sparkle's version history.
 
 For a Windows `-setup.exe`, deploy.sh takes the build number and version
 from the commit in its name (so that commit must be in this repository),

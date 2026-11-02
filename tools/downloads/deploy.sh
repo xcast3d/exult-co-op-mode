@@ -20,6 +20,8 @@
 #     new Windows "-setup.exe" is signed and becomes the feed's one update.
 #     Its build number and version come from the commit in its name, which
 #     must be in this repository.
+# Both feeds carry their release notes, plain, from the newest release in
+# CHANGELOG.md at the build's commit (release-notes.py).
 #
 # Needs wrangler logged in to the xcast3d.com account (npx wrangler login),
 # Sparkle's tools (tools/friend-mode/get-sparkle.sh) and the private update
@@ -49,7 +51,7 @@ add_file() {
 # the way Finder does; other zippers can leave files in Sparkle.framework
 # that Gatekeeper rejects.
 add_mac_update() {
-	local dmg="$1" mount app build newest zip work
+	local dmg="$1" mount app build newest zip work commit
 	mount="$(mktemp -d)"
 	hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$mount" "$dmg"
 	app="$(find "$mount" -maxdepth 1 -name '*.app' | head -1)"
@@ -74,16 +76,36 @@ add_mac_update() {
 	work="$(mktemp -d)"
 	[ -f "$feed" ] && cp "$feed" "$work/"
 	cp "$zip" "$work/"
+	# Named like the zip, so generate_appcast embeds it in the new item.
+	commit="$(build_commit "$(basename "$dmg")")"
+	release_notes "$commit" >"$work/$(basename "${zip%.zip}").html"
 	(cd "$work" && "$sparkle_bin/generate_appcast" . \
 		--ed-key-file "$key_file" \
 		--download-url-prefix "https://downloads.xcast3d.com/u7-qotc/" \
 		--full-release-notes-url "https://xcast3d.com/u7-quest-of-the-companions/changelog.html" \
 		--link "https://xcast3d.com/u7-quest-of-the-companions/" \
+		--embed-release-notes \
 		--maximum-deltas 0 \
 		-o appcast-macos.xml)
 	cp "$work/appcast-macos.xml" "$feed"
 	rm -rf "$work"
 	echo "Added build $build to appcast-macos.xml"
+}
+
+# The release notes for a commit, as an HTML fragment.
+release_notes() {
+	git -C "$repo" show "$1:CHANGELOG.md" | python3 -I "$here/release-notes.py"
+}
+
+# The commit in a build's name: Exult-U7-QOTC-<platform>-<commit>[-setup].<ext>
+build_commit() {
+	local commit
+	commit="$(echo "$1" | sed -nE 's/^.*-([0-9a-f]{7,40})(-setup)?\.[a-z]+$/\1/p')"
+	if [ -z "$commit" ] || ! git -C "$repo" cat-file -e "$commit^{commit}" 2>/dev/null; then
+		echo "$1: no commit of this repository in its name." >&2
+		exit 1
+	fi
+	echo "$commit"
 }
 
 # The highest build in a feed, or nothing.
@@ -95,13 +117,9 @@ feed_newest() {
 # runs it with installerArguments: quietly, over the install, and it starts
 # the game again (win32/qotc_installer.iss).
 add_windows_update() {
-	local exe="$1" name commit build version newest signature
+	local exe="$1" name commit build version newest signature notes
 	name="$(basename "$exe")"
-	commit="$(echo "$name" | sed -nE 's/^.*-([0-9a-f]{7,40})-setup\.exe$/\1/p')"
-	if [ -z "$commit" ] || ! git -C "$repo" cat-file -e "$commit^{commit}" 2>/dev/null; then
-		echo "$name: no commit of this repository in its name, so no build number." >&2
-		exit 1
-	fi
+	commit="$(build_commit "$name")"
 	build="$(git -C "$repo" rev-list --count "58f31e831..$commit")"
 	version="$(git -C "$repo" show "$commit:qotcversion.h" | sed -n 's/^#define QOTC_VERSION "\(.*\)"$/\1/p')"
 	newest="$(feed_newest "$win_feed")"
@@ -110,6 +128,7 @@ add_windows_update() {
 		exit 1
 	fi
 	signature="$("$sparkle_bin/sign_update" --ed-key-file "$key_file" -p "$exe")"
+	notes="$(release_notes "$commit")"
 	cat >"$win_feed" <<-EOF
 	<?xml version="1.0" encoding="utf-8"?>
 	<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
@@ -119,7 +138,9 @@ add_windows_update() {
 	    <item>
 	      <title>Version $version (build $build)</title>
 	      <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
-	      <sparkle:releaseNotesLink>https://xcast3d.com/u7-quest-of-the-companions/changelog.html</sparkle:releaseNotesLink>
+	      <description><![CDATA[
+	$notes
+	      ]]></description>
 	      <enclosure url="https://downloads.xcast3d.com/u7-qotc/$name"
 	        sparkle:version="$build"
 	        sparkle:shortVersionString="$version"
