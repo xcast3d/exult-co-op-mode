@@ -18,7 +18,7 @@ Mode, and tick off what you tried. Black Gate only for now.
    (for example Iolo or Spark), and stand somewhere open.
 4. Press **Ctrl+F9** on the host to place the object test kit (doors,
    chests, keys, teleporters) around the Avatar. (**F9** alone gathers the
-   first group of companions for the Class System, **F8** the second; **Shift+F9** places a fight, two each of troll, headless and skeleton; **Shift+F8** a rat, a wolf and a rabbit.) The host
+   first group of companions for the Class System, **F8** the second; **Shift+F9** places a fight, two each of troll, headless and skeleton; **Shift+F8** a rat, a wolf and a rabbit; **Alt+F8** (Option on a Mac) visits the flying carpet, a ship and a cart in turn, with the deed.) The host
    shows "Friend Mode test kit placed".
    - **Do this before the guest joins.** Objects created after a guest joins
      are not synced yet, but the kit is part of the world the guest downloads.

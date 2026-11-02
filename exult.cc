@@ -45,6 +45,7 @@
 #include "actors.h"
 #include "args.h"
 #include "barge.h"
+#include "ucinternal.h"
 #include "cheat.h"
 #include "chunks.h"
 #include "combat.h"
@@ -1217,7 +1218,8 @@ static void Friend_mode_use_object_for_guest(const Friend_mode_session::Object_f
 }
 
 // The host's test keys (F9: gather the companions, Ctrl+F9: the test kit,
-// Shift+F9 / Shift+F8: creatures; F8: the second group), only in a build
+// Shift+F9 / Shift+F8: creatures; F8: the second group; Alt+F8: the
+// vehicles), only in a build
 // made with FRIEND_TEST_KEYS defined (e.g. CPPFLAGS=-DFRIEND_TEST_KEYS):
 // release builds have neither the keys nor this code (2026-10-26).
 #ifdef FRIEND_TEST_KEYS
@@ -1479,6 +1481,44 @@ static bool Friend_test_kit_player_has(const Actor* npc) {
 	return false;
 }
 
+// Host debug aid (Alt+F8, Option on a Mac): the party to the next of Black Gate's
+// vehicles as the game starts them (the flying carpet, the ship in
+// Britain's harbour, the cart by Britain), with the deed or title for it
+// in the Avatar's pack, to try their Target System actions.
+static void Friend_mode_visit_next_vehicle() {
+	if (!GAME_BG) {
+		Friend_mode_notice("The vehicle tour uses Black Gate's map");
+		return;
+	}
+	struct Vehicle {
+		const char* name;
+		Tile_coord  at;      // Where the party lands.
+		int         owner;    // The part whose quality the deed matches (-1: none).
+	};
+	static const Vehicle vehicles[] = {
+			{"the flying carpet", Tile_coord(625, 1050, 0), -1},
+			{"a ship", Tile_coord(982, 1475, 0), 251},    // The lowered gangplank.
+			{"a cart", Tile_coord(906, 1562, 0), 796},
+	};
+	static int next = 0;
+	const Vehicle& to = vehicles[next];
+	next = (next + 1) % 3;
+	gwin->teleport_party(to.at);
+	Main_actor* avatar = gwin->get_main_actor();
+	std::string note   = std::string("Took the party to ") + to.name;
+	if (to.owner >= 0) {
+		Game_object_vector parts;
+		avatar->find_nearby(parts, to.owner, 30, 0);
+		if (!parts.empty()) {
+			const Game_object_shared deed = Friend_test_kit_create(797, 0);    // A scroll.
+			deed->set_quality(parts.front()->get_quality());
+			avatar->add(deed.get(), true);
+			note += to.owner == 251 ? ", with its deed" : ", with its title";
+		}
+	}
+	Friend_mode_notice(note);
+}
+
 // Host debug aid (F9 and F8, for the Class System): one group of
 // companions stands by the Avatar and joins the party, at level 7 or more
 // so all their skills are open; the Avatar at level 5 or more (Great
@@ -1630,10 +1670,29 @@ struct Friend_item {
 enum Friend_item_flags { friend_item_okay_to_take = 1, friend_item_invisible = 2 };
 }    // namespace
 
+// The vehicle under way (a ship, cart or the flying carpet): the host's
+// moving barge; on a guest, the one the host said is moving.  Its parts move
+// by the barge steps (Friend_mode_barge_pass), not item sync, which would
+// resend whole chunks and delete and remake the parts on a guest
+// (2026-11-01: the vehicle lagged and its riders snapped).
+static Game_object_weak friend_guest_barge;
+
+static Barge_object* Friend_riding_barge() {
+	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
+		const Game_object_shared barge = friend_guest_barge.lock();
+		return barge ? barge->as_barge() : nullptr;
+	}
+	return gwin->get_moving_barge();
+}
+
 // A world object that item sync covers: movable (ireg), not an actor, egg or
-// barge.
+// barge, nor part of a vehicle under way.
 static bool Friend_item_synced(Game_object* obj) {
-	return obj && !obj->as_actor() && !obj->is_egg() && !obj->as_barge() && dynamic_cast<Ireg_game_object*>(obj);
+	if (!obj || obj->as_actor() || obj->is_egg() || obj->as_barge() || !dynamic_cast<Ireg_game_object*>(obj)) {
+		return false;
+	}
+	Barge_object* riding = Friend_riding_barge();
+	return !riding || !riding->is_grouped_member(obj);
 }
 
 // The frame item sync sends: an animated object (a lit lamp post, a
@@ -1925,6 +1984,116 @@ static void Friend_reconcile_contents(Container_game_object* container, const st
 }
 
 // Guest: make a chunk's movable objects match the host's list.
+// Host: the vehicle under way, each step: started (1), stepped (2: from,
+// to, facing) or stopped (3), as barge_step blobs.  A guest moves its own
+// copy the same way, carrying whoever is aboard, so the riders' positions
+// from the host land where the vehicle already is.
+enum Friend_barge_step : unsigned char { friend_barge_start = 1, friend_barge_step = 2, friend_barge_stop = 3 };
+static Game_object_weak friend_sent_barge;
+static Tile_coord       friend_sent_barge_at;
+static int              friend_sent_barge_dir = -1;
+
+static void Friend_send_barge(unsigned char kind, const Tile_coord& from, const Tile_coord& to, int dir) {
+	if (kind != friend_barge_step) {    // Steps come every frame.
+		cout << "Friend Mode: barge " << (kind == friend_barge_start ? "started" : "stopped") << " at " << to.tx << ','
+			 << to.ty << ',' << to.tz << endl;
+	}
+	std::vector<unsigned char> payload{kind};
+	for (const Tile_coord& t : {from, to}) {
+		Friend_put16(payload, t.tx);
+		Friend_put16(payload, t.ty);
+		Friend_put8(payload, t.tz);
+	}
+	Friend_put8(payload, dir);
+	friend_session.send_blob(Friend_mode_session::Blob_kind::barge_step, payload);
+}
+
+static void Friend_mode_barge_pass() {
+	Barge_object*            barge = gwin->get_moving_barge();
+	const Game_object_shared was   = friend_sent_barge.lock();
+	if (Barge_object* old = was ? was->as_barge() : nullptr) {
+		const Tile_coord at = old->get_tile();
+		if (at != friend_sent_barge_at || old->get_dir() != friend_sent_barge_dir) {
+			Friend_send_barge(friend_barge_step, friend_sent_barge_at, at, old->get_dir());
+			friend_sent_barge_at  = at;
+			friend_sent_barge_dir = old->get_dir();
+		}
+		if (old != barge) {
+			Friend_send_barge(friend_barge_stop, at, at, old->get_dir());
+			friend_sent_barge.reset();
+		}
+	}
+	if (barge && barge != was.get()) {
+		friend_sent_barge     = weak_from_obj(barge);
+		friend_sent_barge_at  = barge->get_tile();
+		friend_sent_barge_dir = barge->get_dir();
+		Friend_send_barge(friend_barge_start, friend_sent_barge_at, friend_sent_barge_at, friend_sent_barge_dir);
+	}
+}
+
+// Guest: the barge whose reference tile is 'at', or null.
+static Game_object_shared Friend_barge_at(const Tile_coord& at) {
+	Game_map* map = gwin->get_map();
+	const int cx  = at.tx / c_tiles_per_chunk;
+	const int cy  = at.ty / c_tiles_per_chunk;
+	if (cx >= c_num_chunks || cy >= c_num_chunks || !map->is_chunk_read(cx, cy)) {
+		return nullptr;
+	}
+	Object_iterator next(map->get_chunk(cx, cy)->get_objects());
+	while (Game_object* obj = next.get_next()) {
+		if (obj->as_barge() && obj->get_tile() == at) {
+			return obj->shared_from_this();
+		}
+	}
+	return nullptr;
+}
+
+static void Friend_mode_apply_barge(const std::vector<unsigned char>& data) {
+	if (data.size() < 12) {
+		return;
+	}
+	auto tile = [&](std::size_t at) {
+		return Tile_coord(data[at] | (data[at + 1] << 8), data[at + 2] | (data[at + 3] << 8), data[at + 4]);
+	};
+	const unsigned char kind = data[0];
+	const Tile_coord    from = tile(1);
+	const Tile_coord    to   = tile(6);
+	const int           dir  = data[11];
+	Game_object_shared  obj  = friend_guest_barge.lock();
+	if (!obj || obj->get_tile() != from) {
+		obj = Friend_barge_at(from);
+	}
+	Barge_object* barge = obj ? obj->as_barge() : nullptr;
+	if (kind != friend_barge_step) {    // Steps come every frame.
+		cout << "Friend Mode: barge " << (kind == friend_barge_start ? "started" : "stopped") << " at " << to.tx << ','
+			 << to.ty << ',' << to.tz << (barge ? "" : " (not found here)") << endl;
+	}
+	if (kind == friend_barge_stop || !barge) {
+		friend_guest_barge.reset();    // Item sync has its parts again.
+		return;
+	}
+	// Its parts and riders at once (also when we join mid-ride): until it
+	// knows them, item sync would take parts the host leaves out of a
+	// chunk (the vehicle under way) for gone, and delete them (2026-11-01:
+	// half a ship lying across a chunk border vanished).
+	if (kind == friend_barge_start || friend_guest_barge.lock() != obj) {
+		barge->gather();
+	}
+	friend_guest_barge = obj;
+	if (kind == friend_barge_step) {
+		if (dir != barge->get_dir()) {
+			barge->face_direction(dir * 2);
+		}
+		if (barge->get_tile() != to) {
+			barge->move(to.tx, to.ty, to.tz);
+			// The host takes its steps a tile at a time, each scrolling a
+			// tile; ours can be two at once, so the view catches up here.
+			for (int i = 0; i < 4 && gwin->scroll_if_needed(barge->get_center()); ++i) {
+			}
+		}
+	}
+}
+
 static void Friend_mode_apply_chunk(const std::vector<unsigned char>& data) {
 	if (data.size() < 6) {
 		return;
@@ -3577,11 +3746,15 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	// (848), harpsichord, xylophone and harp (689, 690, 745), the fair's
 	// strength tester, Virtue Roulette Wheel, Triples and Rat Race (743,
 	// 725, 809, 763), puppet show (503), stocks (708), guillotines (709,
-	// 734) and archery target (735).  Decor is what has no use.
+	// 734) and archery target (735).  Vehicles (Friend_vehicle_action),
+	// 2026-11-01: the gangplank (150 lowered, 781 raised), sails (251),
+	// carts (301, 652, 660, 757, 773, 774), the draft horse (796) and the
+	// flying carpet (840).  The pool of water (893, fountains: a drink;
+	// was decor).  Decor is what has no use.
 	static const std::unordered_set<int> usable{
 			583, 696, 787, 788, 810, 823, 837, 949, 950, 1011, 410, 261, 651, 431, 470, 740, 719, 741,
 			258, 434, 210, 307, 252, 695, 284, 744, 729, 848, 689, 690, 745, 743, 725, 809, 763, 503,
-			708, 709, 734, 735};
+			708, 709, 734, 735, 150, 781, 251, 301, 652, 660, 757, 773, 774, 796, 840, 893};
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
 	// walls (828, 845) that slide open.
 	static const std::unordered_set<int> interactive{290, 291, 322, 372, 435, 481, 526, 657, 678, 828, 845, 889};
@@ -3609,6 +3782,41 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 		return Friend_thing_group::loot;
 	}
 	return Friend_thing_group::decor;
+}
+
+// What Space does to part of a ship, cart or the flying carpet, from the
+// game's own scripts: the gangplank's shape says whether it is down (150)
+// or up (781); sails, carts and the carpet are going while their barge is
+// the one moving (Exult's answer to flag 10).  Empty for anything else.
+// Driving is the Avatar's: guests aren't offered these.
+static std::string Friend_vehicle_action(Game_object* obj) {
+	if (!GAME_BG) {
+		return {};
+	}
+	auto moving = [obj]() {
+		Barge_object* barge = Get_barge(obj);    // A search: only for vehicles.
+		return barge && barge == gwin->get_moving_barge();
+	};
+	switch (obj->get_shapenum()) {
+	case 150:
+		return "Raise Gangplank";
+	case 781:
+		return "Lower Gangplank";
+	case 251:
+		return moving() ? "Furl Sails" : "Set Sail";
+	case 301:
+	case 652:
+	case 660:
+	case 757:
+	case 773:
+	case 774:
+	case 796:
+		return moving() ? "Stop" : "Drive";
+	case 840:
+		return moving() ? "Land" : "Fly";
+	default:
+		return {};
+	}
 }
 
 // E offers things within this many tiles, and a pick on the map is dropped
@@ -4432,6 +4640,9 @@ static std::string Friend_space_hint() {
 	case Friend_lock::none:
 		break;
 	}
+	if (const std::string drive = Friend_vehicle_action(obj); !drive.empty()) {
+		return two(drive, "", pick_up);
+	}
 	if (Friend_is_usable_thing(obj)) {
 		const char* what = Friend_is_readable(obj) ? "Read" : obj->get_shapenum() == 893 ? "Drink" : "Use";
 		return two(what, "", pick_up);
@@ -4602,19 +4813,20 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		if (obj->as_actor() || obj->get_owner() || !obj->get_chunk()) {
 			continue;
 		}
+		if (Friend_mode_is_guest() && !Friend_vehicle_action(obj).empty()) {
+			continue;    // Ships, carts and the carpet are the Avatar's.
+		}
 		const Tile_coord         at    = obj->get_tile();
 		const Friend_thing_group group = Friend_thing_group_of(obj);
 		// Containers, bodies, signs, things one can pick up, and doors,
 		// lamps and levers to use, on screen within 18 tiles (2026-10-29;
 		// containers and signs were the whole screen).  All
 		// with a path to them that walls don't block, as Exult lets one
-		// take things.  Pools of water (fountains) are decor that can't be
-		// picked up.
+		// take things.
 		// Furniture fixed in the map (a cradle, a chair) can't be picked
 		// up but is used (2026-11-01: it was never offered).
 		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::usable
-							 || group == Friend_thing_group::furniture || Friend_is_usable_thing(obj)
-							 || (GAME_BG && obj->get_shapenum() == 893);
+							 || group == Friend_thing_group::furniture || Friend_is_usable_thing(obj);
 		const bool offered = obj->is_dragable() || fixture || group == Friend_thing_group::box
 							 || group == Friend_thing_group::sign;
 		if (Friend_thing_group_on(group) && offered && from.distance(at) <= friend_thing_reach_tiles
@@ -4628,6 +4840,20 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 	std::stable_sort(things.begin(), things.end(), [&](const Game_object* a, const Game_object* b) {
 		return from.distance(a->get_tile()) < from.distance(b->get_tile());
 	});
+	// The flying carpet is 72 pieces of one shape, a cart 18 and a ship two
+	// sails: one of each vehicle's actions, the nearest.  A ship's two
+	// gangplanks are on opposite sides, each its own.
+	std::map<std::pair<Barge_object*, std::string>, bool> seen;
+	things.erase(std::remove_if(things.begin(), things.end(),
+								[&](Game_object* obj) {
+									const std::string drive = Friend_vehicle_action(obj);
+									const int         shape = obj->get_shapenum();
+									if (drive.empty() || shape == 150 || shape == 781) {
+										return false;
+									}
+									return !seen.emplace(std::make_pair(Get_barge(obj), drive), true).second;
+								}),
+				 things.end());
 	return things;
 }
 
@@ -5054,6 +5280,28 @@ static void Friend_mode_set_follow(
 	}
 	if (reply) {
 		friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {static_cast<unsigned char>(on)}, player);
+	}
+}
+
+// Host: a ship, cart or the flying carpet set off.  Boarding seated
+// everyone, guests' companions too; each guest is now following (Y), with
+// its bar, so the party's AI has its companion during the ride and after,
+// until the guest walks (2026-11-01: a seated companion was left
+// following with no bar, and walking didn't end it).  The seat stays: the
+// ride carries it.
+void Friend_mode_vehicle_started() {
+	for (auto& [player, guest] : friend_guests) {
+		Actor* actor = guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr;
+		if (!actor || actor->is_dead() || (guest.following && !guest.menu_following)) {
+			continue;
+		}
+		// Following quietly while in a menu becomes the real thing, with
+		// the bar: the menu closing doesn't end it.
+		guest.menu_following = false;
+		Friend_mode_end_guest_attack(guest, "riding");
+		guest.following = true;
+		friend_session.send_blob(Friend_mode_session::Blob_kind::guest_follow, {1}, player);
+		cout << "Friend Mode: " << guest.name << " follows the Avatar (riding)" << endl;
 	}
 }
 
@@ -10965,6 +11213,7 @@ static void Handle_events() {
 			// Spectating guests (no companion) are kept in step too.
 			if (friend_session.connected() && friend_world_sent) {
 				const uint32 now = SDL_GetTicks();
+				Friend_mode_barge_pass();    // Every frame: the vehicle under way.
 				// A host drag lifts the item out of the world, and guests see
 				// it gone at once, the same as when a guest picks one up.
 				if (now >= friend_next_item_sync) {
@@ -11146,6 +11395,12 @@ static void Handle_events() {
 						Friend_mode_attack_for_guest(request, *guest);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_follow) {
 						const int what = request.empty() ? 0 : request[0];
+						cout << "Friend Mode: " << guest->name << " asks to follow ("
+							 << (what == friend_follow_menu_open    ? "menu open"
+								 : what == friend_follow_menu_close ? "menu closed"
+								 : what                              ? "Y: on"
+																	 : "Y: off")
+							 << ')' << endl;
 						if (what == friend_follow_menu_open) {
 							if (!guest->following) {    // Not if it follows already (Y).
 								Friend_mode_set_follow(requester, *guest, true, true, false);
@@ -11217,6 +11472,13 @@ static void Handle_events() {
 					}
 				} else {
 					guest.leash_return_at = 0;
+				}
+				// A script can set the whole party following (the flying
+				// carpet's landing does, a moment after it lands); a guest's
+				// own companion waits for its guest unless it follows (Y).
+				if (!guest.following && guest.attacker < 0 && actor->get_schedule_type() == Schedule::follow_avatar) {
+					actor->set_schedule_type(Schedule::wait);
+					cout << "Friend Mode: " << guest.name << "'s companion was set to follow; waits for them again" << endl;
 				}
 				if (actor->get_tile() != guest.last_state || actor->get_framenum() != guest.last_frame) {
 					guest.last_state = actor->get_tile();
@@ -11293,6 +11555,8 @@ static void Handle_events() {
 					}
 				} else if (blob_kind == Friend_mode_session::Blob_kind::chunk_objects) {
 					Friend_mode_apply_chunk(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::barge_step) {
+					Friend_mode_apply_barge(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::actor_inventory) {
 					Friend_mode_apply_inventory(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::object_speech) {
@@ -12381,8 +12645,10 @@ static void Handle_event(SDL_Event& event) {
 		return;
 	}
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F8
-		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))) {
-		if (event.key.mod & SDL_KMOD_SHIFT) {
+		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI))) {
+		if (event.key.mod & SDL_KMOD_ALT) {
+			Friend_mode_visit_next_vehicle();    // Carpet, ship, cart (macOS keeps Ctrl+F8).
+		} else if (event.key.mod & SDL_KMOD_SHIFT) {
 			Friend_mode_spawn_test_creatures(true);    // A rat, a wolf and a rabbit.
 		} else {
 			Friend_mode_gather_companions(true);    // F8: the second group.

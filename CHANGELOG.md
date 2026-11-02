@@ -29,7 +29,7 @@ both in `--version` and the version files saved with each game.
 ### Changed
 
 - **Co-op:** hosts and guests need the same release (the co-op protocol is
-  now 38).
+  now 39).
 - **Winches:** the Target System offers them with levers and switches, and
   Space turns them.
 - **Locks:** with a locked chest or door targeted, Space says Unlock and
@@ -42,6 +42,19 @@ both in `--version` and the version files saved with each game.
   instruments, the fair's games, stocks and more, with levers and
   switches. Torches on walls come with lamps, and furniture fixed in
   place (cradles, chairs) is offered when Furniture is on.
+- **Ships, carts and the flying carpet:** the Target System offers their
+  parts with levers and switches, and Space says what it will do: Lower
+  or Raise Gangplank, Set Sail or Furl Sails, Drive or Stop for a cart
+  or its horse, Fly or Land for the carpet. They're the Avatar's to
+  drive, so guests aren't offered them. When a ride sets off, guests go
+  into Follow (Y), with its bar, and walking takes their companion back as
+  usual; before, a companion was left following after the ride with no
+  bar, and walking didn't end it. On a guest's screen the vehicle now
+  moves in step with the host, its riders aboard, instead of lagging
+  behind with the riders snapping into place.
+- **Fountains:** pools of water are in the Target System's Usable group
+  (with levers and switches) instead of Decor, so they're offered without
+  turning Decor on.
 - **Shared experience:** every kill's experience is shared by the party
   members near it (alive and awake), divided among them with a small
   bonus for each extra member, so healers and support companions level

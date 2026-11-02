@@ -4717,6 +4717,11 @@ void Main_actor::get_followers() const {
 		if (!npc || npc->get_flag(Obj_flags::asleep) || npc->is_dead()) {
 			continue;
 		}
+		// Friend Mode: a guest's companion goes where its guest takes it
+		// (one left seated after a ride would otherwise follow from here).
+		if (Friend_mode_player_playing(npc) >= 0) {
+			continue;
+		}
 		const int sched = npc->get_schedule_type();
 		// Skip if in combat or set to 'wait'.
 		if (sched != Schedule::combat && sched != Schedule::wait &&

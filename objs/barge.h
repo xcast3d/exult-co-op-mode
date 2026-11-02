@@ -91,6 +91,10 @@ public:
 		return false;
 	}
 
+	int get_dir() const {    // 0=N, 1=E, 2=S, 3=W (Friend Mode syncs it).
+		return dir;
+	}
+
 	int get_xtiles() const {    // Dims. in tiles.
 		return xtiles;
 	}

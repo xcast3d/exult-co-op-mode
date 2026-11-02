@@ -182,6 +182,10 @@ void Friend_close_door_behind();
 // A party member's walk went through 'door', opened from 'from': it closes
 // once the party is through.  False if 'walker' isn't the party's (close
 // it at once).
+// Host: a vehicle set off; guests follow the Avatar until they walk.
+void Friend_mode_vehicle_started();
+// The player playing 'actor' (not following), or -1.
+int Friend_mode_player_playing(const Actor* actor);
 bool Friend_door_passed(Actor* walker, Game_object* door, const Tile_coord& from);
 // Items guests may use: food, potions, the bucket and pools of water on
 // their own companion; keys and lockpicks on a door or chest they pick; the

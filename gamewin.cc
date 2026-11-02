@@ -687,6 +687,7 @@ void Game_window::set_moving_barge(Barge_object* b) {
 			b->set_to_gather();
 		}
 		landing_barge = nullptr;    // Boarding cancels any pending landing glide.
+		Friend_mode_vehicle_started();    // Guests follow until they walk.
 	} else if (!b && moving_barge) {
 		moving_barge->done();    // No longer 'barging'.
 		// Smooth scroll: prevent jerkiness on offboarding, especially the flying carpet.

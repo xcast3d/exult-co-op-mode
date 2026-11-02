@@ -31,7 +31,7 @@ they go on to the next, then "No target", then round again.
 | Decor | off | takes | anything not in another group |
 | Furniture | off | uses (Shift: picks up) | the list below; also pieces fixed in the map, which can't be picked up (2026-11-01: they were never offered, so the cradles in Lord British's castle never came up) |
 | Doors, hidden walls, lamps | on | uses (a locked one: Unlock with a key that fits, else Pick Lock with lockpicks where they work; 2026-11-01) | doors, secret walls (828, 845), shutters, sconces, curtains, lamp posts, torches fixed on walls (595, 701 that can't be picked up; 2026-11-01). On by default since 2026-10-24 (was off: with it on, E finds secret walls, which Black Gate means to be found by looking) |
-| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture), beds (696, 1011) and the bed roll (583, was loot; Space sleeps, 2026-10-29), winches (949, 950; 2026-10-31). From a scan of every shape with a script that E never offered (2026-11-01): the mining machine (410, the mines' ore extractor), loom (261), spinning wheel (651), bellows (431), wells (470, 740), water troughs (719, 741), keg and cask (258, 434), chicken coop (210), laboratory burner (307), grandfather clocks (252, 695), sundial (284), telescope (744), crystal ball (729), mirror (848), harpsichord, xylophone, harp (689, 690, 745), the fair's strength tester, Virtue Roulette Wheel, Triples, Rat Race (743, 725, 809, 763), puppet show (503), stocks (708), guillotines (709, 734), archery target (735). Decor is what has no use (2026-10-23) |
+| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture), beds (696, 1011) and the bed roll (583, was loot; Space sleeps, 2026-10-29), winches (949, 950; 2026-10-31). From a scan of every shape with a script that E never offered (2026-11-01): the mining machine (410, the mines' ore extractor), loom (261), spinning wheel (651), bellows (431), wells (470, 740), water troughs (719, 741), keg and cask (258, 434), chicken coop (210), laboratory burner (307), grandfather clocks (252, 695), sundial (284), telescope (744), crystal ball (729), mirror (848), harpsichord, xylophone, harp (689, 690, 745), the fair's strength tester, Virtue Roulette Wheel, Triples, Rat Race (743, 725, 809, 763), puppet show (503), stocks (708), guillotines (709, 734), archery target (735). Vehicles (2026-11-01; Space names the action from the vehicle's state, host and single player only): the gangplank (150 lowered, 781 raised), sails (251), carts (301, 652, 660, 757, 773, 774) and the draft horse (796), the flying carpet (840). The pool of water (893, fountains; Space drinks; was decor, 2026-11-01). Decor is what has no use (2026-10-23) |
 | Signs, plaques, graves | on | reads | sign (379), plaque (820), tombstone (715); picture signs (360, 361) have nothing to read |
 
 **Loot (besides weapons, armour and ammunition):** pocketwatch, cloth map,
@@ -55,9 +55,9 @@ spindle of thread, dough, desk items, sack of wheat, jar, glass item, cannon
 ball, log saw, plate, baby, stuffed toy, alchemist's apparatus, music box,
 small orrery, orrery viewer, stone chips, diaper,
 pitcher, cloth, kitchen items, thumbscrews, test tubes, pieces of wood, pot,
-bee stinger, tongs, horseshoe, plant, haystack. Also the pool of water
-(893, Black Gate's fountains): it can't be picked up, but E offers it within
-6 tiles while decor is on, and Space drinks (2026-10-22).
+bee stinger, tongs, horseshoe, plant, haystack. The pool of water (893,
+Black Gate's fountains) was here until 2026-11-01; it's Usable now, and
+Space drinks.
 
 ## Borderline, for review
 
