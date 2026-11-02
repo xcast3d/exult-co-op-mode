@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "gamewin.h"
 #include "items.h"
 #include "mouse.h"
+#include "qotcupdates.h"
 
 #include <algorithm>
 #include <string>
@@ -346,6 +347,13 @@ void Gamemenu_gump::createButtons() {
 				this, &Gamemenu_gump::open_coop, "Co-Op Mode", margin, yForRow(y++), preferred_button_width, 11);
 	}
 #endif
+#ifdef QOTC_UPDATES
+	if (QOTC_updates_on()) {
+		buttons[id_updates] = std::make_unique<Gamemenu_button>(
+				this, &Gamemenu_gump::check_for_updates, "Check for Updates", margin, yForRow(y++),
+				preferred_button_width, 11);
+	}
+#endif
 #if !defined(SDL_PLATFORM_IOS) && !defined(ANDROID)
 	if (!gwin->is_in_exult_menu()) {
 		buttons[id_main_menu] = std::make_unique<Gamemenu_button>(
@@ -436,6 +444,15 @@ void Gamemenu_gump::game_engine_options() {
 void Gamemenu_gump::open_coop() {
 	Coop_options_gump coop;
 	gumpman->do_modal_gump(&coop, Mouse::hand);
+}
+
+// The updater's own window says what it found; the menu closes so it
+// isn't left behind it.
+void Gamemenu_gump::check_for_updates() {
+#ifdef QOTC_UPDATES
+	QOTC_check_for_updates();
+#endif
+	done = true;
 }
 
 void Gamemenu_gump::input_options() {

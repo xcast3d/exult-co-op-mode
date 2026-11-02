@@ -1,8 +1,9 @@
 # Updates
 
 Status: **Mac built and tested locally 2026-11-02** (Sparkle 2.10.1); not
-in a release yet. Windows (WinSparkle) is not started. The web build needs
-none: a redeploy is the update.
+in a release yet. **Windows written 2026-11-02** (WinSparkle 0.9.4, an
+Inno Setup installer), not yet built or tried. The web build needs none: a
+redeploy is the update.
 
 ## How it works for players
 
@@ -17,8 +18,16 @@ Only `Exult.app` is replaced. Saves and game data
 (`~/Library/Preferences/exult.cfg`) are outside the app and untouched
 (checked in the test below).
 
+On Windows the same feed idea, `appcast-windows.xml`: WinSparkle checks it
+daily, and the game menu has **Check for Updates** (on both platforms).
+Install downloads our installer, checks its signature and runs it quietly
+(`/SILENT`): the game asks "really quit?", and once it has closed the
+installer replaces the install and starts the game again. It installs where
+the player first installed it.
+
 Builds before this one (e.g. `d2597e4`) have no updater: players download
-the first updating build by hand, once.
+the first updating build by hand, once. On Windows that is the installer,
+which replaces the zipped folder.
 
 ## The pieces
 
@@ -35,6 +44,26 @@ the first updating build by hand, once.
     Sparkle compares; `CFBundleShortVersionString` = `QOTC_VERSION`;
   - `SUFeedURL`, `SUPublicEDKey`, `SUEnableAutomaticChecks`.
 - **The feed**: `tools/downloads/deploy.sh` (see below).
+
+On Windows:
+
+- **WinSparkle**: `tools/friend-mode/get-winsparkle.sh` puts a pinned,
+  checksummed release in `third_party/build/winsparkle/` (git-ignored).
+  `Makefile.mingw` finds it, defines `QOTC_WINSPARKLE`, links
+  `WinSparkle.dll` and installs it next to `Exult.exe`.
+- **The code**: `win32/qotcupdates.cc`, from the same place in `Init()`. It
+  holds the feed URL and the public key, gives WinSparkle the build number
+  to compare, and turns a shutdown request into the window's close (so the
+  player is asked). It also holds a named mutex,
+  `QuestOfTheCompanionsRunning`, while the game runs. Updates are off in
+  portable mode (`-p`) and for a build with no number.
+- **The installer**: `win32/qotc_installer.iss` (Inno Setup), made by the
+  workflow. Per user (`%LOCALAPPDATA%\Programs\Quest of the Companions` by
+  default), no administrator prompt. Its `AppId` must never change: it's
+  how an update finds the install. Run silently, it waits up to a minute for
+  the mutex to go, then asks to close the game, and starts the game again
+  when done. It leaves `blackgate\` and `serpentisle\` (the player's game
+  data) alone, through updates and uninstalling.
 
 ## The signing key
 
@@ -53,14 +82,17 @@ update again** (players would have to download by hand), so keep a copy
 somewhere safe, e.g. a password manager. For CI later it becomes a
 GitHub Actions secret, passed with `--ed-key-file -`.
 
-## Releasing a Mac build
+## Releasing
 
 The usual release build ([macOS setup](macos-setup.md#the-mac-build)),
 after `tools/friend-mode/get-sparkle.sh` once, then:
 
 ```sh
-tools/downloads/deploy.sh Exult-U7-QOTC-macOS-arm64-<commit>.dmg Exult-U7-QOTC-Windows-x64-<commit>.zip
+tools/downloads/deploy.sh Exult-U7-QOTC-macOS-arm64-<commit>.dmg Exult-U7-QOTC-Windows-x64-<commit>-setup.exe
 ```
+
+The installer is the workflow's `exult-friend-mode-windows-setup-<commit>`
+artifact ([Windows build](windows-build.md)).
 
 For a macOS dmg whose app has the updater, deploy.sh zips the app (with
 `ditto`, as Finder does: other zippers leave files in Sparkle.framework that
@@ -68,6 +100,14 @@ Gatekeeper rejects) as `<name>-update.zip`, signs it, and adds it to
 `appcast-macos.xml`. It refuses a build number that isn't higher than every
 build already in the feed, before copying anything. The update window links
 to the site's changelog.
+
+For a Windows `-setup.exe`, deploy.sh takes the build number and version
+from the commit in its name (so that commit must be in this repository),
+signs it with Sparkle's `sign_update` (WinSparkle checks the same EdDSA
+signatures), and writes `appcast-windows.xml` with it as the one update,
+run with `/SILENT /SP- /NOCANCEL /NORESTART`. It too refuses a build that
+isn't higher than the feed's. `latest/windows` then points at the
+installer.
 
 The build number only goes up with commits, so release from a commit
 (nothing uncommitted), as the release steps already say.
@@ -100,6 +140,11 @@ live one. How it was tested on 2026-11-02:
 Not tried yet: the interactive path (Check for Updates… → Install and
 Relaunch), Sparkle's windows over a fullscreen game, and a download from
 the live site with Gatekeeper's quarantine.
+
+On Windows (not done yet), the same way: install a build, make a second
+installer from a later commit, serve a feed for it locally, and run the
+installed game with `QOTC_UPDATE_FEED=http://<this PC>:8650/appcast-windows.xml`.
+Then the game menu's Check for Updates.
 
 ## Windows: where players' data lives
 

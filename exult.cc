@@ -108,9 +108,7 @@
 #ifdef HAVE_ZIP_SUPPORT
 #	include "files/zip/unzip.h"
 #endif
-#ifdef QOTC_SPARKLE
-#	include "macosx/qotcupdates.h"
-#endif
+#include "qotcupdates.h"
 
 #include <algorithm>
 #include <map>
@@ -10476,8 +10474,8 @@ static void Init() {
 		exit(-1);
 	}
 	std::atexit(SDL_Quit);
-#ifdef QOTC_SPARKLE
-	QOTC_start_updates();    // Update checks (macosx/qotcupdates.mm).
+#ifdef QOTC_UPDATES
+	QOTC_start_updates();    // Update checks (qotcupdates.h).
 #endif
 
 	// KBD repeat should be nice.

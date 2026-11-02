@@ -1,7 +1,7 @@
 #!/bin/bash
 # Put Quest of the Companions builds online at downloads.xcast3d.com/u7-qotc/:
 #
-#   tools/downloads/deploy.sh Exult-U7-QOTC-macOS-arm64-abc1234.dmg Exult-U7-QOTC-Windows-x64-abc1234.zip
+#   tools/downloads/deploy.sh Exult-U7-QOTC-macOS-arm64-abc1234.dmg Exult-U7-QOTC-Windows-x64-abc1234-setup.exe
 #
 # The builds are copied into public/u7-qotc/ (git-ignored), which keeps
 # every build ever deployed; the whole folder is uploaded each time, so a
@@ -16,6 +16,10 @@
 #     (Sparkle): each new macOS .dmg whose app has the updater gets an
 #     "-update.zip" of that app, signed and added to the feed.  Its build
 #     number must be higher than every build already in the feed.
+#   u7-qotc/appcast-windows.xml  the same for Windows (WinSparkle): each
+#     new Windows "-setup.exe" is signed and becomes the feed's one update.
+#     Its build number and version come from the commit in its name, which
+#     must be in this repository.
 #
 # Needs wrangler logged in to the xcast3d.com account (npx wrangler login),
 # Sparkle's tools (tools/friend-mode/get-sparkle.sh) and the private update
@@ -29,6 +33,8 @@ max_bytes=$((25 * 1024 * 1024))
 sparkle_bin="${SPARKLE_BIN:-$here/../../third_party/build/sparkle/bin}"
 key_file="${SPARKLE_KEY_FILE:-$HOME/.u7-qotc/sparkle-private-key}"
 feed="$builds/appcast-macos.xml"
+win_feed="$builds/appcast-windows.xml"
+repo="$here/../.."
 
 add_file() {
 	if [ "$(stat -f %z "$1")" -gt "$max_bytes" ]; then
@@ -80,6 +86,55 @@ add_mac_update() {
 	echo "Added build $build to appcast-macos.xml"
 }
 
+# The highest build in a feed, or nothing.
+feed_newest() {
+	grep -oE 'sparkle:version(>|=")[0-9]+' "$1" 2>/dev/null | grep -oE '[0-9]+$' | sort -n | tail -1 || true
+}
+
+# A Windows installer, signed and made the Windows feed's update.  WinSparkle
+# runs it with installerArguments: quietly, over the install, and it starts
+# the game again (win32/qotc_installer.iss).
+add_windows_update() {
+	local exe="$1" name commit build version newest signature
+	name="$(basename "$exe")"
+	commit="$(echo "$name" | sed -nE 's/^.*-([0-9a-f]{7,40})-setup\.exe$/\1/p')"
+	if [ -z "$commit" ] || ! git -C "$repo" cat-file -e "$commit^{commit}" 2>/dev/null; then
+		echo "$name: no commit of this repository in its name, so no build number." >&2
+		exit 1
+	fi
+	build="$(git -C "$repo" rev-list --count "58f31e831..$commit")"
+	version="$(git -C "$repo" show "$commit:qotcversion.h" | sed -n 's/^#define QOTC_VERSION "\(.*\)"$/\1/p')"
+	newest="$(feed_newest "$win_feed")"
+	if [ -n "$newest" ] && [ "$build" -le "$newest" ]; then
+		echo "$name is build $build, but the Windows feed already has build $newest." >&2
+		exit 1
+	fi
+	signature="$("$sparkle_bin/sign_update" --ed-key-file "$key_file" -p "$exe")"
+	cat >"$win_feed" <<-EOF
+	<?xml version="1.0" encoding="utf-8"?>
+	<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+	  <channel>
+	    <title>Quest of the Companions</title>
+	    <link>https://xcast3d.com/u7-quest-of-the-companions/</link>
+	    <item>
+	      <title>Version $version (build $build)</title>
+	      <pubDate>$(LC_ALL=C date -u '+%a, %d %b %Y %H:%M:%S +0000')</pubDate>
+	      <sparkle:releaseNotesLink>https://xcast3d.com/u7-quest-of-the-companions/changelog.html</sparkle:releaseNotesLink>
+	      <enclosure url="https://downloads.xcast3d.com/u7-qotc/$name"
+	        sparkle:version="$build"
+	        sparkle:shortVersionString="$version"
+	        sparkle:os="windows-x64"
+	        sparkle:installerArguments="/SILENT /SP- /NOCANCEL /NORESTART"
+	        sparkle:edSignature="$signature"
+	        length="$(stat -f %z "$exe")"
+	        type="application/octet-stream"/>
+	    </item>
+	  </channel>
+	</rss>
+	EOF
+	echo "Windows feed: build $build ($version)"
+}
+
 mkdir -p "$builds"
 for file in "$@"; do
 	if [ ! -f "$file" ]; then
@@ -91,6 +146,7 @@ done
 for file in "$@"; do
 	case "$file" in
 	*macOS*.dmg) add_mac_update "$file" ;;
+	*Windows*-setup.exe) add_windows_update "$file" ;;
 	esac
 	add_file "$file"
 done
@@ -101,7 +157,7 @@ fi
 
 # Never upload an empty folder: that would take every build offline.
 shopt -s nullglob
-files=("$builds"/*.dmg "$builds"/*.zip)
+files=("$builds"/*.dmg "$builds"/*.zip "$builds"/*.exe)
 if [ ${#files[@]} -eq 0 ]; then
 	echo "No builds in $builds; give the files to deploy." >&2
 	exit 1
@@ -109,10 +165,13 @@ fi
 
 # Newest first, by the time each was added here.
 newest() {
-	ls -t "$builds"/$1 2>/dev/null | head -1 | xargs basename 2>/dev/null || true
+	local matches=("$builds"/$1)    # None with nullglob, so ls lists nothing else.
+	[ ${#matches[@]} -gt 0 ] && basename "$(ls -t "${matches[@]}" | head -1)" || true
 }
 mac="$(newest '*macOS*.dmg')"
-win="$(newest '*Windows*.zip')"
+# The installer once there is one; before that, the zipped folder.
+win="$(newest '*Windows*-setup.exe')"
+[ -n "$win" ] || win="$(newest '*Windows*.zip')"
 
 {
 	echo "/ https://xcast3d.com/u7-quest-of-the-companions/ 302"
@@ -131,7 +190,7 @@ win="$(newest '*Windows*.zip')"
 	<p><a href="https://xcast3d.com/u7-quest-of-the-companions/">About the project</a></p>
 	<ul>
 	EOF
-	ls -t "$builds" | grep -E '\.(dmg|zip)$' | grep -v -- '-update\.zip$' | while read -r name; do
+	ls -t "$builds" | grep -E '\.(dmg|zip|exe)$' | grep -v -- '-update\.zip$' | while read -r name; do
 		size="$(stat -f %z "$builds/$name")"
 		echo "<li><a href=\"$name\">$name</a> <small>$((size / 1024 / 1024)) MB</small></li>"
 	done

@@ -49,3 +49,13 @@ void QOTC_start_updates() {
 		[app_menu insertItem:item atIndex:at];
 	}
 }
+
+bool QOTC_updates_on() {
+	return updater_controller != nil;
+}
+
+void QOTC_check_for_updates() {
+	if (updater_controller != nil) {
+		[updater_controller checkForUpdates:nil];
+	}
+}

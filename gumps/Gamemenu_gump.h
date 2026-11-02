@@ -41,6 +41,7 @@ private:
 		id_class_system,
 		id_controller,
 		id_open_coop,
+		id_updates,
 		id_main_menu,
 		id_quit,
 		id_count
@@ -86,6 +87,7 @@ public:
 	void class_options();        // Friend Mode: companion skills.
 	void controller_page();      // Controller support: the pad's buttons.
 	void open_coop();    // Co-Op Mode: host, how guests join, closing.
+	void check_for_updates();    // Our updater's window (qotcupdates.h).
 
 	static void  do_exult_menu();
 	Gump_button* on_button(int mx, int my) override;

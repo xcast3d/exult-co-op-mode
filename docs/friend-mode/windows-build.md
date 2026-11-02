@@ -55,7 +55,9 @@ gh workflow run friend-mode-windows.yml -R xcast3d/exult-co-op-mode --ref featur
 The workflow uses MSYS2 UCRT64 (64-bit Windows 10 and 11, including Windows on
 Arm through emulation) and `Makefile.mingw`, like upstream's
 `ci-windows.yml`, but builds only `Exult.exe` (no Exult Studio, tools or
-installer) to save minutes. A run takes about 15–25 minutes, most of it
+Exult's own installers) to save minutes. It also fetches WinSparkle
+(`tools/friend-mode/get-winsparkle.sh`) and makes our installer
+(`win32/qotc_installer.iss`, with the Inno Setup the runner has). A run takes about 15–25 minutes, most of it
 installing MSYS2 packages. Starting a new run cancels one still going.
 
 ### Downloading the build
@@ -67,15 +69,23 @@ run on.
 
 1. On GitHub, open the repository's **Actions** tab, then the latest green
    **friend-mode-windows** run.
-2. Under **Artifacts**, download `exult-friend-mode-windows-<commit>` (you
-   must be signed in). It is a zip, kept for 14 days.
-3. Unzip it anywhere. The `Exult` folder has `Exult.exe`, the DLLs it
+2. Under **Artifacts** (you must be signed in; kept for 14 days):
+   - `exult-friend-mode-windows-setup-<commit>`: a zip holding the
+     installer, `Exult-U7-QOTC-Windows-x64-<commit>-setup.exe`. This is the
+     release download and the update
+     ([updates](updates.md#releasing)).
+   - `exult-friend-mode-windows-<commit>`: the same build as a folder, for
+     testing without installing.
+   From the Mac, `gh run download <run id> -R xcast3d/exult-co-op-mode`
+   fetches both.
+3. Run the installer (it installs for you alone, no administrator), or
+   unzip the folder anywhere. The `Exult` folder has `Exult.exe`, the DLLs it
    needs, `data/` (Exult's own data, not Ultima VII), `COPYING.txt`,
    `README.windows.txt`, these Friend Mode notes and `FRIEND-MODE-COMMIT.txt`
    (the commit it was built from).
 4. Add the game: copy the `STATIC` folder of your own Ultima VII into
-   `Exult\blackgate\` (Serpent Isle into `Exult\serpentisle\`), as
-   `README.windows.txt` says, then run `Exult.exe`. Game files are never
+   `blackgate\` in the install folder (Serpent Isle into `serpentisle\`),
+   as `README.windows.txt` says, then run `Exult.exe`. Game files are never
    in the zip.
 
 If a run fails, open it and read the **Build Exult** step; `stdout.txt` and

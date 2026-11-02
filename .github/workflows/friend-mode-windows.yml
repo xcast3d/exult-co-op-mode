@@ -1,7 +1,8 @@
 name: friend-mode-windows
 
 # Builds Exult with Friend Mode for 64-bit Windows (MSYS2 UCRT64) and uploads
-# a ready-to-run folder as a run artifact. Based on ci-windows.yml and
+# a ready-to-run folder and its installer (the download, and the update
+# WinSparkle installs; docs/friend-mode/updates.md) as run artifacts. Based on ci-windows.yml and
 # snapshots-windows.yml, trimmed to Exult.exe only to save Actions minutes.
 
 # Manual only, to save Actions minutes: build at milestones from the Actions
@@ -29,7 +30,7 @@ jobs:
           update: true
           release: true
           install: |
-            base-devel git zip
+            base-devel git zip unzip
             mingw-w64-ucrt-x86_64-toolchain mingw-w64-ucrt-x86_64-binutils mingw-w64-ucrt-x86_64-ntldd
             mingw-w64-ucrt-x86_64-sdl3 mingw-w64-ucrt-x86_64-sdl3-image
             mingw-w64-ucrt-x86_64-fluidsynth mingw-w64-ucrt-x86_64-libtimidity
@@ -66,11 +67,14 @@ jobs:
           RTC_PREFIX: ${{ github.workspace }}/third_party/build/windows
           CMAKE_GENERATOR: Ninja
         run: tools/friend-mode/build-rtc.sh
+      - name: Get WinSparkle
+        run: tools/friend-mode/get-winsparkle.sh
       - name: Build Exult
         run: |
           test -f third_party/build/windows/lib/libdatachannel.a
           make -j 4 -f Makefile.mingw U7PATH=out/Exult install
           test -f out/Exult/data/friend/cacert.pem
+          test -f out/Exult/WinSparkle.dll
           out/Exult/Exult.exe --version
       - name: Add notes
         run: |
@@ -80,10 +84,28 @@ jobs:
           cp docs/friend-mode/internet-play.md out/Exult/FRIEND-MODE-INTERNET.md
           git rev-parse HEAD > out/Exult/FRIEND-MODE-COMMIT.txt
           echo "SHORT_SHA=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+      # Inno Setup 6 comes with GitHub's Windows runners.
+      - name: Make installer
+        run: |
+          version="$(sed -n 's/^#define QOTC_VERSION "\(.*\)"$/\1/p' qotcversion.h)"
+          build="$(sed -n 's/^#define QOTC_BUILD //p' qotcbuild.h)"
+          test -n "$version" && test "$build" -gt 0
+          name="Exult-U7-QOTC-Windows-x64-$SHORT_SHA-setup"
+          (cd win32 && "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q \
+            "-DSRCDIR=$(cygpath -w ../out/Exult)" "-DQOTC_VERSION=$version" \
+            "-DQOTC_BUILD=$build" "-DOUTNAME=$name" qotc_installer.iss)
+          mkdir -p setup && mv "win32/$name.exe" setup/
       - name: Upload build
         uses: actions/upload-artifact@v7
         with:
           name: exult-friend-mode-windows-${{ env.SHORT_SHA }}
           path: out/
+          retention-days: 14
+          if-no-files-found: error
+      - name: Upload installer
+        uses: actions/upload-artifact@v7
+        with:
+          name: exult-friend-mode-windows-setup-${{ env.SHORT_SHA }}
+          path: setup/
           retention-days: 14
           if-no-files-found: error

@@ -175,7 +175,7 @@ QOTC_UPDATES_OBJ = macosx/qotcupdates.$(OBJEXT)
 EXULTLIBADD += $(QOTC_UPDATES_OBJ)
 EXULTDEPENDENCIES += $(QOTC_UPDATES_OBJ)
 
-$(QOTC_UPDATES_OBJ): $(srcdir)/macosx/qotcupdates.mm $(srcdir)/macosx/qotcupdates.h qotcbuild.h
+$(QOTC_UPDATES_OBJ): $(srcdir)/macosx/qotcupdates.mm $(srcdir)/qotcupdates.h qotcbuild.h
 	@mkdir -p macosx
 	$(CXX) -x objective-c++ -fobjc-arc $(DEFS) $(DEFAULT_INCLUDES) $(exult_CPPFLAGS) $(CXXFLAGS) -c -o $@ $(srcdir)/macosx/qotcupdates.mm
 endif
@@ -230,9 +230,11 @@ EXTRA_DIST = 	\
 	win32/exult_studio_installer.iss \
 	win32/exult_tools_installer.iss \
 	win32/glib-xp.patch \
+	win32/qotc_installer.iss \
+	win32/qotcupdates.cc \
 	win32/README-SDL.txt \
 	macosx/exult.icns \
-	macosx/qotcupdates.h \
+	qotcupdates.h \
 	macosx/qotcupdates.mm \
 	macosx/exult_studio_info.plist.in \
 	macosx/diskback.png \

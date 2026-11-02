@@ -410,6 +410,15 @@ FRIEND_RTC_LIBS:=$(addprefix $(FRIEND_RTC_DIR)/lib/,libdatachannel.a libjuice.a 
 	-liphlpapi -lbcrypt -lws2_32
 LIBS:=$(FRIEND_RTC_LIBS) $(LIBS)
 endif
+# Updates (win32/qotcupdates.cc): WinSparkle, which
+# tools/friend-mode/get-winsparkle.sh fetches.  Without it Exult still
+# builds, with no updater.
+WINSPARKLE_DIR:=third_party/build/winsparkle
+ifneq ($(wildcard $(WINSPARKLE_DIR)/x64/WinSparkle.dll),)
+WINSPARKLE_CPPFLAGS:=-DQOTC_WINSPARKLE -isystem $(WINSPARKLE_DIR)/include
+# GNU ld links a DLL's exports directly; no import library needed.
+LIBS:=$(WINSPARKLE_DIR)/x64/WinSparkle.dll $(LIBS)
+endif
 # Mbed TLS has no certificate authorities of its own and Windows has no PEM
 # list, so the lobby's certificate is checked against this one (MSYS2's
 # ca-certificates, Mozilla's list); friendrtc.cc looks for it in <DATA>/friend.
@@ -511,6 +520,9 @@ ES_SHAPES_OBJS:=\
 
 WIN32_OBJS:=\
 	win32/crash.o
+ifneq ($(WINSPARKLE_CPPFLAGS),)
+WIN32_OBJS += win32/qotcupdates.o
+endif
 
 OBJS += $(WIN32_OBJS)
 
@@ -538,7 +550,7 @@ CPPFLAGS:=$(strip -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"data\" \
 ifneq ($(ANDROID_CFLAGS),)
 CPPFLAGS += $(ANDROID_CFLAGS)
 endif
-CPPFLAGS += $(FRIEND_RTC_CPPFLAGS)
+CPPFLAGS += $(FRIEND_RTC_CPPFLAGS) $(WINSPARKLE_CPPFLAGS)
 
 PLUGIN_CPPFLAGS:=$(strip -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"data\" \
 	-DNOMINMAX=1 -D_USE_MATH_DEFINES -DHAVE_NETDB_H=0 $(SYSFLAGS) \
@@ -624,6 +636,7 @@ install: $(EXEC)
 	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
 	cp data/friend/title.shp $(U7PATH)/data/friend
 	if [ -f "$(FRIEND_CA_FILE)" ]; then cp "$(FRIEND_CA_FILE)" $(U7PATH)/data/friend/cacert.pem; fi
+	if [ -n "$(WINSPARKLE_CPPFLAGS)" ]; then cp $(WINSPARKLE_DIR)/x64/WinSparkle.dll $(U7PATH)/; cp $(WINSPARKLE_DIR)/COPYING.txt $(U7PATH)/WinSparkle-COPYING.txt; fi
 
 debug: $(EXEC)
 	mkdir -p $(U7PATH)
@@ -637,6 +650,7 @@ debug: $(EXEC)
 	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
 	cp data/friend/title.shp $(U7PATH)/data/friend
 	if [ -f "$(FRIEND_CA_FILE)" ]; then cp "$(FRIEND_CA_FILE)" $(U7PATH)/data/friend/cacert.pem; fi
+	if [ -n "$(WINSPARKLE_CPPFLAGS)" ]; then cp $(WINSPARKLE_DIR)/x64/WinSparkle.dll $(U7PATH)/; cp $(WINSPARKLE_DIR)/COPYING.txt $(U7PATH)/WinSparkle-COPYING.txt; fi
 
 mods: tools
 	for mod in $(MODS); do \

@@ -28,11 +28,18 @@ both in `--version` and the version files saved with each game.
 
 ### Added
 
-- **Updates on Mac:** the game checks for a new build once a day and
-  installs it when you quit, so there's no more downloading each release.
-  The app menu (exult) → Check for Updates… checks right away. Your saves
-  and settings aren't touched. (This build is the last one to download by
-  hand.)
+- **Updates:** the game checks for a new build once a day, so there's no
+  more downloading each release. On a Mac it installs when you quit. On
+  Windows it asks first, then closes the game (you're asked to quit as
+  usual), updates and starts it again. Game menu → Check for Updates checks
+  right away (on a Mac, also the app menu (exult) → Check for Updates…).
+  Your saves and settings aren't touched. (This build is the last one to
+  download by hand.)
+- **Windows installer:** Windows builds come as an installer instead of a
+  zip. It installs for you alone, with no administrator prompt, adds a
+  Start menu shortcut, and updates go where you installed it. Copy your
+  game data into its blackgate folder as before, or install into the
+  folder you've been using: your game data there stays.
 
 ### Changed
 
