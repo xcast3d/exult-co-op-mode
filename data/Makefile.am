@@ -247,7 +247,7 @@ friendskillsdir = $(datadir)/exult/friend/skills
 friendskills_DATA = friend/skills/skill_icons_colour.shp friend/skills/skill_icons_parchment.shp friend/skills/CREDITS.txt
 # The title menu's Quest of the Companions picture (game.cc).
 friendtitledir = $(datadir)/exult/friend
-friendtitle_DATA = friend/title.shp
+friendtitle_DATA = friend/title.shp friend/CREDITS.txt
 estudionewdir = $(datadir)/exult/estudio/new
 
 if DATA_FILES

@@ -3,10 +3,11 @@ Friend Mode skill icons (data/friend/skills/)
 skill_icons_colour.shp and skill_icons_parchment.shp: one 24x24 frame per
 companion skill, in the order of Classes() in friendclass.cc.
 
-The pictures were made for Friend Mode after icons from game-icons.net
-(https://game-icons.net/), used under the Creative Commons Attribution 3.0
-licence (https://creativecommons.org/licenses/by/3.0/). The reference icon
-for each skill, with its author:
+The pictures were made by xcast3d for Quest of the Companions, after
+icons from game-icons.net (https://game-icons.net/). Those are used
+under the Creative Commons Attribution 3.0 licence
+(https://creativecommons.org/licenses/by/3.0/). The reference icon for
+each skill, with its author:
 
  0  Iolo: Song of Warding - Bell shield by Lorc, https://game-icons.net/1x1/lorc/bell-shield.html
  1  Iolo: Song of Peace - Night sleep by Delapouite, https://game-icons.net/1x1/delapouite/night-sleep.html

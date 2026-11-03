@@ -52,7 +52,7 @@ OUT="$MAIN/web/out"
 rm -rf "$PKG"
 mkdir -p "$PKG/data/friend" "$OUT"
 cp "$MAIN"/data/*.flx "$MAIN"/data/*.txt "$PKG/data/"
-cp -R "$MAIN/data/friend/skills" "$MAIN/data/friend/title.shp" "$PKG/data/friend/"
+cp -R "$MAIN/data/friend/skills" "$MAIN/data/friend/title.shp" "$MAIN/data/friend/CREDITS.txt" "$PKG/data/friend/"
 cp "$MAIN/web/exult-web.cfg" "$PKG/exult.cfg"
 
 # The final link, as libtool did it, to a web page.

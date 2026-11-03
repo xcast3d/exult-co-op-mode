@@ -634,7 +634,7 @@ install: $(EXEC)
 	cp data/exult_si.flx $(U7PATH)/data
 	mkdir -p $(U7PATH)/data/friend/skills
 	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
-	cp data/friend/title.shp $(U7PATH)/data/friend
+	cp data/friend/title.shp data/friend/CREDITS.txt $(U7PATH)/data/friend
 	if [ -f "$(FRIEND_CA_FILE)" ]; then cp "$(FRIEND_CA_FILE)" $(U7PATH)/data/friend/cacert.pem; fi
 	if [ -n "$(WINSPARKLE_CPPFLAGS)" ]; then cp $(WINSPARKLE_DIR)/x64/WinSparkle.dll $(U7PATH)/; cp $(WINSPARKLE_DIR)/COPYING.txt $(U7PATH)/WinSparkle-COPYING.txt; fi
 
@@ -648,7 +648,7 @@ debug: $(EXEC)
 	cp data/exult_si.flx $(U7PATH)/data
 	mkdir -p $(U7PATH)/data/friend/skills
 	cp data/friend/skills/skill_icons_colour.shp data/friend/skills/skill_icons_parchment.shp data/friend/skills/CREDITS.txt $(U7PATH)/data/friend/skills
-	cp data/friend/title.shp $(U7PATH)/data/friend
+	cp data/friend/title.shp data/friend/CREDITS.txt $(U7PATH)/data/friend
 	if [ -f "$(FRIEND_CA_FILE)" ]; then cp "$(FRIEND_CA_FILE)" $(U7PATH)/data/friend/cacert.pem; fi
 	if [ -n "$(WINSPARKLE_CPPFLAGS)" ]; then cp $(WINSPARKLE_DIR)/x64/WinSparkle.dll $(U7PATH)/; cp $(WINSPARKLE_DIR)/COPYING.txt $(U7PATH)/WinSparkle-COPYING.txt; fi
 

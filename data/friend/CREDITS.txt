@@ -1,0 +1,12 @@
+Quest of the Companions artwork (data/friend/)
+
+title.shp, the title menu's "Quest of the Companions" under Black Gate's
+logo (and web/quest-of-the-companions-title.avif, the same art for the web
+build's page): drawn by xcast3d for Quest of the Companions, and converted
+to Ultima VII's intro palette with tools/friend-mode/title_to_shp.py.
+
+skills/: the companion skill icons, made by xcast3d for Quest of the
+Companions; their credits are in skills/CREDITS.txt.
+
+Both are part of Quest of the Companions and, like the rest of it, under
+the GNU General Public License, version 2 or later (COPYING).
