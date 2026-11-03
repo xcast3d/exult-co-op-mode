@@ -108,6 +108,7 @@
 #ifdef HAVE_ZIP_SUPPORT
 #	include "files/zip/unzip.h"
 #endif
+#include "qotcservices.h"
 #include "qotcupdates.h"
 
 #include <algorithm>
@@ -7034,9 +7035,10 @@ bool Friend_mode_hosting() {
 }
 
 // The lobby that hands out codes (tools/lobby); "off" (or empty) for none.
+// The default is the build's (qotcservices.h).
 static std::string Friend_mode_lobby_url() {
 	std::string url;
-	config->value("config/friend/lobby_url", url, "wss://u7-multiplayer-lobby.xcast3d.com");
+	config->value("config/friend/lobby_url", url, QOTC_LOBBY_URL);
 	return url == "off" ? std::string() : url;
 }
 

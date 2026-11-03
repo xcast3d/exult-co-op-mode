@@ -37,6 +37,8 @@ key_file="${SPARKLE_KEY_FILE:-$HOME/.u7-qotc/sparkle-private-key}"
 feed="$builds/appcast-macos.xml"
 win_feed="$builds/appcast-windows.xml"
 repo="$here/../.."
+# Our feeds and update key, as every build has them.
+. "$repo/tools/friend-mode/qotc-release.env"
 
 add_file() {
 	if [ "$(stat -f %z "$1")" -gt "$max_bytes" ]; then
@@ -49,16 +51,20 @@ add_file() {
 
 # A macOS .dmg's app, zipped for Sparkle and added to the feed.  ditto zips
 # the way Finder does; other zippers can leave files in Sparkle.framework
-# that Gatekeeper rejects.
+# that Gatekeeper rejects.  An app without our feed and key (configure
+# --with-qotc-services) is refused: it would never find another update.
 add_mac_update() {
-	local dmg="$1" mount app build newest zip work commit
+	local dmg="$1" mount app build newest zip work commit feed_url key
 	mount="$(mktemp -d)"
 	hdiutil attach -quiet -nobrowse -readonly -noautoopen -mountpoint "$mount" "$dmg"
 	app="$(find "$mount" -maxdepth 1 -name '*.app' | head -1)"
-	if [ -z "$app" ] || ! /usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist" >/dev/null 2>&1; then
+	feed_url="$(/usr/libexec/PlistBuddy -c 'Print :SUFeedURL' "$app/Contents/Info.plist" 2>/dev/null || true)"
+	key="$(/usr/libexec/PlistBuddy -c 'Print :SUPublicEDKey' "$app/Contents/Info.plist" 2>/dev/null || true)"
+	if [ -z "$app" ] || [ "$feed_url" != "$QOTC_FEED_MACOS" ] || [ "$key" != "$QOTC_UPDATE_KEY" ]; then
 		hdiutil detach -quiet "$mount"
-		echo "$(basename "$dmg") has no updater: not added to the feed"
-		return
+		echo "$(basename "$dmg") doesn't have our updater (feed: ${feed_url:-none}); build it with" >&2
+		echo "./configure --with-qotc-services=tools/friend-mode/qotc-release.env" >&2
+		exit 1
 	fi
 	codesign --verify --deep --strict "$app"
 	build="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$app/Contents/Info.plist")"

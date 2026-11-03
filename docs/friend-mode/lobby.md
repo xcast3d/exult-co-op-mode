@@ -95,8 +95,10 @@ never carries the game.
   the project's own domain (decided 2026-10-20), so the Worker can move
   without breaking builds already handed out.
 - In Exult: the setting `config/friend/lobby_url` in `exult.cfg`,
-  defaulting to that address, so anyone can point a copy at their own
-  lobby; `off` turns lobby codes off (hosting by address only). Only
+  defaulting to the build's lobby (`QOTC_LOBBY_URL`, qotcservices.h: that
+  address unless a build names another; [your own
+  builds](updates.md#your-own-builds)), so anyone can point a copy at their
+  own lobby; `off` turns lobby codes off (hosting by address only). Only
   `wss://` addresses are taken, except `ws://127.0.0.1:8787` and other
   addresses on the same machine, for `wrangler dev`.
 - No secrets in the game: TURN's key is a secret of the Worker, which hands

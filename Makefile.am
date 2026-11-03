@@ -137,7 +137,8 @@ EXULTSOURCES =	\
 	version.cc	\
 	version.h	\
 	qotcversion.cc	\
-	qotcversion.h
+	qotcversion.h	\
+	qotcservices.h
 
 EXULTLIBS = \
 	pathfinder/libpathfinder.la		\

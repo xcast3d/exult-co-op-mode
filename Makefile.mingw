@@ -410,14 +410,27 @@ FRIEND_RTC_LIBS:=$(addprefix $(FRIEND_RTC_DIR)/lib/,libdatachannel.a libjuice.a 
 	-liphlpapi -lbcrypt -lws2_32
 LIBS:=$(FRIEND_RTC_LIBS) $(LIBS)
 endif
+# Quest of the Companions' services (qotcservices.h): the update feed and
+# the key that checks updates, and optionally the lobby, from a file of
+# NAME=value lines (QOTC_SERVICES=tools/friend-mode/qotc-release.env, our
+# release builds), or each on make's command line.
+ifneq ($(QOTC_SERVICES),)
+include $(QOTC_SERVICES)
+endif
+ifneq ($(QOTC_LOBBY_URL),)
+QOTC_SERVICES_CPPFLAGS:=-DQOTC_LOBBY_URL=\"$(QOTC_LOBBY_URL)\"
+endif
 # Updates (win32/qotcupdates.cc): WinSparkle, which
-# tools/friend-mode/get-winsparkle.sh fetches.  Without it Exult still
-# builds, with no updater.
+# tools/friend-mode/get-winsparkle.sh fetches, and a feed and key.  Without
+# them Exult still builds, with no updater.
 WINSPARKLE_DIR:=third_party/build/winsparkle
 ifneq ($(wildcard $(WINSPARKLE_DIR)/x64/WinSparkle.dll),)
+ifneq ($(and $(QOTC_FEED_WINDOWS),$(QOTC_UPDATE_KEY)),)
 WINSPARKLE_CPPFLAGS:=-DQOTC_WINSPARKLE -isystem $(WINSPARKLE_DIR)/include
+QOTC_SERVICES_CPPFLAGS+=-DQOTC_FEED_WINDOWS=\"$(QOTC_FEED_WINDOWS)\" -DQOTC_UPDATE_KEY=\"$(QOTC_UPDATE_KEY)\"
 # GNU ld links a DLL's exports directly; no import library needed.
 LIBS:=$(WINSPARKLE_DIR)/x64/WinSparkle.dll $(LIBS)
+endif
 endif
 # Mbed TLS has no certificate authorities of its own and Windows has no PEM
 # list, so the lobby's certificate is checked against this one (MSYS2's
@@ -550,7 +563,7 @@ CPPFLAGS:=$(strip -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"data\" \
 ifneq ($(ANDROID_CFLAGS),)
 CPPFLAGS += $(ANDROID_CFLAGS)
 endif
-CPPFLAGS += $(FRIEND_RTC_CPPFLAGS) $(WINSPARKLE_CPPFLAGS)
+CPPFLAGS += $(FRIEND_RTC_CPPFLAGS) $(WINSPARKLE_CPPFLAGS) $(QOTC_SERVICES_CPPFLAGS)
 
 PLUGIN_CPPFLAGS:=$(strip -DVERSION=\"$(VERSION)\" -DEXULT_DATADIR=\"data\" \
 	-DNOMINMAX=1 -D_USE_MATH_DEFINES -DHAVE_NETDB_H=0 $(SYSFLAGS) \

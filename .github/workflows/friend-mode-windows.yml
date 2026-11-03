@@ -69,12 +69,19 @@ jobs:
         run: tools/friend-mode/build-rtc.sh
       - name: Get WinSparkle
         run: tools/friend-mode/get-winsparkle.sh
+      # Our feed, update key and installer AppId (qotcservices.h): a build
+      # without them would have no updater and strand its players.
       - name: Build Exult
         run: |
+          . tools/friend-mode/qotc-release.env
+          test -n "$QOTC_FEED_WINDOWS"
+          test -n "$QOTC_UPDATE_KEY"
+          test -n "$QOTC_APPID"
           test -f third_party/build/windows/lib/libdatachannel.a
-          make -j 4 -f Makefile.mingw U7PATH=out/Exult install
+          make -j 4 -f Makefile.mingw U7PATH=out/Exult QOTC_SERVICES=tools/friend-mode/qotc-release.env install
           test -f out/Exult/data/friend/cacert.pem
           test -f out/Exult/WinSparkle.dll
+          grep -aqF "$QOTC_FEED_WINDOWS" out/Exult/Exult.exe
           out/Exult/Exult.exe --version
       - name: Add notes
         run: |
@@ -87,13 +94,14 @@ jobs:
       # Inno Setup 6 comes with GitHub's Windows runners.
       - name: Make installer
         run: |
+          . tools/friend-mode/qotc-release.env
           version="$(sed -n 's/^#define QOTC_VERSION "\(.*\)"$/\1/p' qotcversion.h)"
           build="$(sed -n 's/^#define QOTC_BUILD //p' qotcbuild.h)"
           test -n "$version" && test "$build" -gt 0
           name="Exult-U7-QOTC-Windows-x64-$SHORT_SHA-setup"
           (cd win32 && "/c/Program Files (x86)/Inno Setup 6/ISCC.exe" -Q \
             "-DSRCDIR=$(cygpath -w ../out/Exult)" "-DQOTC_VERSION=$version" \
-            "-DQOTC_BUILD=$build" "-DOUTNAME=$name" qotc_installer.iss)
+            "-DQOTC_BUILD=$build" "-DQOTC_APPID=$QOTC_APPID" "-DOUTNAME=$name" qotc_installer.iss)
           mkdir -p setup && mv "win32/$name.exe" setup/
       - name: Upload build
         uses: actions/upload-artifact@v7

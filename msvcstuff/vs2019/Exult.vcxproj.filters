@@ -949,6 +949,9 @@
     <ClInclude Include="..\..\qotcversion.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\qotcservices.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="..\..\audio\midi_drivers\fmopl.h">
       <Filter>audio\midi_drivers</Filter>
     </ClInclude>

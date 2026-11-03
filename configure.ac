@@ -472,16 +472,53 @@ AC_SUBST(FRIEND_RTC_CPPFLAGS)
 AC_SUBST(FRIEND_RTC_LIBS)
 
 # ---------------------------------------------------------------------
+# Quest of the Companions' services (qotcservices.h): the update feed and
+# the key that checks updates, and optionally the lobby, from a file of
+# NAME=value lines such as tools/friend-mode/qotc-release.env (our release
+# builds).  Without a feed and a key there is no updater.
+# ---------------------------------------------------------------------
+
+AC_ARG_WITH(qotc-services, AS_HELP_STRING([--with-qotc-services=FILE], [the update feed, update key and lobby, e.g. tools/friend-mode/qotc-release.env @<:@default none: no updater, the default lobby@:>@]),,with_qotc_services=no)
+QOTC_FEED_MACOS=""
+QOTC_UPDATE_KEY=""
+QOTC_LOBBY_URL=""
+if test "x$with_qotc_services" != xno; then
+	case "$with_qotc_services" in
+	/*) qotc_services="$with_qotc_services" ;;
+	*) qotc_services="`pwd`/$with_qotc_services" ;;
+	esac
+	AC_MSG_CHECKING([for the services in $qotc_services])
+	if test -f "$qotc_services"; then
+		AC_MSG_RESULT(yes)
+		. "$qotc_services"
+	else
+		AC_MSG_RESULT(no)
+		AC_MSG_ERROR([no such file: $qotc_services])
+	fi
+fi
+if test -n "$QOTC_LOBBY_URL"; then
+	AC_DEFINE_UNQUOTED(QOTC_LOBBY_URL, "$QOTC_LOBBY_URL", [The lobby that hands out codes, or "off"])
+fi
+AC_SUBST(QOTC_FEED_MACOS)
+AC_SUBST(QOTC_UPDATE_KEY)
+
+# ---------------------------------------------------------------------
 # Quest of the Companions updates on macOS: Sparkle.framework, which
-# tools/friend-mode/get-sparkle.sh puts in third_party/build/sparkle/.
-# Without it the app builds as before, with no update checks.
+# tools/friend-mode/get-sparkle.sh puts in third_party/build/sparkle/,
+# and a feed and key (--with-qotc-services).  Without either the app
+# builds as before, with no update checks.
 # ---------------------------------------------------------------------
 
 AC_ARG_WITH(sparkle, AS_HELP_STRING([--with-sparkle=DIR], [macOS: folder holding Sparkle.framework, for update checks @<:@default third_party/build/sparkle@:>@]),,with_sparkle=auto)
 SPARKLE_DIR=""
 SPARKLE_CPPFLAGS=""
 SPARKLE_LIBS=""
-if test "x$ARCH" = xmacosx -a "x$with_sparkle" != xno; then
+if test "x$ARCH" = xmacosx -a "x$with_sparkle" != xno -a \( -z "$QOTC_FEED_MACOS" -o -z "$QOTC_UPDATE_KEY" \); then
+	AC_MSG_NOTICE([no update feed and key (--with-qotc-services): no update checks])
+	if test "x$with_sparkle" != xauto; then
+		AC_MSG_ERROR([--with-sparkle needs a feed and key: --with-qotc-services=FILE])
+	fi
+elif test "x$ARCH" = xmacosx -a "x$with_sparkle" != xno; then
 	sparkle_dir="$with_sparkle"
 	if test "x$sparkle_dir" = xauto -o "x$sparkle_dir" = xyes; then
 		sparkle_dir="`cd "$srcdir" && pwd`/third_party/build/sparkle"

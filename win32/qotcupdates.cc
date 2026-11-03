@@ -20,11 +20,15 @@
 #include <string>
 
 namespace {
-// What every build checks; QOTC_UPDATE_FEED replaces it, for trying an
-// update against a local test feed (docs/friend-mode/updates.md).
-constexpr const char* feed_url = "https://downloads.xcast3d.com/u7-qotc/appcast-windows.xml";
+#if !defined(QOTC_FEED_WINDOWS) || !defined(QOTC_UPDATE_KEY)
+#	error Give a feed and key (Makefile.mingw QOTC_SERVICES=<file>; qotcservices.h)
+#endif
+// What every build checks (qotcservices.h); QOTC_UPDATE_FEED replaces it,
+// for trying an update against a local test feed
+// (docs/friend-mode/updates.md).
+constexpr const char* feed_url = QOTC_FEED_WINDOWS;
 // The public half of the key that signs updates (the Mac's SUPublicEDKey).
-constexpr const char* public_key = "0yHVSoBe8ELk7KcI/CkUiW4dHvXbtCVbbor4rA99/4w=";
+constexpr const char* public_key = QOTC_UPDATE_KEY;
 // The installer waits for this to go before it replaces files.
 constexpr const wchar_t* running_mutex = L"QuestOfTheCompanionsRunning";
 

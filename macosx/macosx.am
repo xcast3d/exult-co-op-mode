@@ -5,12 +5,9 @@ exult_studio = $(top_builddir)/mapedit/exult_studio$(EXEEXT)
 
 # Quest of the Companions updates (Sparkle; docs/friend-mode/updates.md).
 # Builds compare CFBundleVersion, which is QOTC_BUILD, so a newer build is
-# always a higher number.  The feed address is in every build handed out:
-# never change it.  The key is the public half of the signing key (private
-# half: login keychain, account "u7-qotc"); losing the private half means
-# installed builds can't verify an update again.
-QOTC_FEED_URL = https://downloads.xcast3d.com/u7-qotc/appcast-macos.xml
-QOTC_ED_KEY = 0yHVSoBe8ELk7KcI/CkUiW4dHvXbtCVbbor4rA99/4w=
+# always a higher number.  The feed (QOTC_FEED_MACOS) and the public half of
+# the signing key (QOTC_UPDATE_KEY) come from configure
+# --with-qotc-services; ours are in tools/friend-mode/qotc-release.env.
 
 $(top_builddir)/mapedit/exult_studio$(EXEEXT):
 	+(cd $(top_builddir)/mapedit;$(MAKE) exult_studio$(EXEEXT))
@@ -51,8 +48,8 @@ if QOTC_SPARKLE
 	/usr/libexec/PlistBuddy \
 	  -c "Set :CFBundleVersion $$build" \
 	  -c "Set :CFBundleShortVersionString $$version" \
-	  -c "Add :SUFeedURL string $(QOTC_FEED_URL)" \
-	  -c "Add :SUPublicEDKey string $(QOTC_ED_KEY)" \
+	  -c "Add :SUFeedURL string $(QOTC_FEED_MACOS)" \
+	  -c "Add :SUPublicEDKey string $(QOTC_UPDATE_KEY)" \
 	  -c "Add :SUEnableAutomaticChecks bool true" \
 	  $(bundle_name)/Contents/Info.plist
 endif

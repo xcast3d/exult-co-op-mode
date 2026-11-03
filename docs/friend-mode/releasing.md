@@ -52,10 +52,11 @@ as usual between releases.
    16 MB). About 13 minutes.
 4. **Mac build** here, meanwhile, from the same commit ([The Mac
    build](macos-setup.md#the-mac-build)): `get-sparkle.sh` once, configure
-   with `--with-optimization=normal`, `make bundle_shared`, sign each
-   library then the app, and the dmg named
+   with `--with-optimization=normal
+   --with-qotc-services=tools/friend-mode/qotc-release.env` (our updater),
+   `make bundle_shared`, sign each library then the app, and the dmg named
    `Exult-U7-QOTC-macOS-arm64-<commit>.dmg`. Check `CFBundleVersion` in
-   its Info.plist is the new build number.
+   its Info.plist is the new build number, and `SUFeedURL` is there.
 5. **Try both** before they go online: install, start, play a little.
 6. **Deploy** (needs wrangler logged in, and the update key in
    `~/.u7-qotc/sparkle-private-key`):
@@ -98,5 +99,6 @@ tried yet, only its install on quit ([updates](updates.md#trying-an-update-local
   login keychain account `u7-qotc`): lose it and no installed build can
   take an update again. Keep a copy in a password manager. Never in the
   repository.
-- The feed URLs and the installer's `AppId` are built into every install:
+- The feed URLs, the update key and the installer's `AppId`
+  (`tools/friend-mode/qotc-release.env`) are built into every install:
   never change them.

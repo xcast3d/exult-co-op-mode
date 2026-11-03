@@ -855,6 +855,7 @@ for /f "tokens=* delims=" %%u in ('git ls-remote --get-url') do echo #define GIT
     <ClInclude Include="..\..\verify.h" />
     <ClInclude Include="..\..\version.h" />
     <ClInclude Include="..\..\qotcversion.h" />
+    <ClInclude Include="..\..\qotcservices.h" />
     <ClInclude Include="..\..\gumps\AdvancedOptions_gump.h" />
     <ClInclude Include="..\..\gumps\DropDown_widget.h" />
     <ClInclude Include="msvc_include.h" />

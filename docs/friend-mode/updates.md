@@ -32,10 +32,19 @@ which replaces the zipped folder.
 
 ## The pieces
 
+- **The feed, the key and the lobby** are chosen when building
+  (`qotcservices.h`, 2026-11-02), not written in the code. Ours are in
+  `tools/friend-mode/qotc-release.env`: `QOTC_FEED_MACOS`,
+  `QOTC_FEED_WINDOWS`, `QOTC_UPDATE_KEY` (the public key) and `QOTC_APPID`
+  (the Windows installer). A build given no feed and key has **no
+  updater**, so a build of the source never checks our feed by accident.
+  See [your own builds](#your-own-builds).
 - **Sparkle**: `tools/friend-mode/get-sparkle.sh` puts a pinned, checksummed
-  release in `third_party/build/sparkle/` (git-ignored). `./configure` finds
-  it on macOS (`--with-sparkle=DIR`, `--without-sparkle` to leave it out)
-  and defines `QOTC_SPARKLE`.
+  release in `third_party/build/sparkle/` (git-ignored). `./configure`
+  finds it on macOS (`--with-sparkle=DIR`, `--without-sparkle` to leave it
+  out) and, when given a feed and key
+  (`--with-qotc-services=tools/friend-mode/qotc-release.env`), defines
+  `QOTC_SPARKLE`.
 - **The code**: `macosx/qotcupdates.mm`, started from `Init()` in exult.cc
   once SDL's video is up. It does nothing outside an app bundle (plain
   `./exult` in the build folder).
@@ -43,25 +52,30 @@ which replaces the zipped folder.
   Sparkle.framework into `Contents/Frameworks`, and writes into Info.plist:
   - `CFBundleVersion` = the build number (`QOTC_BUILD`), which is what
     Sparkle compares; `CFBundleShortVersionString` = `QOTC_VERSION`;
-  - `SUFeedURL`, `SUPublicEDKey`, `SUEnableAutomaticChecks`.
+  - `SUFeedURL`, `SUPublicEDKey` (from `--with-qotc-services`),
+    `SUEnableAutomaticChecks`.
 - **The feed**: `tools/downloads/deploy.sh` (see below).
 
 On Windows:
 
 - **WinSparkle**: `tools/friend-mode/get-winsparkle.sh` puts a pinned,
   checksummed release in `third_party/build/winsparkle/` (git-ignored).
-  `Makefile.mingw` finds it, defines `QOTC_WINSPARKLE`, links
-  `WinSparkle.dll` and installs it next to `Exult.exe`.
+  `Makefile.mingw` finds it and, when given a feed and key
+  (`QOTC_SERVICES=tools/friend-mode/qotc-release.env`, as the workflow
+  does), defines `QOTC_WINSPARKLE`, links `WinSparkle.dll` and installs it
+  next to `Exult.exe`.
 - **The code**: `win32/qotcupdates.cc`, from the same place in `Init()`. It
-  holds the feed URL and the public key, gives WinSparkle the build number
+  takes the feed and the public key from the build (`QOTC_FEED_WINDOWS`,
+  `QOTC_UPDATE_KEY`), gives WinSparkle the build number
   to compare, and turns a shutdown request into the window's close (so the
   player is asked). It also holds a named mutex,
   `QuestOfTheCompanionsRunning`, while the game runs. Updates are off in
   portable mode (`-p`) and for a build with no number.
 - **The installer**: `win32/qotc_installer.iss` (Inno Setup), made by the
   workflow. Per user (`%LOCALAPPDATA%\Programs\Quest of the Companions` by
-  default), no administrator prompt. Its `AppId` must never change: it's
-  how an update finds the install. Run silently, it waits up to a minute for
+  default), no administrator prompt. Its `AppId` (`-DQOTC_APPID`, from
+  qotc-release.env) must never change: it's how an update finds the
+  install. Run silently, it waits up to a minute for
   the mutex to go, then asks to close the game, and starts the game again
   when done. It leaves `blackgate\` and `serpentisle\` (the player's game
   data) alone, through updates and uninstalling.
@@ -69,7 +83,8 @@ On Windows:
 ## The signing key
 
 Every update is signed with an EdDSA key; builds carry its public half
-(`QOTC_ED_KEY` in macosx/macosx.am) and refuse anything it didn't sign.
+(`QOTC_UPDATE_KEY` in tools/friend-mode/qotc-release.env) and refuse
+anything it didn't sign.
 The private half:
 
 - login keychain, account **`u7-qotc`** (made with Sparkle's
@@ -83,10 +98,36 @@ update again** (players would have to download by hand), so keep a copy
 somewhere safe, e.g. a password manager. For CI later it becomes a
 GitHub Actions secret, passed with `--ed-key-file -`.
 
+## Your own builds
+
+Anyone building Quest of the Companions to hand out keeps our lobby or
+names theirs, and uses their own updates or none:
+
+- **No updates:** build as usual (plain `./configure`, plain
+  `make -f Makefile.mingw`). No updater is built, nothing checks a feed.
+- **Your own lobby:** deploy `tools/lobby/` to your own Cloudflare account
+  ([lobby](lobby.md)) and build with `QOTC_LOBBY_URL=wss://<yours>` in your
+  services file (or `off` for joining by address only). Players can still
+  change it in exult.cfg (`config/friend/lobby_url`).
+- **Your own updates:** make a key (Sparkle's `generate_keys --account
+  <name>`, which prints the public half), run a feed (`tools/downloads/`
+  is ours; deploy.sh's addresses would need changing), then copy
+  `tools/friend-mode/qotc-release.env` with your feeds, your public key
+  and a new `QOTC_APPID` (any new GUID), and build with
+  `./configure --with-qotc-services=<file>` (macOS) or
+  `make -f Makefile.mingw QOTC_SERVICES=<file>` (Windows); the installer
+  takes `-DQOTC_APPID=<GUID>`.
+
+Values are plain `NAME=value` lines (shell and make both read the file), so
+no spaces or quotes, and no `&` or `?` in a URL.
+
 ## Releasing
 
 The steps from commit to deploy are in [releasing](releasing.md); this is
-what deploy.sh does with the builds.
+what deploy.sh does with the builds. It refuses a Mac build without our
+feed and key (one built without `--with-qotc-services`): it would never
+find another update. The Windows workflow fails the same way, and checks
+`Exult.exe` holds our feed.
 
 The usual release build ([macOS setup](macos-setup.md#the-mac-build)),
 after `tools/friend-mode/get-sparkle.sh` once, then:

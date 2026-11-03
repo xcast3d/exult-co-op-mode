@@ -102,13 +102,16 @@ optimization; a release needs it:
 
 ```sh
 tools/friend-mode/get-sparkle.sh           # once: the updater (docs: updates.md)
-./configure --with-optimization=normal     # -O2
+./configure --with-optimization=normal --with-qotc-services=tools/friend-mode/qotc-release.env   # -O2, our updater
 make clean && make -j8
 rm -rf Exult.app && make bundle_shared      # the app, with Homebrew's libraries copied in (dylibbundler)
 for f in Exult.app/Contents/Resources/lib/*.dylib; do codesign --force --sign - "$f"; done
 codesign --force --sign - Exult.app         # ad-hoc: each library first, then the app
 codesign --verify --deep --strict Exult.app
 ```
+
+Without `--with-qotc-services` the app has no updater, and deploy.sh
+refuses it ([updates](updates.md#the-pieces)).
 
 Sign every library by itself: `dylibbundler` rewrites their paths, which
 breaks their signatures, and `codesign --deep` doesn't reach

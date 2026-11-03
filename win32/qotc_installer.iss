@@ -3,7 +3,7 @@
 ; The friend-mode-windows workflow builds it from the `make install` folder:
 ;
 ;   ISCC.exe -DSRCDIR=<folder> -DQOTC_VERSION=0.8.2 -DQOTC_BUILD=240
-;            -DOUTNAME=<name> qotc_installer.iss
+;            -DQOTC_APPID=<GUID> -DOUTNAME=<name> qotc_installer.iss
 ;
 ; It installs for this user only, with no administrator prompt, so updates
 ; need none either.  Saves and settings live in %LOCALAPPDATA%\Exult, apart
@@ -19,13 +19,17 @@
 #ifndef QOTC_BUILD
   #error Pass -DQOTC_BUILD
 #endif
+#ifndef QOTC_APPID
+  #error Pass -DQOTC_APPID=<GUID> (ours: tools/friend-mode/qotc-release.env)
+#endif
 #ifndef OUTNAME
   #define OUTNAME "QOTC-Setup"
 #endif
 
 [Setup]
 ; Never change AppId: it's how an update finds the install it replaces.
-AppId={{32D331D8-FE01-4298-9106-FC08CC6A3832}
+; "{{" is a literal brace: AppId is {<GUID>}.
+AppId={{{#QOTC_APPID}}
 AppName=Quest of the Companions
 AppVersion={#QOTC_VERSION} (build {#QOTC_BUILD})
 AppVerName=Quest of the Companions {#QOTC_VERSION}
