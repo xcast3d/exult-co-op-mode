@@ -22,7 +22,7 @@ grabbing the same item.
 Phase 1 (local possession), for the record:
 
 - [x] Import the official Exult source and history.
-- [x] Configure GitHub as `upstream` and Bitbucket as `origin`.
+- [x] Configure GitHub as `upstream` and Bitbucket as `origin` (GitHub became `origin` on 2026-11-03).
 - [x] Configure and compile an unmodified Exult binary on macOS.
 - [x] Launch with legally obtained Ultima VII data and record a baseline save.
 - [x] Trace the initial input, camera, and party-AI control points.

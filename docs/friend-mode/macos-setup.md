@@ -58,7 +58,7 @@ Exult's full platform notes remain in [`README.macOS`](../../README.macOS).
 The intended layout is:
 
 ```text
-origin    Bitbucket project repository
+origin    Project repository on GitHub (xcast3d/exult-co-op-mode)
 upstream  Official Exult GitHub repository
 ```
 

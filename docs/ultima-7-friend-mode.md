@@ -772,7 +772,7 @@ bars). What could go upstream and what to untangle first:
 
 | Need | Initial choice | Later possibility |
 | --- | --- | --- |
-| Source hosting | Private Bitbucket repository | Public release when ready |
+| Source hosting | Public GitHub repository (was private Bitbucket until 2026-11-03) | |
 | Main development machine | Mac | Windows CI / testing |
 | Authoritative simulation | Host Exult process | Dedicated server only if needed |
 | Connection | LAN, or internet with port forwarding (TCP 1992) | WebRTC data channels with TURN relay fallback (Phase 8) |
@@ -785,14 +785,13 @@ Supabase is **not** needed to run the simulation. If introduced later, use it fo
 
 ## Repository workflow
 
-Use a **private Bitbucket repo** as `origin` and the official Exult GitHub repository as `upstream`.
+Use the project's GitHub repository as `origin` and the official Exult GitHub repository as `upstream`.
 
 ```bash
-# Create an empty PRIVATE repository in Bitbucket first.
 git clone https://github.com/exult/exult.git exult-friend-mode
 cd exult-friend-mode
 git remote rename origin upstream
-git remote add origin git@bitbucket.org:YOUR_WORKSPACE/exult-friend-mode.git
+git remote add origin https://github.com/xcast3d/exult-co-op-mode.git
 git switch -c feature/friend-mode
 git push -u origin feature/friend-mode
 ```
@@ -834,7 +833,7 @@ worth it: every save, single player or co-op, is plain Black Gate.
 - Exult is open source under GPL terms; confirm the exact repository license and bundled component licenses before distributing modified builds.
 - Private development is permitted. Sharing binaries with testers can trigger obligations to provide corresponding source to those recipients.
 - The original Ultima VII game data is **not** included with Exult and remains subject to its own copyright/licensing.
-- Do not commit original game assets, purchased game files, or save data containing private information to the Bitbucket repository.
+- Do not commit original game assets, purchased game files, or save data containing private information to the repository.
 - Friend Mode is an experimental fan project, not an official Ultima release.
 - A browser build must not host the Ultima VII files, even behind a "you must
   own the game" disclaimer; that is still redistribution. Players load their

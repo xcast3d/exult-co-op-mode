@@ -35,11 +35,10 @@ Friend Mode's Windows networking in `friendnet.cc`:
 ## How it is built: GitHub Actions
 
 Mac builds stay local (`make -j8`). Windows builds come from GitHub Actions
-on a **private** GitHub repository that mirrors this branch. Bitbucket stays
-`origin`; GitHub is a second remote named `github`:
+on the project's GitHub repository, which is `origin`:
 
 ```bash
-git push github feature/friend-mode
+git push origin feature/friend-mode
 ```
 
 Pushing does **not** build: to save Actions minutes,

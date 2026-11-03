@@ -40,10 +40,9 @@ as usual between releases.
 
    Commit, with nothing left uncommitted: the build number counts commits,
    and both builds must come from this commit.
-2. **Tag and push to both remotes:** `git tag -a qotc-v<version> -m
+2. **Tag and push:** `git tag -a qotc-v<version> -m
    "Quest of the Companions <version> (build <n>)"`, then
-   `git push origin feature/friend-mode qotc-v<version>` and
-   `git push github feature/friend-mode qotc-v<version>`. The tag is
+   `git push origin feature/friend-mode qotc-v<version>`. The tag is
    where each build's source is found (GPL); `qotc-` keeps it apart from
    Exult's own `v…` tags.
 3. **Windows build** on GitHub Actions ([Windows build](windows-build.md)):
