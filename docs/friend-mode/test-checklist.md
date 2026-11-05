@@ -821,7 +821,7 @@ resolution.
       (Space)  Drop (Shift+Space)", a sword "Ready (Space)  Drop
       (Shift+Space)" or "Put away (Space)  Drop (Shift+Space)", a gem
       "Drop (Space)", food "Use (Space)  Drop some (Shift+Space)";
-      Shift+Space drops at once (a stack asks how many). A shop item says "Steal (Space)", and Space asks "Steal?
+      Shift+Space asks where with the cursor, Space again drops at your feet. A shop item says "Steal (Space)", and Space asks "Steal?
       Space again". Each matches what Space then does.
 
 ## Maps
@@ -1325,7 +1325,7 @@ Space and its hint line (the second line under "Targeting ..."):
 - [ ] A chest that isn't yours: Shift+Space asks "Not all yours" once,
       again takes everything (and the theft rules apply).
 - [ ] In one's own pack: Space uses or readies; on a gem, Space asks to
-      drop; Shift+Space drops at once; Alt+Space on a stack asks how many
+      drop; Shift+Space asks where with the cursor; Alt+Space on a stack asks how many
       to drop.
 - [ ] Option (Alt)+Space on the Mac works the same.
 

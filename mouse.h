@@ -118,6 +118,8 @@ public:
 	// Controller support: hidden while the pad is in use and its pointer
 	// isn't showing (controller.cc).  A crosshair still shows.
 	static bool pad_hidden;
+	// A drop's crosshair, hidden until the player starts to aim (exult.cc).
+	static bool aim_hidden;
 
 private:
 	// This is updated By MakeCurrent to point to the current mouse object

@@ -55,6 +55,9 @@ using std::max;
 bool Mouse::use_touch_input = false;
 
 static inline bool should_hide_frame(int frame) {
+	if (Mouse::aim_hidden && frame == Mouse::greenselect) {
+		return true;
+	}
 	if (Mouse::pad_hidden && frame != Mouse::greenselect) {
 		return true;    // Controller support: the pad is in use.
 	}
@@ -76,6 +79,7 @@ short Mouse::med_combat_arrows[8]   = {40, 41, 42, 43, 44, 45, 46, 47};
 Mouse* Mouse::current_mouse = nullptr;
 bool   Mouse::mouse_update  = false;
 bool   Mouse::pad_hidden    = false;
+bool   Mouse::aim_hidden    = false;
 
 /*
  *  Create.

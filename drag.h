@@ -75,6 +75,12 @@ class Dragging_info : public Game_singletons {
 	Container_game_object* old_owner = nullptr;    // Held it, with no window open.
 	bool                   lift();
 	bool                   place(Container_game_object* dest, int spot, int count);
+	// Friend Mode: a drop aimed without dragging (Game_window::drop_object_at):
+	// how many is already known, and 'drop_thing' is what E or Q picked.
+	bool         aimed_drop = false;
+	Game_object* drop_thing = nullptr;
+	bool         drop_inside = false;    // 'drop_thing' is a chest on the map: in it, not on it.
+	bool         drop_on_thing(Game_object* to_drop);
 	bool drop_on_gump(int x, int y, Game_object* to_drop, Gump* gump);
 	bool drop_on_map(int x, int y, Game_object* to_drop);
 

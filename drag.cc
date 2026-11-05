@@ -773,6 +773,60 @@ bool Dragging_info::drop_on_map(
 }
 
 /*
+ *  Friend Mode targeting: drop onto what was picked: into it or on top of it
+ *  if it takes that, else on a free spot beside it (a plaque is on a wall).
+ *  By tile, not pixel, so it lands on the pick itself: some puzzles' eggs
+ *  are one tile (the Black Gate's pedestals).
+ *
+ *  Output: False if not (all) of object was dropped.
+ */
+
+bool Dragging_info::drop_on_thing(Game_object* to_drop) {
+	if (!Check_weight(gwin, to_drop, drop_thing)) {
+		return false;
+	}
+	Actor* actor = gwin->get_controlled_actor();
+	if (Container_game_object* box = drop_inside ? drop_thing->as_container() : nullptr) {
+		if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(actor, box)) {
+			Mouse::mouse()->flash_shape(Mouse::outofrange);
+			Audio::get_ptr()->play_sound_effect(Audio::game_sfx(76));
+			return false;
+		}
+		if (box->add(to_drop, false, true)) {
+			possible_theft = !gump;
+			return true;
+		}    // Full: on top of it, below.
+	} else if (drop_thing->drop(to_drop)) {
+		possible_theft = true;
+		return true;
+	}
+	const Tile_coord at    = drop_thing->get_tile();
+	const int        top   = at.tz + drop_thing->get_info().get_3d_height();
+	bool             done  = false;
+	if (top <= actor->get_lift() + 5 && top < gwin->get_render_skip_lift()) {
+		// The inverse of drop_at_lift's pixel to tile.
+		const int px = ((at.tx - gwin->get_scrolltx() + c_num_tiles) % c_num_tiles) * c_tilesize + c_tilesize / 2 - top * 4 + 1;
+		const int py = ((at.ty - gwin->get_scrollty() + c_num_tiles) % c_num_tiles) * c_tilesize + c_tilesize / 2 - top * 4 + 1;
+		done         = gwin->drop_at_lift(to_drop, px, py, top) > 0;
+	}
+	if (!done) {
+		const Tile_coord spot = Map_chunk::find_spot(at, 2, to_drop->get_shapenum(), to_drop->get_framenum(), 1);
+		if (spot.tx < 0 || (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(actor, spot))) {
+			Mouse::mouse()->flash_shape(Mouse::outofrange);
+			Audio::get_ptr()->play_sound_effect(Audio::game_sfx(76));
+			return false;
+		}
+		to_drop->move(spot);
+		gmap->get_chunk(spot.tx / c_tiles_per_chunk, spot.ty / c_tiles_per_chunk)
+				->activate_eggs(to_drop, spot.tx, spot.ty, spot.tz, spot.tx, spot.ty);
+	}
+	if (!gump && !possible_theft && to_drop->get_tile().distance(old_pos) > 2) {
+		possible_theft = true;
+	}
+	return true;
+}
+
+/*
  *  Drop at given position.
  *  ++++++NOTE:  Potential problems here with 'to_drop' being deleted by
  *      call to add().  Probably add() should provide feedback if obj.
@@ -793,7 +847,7 @@ bool Dragging_info::drop(
 	const bool okay_to_move = to_drop->get_flag(Obj_flags::okay_to_take);
 	const int  old_top      = old_pos.tz + obj->get_info().get_3d_height();
 	// First see if it's a gump.
-	Gump* on_gump = gumpman->find_gump(x, y);
+	Gump* on_gump = drop_thing ? nullptr : gumpman->find_gump(x, y);
 	// Don't prompt if within same gump
 	// or if alternate drop is enabled (ctrl inverts).
 
@@ -803,7 +857,7 @@ bool Dragging_info::drop(
 	const bool  temp     = obj->get_flag(Obj_flags::is_temporary);
 
 	bool escaped = false;
-	if (quantity > 1 && (!on_gump || on_gump != gump) && drop) {
+	if (quantity > 1 && (!on_gump || on_gump != gump) && drop && !aimed_drop) {
 		quantity = gumpman->prompt_for_number(0, quantity, 1, quantity, nullptr, &escaped);
 	}
 
@@ -823,12 +877,14 @@ bool Dragging_info::drop(
 		}
 	}
 	// Drop it.
-	if (!(on_gump ? drop_on_gump(x, y, to_drop, on_gump) : drop_on_map(x, y, to_drop))) {
+	if (!(drop_thing       ? drop_on_thing(to_drop)
+		  : on_gump        ? drop_on_gump(x, y, to_drop, on_gump)
+						   : drop_on_map(x, y, to_drop))) {
 		return false;
 	}
 	// Friend Mode guests: ask the host to make the same move.
 	Friend_mode_note_drag_drop(
-			to_drop, quantity, on_gump ? on_gump->get_container() : nullptr, to_drop == obj.get());
+			to_drop, quantity, on_gump ? on_gump->get_container() : drop_thing, to_drop == obj.get());
 	// Make a 'dropped' sound.
 	Audio::get_ptr()->play_sound_effect(Audio::game_sfx(74));
 	if (!gump) {    // Do eggs where it came from.
@@ -968,6 +1024,11 @@ bool Dragging_info::place(Container_game_object* dest, int spot, int count) {
 	if (!gump && !old_owner) {    // Do eggs where it came from.
 		gmap->get_chunk(oldcx, oldcy)->activate_eggs(obj.get(), old_pos.tx, old_pos.ty, old_pos.tz, old_pos.tx, old_pos.ty);
 	}
+	if (!dest) {    // And where it landed, as a drag's drop does (Penumbra's plaques).
+		const Tile_coord at = to_drop->get_tile();
+		gmap->get_chunk(at.tx / c_tiles_per_chunk, at.ty / c_tiles_per_chunk)
+				->activate_eggs(to_drop, at.tx, at.ty, at.tz, at.tx, at.ty);
+	}
 	if (!okay_to_move && !cheat.in_hack_mover() && possible_theft && !gwin->is_in_dungeon()) {
 		gwin->theft(Friend_mode_led_companion());    // The companion one leads is the thief (null: the Avatar).
 	}
@@ -997,6 +1058,37 @@ bool Game_window::move_object(Game_object* object, Gump* from, Container_game_ob
 	}
 	Dragging_info info(object, from);
 	return info.lift() && info.place(dest, spot, count);
+}
+
+/*
+ *  Friend Mode targeting: as a drag let go at (x, y), or onto 'on' if given:
+ *  'count' of it (0: all), with no "how many?".
+ *
+ *  Output: true if 'count' went; what didn't is back where it was.
+ */
+
+bool Game_window::drop_object_at(Game_object* object, Gump* from, int x, int y, int count, Game_object* on, bool inside) {
+	if (!object || (dragging && dragging->has_object())) {
+		return false;
+	}
+	const int          held = object->get_quantity();
+	const Game_object_shared keep = object->shared_from_this();
+	Dragging_info      info(object, from);
+	info.aimed_drop = true;
+	info.drop_thing = on;
+	info.drop_inside = inside;
+	info.paintx     = -1000;    // Where it's aimed, not where its window shows it.
+	info.painty     = -1000;
+	info.quantity   = count > 0 && count < held ? count : held;
+	const int going = info.quantity;
+	if (!info.lift()) {
+		return false;
+	}
+	if (info.drop(x, y)) {
+		return true;
+	}
+	info.put_back();    // All of it, or the rest of a stack.
+	return going < held && keep->get_quantity() == held - going;
 }
 
 /*

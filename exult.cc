@@ -2720,6 +2720,11 @@ static void Friend_mode_perform_guest_move(
 		}
 		return refuse("no room");
 	}
+	if (!container) {    // On an egg?  As a drop does (Penumbra's plaques).
+		const Tile_coord at = moving->get_tile();
+		gwin->get_map()->get_chunk(at.tx / c_tiles_per_chunk, at.ty / c_tiles_per_chunk)
+				->activate_eggs(moving.get(), at.tx, at.ty, at.tz, at.tx, at.ty);
+	}
 	gwin->set_all_dirty();
 	cout << "Friend Mode: moved shape " << moving->get_shapenum() << " for guest" << endl;
 	// Theft, as for the Avatar's drags: an item not okay to take, from
@@ -3038,7 +3043,7 @@ static bool Friend_is_attack_target(const Actor* own, const Actor* foe) {
 		   && !foe->get_info().is_body_shape();
 }
 
-enum class Friend_confirm { none, take, drop, attack };
+enum class Friend_confirm { none, take, attack };
 static bool Friend_confirmed(Game_object* obj, Friend_confirm action, const std::string& ask);
 constexpr unsigned char friend_attack_peaceful = 1;    // Last byte: a peaceful foe, confirmed.
 
@@ -3227,6 +3232,7 @@ static void Friend_mode_clear_target() {
 // Q cycling for the crosshair (Get_click): the party and oneself are
 // offered in combat too, and a pick there is never attacked.
 static bool friend_crosshair_cycle = false;
+static bool friend_crosshair_things = false;    // E, as Q's above.
 
 static bool Friend_is_party_pick(const Actor* own, const Actor* actor) {
 	if (!own || !actor || !Friend_targeting_party || (gwin->in_combat() && !friend_crosshair_cycle)
@@ -3274,22 +3280,43 @@ static bool Friend_cycle_moved(const Actor* own) {
 static bool friend_cycle_aimed  = false;
 static int  friend_cycle_aim_x  = 0;
 static int  friend_cycle_aim_y  = 0;
+// The crosshair (Get_click): where a pick last left the pointer.  Only the
+// player moving it from there, by mouse or stick, starts Q and E again from
+// the pointer; a pick moving it must not, or the pick is ever the nearest.
+static int  friend_crosshair_left_x = 0;
+static int  friend_crosshair_left_y = 0;
 
 static void Friend_picture_middle(Game_object* obj, int& gx, int& gy);
+
+// The pad pointer's window point in game coordinates.
+static void Friend_pointer_in_game(float wx, float wy, int& gx, int& gy) {
+	SDL_Window* window = gwin->get_win()->get_screen_window();
+	float       rx     = 0;
+	float       ry     = 0;
+	SDL_RenderCoordinatesFromWindow(SDL_GetRenderer(window), wx, wy, &rx, &ry);
+	gwin->get_win()->screen_to_game(static_cast<int>(rx), static_cast<int>(ry), gwin->get_fastmouse(), gx, gy);
+}
 
 // True if Q or E measure from the pointer; 'fresh' if it was just used
 // (the cycle starts again).  'moved': Friend_cycle_moved's answer.
 static bool Friend_cycle_aim(bool moved, bool& fresh) {
-	fresh    = false;
+	fresh = false;
+	if (friend_crosshair_cycle || friend_crosshair_things) {
+		const int mx = Mouse::mouse()->get_mousex();
+		const int my = Mouse::mouse()->get_mousey();
+		// 3: the pick's aim, window pixels and back, isn't exact.
+		if (std::abs(mx - friend_crosshair_left_x) > 3 || std::abs(my - friend_crosshair_left_y) > 3) {
+			friend_crosshair_left_x = friend_cycle_aim_x = mx;
+			friend_crosshair_left_y = friend_cycle_aim_y = my;
+			friend_cycle_aimed = true;
+			fresh              = true;
+		}
+		return friend_cycle_aimed;
+	}
 	float wx = 0;
 	float wy = 0;
 	if (Controller_pointer_at(wx, wy)) {
-		SDL_Window* window = gwin->get_win()->get_screen_window();
-		float       rx     = 0;
-		float       ry     = 0;
-		SDL_RenderCoordinatesFromWindow(SDL_GetRenderer(window), wx, wy, &rx, &ry);
-		gwin->get_win()->screen_to_game(static_cast<int>(rx), static_cast<int>(ry), gwin->get_fastmouse(),
-				friend_cycle_aim_x, friend_cycle_aim_y);
+		Friend_pointer_in_game(wx, wy, friend_cycle_aim_x, friend_cycle_aim_y);
 		friend_cycle_aimed = true;
 		fresh              = true;
 	} else if (moved) {
@@ -3413,7 +3440,9 @@ static void Friend_mode_cycle_target(int step) {
 	int        index   = step < 0 ? count - 1 : 0;
 	if (current != foes.end()) {
 		index = static_cast<int>(current - foes.begin()) + step;
-		if (index < 0 || index >= count) {
+		if (friend_crosshair_cycle) {
+			index = (index + count) % count;    // The crosshair loops: to aim at nothing, move it.
+		} else if (index < 0 || index >= count) {
 			Friend_mode_clear_target();
 			return;
 		}
@@ -3736,9 +3765,14 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	static const std::unordered_set<int> loot{
 			159, 178, 194, 285, 295, 296, 298, 330, 340, 377, 444, 581, 584, 585, 616, 627, 640, 641, 642, 644,
 			645, 646, 648, 649, 650, 662, 668, 691, 692, 693, 726, 728, 738, 746, 747, 754, 756, 760, 761, 769, 771,
-			772, 785, 786, 790, 797, 827, 838, 839, 842, 877, 914, 915, 916, 921, 937, 955, 981};
+			772, 785, 786, 790, 797, 827, 838, 839, 842, 877, 914, 915, 916, 921, 937, 955, 981,
+			// Things quests ask for, from a scan of the scripts (2026-11-04):
+			// iron bars (Trent's cage), stone chips, the orrery viewer, bee
+			// stingers, sacks of wheat, and bale, spindle and dough, which
+			// the loom and the oven want.
+			264, 815, 770, 947, 677, 653, 654, 658};
 	static const std::unordered_set<int> furniture{
-			336, 338, 997, 873, 697, 702, 704, 812, 813, 987, 991, 992, 995, 1013};
+			336, 338, 997, 873, 697, 702, 704, 812, 813, 987, 992, 995, 1013};
 	// Usable things (2026-10-23; was levers and switches): levers (787),
 	// switches (788), the bucket (810), artist's equipment (823: pigments
 	// and the paint brush) and the easel (837, was furniture); the gavel
@@ -3757,20 +3791,30 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	// 2026-11-01: the gangplank (150 lowered, 781 raised), sails (251),
 	// carts (301, 652, 660, 757, 773, 774), the draft horse (796) and the
 	// flying carpet (840).  The pool of water (893, fountains: a drink;
-	// was decor).  Decor is what has no use.
+	// was decor).  2026-11-04, from what the scripts of tools and quests
+	// ask for: the forge's firepit (739, for the sword blank) and anvil (991,
+	// was furniture), the Well of Souls (748), pedestals (577), the horns
+	// that call the ferry (888), the Ferryman (155), the Dark Core (990),
+	// the Enclosed Prism (968) and the giant bones with things in them
+	// (418); the bleeding stone below.  Decor is what has no use.
 	static const std::unordered_set<int> usable{
 			583, 696, 787, 788, 810, 823, 837, 949, 950, 1011, 410, 261, 651, 431, 470, 740, 719, 741,
 			258, 434, 210, 307, 252, 695, 284, 744, 729, 848, 689, 690, 745, 743, 725, 809, 763, 503,
-			708, 709, 734, 735, 150, 781, 251, 301, 652, 660, 757, 773, 774, 796, 840, 893};
+			708, 709, 734, 735, 150, 781, 251, 301, 652, 660, 757, 773, 774, 796, 840, 893,
+			739, 991, 748, 577, 888, 155, 990, 968, 418};
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
-	// walls (828, 845) that slide open.
-	static const std::unordered_set<int> interactive{290, 291, 322, 372, 435, 481, 526, 657, 678, 828, 845, 889};
+	// walls (828, 845) that slide open; the Abbey's door (250), metal walls
+	// (303, 876) and portcullises (935, 936), which have door scripts.
+	static const std::unordered_set<int> interactive{
+			290, 291, 322, 372, 435, 481, 526, 657, 678, 828, 845, 889, 250, 303, 876, 935, 936};
 	const Shape_info& info  = obj->get_info();
 	const int         shape = obj->get_shapenum();
+	const int         frame = obj->get_framenum();
 	if (info.get_shape_class() == Shape_info::container || info.is_body_shape()) {
 		return Friend_thing_group::box;
 	}
-	if (usable.count(shape) || (shape == 675 && obj->get_framenum() == 0)) {    // 675 frame 0: the gavel.
+	if (usable.count(shape) || (shape == 675 && frame == 0)    // 675 frame 0: the gavel.
+		|| (shape == 932 && (frame == 2 || frame == 3))) {     // The stone a pick cuts (the rest of 932 are trees).
 		return Friend_thing_group::usable;
 	}
 	if (shape == 379 || shape == 820 || shape == 715) {    // Sign, plaque, tombstone.
@@ -3785,7 +3829,8 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	if (furniture.count(shape)) {
 		return Friend_thing_group::furniture;
 	}
-	if (loot.count(shape) || info.get_weapon_info() || info.get_armor_info() || info.get_ammo_info()) {
+	if (loot.count(shape) || (shape == 203 && frame == 10)    // 203 frame 10: the stone heart.
+		|| info.get_weapon_info() || info.get_armor_info() || info.get_ammo_info()) {
 		return Friend_thing_group::loot;
 	}
 	return Friend_thing_group::decor;
@@ -3862,6 +3907,9 @@ static bool Friend_thing_group_on(Friend_thing_group group) {
 // "10 gold coins", "sword": a thing's name for the notices (Exult's names
 // already carry the quantity).
 static std::string Friend_thing_name(Game_object* obj) {
+	if (GAME_BG && obj->get_shapenum() == 932 && obj->get_framenum() >= 2) {
+		return "stone";    // Black Gate calls every frame of 932 a tree.
+	}
 	const std::string name = obj->get_name();
 	return name.empty() ? std::string("something") : name;
 }
@@ -4002,6 +4050,32 @@ static bool Friend_is_usable_thing(const Game_object* obj) {
 	return Friend_is_readable(obj) || (shape == 675 && obj->get_framenum() == 0)    // Gavel (a desk item).
 		   || shape == 810 || shape == 893                                          // Bucket, pool of water.
 		   || Friend_mode_guest_local_shape(shape, obj->get_framenum()) || Friend_mode_guest_usable_shape(shape);
+}
+
+// What Space uses on a thing that does nothing by itself: the tool whose
+// script asks "on what?" and takes it.  Null for anything else.
+struct Friend_tool {
+	int         shape;
+	const char* name;
+};
+
+static const Friend_tool* Friend_tool_for(const Game_object* obj) {
+	static const Friend_tool pick{624, "Pick"};
+	static const Friend_tool blank{668, "Sword Blank"};
+	static const Friend_tool cage{747, "Soul Cage"};
+	if (!GAME_BG) {
+		return nullptr;
+	}
+	switch (obj->get_shapenum()) {
+	case 932:
+		return obj->get_framenum() >= 2 ? &pick : nullptr;    // The bleeding stone.
+	case 739:
+		return &blank;    // The firepit.
+	case 748:
+		return &cage;    // The Well of Souls.
+	default:
+		return nullptr;
+	}
 }
 
 // Readying: an item meant to be worn or wielded.  Anything can be held in
@@ -4161,8 +4235,8 @@ static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 //   takes them; anything else Space takes and Alt+Space splits (how
 //   many); Shift+Space takes everything there (2026-10-29).
 // - one's own: used, read, readied or put away; what has none of those
-//   is dropped at one's feet after asking.  Shift+Space drops at once;
-//   Alt+Space drops some (how many).
+//   is dropped where the crosshair says (Friend_mode_drop_where), as
+//   Shift+Space drops anything; Alt+Space drops some (how many).
 // Not okay to take: asks first.
 //
 // False if Space should do its usual thing.
@@ -4194,6 +4268,149 @@ static bool Friend_may_talk(const Actor* actor) {
 }
 
 static std::string Friend_key_label(const std::string& key);
+
+// Space on a thing that needs a tool: the party's tool used on it, its "on
+// what?" answered.  The tool's own script says if it must be held.  False
+// if this thing has none, or for a guest (who has the crosshair).
+static bool Friend_mode_use_tool_on(Game_object* obj) {
+	const Friend_tool* tool = Friend_tool_for(obj);
+	if (!tool || Friend_mode_is_guest()) {
+		return false;
+	}
+	if (!is_party_item(tool->shape)) {
+		Friend_mode_target_notice(std::string("Needs a ") + tool->name);
+		return true;
+	}
+	Usecode_machine* usecode = gwin->get_usecode();
+	Game_object*     old_target;
+	Tile_coord*      old_tile;
+	usecode->save_intercept(old_target, old_tile);
+	usecode->intercept_click_on_item(obj);
+	gwin->activate_item(tool->shape);
+	usecode->restore_intercept(old_target, old_tile);
+	return true;
+}
+
+// Dropping by Space or the item menu (2026-11-04): the crosshair says where,
+// as Penumbra's plaques and other puzzles care.  E (or the pad's D-pad) aims
+// at a thing, Q at a person, the mouse or right stick anywhere; a click or
+// Space drops there.  Space with nothing aimed drops at one's feet, so two
+// Spaces still drop at one's feet.
+static bool friend_drop_cursor = false;    // Get_click: Space answers, aimed or not.
+static int  friend_drop_start_x = 0;       // Where the pointer was: not moved, not aimed.
+static int  friend_drop_start_y = 0;
+static Game_object* friend_drop_item = nullptr;    // What's being dropped.
+static Game_object* Friend_crosshair_pick();
+static void         Friend_picture_middle(Game_object* obj, int& gx, int& gy);
+
+// What Space would drop on now: the pick if the pointer is on it ('on');
+// else true if the pointer has moved, for there; else false, one's feet.
+static bool Friend_drop_aimed(Game_object*& on) {
+	const int mx = Mouse::mouse()->get_mousex();
+	const int my = Mouse::mouse()->get_mousey();
+	auto near = [mx, my](int gx, int gy) {
+		return std::abs(mx - gx) <= 6 && std::abs(my - gy) <= 6;
+	};
+	on = Friend_crosshair_pick();
+	if (on && on != friend_drop_item) {
+		int gx;
+		int gy;
+		Friend_picture_middle(on, gx, gy);
+		if (near(gx, gy)) {
+			return true;
+		}
+	}
+	on = nullptr;
+	return !near(friend_drop_start_x, friend_drop_start_y);
+}
+
+// What dropping on 'person' does, as Actor::drop has it: the party take it,
+// anyone else has it land by them.
+static std::string Friend_drop_on_person(Actor* person) {
+	if (!person->is_in_party()) {
+		return "Drop by " + Friend_target_name(person);
+	}
+	return friend_drop_item && friend_drop_item->get_outermost() == person ? "Keep"
+																		   : "Give to " + Friend_target_name(person);
+}
+
+// A chest, crate or body on the map takes what's dropped on it (unlike a
+// drag, where it lands on top).  A locked one doesn't.
+static bool Friend_drop_goes_inside(Game_object* thing) {
+	return thing != friend_drop_item && thing->as_container() && !thing->as_actor()
+		   && Friend_thing_group_of(thing) == Friend_thing_group::box && !thing->get_info().is_container_locked();
+}
+
+// What the pointer alone is on, if dropping there does more than set it
+// down: a party member or an open chest.  Not with a window over it.
+static Game_object* Friend_drop_under(int x, int y) {
+	if (gwin->get_gump_man()->find_gump(x, y)) {
+		return nullptr;
+	}
+	Game_object* under  = gwin->find_object(x, y);
+	Actor*       person = under ? under->as_actor() : nullptr;
+	return under && ((person && person->is_in_party()) || Friend_drop_goes_inside(under)) ? under : nullptr;
+}
+
+// The hint under "Drop X where?": what Space does, as the pointer moves.
+static std::string Friend_drop_hint() {
+	const std::string act = " (" + Friend_key_label("Space") + ")";
+	Game_object*      on  = nullptr;
+	if (!Friend_drop_aimed(on)) {
+		return "At your feet" + act + "  Aim ("
+			   + (Controller_last_input_is_pad() ? "R stick, D-pad" : "E, Q, mouse") + ")";
+	}
+	if (!on) {
+		on = Friend_drop_under(Mouse::mouse()->get_mousex(), Mouse::mouse()->get_mousey());
+	}
+	if (!on) {
+		return "Drop here" + act;
+	}
+	if (Actor* person = on->as_actor()) {
+		return Friend_drop_on_person(person) + act;
+	}
+	return (Friend_drop_goes_inside(on) ? "Put in " : "Drop on ") + Friend_thing_name(on) + act;
+}
+
+static bool Friend_mode_drop_where(Game_object* obj, int count) {
+	const Game_object_shared keep = obj->shared_from_this();
+	const std::string name = count < obj->get_quantity() ? std::to_string(count) + " of " + Friend_thing_name(obj)
+														 : Friend_thing_name(obj);
+	if (gwin->get_action_target()) {
+		Friend_mode_clear_target();    // A foe picked earlier isn't where this goes.
+	}
+	Friend_mode_target_notice("Drop " + name + " where?");
+	friend_drop_start_x = Mouse::mouse()->get_mousex();
+	friend_drop_start_y = Mouse::mouse()->get_mousey();
+	int x = -1;
+	int y = -1;
+	friend_drop_item   = obj;
+	friend_drop_cursor = true;
+	Mouse::aim_hidden  = true;    // Till the player starts to aim (Friend_mode_click_wait_poll).
+	const bool answered = Get_click(x, y, Mouse::greenselect);
+	Mouse::aim_hidden  = false;
+	friend_drop_cursor = false;
+	if (!answered) {
+		friend_drop_item = nullptr;
+		Friend_mode_target_notice("Not dropped");
+		return false;
+	}
+	Game_object* on = nullptr;
+	if (x < 0 && Friend_drop_aimed(on) && !on) {    // Space: where the hint said.
+		x = Mouse::mouse()->get_mousex();
+		y = Mouse::mouse()->get_mousey();
+	}
+	if (!on && x >= 0) {
+		on = Friend_drop_under(x, y);
+	}
+	const bool inside = on && Friend_drop_goes_inside(on);
+	friend_drop_item  = nullptr;
+	Gump* from = gwin->get_gump_man()->find_gump(obj);
+	const bool dropped = on || x >= 0 ? gwin->drop_object_at(obj, from, x, y, count, on, inside)
+									  : gwin->move_object(obj, from, nullptr, -1, count);
+	Friend_mode_target_notice(dropped ? "Dropped " + name : "Can't drop that there");
+	return dropped;
+}
 
 // Locks (2026-11-01): a locked chest or door picked with E.  Space unlocks
 // it with a key that fits (K does too), else picks the lock with a
@@ -4397,8 +4614,8 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		}
 	}
 	// One's own.  Space: use, ready or put away; what has none of those is
-	// dropped, after asking.  Shift+Space drops at once; Alt+Space drops
-	// some (how many), or on a worn stack puts some away.
+	// dropped where the crosshair says, as Shift+Space drops anything;
+	// Alt+Space drops some (how many), or on a worn stack puts some away.
 	if (mine) {
 		if (alt && Friend_mode_put_some_away(own, obj, window)) {
 			return true;
@@ -4408,17 +4625,10 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		} else if (plain && Friend_is_wearable(own, obj)) {
 			Friend_mode_equip(own, obj, window);
 		} else {
-			const int         count = Friend_how_many(obj, alt);
-			const std::string name  = count < obj->get_quantity()
-											 ? std::to_string(count) + " of " + Friend_thing_name(obj)
-											 : Friend_thing_name(obj);
+			const int count = Friend_how_many(obj, alt);
 			const int index = window ? Friend_window_index(obj) : 0;
-			if (count > 0 && (!plain || Friend_confirmed(obj, Friend_confirm::drop, "Drop " + name + "? Space again"))
-				&& gwin->move_object(obj, window, nullptr, -1, count)) {
-				Friend_mode_target_notice("Dropped " + name);
-				if (window) {
-					Friend_mode_pick_next_in_window(index);    // Stay in place.
-				}
+			if (count > 0 && Friend_mode_drop_where(obj, count) && window && friend_object_in_window) {
+				Friend_mode_pick_next_in_window(index);    // Stay in place.
 			}
 		}
 		return true;
@@ -4435,6 +4645,9 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	// a window means take all).
 	const bool whole = use || readable || obj->as_container();
 	if (use && plain && Friend_mode_unlock(own, obj)) {
+		return true;
+	}
+	if (use && plain && Friend_mode_use_tool_on(obj)) {
 		return true;
 	}
 	if (use && plain) {
@@ -4534,6 +4747,9 @@ static std::string Friend_key_label(const std::string& key) {
 }
 
 static std::string Friend_space_hint() {
+	if (friend_drop_cursor) {
+		return Friend_drop_hint();
+	}
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
 	const Game_object_shared thing  = friend_object_target.lock();
@@ -4657,6 +4873,9 @@ static std::string Friend_space_hint() {
 	}
 	if (const std::string drive = Friend_vehicle_action(obj); !drive.empty()) {
 		return two(drive, "", pick_up);
+	}
+	if (const Friend_tool* tool = Friend_tool_for(obj); tool && !Friend_mode_is_guest()) {
+		return two(std::string("Use ") + tool->name, "");
 	}
 	if (Friend_is_usable_thing(obj)) {
 		const char* what = Friend_is_readable(obj) ? "Read" : obj->get_shapenum() == 893 ? "Drink" : "Use";
@@ -5051,8 +5270,12 @@ static void Friend_mode_cycle_object(int step) {
 	if (gwin->get_action_target()) {
 		Friend_mode_clear_target();    // E picks things, Q people.
 	}
-	std::vector<Game_object*> things    = Friend_window_candidates();
-	const bool                in_window = !things.empty();
+	// The crosshair wants the world: what's in a window can't be aimed at.
+	std::vector<Game_object*> things;
+	if (!friend_crosshair_things) {
+		things = Friend_window_candidates();
+	}
+	const bool in_window = !things.empty();
 	if (!in_window) {
 		friend_range_shown_until = SDL_GetTicks() + 2000;
 		things                   = Friend_object_candidates(own);
@@ -5075,6 +5298,9 @@ static void Friend_mode_cycle_object(int step) {
 	int                      index   = step < 0 ? count - 1 : 0;
 	if (current != things.end()) {
 		index = static_cast<int>(current - things.begin()) + step;
+		if (friend_crosshair_things) {
+			index = (index + count) % count;    // The crosshair loops, as Q does.
+		}
 	}
 	if (things.empty() || index < 0 || index >= count) {
 		friend_object_target.reset();
@@ -8275,6 +8501,27 @@ static void Friend_mode_take_suggestions() {
 // Host, waiting for a click (a conversation's choices among others): keep
 // reading guests' suggestions.
 static void Friend_mode_click_wait_poll() {
+	if (friend_drop_cursor) {    // The main loop isn't painting these: "Drop X where?" and its hint.
+		// The mouse, the right stick or a pick (which moves the pointer to it).
+		if (Mouse::aim_hidden
+			&& (Mouse::mouse()->get_mousex() != friend_drop_start_x || Mouse::mouse()->get_mousey() != friend_drop_start_y)) {
+			Mouse::aim_hidden   = false;
+			Mouse::mouse_update = true;
+		}
+		const uint32 now = static_cast<uint32>(SDL_GetTicks());
+		for (Friend_log_line& line : friend_notices) {
+			if (line.text == friend_context_line) {
+				line.time = now;
+			}
+		}
+		friend_hint_at         = now;
+		const std::string hint = Friend_space_hint();
+		if (hint != friend_hint_shown) {
+			friend_hint_shown   = hint;
+			friend_hint_changed = true;
+		}
+		Friend_mode_paint_chat_log(false);
+	}
 	if (friend_session.mode() != Friend_mode_session::Mode::host) {
 		return;
 	}
@@ -9879,11 +10126,7 @@ static void Friend_mode_item_menu() {
 	if (party && obj->is_dragable()) {
 		choices.push_back({"Drop", [thing]() {
 							   Game_object* item = thing.get();
-							   const std::string name = Friend_thing_name(item);
-							   if (gwin->move_object(item, gwin->get_gump_man()->find_gump(item), nullptr, -1,
-													 item->get_quantity())) {
-								   Friend_mode_target_notice("Dropped " + name);
-							   }
+							   Friend_mode_drop_where(item, item->get_quantity());
 						   }});
 	}
 	std::vector<std::string> labels;
@@ -13431,6 +13674,8 @@ static bool Friend_aim_crosshair_at_pick() {
 	float       wy     = 0;
 	SDL_RenderCoordinatesToWindow(SDL_GetRenderer(window), static_cast<float>(sx), static_cast<float>(sy), &wx, &wy);
 	Controller_aim_pointer(wx, wy);
+	Controller_pointer_at(wx, wy);    // Where it went: kept in the window.
+	Friend_pointer_in_game(wx, wy, friend_crosshair_left_x, friend_crosshair_left_y);
 	return true;
 }
 
@@ -13441,6 +13686,15 @@ static bool Get_click(
 		bool  rotate_colors    // If the palette colors should rotate.
 ) {
 	dragging               = false;    // Init.
+	if (Mouse::mouse()->get_shape() == Mouse::greenselect) {
+		// A new crosshair: Q and E go by the pointer once it's moved (or the
+		// pad's already showing it).
+		float wx = 0;
+		float wy = 0;
+		friend_crosshair_left_x = friend_cycle_aim_x = Mouse::mouse()->get_mousex();
+		friend_crosshair_left_y = friend_cycle_aim_y = Mouse::mouse()->get_mousey();
+		friend_cycle_aimed      = Controller_pointer_at(wx, wy);
+	}
 	uint32 last_rotate     = 0;
 	g_waiting_for_click    = true;
 	SDL_Renderer* renderer = SDL_GetRenderer(gwin->get_win()->get_screen_window());
@@ -13580,15 +13834,25 @@ static bool Get_click(
 							Friend_mode_cycle_target(step);
 							friend_crosshair_cycle = false;
 						} else {
+							friend_crosshair_things = true;
 							Friend_mode_cycle_object(step);
+							friend_crosshair_things = false;
 						}
 						Friend_aim_crosshair_at_pick();
 						break;
 					}
 					if (crosshair && (c == SDLK_UP || c == SDLK_DOWN)) {    // The D-pad: as Shift+E and E.
+						friend_crosshair_things = true;
 						Friend_mode_cycle_object(c == SDLK_UP ? -1 : 1);
+						friend_crosshair_things = false;
 						Friend_aim_crosshair_at_pick();
 						break;
+					}
+					if (crosshair && c == SDLK_SPACE && friend_drop_cursor && !event.key.repeat) {
+						x                   = -1;    // Friend_mode_drop_where works out where.
+						y                   = -1;
+						g_waiting_for_click = false;
+						return true;
 					}
 					if (crosshair && c == SDLK_SPACE && !event.key.repeat && Friend_aim_crosshair_at_pick()) {
 						Friend_picture_middle(Friend_crosshair_pick(), x, y);

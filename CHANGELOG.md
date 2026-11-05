@@ -24,6 +24,36 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.3)
+
+### Added
+
+- **Dropping asks where:** every drop now lets you aim. E (the D-pad on a
+  controller) aims at a thing, Q at a person, and the mouse or right stick
+  aims anywhere; the cursor appears once you start aiming. A click or Space
+  (Cross) drops it there, or at your feet if you didn't aim, and the hint
+  says which it will do. On a party member it says "Give to" and they take
+  it. On a chest or body it says "Put in" and goes inside, unless it's
+  locked or full. On a plaque or pedestal it is set on top.
+- **Q and E while aiming:** while the cursor is asking where (a drop, a
+  spell, a tool), moving it and pressing Q or E picks what's nearest it, and
+  pressing again steps to the next, looping round. They stuck on the
+  nearest before.
+- **More things to target for quests:** E now offers the bleeding stone
+  (Space uses your pick), the firepit (the sword blank), the anvil, the
+  Well of Souls (the Soul Cage), pedestals, the Skara Brae ferry's horns
+  and the Ferryman, giant bones, metal walls and portcullises. Iron bars,
+  stone chips, the stone heart, the orrery viewer, bee stingers, sacks of
+  wheat, wool, thread and dough now count as Loot, so they're offered
+  without turning Decor on.
+
+### Fixed
+
+- **Puzzles that wait for a dropped item:** Penumbra's plaques ignored
+  anything dropped with Space, and anything a guest dropped. Both now count.
+- **Tools with a window open:** while a tool or spell asks "on what?", E
+  picks from the world instead of the open backpack.
+
 ## 0.8.2, 2026-11-02 (build 242)
 
 ### Added

@@ -1037,6 +1037,9 @@ public:
 	bool start_dragging(int x, int y);
 	// Friend Mode targeting: a drag and drop without the mouse (drag.cc).
 	bool move_object(Game_object* object, Gump* from, Container_game_object* dest, int spot = -1, int count = 0);
+	// Friend Mode targeting: as a drag let go at (x, y), or onto 'on' if given.
+	bool drop_object_at(Game_object* object, Gump* from, int x, int y, int count, Game_object* on = nullptr,
+			bool inside = false);
 	bool drag(int x, int y);                        // During dragging.
 	bool drop_dragged(int x, int y, bool moved);    // Done dragging.
 	void stop_dragging();
