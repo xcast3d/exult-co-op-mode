@@ -7,8 +7,8 @@ Take an item off this list once it's on the site.
 
 ### Aimed drops (new in 0.8.3)
 
-A small section of its own on the site, built around a video. The user is
-recording it, and it doubles as Reddit content.
+A small section of its own on the site, with screenshots. A video comes
+later, for Reddit.
 
 **Headline:** Drop anything anywhere, no dragging.
 
@@ -29,7 +29,10 @@ Iolo", "Put in Chest", "Drop here". Or press twice to drop at your feet.
 | At your feet | Space again without aiming | Cross (A) again without aiming |
 | Cancel | Escape | Circle (B) |
 
-**Video, in order:**
+**Screenshots:** the hints are the story, so catch them on screen: "Give to
+Spark" on a companion, "Put in Chest" on a chest, "Drop here" on open ground.
+
+**Video for Reddit, later, in order:**
 
 1. Two presses: an item lands at your feet, the old habit still works.
 2. Aim at a spot with the mouse or stick: "Drop here".

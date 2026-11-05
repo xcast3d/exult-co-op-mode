@@ -24,7 +24,7 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## Unreleased (0.8.3)
+## 0.8.3, 2026-11-04 (build 249)
 
 ### Added
 
