@@ -7,7 +7,7 @@ steps have moved Unreleased under its version; before that, Unreleased.
     git show <commit>:CHANGELOG.md | python3 -I release-notes.py
 
 Handles what CHANGELOG.md uses: ### headings, "- " items with indented
-continuation lines, paragraphs, **bold**, `code` and [links](...) (kept as
+continuation lines and "  - " items under them, paragraphs, **bold**, `code` and [links](...) (kept as
 their text: the updater's window is no place to browse).
 """
 
@@ -45,7 +45,7 @@ def newest_section(lines):
 
 
 def blocks(section):
-    """(kind, text) for each heading, list item and paragraph."""
+    """(kind, text) for each heading, list item, sub-item and paragraph."""
     current = None
     for line in section:
         if not line.strip():
@@ -61,6 +61,9 @@ def blocks(section):
             if current:
                 yield current
             current = ("li", line[2:].strip())
+        elif line.startswith("  - ") and current:
+            yield current
+            current = ("sub", line[4:].strip())
         elif current:
             current = (current[0], current[1] + " " + line.strip())
         else:
@@ -70,14 +73,27 @@ def blocks(section):
 
 
 def main():
-    out, in_list = [STYLE], False
+    out, in_list, in_sub = [STYLE], False, False
     for kind, text in blocks(newest_section(sys.stdin)):
+        if kind == "sub":
+            # Inside the item before it: its </li> comes after this list.
+            if not in_sub:
+                out[-1] = out[-1].removesuffix("</li>")
+                out.append("<ul>")
+            in_sub = True
+            out.append(f"<li>{inline(text)}</li>")
+            continue
+        if in_sub:
+            out.append("</ul></li>")
+            in_sub = False
         if kind == "li" and not in_list:
             out.append("<ul>")
         elif kind != "li" and in_list:
             out.append("</ul>")
         in_list = kind == "li"
         out.append(f"<{kind}>{inline(text)}</{kind}>")
+    if in_sub:
+        out.append("</ul></li>")
     if in_list:
         out.append("</ul>")
     if len(out) == 1:
