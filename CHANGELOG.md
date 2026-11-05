@@ -28,13 +28,19 @@ both in `--version` and the version files saved with each game.
 
 ### Added
 
-- **Dropping asks where:** every drop now lets you aim. E (the D-pad on a
-  controller) aims at a thing, Q at a person, and the mouse or right stick
-  aims anywhere; the cursor appears once you start aiming. A click or Space
-  (Cross) drops it there, or at your feet if you didn't aim, and the hint
-  says which it will do. On a party member it says "Give to" and they take
-  it. On a chest or body it says "Put in" and goes inside, unless it's
-  locked or full. On a plaque or pedestal it is set on top.
+- **A new way to drop things:** dropping is no longer "at your feet or
+  nothing". Every drop, by keyboard or controller, now lets you choose where
+  the item goes, without dragging it.
+  - **Drop:** press the drop button and press it again to drop at your feet.
+    The cursor stays out of the way until you start to aim.
+  - **Aim:** E (the D-pad on a controller) steps through things, Q through
+    people, and the mouse or right stick goes anywhere. Then a click or
+    Space (Cross) drops it there.
+  - **The hint says what will happen:** "At your feet", "Drop here", "Give
+    to Iolo", "Put in Chest" or "Drop on Plaque", changing as you aim.
+  - **Give and store from anywhere in reach:** a party member takes the item,
+    and an unlocked chest or body holds it, with no window to open. A
+    locked or full one has it set on top.
 - **Q and E while aiming:** while the cursor is asking where (a drop, a
   spell, a tool), moving it and pressing Q or E picks what's nearest it, and
   pressing again steps to the next, looping round. They stuck on the
