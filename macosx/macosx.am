@@ -48,6 +48,7 @@ if QOTC_SPARKLE
 	/usr/libexec/PlistBuddy \
 	  -c "Set :CFBundleVersion $$build" \
 	  -c "Set :CFBundleShortVersionString $$version" \
+	  -c "Add :SUBundleName string 'Quest of the Companions'" \
 	  -c "Add :SUFeedURL string $(QOTC_FEED_MACOS)" \
 	  -c "Add :SUPublicEDKey string $(QOTC_UPDATE_KEY)" \
 	  -c "Add :SUEnableAutomaticChecks bool true" \
