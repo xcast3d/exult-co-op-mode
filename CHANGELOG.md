@@ -33,8 +33,8 @@ both in `--version` and the version files saved with each game.
   your companions to attack a target, protect someone, fall back or hold, then
   the fight carries on. In co-op nothing stops: the fight goes on while you choose.
 - **Enemy tactics:** enemies now fight by what they carry. Archers keep their
-  distance, packs spread out instead of queueing, casters go for the most hurt,
-  and a group can break and run when its leader falls or half of it is gone.
+  distance, packs spread out instead of queueing, and a group can break and run
+  when its leader falls or half of it is gone.
   You can turn this off under Enemy tactics in the Class System options.
 - **Positional damage (optional, off by default):** turn it on in the Game Engine
   options, and melee blows from the side or back land more often, with blows from
