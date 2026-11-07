@@ -45,8 +45,10 @@ In a test build (made with `CPPFLAGS=-DFRIEND_TEST_KEYS`; release builds
 have none of this since 2026-10-26), on the host, **Ctrl+F9** places a test
 kit of usable objects around the Avatar, **F9** and **F8** gather two groups
 of companions into the party (levelled for the Class System, with reagents
-and a full spellbook), **Shift+F9** places a fight (two each of troll,
-headless and skeleton) and **Shift+F8** a rat, a wolf and a rabbit.
+and a full spellbook), **Shift+F9** lists test fights (a wolf pack, a troll
+band with a leader, archers and mages, skeletons and slimes, a mixed fight,
+peaceful animals, and Clear them to remove them) and **Shift+F8** places a rat,
+a wolf and a rabbit.
 **Alt+F8** (Option+F8 on a Mac, which keeps Ctrl+F8) takes the party to the next of the game's vehicles (the flying
 carpet, a ship in Britain's harbour, a cart by Britain), with the deed or
 title in the Avatar's pack.
@@ -217,9 +219,19 @@ never pause the world on any machine (`Gump_manager::gumps_dont_pause_game`
 says so while `Friend_mode_in_session`; each window remembers whether it
 paused, so turning co-op on or off with windows open can't unbalance the
 queue). Combat pause does nothing in co-op, host included (decided: no
-pausing in a co-op game; the only exceptions are Exult's menus and the
-Avatar's conversations, which stop Exult's main loop and can't be
-changed). While a guest has one of
+pausing in a co-op game; the exceptions are Exult's menus and the Avatar's
+conversations, which stop Exult's main loop and can't be changed).
+
+**Cursors and short lists** (2026-11-06) don't stop anyone in co-op: the crosshair,
+however it's opened (drops, spells, an item asking for a target, battle orders), and
+the small lists (item menu, Give to, Orders, how many). `Main_loop_pass(false)` runs
+the game under them (`Friend_mode_live_pass`), from `Get_click` and `do_modal_gump`,
+with no input and nothing that loads a world or opens a window; a world from the
+host waits for the cursor to end. The one aiming stops walking. A conversation or
+loaded save takes a crosshair away, as Escape would. The fallback, if this proves
+unreliable: time the cursor out after 2 seconds and snap guests back.
+
+While a guest has one of
 Exult's menus open (they stop its main loop), the host's AI drives its
 companion quietly (guest_follow 2 and 3: no bar, no notice), and hands it
 back when the menu closes. The host's menus still pause everyone.

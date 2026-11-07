@@ -117,6 +117,13 @@ void Friend_mode_request_main_menu();
 bool Friend_mode_is_guest();
 // Hosting or joined: a co-op session is on.
 bool Friend_mode_in_session();
+// Co-op: the next modal window, a short list or prompt, doesn't stop the game.
+// It asks with _take, then runs the game with _pass each frame.
+void Friend_mode_next_modal_live();
+bool Friend_mode_take_modal_live();
+void Friend_mode_combat_switched(bool on);
+bool Friend_mode_in_live_pass();
+void Friend_mode_live_pass();
 // The palette colour of the player controlling 'actor' (their minimap dot),
 // or -1: the host's character (the Avatar, or the companion it leads) and
 // each guest's companion, during a co-op session.  For the status bar.

@@ -28,6 +28,7 @@
 #include "Astar.h"
 #include "Audio.h"
 #include "Face_stats.h"
+#include "friendbattle.h"
 #include "friendclass.h"
 #include "Gump_manager.h"
 #include "Paperdoll_gump.h"
@@ -2841,6 +2842,7 @@ int Actor::apply_damage(
 
 	// Friend Mode's skills: armour boosts, armour piercing, marked foes.
 	Friend_class_adjust_damage(this, attacker, damage, armor);
+	damage += Friend_battle_strike_damage();    // Friend Mode: Positional damage.
 
 	// Some attacks ignore armor (unless the armor gives immunity).
 	if (wpoints == 127 || type == Weapon_data::lightning_damage || type == Weapon_data::ethereal_damage
@@ -4301,7 +4303,7 @@ Game_object* Actor::attacked(
 	if (Combat::show_hits && !is_dead() && delta >= 0) {
 		eman->remove_text_effect(this);
 		char hpmsg[50];
-		snprintf(hpmsg, sizeof(hpmsg), "-%d(%d)", delta, oldhp - delta);
+		snprintf(hpmsg, sizeof(hpmsg), "-%d(%d)%s", delta, oldhp - delta, Friend_battle_strike_label());
 		eman->add_text(hpmsg, this);
 	}
 	if (combat_trace) {

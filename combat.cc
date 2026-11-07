@@ -35,6 +35,7 @@
 #include "combat_opts.h"
 #include "effects.h"
 #include "exult.h"
+#include "friendbattle.h"
 #include "friendclass.h"
 #include "game.h"
 #include "gameclk.h"
@@ -71,6 +72,8 @@ Combat::Mode Combat::mode                   = Combat::original;
 bool         Combat::show_hits              = false;
 bool         Combat::health_bars            = false;
 bool         Combat::charmed_more_difficult = false;
+bool         Combat::friendly_fire          = false;
+bool         Combat::positional_damage      = false;
 
 extern bool combat_trace;
 
@@ -827,7 +830,7 @@ void Combat_schedule::back_off(Actor* npc, Game_object* attacker) {
 	}
 	const Tile_coord npc_tile      = npc->get_tile();
 	const Tile_coord attacker_tile = attacker->get_tile();
-	int              dx            = npc_tile.tx - attacker_tile.ty;
+	int              dx            = npc_tile.tx - attacker_tile.tx;
 	int              dy            = npc_tile.ty - attacker_tile.ty;
 	dx                             = dx < 0 ? -1 : dx > 0 ? 1 : 0;
 	dy                             = dy < 0 ? -1 : dy > 0 ? 1 : 0;
@@ -929,6 +932,12 @@ void Combat_schedule::approach_foe(bool for_projectile    // Want to attack with
 		if (!retry_ok) {
 			delete path;    // Really failed.  Try again in
 			//  after wandering.
+			if (Friend_battle_no_path(npc)) {    // Friend Mode: wait, not wander.
+				failures++;
+				npc->set_target(nullptr);
+				npc->start(200, 500 + rand() % 500);
+				return;
+			}
 			// Just try to walk towards opponent.
 			Tile_coord       pos   = npc->get_tile();
 			const Tile_coord topos = opponent->get_tile();
@@ -1377,6 +1386,9 @@ bool Combat_schedule::attack_target(
 		if (cheat.in_god_mode()) {
 			autohit = trg_party ? false : (att_party ? true : autohit);
 		}
+		// Friend Mode: Positional damage, a blow from the side or back.
+		const Friend_strike_position strike = Friend_battle_position(att, target);
+		attval += Friend_battle_hit_bonus(strike);
 		if (!autohit && !target->try_to_hit(attacker, attval)) {
 			Friend_class_note_miss(attacker, target);    // Friend Mode: Riposte.
 			return false;    // Missed.
@@ -1397,7 +1409,12 @@ bool Combat_schedule::attack_target(
 			eman->add_effect(std::make_unique<Explosion_effect>(target->get_tile() + offset, target, 0, weapon, -1, attacker));
 		} else {
 			const Game_object_shared tgt_obj = target->shared_from_this();
+			Friend_battle_set_strike(strike);
 			auto*                    result  = target->attacked(attacker, weapon, ammo ? ammo->get_shapenum() : -1, false);
+			Friend_battle_set_strike(friend_strike_front);
+			if (result != nullptr) {
+				Friend_battle_announce_strike(result->as_actor(), strike);
+			}
 			if (trg != nullptr && result != nullptr) {
 				back_off(trg, attacker);
 			}
@@ -1422,6 +1439,7 @@ void Combat_schedule::run_away() {
 	Tile_coord pos  = npc->get_tile();
 	pos.tx += dirx * (8 + rx % 8);
 	pos.ty += diry * (8 + ry % 8);
+	Friend_battle_flee_spot(npc, pos);    // Friend Mode: morale runs from the party.
 	npc->walk_to_tile(pos, gwin->get_std_delay(), 0);
 	if (fleed == 1 && !npc->get_flag(Obj_flags::tournament) && rand() % 3 && gwin->add_dirty(npc)) {
 		yelled++;
@@ -1605,6 +1623,17 @@ void Combat_schedule::now_what() {
 	if (Need_new_opponent(gwin, npc)) {
 		npc->set_target(nullptr);
 		state = approach;
+	}
+	// Friend Mode: the party's orders, and enemies' tactics.
+	switch (Friend_battle_steer(npc, spellbook != nullptr)) {
+	case friend_steer_busy:
+		state = approach;
+		return;
+	case friend_steer_new_target:
+		state = approach;
+		break;
+	default:
+		break;
 	}
 	Game_object* opponent = npc->get_target();
 	switch (state) {    // Note:  state's action has finished.
@@ -1915,7 +1944,7 @@ void Duel_schedule::now_what() {
 
 void Combat::toggle_pause() {
 	if (!gwin->in_combat() || Friend_mode_in_session()) {
-		return;    // Not in combat; no pausing in co-op (only the host's menus).
+		return;    // Not in combat; no pausing in co-op (only the host's menus and orders).
 	}
 	if (!paused && mode == original) {
 		return;    // Not doing that sort of thing.

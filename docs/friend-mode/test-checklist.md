@@ -921,9 +921,21 @@ Built 2026-10-20, untested. Only the host pauses the game.
       Avatar and fights (the host's log: "follows the Avatar"); closing
       the menu hands it back where it stands ("takes over again"), with no
       "Following" bar. A guest already following (Y) stays following.
-- [ ] Combat pause does nothing in co-op, on the host too (the key, and
-      Space while the Avatar attacks its pick); in single player it works
-      as before. Opening to co-op while combat is paused resumes it.
+- [ ] Co-op, on the host and on a guest: while one aims a crosshair (a drop by
+      Space and by the item menu, a spell, an item asking for a target, an order)
+      or has a short list open (item menu, Orders, how many), the others carry on
+      with no message and the world moves; a conversation that starts takes the
+      crosshair away. A guest's join waits only until a script's cursor ends. A
+      scripted spell's cursor is the one to watch for trouble: from the spell
+      bar, a second click on the bar under its crosshair does nothing (one cast,
+      one payment of mana, and the world keeps moving).
+- [ ] On a pad, switching combat on or off says "Combat Mode" or "Peaceful Mode" at
+      the top, however it switched (the button, or a fight starting); a mode line
+      replaces the last one. With the mouse and keyboard, no line.
+- [ ] Combat pause does nothing in co-op, on the host too. In single player, with
+      it on in the options and nothing picked, Space pauses and resumes; with a
+      pick, Space attacks it; once paused, Space always resumes. Opening to co-op
+      while combat is paused resumes it.
 - [ ] The host's Escape menu still pauses everyone, with the bar on guests.
 
 ## Class System (protocol 32)

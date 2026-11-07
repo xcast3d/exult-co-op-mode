@@ -132,6 +132,8 @@ void Friend_class_adjust_damage(const Actor* target, Game_object* attacker, int&
 void Friend_class_note_miss(Game_object* attacker, Game_object* target);
 // Combat_schedule::attack_target: this strike always hits (a Riposte's answer).
 bool Friend_class_sure_hit(const Game_object* attacker);
+// One of the party's summoned creatures, still about.
+bool Friend_class_is_summon(const Actor* actor);
 // Combat_schedule::attack_target: a skill's shot may reach this far, past
 // the weapon's own range (0 when no skill is shooting).
 int Friend_class_shot_reach();
@@ -148,6 +150,7 @@ void                 Friend_mode_class_notice(const std::string& text);
 void Friend_mode_class_hint(const std::string& text, const std::string& hint);
 // Hostile: evil or chaotic, outside the party, alive, someone 'own' may fight.
 bool Friend_mode_is_hostile(const Actor* own, const Actor* foe);
+bool Friend_mode_is_attackable(const Actor* own, const Actor* foe);    // Peaceful or not.
 // A guest may fight it: a creature (animals, monsters), or a hostile NPC;
 // townsfolk too with 'peaceful_ok' (after the guest confirmed).
 bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe, bool peaceful_ok = false);

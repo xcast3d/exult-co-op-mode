@@ -107,7 +107,9 @@ public:
 	 */
 	enum Avatar_Speed_Factors {
 		slow_speed_factor          = 100,
-		medium_combat_speed_factor = 150,
+		// Friend Mode (2026-11-06): was 150, a step between walking and the
+		// slowest speed that felt like lag; now walking pace.
+		medium_combat_speed_factor = 200,
 		medium_speed_factor        = 200,
 		fast_speed_factor          = 400
 	};

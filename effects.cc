@@ -32,9 +32,11 @@
 #include "actors.h"
 #include "ammoinf.h"
 #include "chunks.h"
+#include "combat_opts.h"
 #include "dir.h"
 #include "egg.h"
 #include "exult.h"
+#include "friendclass.h"
 #include "game.h"
 #include "gameclk.h"
 #include "gamemap.h"
@@ -518,6 +520,14 @@ static inline int get_explosion_sfx(int weap, int proj) {
 	return ShapeID::get_info(shp).get_explosion_sfx();
 }
 
+// Friend Mode: on the party's side and in its right mind.  Charmed, they count
+// as foes: a blast of theirs isn't safe, nor are they safe from one.
+static bool On_party_side(const Actor* actor) {
+	return actor && actor->get_effective_alignment() == Actor::good
+		   && (actor->is_in_party() || actor == Game_window::get_instance()->get_main_actor()
+			   || Friend_class_is_summon(actor));
+}
+
 /**
  *  Start explosion.
  */
@@ -539,6 +549,10 @@ Explosion_effect::Explosion_effect(
 	if (exp && exp->get_info().is_explosive()) {    // powderkeg
 		exp->set_quality(1);                        // mark as detonating
 	}
+
+	// Friend Mode: decided here, before a missing attacker is put down to the
+	// Avatar below.  Kegs stay dangerous, whoever sets them off.
+	party_fired = att && On_party_side(att->as_actor()) && !ShapeID::get_info(weapon).is_explosive();
 
 	if (!att || !att->as_actor()) {
 		// Blame avatar: if we have no living attacker.
@@ -575,6 +589,10 @@ void Explosion_effect::handle_event(
 		for (auto& it : cvec) {
 			const Game_object_shared obj = it.lock();
 			if (obj) {
+				// Friend Mode: the party's own blasts spare the party.
+				if (party_fired && !Combat::friendly_fire && On_party_side(obj->as_actor())) {
+					continue;
+				}
 				const Game_object_shared att_obj = attacker.lock();
 				obj->attacked(att_obj.get(), weapon, projectile, true);
 			}

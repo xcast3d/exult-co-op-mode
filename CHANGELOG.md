@@ -26,8 +26,42 @@ both in `--version` and the version files saved with each game.
 
 ## Unreleased (0.8.4)
 
+### Added
+
+- **Battle orders:** in combat, the Hold button under the minimap becomes
+  Orders (Ctrl+C, or LT + Y on a controller). The game pauses while you tell
+  your companions to attack a target, protect someone, fall back or hold, then
+  the fight carries on. In co-op nothing stops: the fight goes on while you choose.
+- **Enemy tactics:** enemies now fight by what they carry. Archers keep their
+  distance, packs spread out instead of queueing, casters go for the most hurt,
+  and a group can break and run when its leader falls or half of it is gone.
+  You can turn this off under Enemy tactics in the Class System options.
+- **Positional damage (optional, off by default):** turn it on in the Game Engine
+  options, and melee blows from the side or back land more often, with blows from
+  behind also hitting harder, and "flanked" or "back stab" appears over the target.
+  It works for enemies too.
+- **No more friendly fire from explosions:** blasts your party sets off, like the
+  firedoom staff's, no longer hurt your party or summoned creatures. Powder kegs,
+  traps and enemy blasts still do. To play it the old way, set Friendly fire to
+  Yes in the Game Engine options.
+
+### Fixed
+
+- **Stepping back when hit:** fighters no longer step back in the wrong direction
+  when struck.
+
 ### Changed
 
+- **Faster movement in combat:** you now walk at normal walking pace during a
+  fight, instead of the slower combat speed that could feel like lag.
+- **Fewer interruptions in co-op:** aiming a crosshair (drops, spells, items that
+  ask for a target) and short lists such as the item menu no longer stop anyone;
+  the game carries on for everyone while you choose.
+- **Pausing combat in single player:** if you turn on combat pause in the options,
+  Space pauses and resumes when nothing is targeted, and you can give battle orders
+  while paused.
+- **Combat Mode and Peaceful Mode on a controller:** a message at the top now says
+  when combat turns on or off, since the mouse pointer that shows it is hidden.
 - **The update window on a Mac** now says Quest of the Companions has a new
   version, not exult.
 

@@ -388,8 +388,8 @@ upstream.
       guest's companion), a peaceful one waits for Space. Turning combat
       mode on with a hostile picked attacks it.
 - [x] **Space attacks the target**, peaceful or not, turning combat mode
-      on. While the Avatar is already attacking the pick, Space pauses
-      combat as before. Guests attack peaceful people only after confirming
+      on. With nothing picked, or once paused, Space is combat pause, when
+      that option is on (2026-11-06). Guests attack peaceful people only after confirming
       ("Again to attack", 2026-10-20; it was not allowed before). Space
       was weighed against F (with food on Shift+F), double-clicking the
       target and an on-screen button, and kept: it only acts while the
@@ -760,6 +760,19 @@ effective health (the host shrinks each hit on them), a little more damage
 to the party, host-only settings, on top of Exult's own combat difficulty.
 Only if more testing shows combat got too easy with skills and the better
 AI (2026-10-25). Plan: [co-op scaling](friend-mode/coop-scaling-plan.md).
+
+### Friendly fire
+
+Explosions fired by the party (the firedoom staff above all) stop hurting the
+party, as a host option; kegs, traps, enemies' blasts and fire fields stay
+dangerous (2026-11-06, being built). Plan: [friendly fire](friend-mode/friendly-fire-plan.md).
+
+### Battle orders and enemy tactics
+
+In combat the Avatar's player can pause for a moment and give the party an order
+(attack a target, protect someone, fall back), from the button under the minimap,
+Ctrl+C or LT + Y. Enemies fight by what they carry, and can lose their nerve
+(2026-11-06, being built). Plan: [battle orders](friend-mode/battle-orders-plan.md).
 
 ### Offering features to Exult
 

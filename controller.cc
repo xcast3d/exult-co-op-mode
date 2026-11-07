@@ -22,6 +22,7 @@
 #include "palette.h"
 #include "shapeid.h"
 #include "shapes/vgafile.h"
+#include "exult.h"
 #include "mouse.h"
 
 #include <algorithm>
@@ -1675,6 +1676,7 @@ int Controller_choose(const std::string& title, const std::vector<std::string>& 
 		return -1;
 	}
 	Choice_gump choice(title, entries);
+	Friend_mode_next_modal_live();
 	Game_window::get_instance()->get_gump_man()->do_modal_gump(&choice, Mouse::hand);
 	return choice.get_chosen();
 }

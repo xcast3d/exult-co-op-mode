@@ -67,6 +67,7 @@
 #include "gumps/Spellbook_gump.h"
 #include "shapeinf/gumpinf.h"
 #include "font_map.h"
+#include "friendbattle.h"
 #include "friendclass.h"
 #include "friendmap.h"
 #include "spellbook.h"
@@ -1533,7 +1534,7 @@ static void Friend_mode_visit_next_vehicle() {
 // companions leave the party first (as a script dismisses them, waiting
 // where they stand), except those a player has; never more than seven
 // companions, U7's party.  Party changes reach guests as always.  Ctrl+F9
-// is the object kit, Shift+F9 a fight, Shift+F8 a rat, a wolf and a rabbit.
+// is the object kit, Shift+F9 a list of fights, Shift+F8 a rat, a wolf and a rabbit.
 static void Friend_mode_gather_companions(bool second_group) {
 	if (!GAME_BG) {
 		Friend_mode_notice("The test kit uses Black Gate's companions");
@@ -1609,38 +1610,145 @@ static void Friend_mode_gather_companions(bool second_group) {
 
 
 // Host debug aid: creatures that appear after a guest joined, for creature
-// sync and the Class System.  Shift+F9: a fight, two each of troll,
-// headless and skeleton (2026-10-23; nothing as strong as a dragon);
-// Shift+F8: a rat, a wolf and a rabbit (the old Shift+F9; the rabbit for
-// peaceful picks).  Found by name, so they work in either game; two rows
-// a few tiles north-east of the Avatar.
-static void Friend_mode_spawn_test_creatures(bool small) {
-	static const char* const fight[] = {"troll", "headless", "skeleton", "troll", "headless", "skeleton"};
-	static const char* const tame[]  = {"rat", "wolf", "rabbit"};
-	const char* const*       wanted  = small ? tame : fight;
-	const std::size_t        count   = small ? std::size(tame) : std::size(fight);
+// sync, the Class System and combat.  Shift+F8: a rat, a wolf and a rabbit
+// (the rabbit for peaceful picks).  Shift+F9: a list of fights, each for
+// something to test (2026-11-06; battle orders, enemy tactics).  Found by
+// name, so they work in either game; rows a few tiles north-east of the Avatar.
+static std::vector<Game_object_weak> friend_test_foes;    // For "Clear them".
+
+static int Friend_test_shape_named(const char* wanted) {
 	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
-	int              made   = 0;
-	for (std::size_t i = 0; i < count; ++i) {
-		for (int shape = 150; shape < shapes.get_num_shapes(); ++shape) {
-			const char* name = get_item_name(shape);
-			if (!name || std::strcmp(name, wanted[i]) != 0 || !ShapeID::get_info(shape).is_npc()) {
-				continue;
-			}
-			const Tile_coord avatar = gwin->get_main_actor()->get_tile();
-			const int        column = static_cast<int>(i % 3);
-			const int        row    = static_cast<int>(i / 3);
-			const Tile_coord want(avatar.tx + 5 + 3 * column, avatar.ty - 4 - 3 * row, avatar.tz);
-			const Tile_coord pos = Map_chunk::find_spot(want, 4, shape, 0, 1);
+	for (int shape = 150; shape < shapes.get_num_shapes(); ++shape) {
+		const char* name = get_item_name(shape);
+		if (name && std::strcmp(name, wanted) == 0 && ShapeID::get_info(shape).is_npc()) {
+			return shape;
+		}
+	}
+	return -1;
+}
+
+static Tile_coord Friend_test_spot(int shape, int index, int columns) {
+	const Tile_coord avatar = gwin->get_main_actor()->get_tile();
+	const Tile_coord want(avatar.tx + 5 + 3 * (index % columns), avatar.ty - 4 - 3 * (index / columns), avatar.tz);
+	return Map_chunk::find_spot(want, 4, shape, 0, 1);
+}
+
+static void Friend_mode_spawn_test_creatures() {
+	static const char* const tame[] = {"rat", "wolf", "rabbit"};
+	int                      made   = 0;
+	for (int i = 0; i < static_cast<int>(std::size(tame)); ++i) {
+		const int shape = Friend_test_shape_named(tame[i]);
+		if (shape >= 0) {
+			const Tile_coord pos = Friend_test_spot(shape, i, 3);
 			if (pos.tx >= 0) {
 				Monster_actor::create(shape, pos);
 				++made;
 			}
-			break;
 		}
 	}
 	gwin->set_all_dirty();
 	Friend_mode_notice(made ? "Test creatures placed" : "No test creatures in this game");
+}
+
+namespace {
+struct Friend_test_foe {
+	const char* name;
+	int         count;
+	int         weapon = -1;    // In place of its own gear (Black Gate shapes).
+	int         ammo   = -1;
+	bool        leader = false;    // Plainly the strongest, for morale.
+};
+
+struct Friend_test_fight {
+	const char*                  label;
+	bool                         hostile;
+	std::vector<Friend_test_foe> foes;
+};
+
+constexpr int friend_test_bow      = 597;
+constexpr int friend_test_arrows   = 722;
+constexpr int friend_test_firebolt = 856;
+}    // namespace
+
+static const std::vector<Friend_test_fight>& Friend_test_fights() {
+	static const std::vector<Friend_test_fight> fights = {
+			{      "Wolf pack (spread out, never flee)", true,                                                 {{"wolf", 6}}},
+			{      "Troll band (leader falls, they run)", true,                     {{"cyclops", 1, -1, -1, true}, {"troll", 5}}},
+			{"Archers and mages (keep their distance)", true,
+			 {{"fighter", 3, friend_test_bow, friend_test_arrows}, {"mage", 2, friend_test_firebolt}}},
+			{    "Skeletons and slimes (never flee)", true,                              {{"skeleton", 3}, {"slime", 3}}},
+			{                     "Mixed (tough fight)", true, {{"troll", 2}, {"headless", 2}, {"skeleton", 2}}},
+			{ "Peaceful (Attack order, not hostile)", false,                {{"deer", 1}, {"rabbit", 1}, {"cow", 1}}},
+	};
+	return fights;
+}
+
+static void Friend_test_arm(Actor* actor, const Friend_test_foe& foe) {
+	Shapes_vga_file& shapes = Shape_manager::get_instance()->get_shapes();
+	if (foe.weapon >= 0 && foe.weapon < shapes.get_num_shapes()) {
+		actor->add(Friend_test_kit_create(foe.weapon, 0).get(), true);
+	}
+	if (foe.ammo >= 0 && foe.ammo < shapes.get_num_shapes()) {
+		const Game_object_shared ammo = Friend_test_kit_create(foe.ammo, 0);
+		ammo->modify_quantity(49);
+		actor->add(ammo.get(), true);
+	}
+	actor->ready_best_weapon();
+}
+
+static void Friend_mode_spawn_test_fight(const Friend_test_fight& fight) {
+	int made  = 0;
+	int index = 0;
+	for (const Friend_test_foe& foe : fight.foes) {
+		const int shape = Friend_test_shape_named(foe.name);
+		for (int i = 0; shape >= 0 && i < foe.count; ++i, ++index) {
+			const Tile_coord pos = Friend_test_spot(shape, index, 4);
+			if (pos.tx < 0) {
+				continue;
+			}
+			const Game_object_shared obj
+					= fight.hostile ? Monster_actor::create(shape, pos, Schedule::combat, Actor::evil, true, foe.weapon < 0)
+									: Monster_actor::create(shape, pos);
+			Actor* actor = obj ? obj->as_actor() : nullptr;
+			if (!actor) {
+				continue;
+			}
+			if (foe.weapon >= 0) {
+				Friend_test_arm(actor, foe);
+			}
+			if (foe.leader) {
+				actor->set_property(Actor::strength, actor->get_property(Actor::strength) + 15);
+				actor->set_property(Actor::health, actor->get_property(Actor::strength));
+				actor->set_property(Actor::combat, actor->get_property(Actor::combat) + 10);
+			}
+			friend_test_foes.push_back(weak_from_obj(actor));
+			++made;
+		}
+	}
+	gwin->set_all_dirty();
+	Friend_mode_notice(made ? std::to_string(made) + " test creatures placed" : "No such creatures in this game");
+}
+
+static void Friend_mode_test_fight_menu() {
+	const auto&              fights = Friend_test_fights();
+	std::vector<std::string> labels;
+	for (const Friend_test_fight& fight : fights) {
+		labels.emplace_back(fight.label);
+	}
+	labels.emplace_back("Clear them");
+	const int chosen = Controller_choose("Test fight", labels);
+	if (chosen >= 0 && chosen < static_cast<int>(fights.size())) {
+		Friend_mode_spawn_test_fight(fights[chosen]);
+	} else if (chosen == static_cast<int>(fights.size())) {
+		for (const Game_object_weak& each : friend_test_foes) {
+			if (const Game_object_shared obj = each.lock(); obj && obj->get_chunk()) {
+				obj->remove_this();
+			}
+		}
+		friend_test_foes.clear();
+		gwin->set_all_dirty();
+		Friend_mode_notice("Test creatures cleared");
+	}
 }
 
 #endif    // FRIEND_TEST_KEYS
@@ -3156,6 +3264,7 @@ static bool        friend_hint_pinned  = false;
 // the skill bar): one at a time, each replacing the last, whatever its kind,
 // then fading as notices do (2026-10-23; they stacked).
 static std::string friend_context_line;
+static bool        friend_orders_aiming = false;    // Battle orders' crosshair: its prompt stays up.
 
 static void Friend_mode_context_line(const std::string& text) {
 	const std::string last = friend_context_line;
@@ -3947,8 +4056,9 @@ static int Friend_how_many(Game_object* obj, bool shift) {
 	if (!shift || count <= 1) {
 		return count;
 	}
-	bool      escaped = false;
-	const int chosen  = gwin->get_gump_man()->prompt_for_number(0, count, 1, count, nullptr, &escaped);
+	bool escaped = false;
+	Friend_mode_next_modal_live();
+	const int chosen = gwin->get_gump_man()->prompt_for_number(0, count, 1, count, nullptr, &escaped);
 	return escaped ? 0 : chosen;
 }
 
@@ -4372,6 +4482,18 @@ static std::string Friend_drop_hint() {
 	return (Friend_drop_goes_inside(on) ? "Put in " : "Drop on ") + Friend_thing_name(on) + act;
 }
 
+// Battle orders: aim the crosshair (Space takes the pick; Q and E cycle).  What
+// it found, or null on Escape or nothing there.
+Game_object* Friend_mode_aim_for_orders(const std::string& prompt) {
+	Friend_mode_target_notice(prompt);
+	int x = -1;
+	int y = -1;
+	friend_orders_aiming = true;
+	const bool answered  = Get_click(x, y, Mouse::greenselect);
+	friend_orders_aiming = false;
+	return answered ? gwin->find_object(x, y) : nullptr;
+}
+
 static bool Friend_mode_drop_where(Game_object* obj, int count) {
 	const Game_object_shared keep = obj->shared_from_this();
 	const std::string name = count < obj->get_quantity() ? std::to_string(count) + " of " + Friend_thing_name(obj)
@@ -4516,7 +4638,9 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
 	const Game_object_shared thing  = friend_object_target.lock();
-	if (!own || (!target && !thing)) {
+	// With nothing picked, Space is the game's own key: combat pause.  Once
+	// paused it always resumes, or a pick made during the pause would trap it.
+	if (!own || (!target && !thing) || Combat::is_paused()) {
 		return false;
 	}
 	const bool fighting = gwin->in_combat();
@@ -5398,6 +5522,7 @@ static void Friend_mode_check_guest_attack(Friend_guest& guest) {
 
 static bool friend_following = false;    // Guest: the host's AI drives ours.
 static bool friend_button_pressed = false;    // The hold button took a click.
+static bool friend_orders_clicked = false;    // That click was for battle orders.
 
 // What the Class System (friendclass.cc) needs from here.
 Friend_mode_session& Friend_mode_get_session() {
@@ -5454,6 +5579,10 @@ static void Friend_mode_face_hover_frame() {
 
 bool Friend_mode_is_hostile(const Actor* own, const Actor* foe) {
 	return Friend_is_hostile_target(own, foe);
+}
+
+bool Friend_mode_is_attackable(const Actor* own, const Actor* foe) {
+	return Friend_is_attack_target(own, foe);
 }
 
 bool Friend_mode_guest_may_attack(const Actor* own, const Actor* foe, bool peaceful_ok) {
@@ -6466,6 +6595,9 @@ static std::string Friend_mode_hold_button_label() {
 	if (Controller_last_input_is_pad()) {
 		return {};
 	}
+	if (Friend_orders_available()) {
+		return "Orders";    // In combat: battle orders (Hold is among them).
+	}
 	if (!Friend_mode_is_guest()) {
 		return gwin->get_party_man()->get_count() > 0 ? (friend_holding ? "Follow" : "Hold") : std::string();
 	}
@@ -6477,6 +6609,13 @@ static std::string Friend_mode_hold_button_label() {
 
 // What the button does, near the top with its key, as the Space hint is.
 static void Friend_mode_hold_button_hint() {
+	if (Friend_orders_available()) {
+		Friend_mode_context_line("Orders: " + Friend_orders_describe());
+		friend_hint_shown   = "Shortcut: Ctrl+C";
+		friend_hint_at      = static_cast<uint32>(SDL_GetTicks());
+		friend_hint_changed = true;
+		return;
+	}
 	std::string what;
 	if (!Friend_mode_is_guest()) {
 		what = friend_holding ? "The party follows you" : "The party holds where it stands";
@@ -6487,6 +6626,32 @@ static void Friend_mode_hold_button_hint() {
 	friend_hint_shown   = "Shortcut: Y";
 	friend_hint_at      = static_cast<uint32>(SDL_GetTicks());
 	friend_hint_changed = true;
+}
+
+// Battle orders (friendbattle.cc) use the party's Hold and these.
+bool Friend_mode_party_holding() {
+	return friend_holding;
+}
+
+void Friend_mode_set_party_hold(bool hold) {
+	Friend_mode_set_hold(hold);
+}
+
+void Friend_mode_battle_notice(const std::string& text) {
+	Friend_mode_notice(text);
+}
+
+// On a pad the pointer is hidden, so the red cursor can't say combat is on.
+void Friend_mode_combat_switched(bool on) {
+	if (!Controller_last_input_is_pad()) {
+		return;
+	}
+	friend_notices.erase(std::remove_if(friend_notices.begin(), friend_notices.end(),
+								 [](const Friend_log_line& line) {
+									 return line.text == "Combat Mode" || line.text == "Peaceful Mode";
+								 }),
+						 friend_notices.end());
+	Friend_mode_top_line(on ? "Combat Mode" : "Peaceful Mode");
 }
 
 // Shift+Tab while holding: the one led now isn't held; the one left is.
@@ -8501,6 +8666,15 @@ static void Friend_mode_take_suggestions() {
 // Host, waiting for a click (a conversation's choices among others): keep
 // reading guests' suggestions.
 static void Friend_mode_click_wait_poll() {
+	if (friend_orders_aiming) {    // The main loop isn't painting it.
+		const uint32 now = static_cast<uint32>(SDL_GetTicks());
+		for (Friend_log_line& line : friend_notices) {
+			if (line.text == friend_context_line) {
+				line.time = now;
+			}
+		}
+		Friend_mode_paint_chat_log(false);
+	}
 	if (friend_drop_cursor) {    // The main loop isn't painting these: "Drop X where?" and its hint.
 		// The mouse, the right stick or a pick (which moves the pointer to it).
 		if (Mouse::aim_hidden
@@ -10430,6 +10604,7 @@ void Friend_mode_keys_page() {
 			{"Ctrl+Space", "Item menu: read, use, take, split, give, drop"},
 			{"Escape", "Clear the pick, close windows, menu"},
 			{"C", "Combat on or off"},
+			{"Ctrl+C", "In combat: orders for the party"},
 	});
 	pages.push_back({
 			{"Moving and the party:", ""},
@@ -10521,6 +10696,12 @@ static void Controller_run(const Controller_binding& binding, bool down) {
 				return;
 			}
 		}
+	}
+	// Friend Mode: LT + Y in combat, battle orders instead of the utilities.
+	if (binding.action == Controller_action::utilities_ring && down && Controller_shift_held() && Friend_orders_available()
+		&& !friend_chat_active && !Notebook_gump::get_instance() && !Controller_ring_is_open()) {
+		Friend_orders_request();
+		return;
 	}
 	if (binding.action == Controller_action::skills_ring || binding.action == Controller_action::utilities_ring) {
 		// Held: the ring opens; let go: the highlighted entry is used.
@@ -11306,40 +11487,45 @@ static void Select_for_combo(
  *  Handle events until a flag is set.
  */
 
-static void Handle_events() {
-	uint32 last_repaint = 0;    // For insuring animation repaints.
-	uint32 last_rest    = 0;
+// One pass of the main loop.  'input' false: the game goes on under a cursor or
+// a short list in co-op (Friend_mode_live_pass), which has the events; so no
+// events or held keys here, and nothing that would load a world or open a window.
+static std::vector<unsigned char> friend_deferred_world;    // Guest: to load once the cursor's gone.
+
+static void Main_loop_pass(bool input) {
+	static uint32 last_repaint = 0;    // For insuring animation repaints.
+	static uint32 last_rest    = 0;
 #ifdef DEBUG
-	uint32 last_fps = 0;
+	static uint32 last_fps = 0;
 #endif
 	/*
 	 *  Main event loop.
 	 */
-	int last_x = -1;
-	int last_y = -1;
+	static int last_x = -1;
+	static int last_y = -1;
 	// Interpolation duration (ms) for the current smooth-scroll
 	// segment. Captured when the scroll actually changes so the glide always
 	// runs at the speed of the step that produced it.
-	int lerp_mswait = 0;
+	static int lerp_mswait = 0;
 	// True once the final catch-up glide has been shortened after the camera
 	// actor stopped (see the stop-skate handling below). Reset on each new
 	// step so it only ever fires once per stop.
-	bool lerp_stop_anchored = false;
-	bool friend_selection_shown = false;
-	Tile_coord last_avatar_state(-1, -1, -1);
-	int last_avatar_frame = -1;
-	uint32 last_npc_snapshot = 0;
-	uint32 friend_next_clock_sync = 0;
-	int  guest_assigned_actor = -1;
-	Tile_coord last_guest_request(-1, -1, -1);
+	static bool lerp_stop_anchored = false;
+	static bool friend_selection_shown = false;
+	static Tile_coord last_avatar_state(-1, -1, -1);
+	static int last_avatar_frame = -1;
+	static uint32 last_npc_snapshot = 0;
+	static uint32 friend_next_clock_sync = 0;
+	static int  guest_assigned_actor = -1;
+	static Tile_coord last_guest_request(-1, -1, -1);
 	// Guest: the steps sent to the host, numbered, until it answers them.
-	uint32                                    guest_move_seq = 0;
-	std::deque<std::pair<uint32, Tile_coord>> guest_sent_steps;
-	std::unordered_set<int> guest_frozen_npcs;
-	uint32                     guest_close_at = 0;    // Ticks when a disconnected guest exits.
-	uint32                     guest_leash_notice_at = 0;    // Last "must return" notice.
-	uint32 friend_last_loop = SDL_GetTicks();
-	while (!quitting_time) {
+	static uint32                                    guest_move_seq = 0;
+	static std::deque<std::pair<uint32, Tile_coord>> guest_sent_steps;
+	static std::unordered_set<int> guest_frozen_npcs;
+	static uint32                     guest_close_at = 0;    // Ticks when a disconnected guest exits.
+	static uint32                     guest_leash_notice_at = 0;    // Last "must return" notice.
+	static uint32 friend_last_loop = SDL_GetTicks();
+	{
 		{
 			// A main-loop pass that took long (a hang, or a conversation or menu
 			// it waited in): logged to help find freezes.
@@ -11370,7 +11556,8 @@ static void Handle_events() {
 				Friend_mode_note_dialogue_reset();
 			}
 			int requester = 0;
-			while (friend_session.take_world_request(&requester)) {
+			// (Under a cursor a spell's script may be running: it waits, as in a menu.)
+			while ((input || !gwin->get_usecode()->in_usecode()) && friend_session.take_world_request(&requester)) {
 				Friend_mode_send_world(requester);
 			}
 			// Guests arriving and leaving.  Each has its own companion, held
@@ -11823,20 +12010,33 @@ static void Handle_events() {
 			}
 			Friend_mode_session::Blob_kind blob_kind;
 			std::vector<unsigned char>     blob;
-			while (friend_session.take_blob(blob_kind, blob)) {
+			// The host loaded a save: load the same world, then wait for the host
+			// to hand our companion back.  Not under a cursor or list, which end
+			// first; what came after it waits with it.
+			const auto load_world = [&](const std::vector<unsigned char>& save) {
+				gwin->set_network_dialogue_paused(false);
+				gwin->release_friend_mode_control();
+				guest_assigned_actor = -1;
+				Friend_mode_apply_follow({0});
+				if (Friend_mode_load_world(save)) {
+					guest_frozen_npcs.clear();
+					last_guest_request = Tile_coord(-1, -1, -1);
+					Friend_mode_notice("The host loaded a saved game");
+				}
+			};
+			if (input && !friend_deferred_world.empty()) {
+				const std::vector<unsigned char> save = std::move(friend_deferred_world);
+				friend_deferred_world.clear();
+				load_world(save);
+			}
+			while (friend_deferred_world.empty() && friend_session.take_blob(blob_kind, blob)) {
 				if (Friend_class_guest_blob(blob_kind, blob)) {
 					// The Class System's.
 				} else if (blob_kind == Friend_mode_session::Blob_kind::world_save) {
-					// The host loaded a save: load the same world, then wait
-					// for the host to hand our companion back.
-					gwin->set_network_dialogue_paused(false);
-					gwin->release_friend_mode_control();
-					guest_assigned_actor = -1;
-					Friend_mode_apply_follow({0});
-					if (Friend_mode_load_world(blob)) {
-						guest_frozen_npcs.clear();
-						last_guest_request = Tile_coord(-1, -1, -1);
-						Friend_mode_notice("The host loaded a saved game");
+					if (input) {
+						load_world(blob);
+					} else {
+						friend_deferred_world = blob;
 					}
 				} else if (blob_kind == Friend_mode_session::Blob_kind::chunk_objects) {
 					Friend_mode_apply_chunk(blob);
@@ -11987,7 +12187,7 @@ static void Handle_events() {
 			}
 			// The picker waits out a host conversation (a companion can leave
 			// the party in one).
-			if (friend_picker_requested && !gwin->is_network_dialogue_paused()
+			if (input && friend_picker_requested && !gwin->is_network_dialogue_paused()
 				&& friend_session.take_roster_update()) {
 				// J: pick a companion again (or a first one, if spectating).
 				friend_picker_requested = false;
@@ -12001,7 +12201,7 @@ static void Handle_events() {
 				} else if (selected >= 0) {
 					cout << "Friend Mode: kept the same companion" << endl;
 				}
-			} else if (friend_session.roster_ready() && !friend_selection_shown) {
+			} else if (input && friend_session.roster_ready() && !friend_selection_shown) {
 				friend_selection_shown = true;
 				friend_session.take_roster_update();
 				const int selected = Select_friend_actor(friend_session.party_roster());
@@ -12250,10 +12450,10 @@ static void Handle_events() {
 		// Get current time.
 		const uint32 ticks = SDL_GetTicks();
 #if defined(_WIN32) && defined(USE_EXULTSTUDIO)
-		if (ticks - Game::get_ticks() < 10) {
+		if (input && ticks - Game::get_ticks() < 10) {
 			// Reducing processor usage with a slight delay.
 			SDL_Delay(10 - (ticks - Game::get_ticks()));
-			continue;
+			return;
 		}
 #endif
 		Game::set_ticks(ticks);
@@ -12268,7 +12468,7 @@ static void Handle_events() {
 #endif
 
 		SDL_Event event;
-		while (!quitting_time && SDL_PollEvent(&event)) {
+		while (input && !quitting_time && SDL_PollEvent(&event)) {
 			Handle_event(event);
 		}
 
@@ -12285,7 +12485,7 @@ static void Handle_events() {
 			int       x  = Mouse::mouse()->get_mousex();
 			int       y  = Mouse::mouse()->get_mousey();
 			const int ms = SDL_GetMouseState(nullptr, nullptr);
-			if ((SDL_BUTTON_RMASK & ms) && !right_on_gump && !friend_wasd_dx && !friend_wasd_dy) {
+			if (input && (SDL_BUTTON_RMASK & ms) && !right_on_gump && !friend_wasd_dx && !friend_wasd_dy) {
 				gwin->start_actor(x, y, Mouse::mouse()->avatar_speed);
 			} else if (ticks > last_rest) {
 				const int resttime = ticks - last_rest;
@@ -12309,7 +12509,7 @@ static void Handle_events() {
 		// keys do (two keys walk diagonally), so a new direction takes effect
 		// at once.  Read from the keyboard itself, so a key let go while a
 		// menu or another window had it never sticks.
-		if (Friend_wasd_movement) {
+		if (input && Friend_wasd_movement) {
 			const bool*      keys   = SDL_GetKeyboardState(nullptr);
 			const SDL_Keymod mod    = SDL_GetModState();
 			const bool       typing = friend_chat_active || Notebook_gump::get_instance()
@@ -12339,16 +12539,18 @@ static void Handle_events() {
 		}
 
 		Friend_mode_name_new_windows();
-		Controller_frame();    // Controller support: held buttons.
+		if (input) {
+			Controller_frame();    // Controller support: held buttons.
+		}
 		Controller_spellbook_hint();
-		if ((joy_aim_x != 0 || joy_aim_y != 0) && Controller_left_stick_centred()) {
+		if (input && (joy_aim_x != 0 || joy_aim_y != 0) && Controller_left_stick_centred()) {
 			// Controller support: the stick was let go while a menu or a
 			// conversation had the events.
 			gwin->stop_actor();
 			joy_aim_x = 0;
 			joy_aim_y = 0;
 		}
-		if (joy_aim_x != 0 || joy_aim_y != 0) {
+		if (input && (joy_aim_x != 0 || joy_aim_y != 0)) {
 			// Calculate the player speed: by the push, but no faster than
 			// the keys go (R's run or walk, slower in combat).
 			const int speed = std::max(
@@ -12359,7 +12561,7 @@ static void Handle_events() {
 		}
 
 		// Lerping stuff...
-		const int lerp    = gwin->is_lerping_enabled();
+		const int lerp    = input ? gwin->is_lerping_enabled() : 0;
 		bool      didlerp = false;
 
 		// Update gumps every frame (drives auto-repeat for held
@@ -12435,7 +12637,7 @@ static void Handle_events() {
 			last_x = last_y = -1;
 		}
 		// update mousecursor appearance if needed
-		if (last_speed_cursor + 100 < SDL_GetTicks() && !dragging) {
+		if (input && last_speed_cursor + 100 < SDL_GetTicks() && !dragging) {
 			last_speed_cursor = SDL_GetTicks();
 			Mouse::mouse()->set_speed_cursor();
 			Mouse::mouse_update = true;
@@ -12449,6 +12651,7 @@ static void Handle_events() {
 			Combat::resume();    // Paused before co-op began: no pausing in co-op.
 		}
 		Friend_class_frame();
+		Friend_battle_frame();
 		Friend_mode_face_hover_frame();
 		if (!Friend_mode_is_guest()) {
 			Friend_mode_hold_frame();
@@ -12502,6 +12705,44 @@ static void Handle_events() {
 			Mouse::mouse()->blit_dirty();
 		}
 	}
+}
+
+static void Handle_events() {
+	while (!quitting_time) {
+		Main_loop_pass(true);
+	}
+}
+
+// Co-op: a cursor or short list doesn't stop anyone (2026-11-06): the world, the
+// sync and the guests carry on under it.  Not during a host's conversation or
+// a main menu, which stop everyone anyway; nor one inside another's pass.
+static bool friend_in_live_pass  = false;
+static bool friend_next_modal_live = false;
+
+static bool Friend_mode_live_allowed() {
+	return Friend_mode_in_session() && !friend_in_live_pass && !friend_host_paused_sent && !friend_host_dialogue_active
+		   && !gwin->is_network_dialogue_paused();
+}
+
+bool Friend_mode_in_live_pass() {
+	return friend_in_live_pass;
+}
+
+void Friend_mode_live_pass() {
+	if (!friend_in_live_pass && !quitting_time) {
+		friend_in_live_pass = true;
+		Main_loop_pass(false);
+		friend_in_live_pass = false;
+	}
+}
+
+void Friend_mode_next_modal_live() {
+	friend_next_modal_live = true;
+}
+
+bool Friend_mode_take_modal_live() {
+	const bool asked = std::exchange(friend_next_modal_live, false);
+	return asked && Friend_mode_live_allowed();
 }
 
 bool Translate_keyboard(const SDL_Event& event, SDL_Keycode& chr, SDL_Keycode& unicode, bool numpad) {
@@ -12797,6 +13038,16 @@ static void Handle_event(SDL_Event& event) {
 		Friend_mode_item_menu();    // Ctrl+Space: the item menu (Cross held on the pad).
 		return;
 	}
+	if (event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_C && !event.key.repeat
+		&& (event.key.mod & SDL_KMOD_CTRL) && !(event.key.mod & (SDL_KMOD_SHIFT | SDL_KMOD_ALT | SDL_KMOD_GUI))
+		&& !friend_chat_active && !Notebook_gump::get_instance() && !cheat.in_map_editor()) {
+		if (Friend_orders_available()) {
+			Friend_orders_request();    // Ctrl+C: battle orders (LT + Y on the pad).
+		} else if (!Friend_mode_is_guest()) {
+			Mouse::mouse()->flash_shape(Mouse::redx);
+		}
+		return;
+	}
 	if (Friend_keyboard_targeting && event.type == SDL_EVENT_KEY_DOWN && event.key.scancode == SDL_SCANCODE_SPACE
 		&& !event.key.repeat && !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)) && !friend_chat_active
 		&& !Notebook_gump::get_instance()
@@ -12928,7 +13179,7 @@ static void Handle_event(SDL_Event& event) {
 #ifdef FRIEND_TEST_KEYS    // Host test keys (F8, F9, with Shift or Ctrl): not in release builds.
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
 		if (event.key.mod & SDL_KMOD_SHIFT) {
-			Friend_mode_spawn_test_creatures(false);    // A fight.
+			Friend_mode_test_fight_menu();    // A list of fights.
 		} else if (event.key.mod & SDL_KMOD_CTRL) {
 			Friend_mode_spawn_test_kit();    // Doors, chests, keys, teleporters...
 		} else {
@@ -12941,7 +13192,7 @@ static void Handle_event(SDL_Event& event) {
 		if (event.key.mod & SDL_KMOD_ALT) {
 			Friend_mode_visit_next_vehicle();    // Carpet, ship, cart (macOS keeps Ctrl+F8).
 		} else if (event.key.mod & SDL_KMOD_SHIFT) {
-			Friend_mode_spawn_test_creatures(true);    // A rat, a wolf and a rabbit.
+			Friend_mode_spawn_test_creatures();    // A rat, a wolf and a rabbit.
 		} else {
 			Friend_mode_gather_companions(true);    // F8: the second group.
 		}
@@ -13059,7 +13310,11 @@ static void Handle_event(SDL_Event& event) {
 		}
 		if (event.button.button == 1 && Friend_map_button_at(event.button.x, event.button.y)) {
 			friend_button_pressed = true;    // Its button-up does nothing else.
-			Friend_mode_hold_or_follow();
+			if (Friend_orders_available()) {
+				friend_orders_clicked = true;    // Opens on the button-up.
+			} else {
+				Friend_mode_hold_or_follow();
+			}
 			break;
 		}
 		if (event.button.button == 1 && Friend_mode_kick_click(event.button.x, event.button.y)) {
@@ -13198,6 +13453,9 @@ static void Handle_event(SDL_Event& event) {
 		SDL_ConvertEventToRenderCoordinates(renderer, &event);
 		if (friend_button_pressed && event.button.button == 1) {
 			friend_button_pressed = false;
+			if (std::exchange(friend_orders_clicked, false)) {
+				Friend_orders_request();
+			}
 			break;
 		}
 		int x;
@@ -13679,6 +13937,8 @@ static bool Friend_aim_crosshair_at_pick() {
 	return true;
 }
 
+static bool friend_cursor_live = false;    // This crosshair doesn't stop the game.
+
 static bool Get_click(
 		int& x, int& y,
 		char* chr,             // Char. returned if not null.
@@ -13702,6 +13962,16 @@ static bool Get_click(
 		SDL_Event event;
 		Delay();    // Wait a fraction of a second.
 		Friend_mode_click_wait_poll();
+		if (friend_cursor_live) {
+			Friend_mode_live_pass();
+			// The fight goes on, and so can the game: a conversation, a loaded
+			// save or closing down takes the cursor away.
+			if (quitting_time || gwin->is_network_dialogue_paused() || friend_host_dialogue_active
+				|| !friend_deferred_world.empty()) {
+				g_waiting_for_click = false;
+				return false;
+			}
+		}
 
 		const uint32 ticks = SDL_GetTicks();
 		Game::set_ticks(ticks);
@@ -13946,12 +14216,28 @@ bool Get_click(
 	}
 	Mouse::mouse()->show();
 	gwin->show(true);    // Want to see new mouse.
-	gwin->get_tqueue()->pause(Game::get_ticks());
+	// Friend Mode: in co-op a crosshair doesn't stop the game.  Walking does stop:
+	// the keys and the stick go to the crosshair.
+	const bool live = shape == Mouse::greenselect && Friend_mode_live_allowed();
+	if (live) {
+		if (friend_wasd_dx || friend_wasd_dy || joy_aim_x || joy_aim_y
+			|| (SDL_GetMouseState(nullptr, nullptr) & SDL_BUTTON_RMASK)) {
+			gwin->stop_actor();
+		}
+		friend_wasd_dx = friend_wasd_dy = 0;
+		joy_aim_x = joy_aim_y = 0;
+	} else {
+		gwin->get_tqueue()->pause(Game::get_ticks());
+	}
+	const bool save_live      = std::exchange(friend_cursor_live, live);
 	const bool save_space     = get_click_space_continues;
 	get_click_space_continues = dynamic_cast<Text_gump*>(paint) != nullptr;
 	const bool ret            = Get_click(x, y, chr, drag_ok, rotate_colors);
 	get_click_space_continues = save_space;
-	gwin->get_tqueue()->resume(Game::get_ticks());
+	friend_cursor_live        = save_live;
+	if (!live) {
+		gwin->get_tqueue()->resume(Game::get_ticks());
+	}
 	Mouse::mouse()->set_shape(saveshape);
 	return ret;
 }

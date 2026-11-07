@@ -21,6 +21,7 @@
 #endif
 
 #include "friendclass.h"
+#include "friendbattle.h"
 
 #include "Audio.h"
 #include "Configuration.h"
@@ -3608,7 +3609,7 @@ void Paint_circles(bool paused) {
 class Class_options_gump : public Modal_gump {
 	// "Require class items" is kept in the config but off the page until
 	// there are items (a story question, decided later).
-	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_foe, set_ai, set_exp, set_count };
+	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_foe, set_ai, set_exp, set_tactics, set_count };
 
 	enum button_ids { id_ok, id_cancel, id_first_setting, id_count = id_first_setting + set_count };
 
@@ -3618,13 +3619,13 @@ class Class_options_gump : public Modal_gump {
 	static const char* label(int setting) {
 		static const char* const labels[set_count]
 				= {"Enable:", "Skill bar:", "Skill icons:", "Show skill ranges:", "Skills on a foe:", "Class AI:",
-				   "Experience:"};
+				   "Experience:", "Enemy tactics:"};
 		return labels[setting];
 	}
 
 	// Guests: the game rules are the host's.
 	static bool host_only(int setting) {
-		return setting == set_enabled || setting == set_ai || setting == set_exp;
+		return setting == set_enabled || setting == set_ai || setting == set_exp || setting == set_tactics;
 	}
 
 	bool shown(int id) const {
@@ -3635,8 +3636,9 @@ class Class_options_gump : public Modal_gump {
 		if (Is_guest() && host_only(setting)) {
 			return false;
 		}
-		// Experience is a rule with or without skills.
-		return setting == set_enabled || setting == set_exp || settings[set_enabled] != 0 || Is_guest();
+		// Experience and enemy tactics are rules with or without skills.
+		return setting == set_enabled || setting == set_exp || setting == set_tactics || settings[set_enabled] != 0
+			   || Is_guest();
 	}
 
 	using Button = CallbackTextButton<Class_options_gump>;
@@ -3655,7 +3657,7 @@ public:
 		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 2)), -1);
 		settings = {Friend_class_enabled ? 1 : 0, Friend_class_bar_position, Friend_class_icon_style - friend_icons_colour,
 					Friend_class_show_ranges ? 1 : 0, Friend_class_auto_foe ? 1 : 0, Friend_class_ai ? 1 : 0,
-					Friend_class_shared_exp ? 1 : 0};
+					Friend_class_shared_exp ? 1 : 0, Friend_enemy_tactics ? 1 : 0};
 		buttons[id_ok]     = std::make_unique<Button>(this, &Class_options_gump::close, GumpStrings::OK(), 25,
 													  yForRow(set_count + 1), 50);
 		buttons[id_cancel] = std::make_unique<Button>(this, &Class_options_gump::cancel, GumpStrings::CANCEL(), 75,
@@ -3673,7 +3675,7 @@ public:
 		using Callback          = void (Class_options_gump::*)(int);
 		Callback toggles[set_count] = {&Class_options_gump::toggle<0>, &Class_options_gump::toggle<1>,
 				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>, &Class_options_gump::toggle<4>,
-				&Class_options_gump::toggle<5>, &Class_options_gump::toggle<6>};
+				&Class_options_gump::toggle<5>, &Class_options_gump::toggle<6>, &Class_options_gump::toggle<7>};
 		for (int i = 0; i < set_count; ++i) {
 			buttons[id_first_setting + i] = std::make_unique<Toggle>(this, std::move(toggles[i]),
 					i == set_bar ? places
@@ -3691,6 +3693,7 @@ public:
 			Friend_class_enabled       = settings[set_enabled] != 0;
 			Friend_class_ai            = settings[set_ai] != 0;
 			Friend_class_shared_exp    = settings[set_exp] != 0;
+			Friend_enemy_tactics       = settings[set_tactics] != 0;
 		}
 		Friend_class_bar_position = settings[set_bar];
 		Friend_class_icon_style   = settings[set_icons] + friend_icons_colour;
@@ -3801,6 +3804,7 @@ void Friend_class_load_settings() {
 	config->value("config/friend/class/auto_foe", Friend_class_auto_foe, false);
 	config->value("config/friend/class/require_items", Friend_class_require_items, false);
 	config->value("config/friend/class/shared_exp", Friend_class_shared_exp, true);
+	Friend_battle_load_settings();
 	if (Friend_class_bar_position < 0 || Friend_class_bar_position >= friend_bar_place_count) {
 		Friend_class_bar_position = friend_bar_above_status;
 	}
@@ -3820,6 +3824,7 @@ void Friend_class_save_settings() {
 		put("config/friend/class/ai", Friend_class_ai);
 		put("config/friend/class/require_items", Friend_class_require_items);
 		put("config/friend/class/shared_exp", Friend_class_shared_exp);
+		Friend_battle_save_settings();
 	}
 	config->set("config/friend/class/bar_position", Friend_class_bar_position, false);
 	config->set("config/friend/class/icon_style", Friend_class_icon_style, false);
@@ -3996,8 +4001,10 @@ void Friend_class_frame() {
 	}
 	Engage_after_cast();
 	// A bar click while the game waits is dropped (no skills during the
-	// host's conversation or a pause).
-	if (const int index = std::exchange(pending_slot, -1); index >= 0 && the_bar && !paused) {
+	// host's conversation or a pause, or under a cursor, which doesn't pause in
+	// co-op: a second cast from there would stop the world under its own cursor).
+	if (const int index = std::exchange(pending_slot, -1);
+		index >= 0 && the_bar && !paused && !Friend_mode_in_live_pass()) {
 		if (const Bar_slot* slot = the_bar->slot(index)) {
 			const Bar_slot copy = *slot;    // Using it may rebuild the bar.
 			Use_slot(copy, index);
@@ -4209,6 +4216,13 @@ Actor* Friend_class_guardian(const Actor* target, Game_object* attacker) {
 		}
 	}
 	return nullptr;
+}
+
+bool Friend_class_is_summon(const Actor* actor) {
+	return actor
+		   && std::any_of(summoned_by.begin(), summoned_by.end(), [actor](const std::pair<Game_object_weak, int>& each) {
+				  return each.first.lock().get() == actor;
+			  });
 }
 
 bool Friend_class_sure_hit(const Game_object* attacker) {

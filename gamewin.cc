@@ -358,6 +358,12 @@ Game_window::Game_window(
 	config->value("config/gameplay/combat/charmDifficulty", str, "normal");
 	Combat::charmed_more_difficult = (str == "hard");
 	config->set("config/gameplay/combat/charmDifficulty", str, false);
+	config->value("config/gameplay/combat/positional_damage", str, "no");
+	Combat::positional_damage = (str == "yes");
+	config->set("config/gameplay/combat/positional_damage", str, false);
+	config->value("config/gameplay/combat/friendly_fire", str, "no");
+	Combat::friendly_fire = (str == "yes");
+	config->set("config/gameplay/combat/friendly_fire", str, false);
 	config->value("config/gameplay/combat/mode", str, "original");
 	if (str == "keypause") {
 		Combat::mode = Combat::keypause;
@@ -792,8 +798,13 @@ long Game_window::check_time_stopped() {
  *  Toggle combat mode.
  */
 
+static bool friend_combat_stays_on = false;    // Not a switch: no line about it.
+
 void Game_window::toggle_combat() {
 	combat = !combat;
+	if (!friend_combat_stays_on) {
+		Friend_mode_combat_switched(combat);
+	}
 	if (Friend_mode_is_guest()) {
 		// The host runs every fight.  Here combat mode only changes what a
 		// double-click does (Friend_mode_guest_attack); our copies of the
@@ -3212,7 +3223,9 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 				// Want everyone to be in combat.
 				combat = false;
 				main_actor->set_target(obj);
+				friend_combat_stays_on = true;
 				toggle_combat();
+				friend_combat_stays_on = false;
 				return;
 			}
 		}

@@ -212,6 +212,9 @@
     <ClCompile Include="..\..\controller.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\friendbattle.cc">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="..\..\friendclass.cc">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -848,6 +851,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\controller.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\friendbattle.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="..\..\friendclass.h">

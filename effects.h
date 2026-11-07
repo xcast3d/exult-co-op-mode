@@ -148,6 +148,7 @@ class Explosion_effect : public Sprites_effect {
 	Game_object_weak attacker;      // Who is responsible for the explosion;
 									// otherwise, explosion and delayed blast spells
 									// would not trigger a response from target
+	bool party_fired = false;       // Friend Mode: the party's, and not a keg.
 public:
 	Explosion_effect(
 			const Tile_coord& p, Game_object* exp, int delay = 0, int weap = -1, int proj = -1, Game_object* att = nullptr);

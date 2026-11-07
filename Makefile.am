@@ -65,6 +65,8 @@ EXULTSOURCES =	\
 	exult_constants.h	\
 	fnames.h	\
 	frameseq.h	\
+	friendbattle.cc	\
+	friendbattle.h	\
 	friendclass.cc	\
 	friendclass.h	\
 	friendconn.h	\

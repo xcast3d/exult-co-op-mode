@@ -1071,8 +1071,11 @@ bool Gump_manager::do_modal_gump(
 	// maybe make this selective? it's nice for menus, but annoying for sliders
 	//  gwin->end_gump_mode();
 
-	// Pause the game
-	gwin->get_tqueue()->pause(SDL_GetTicks());
+	// Pause the game (Friend Mode: unless it's a short list in co-op)
+	const bool live = Friend_mode_take_modal_live();
+	if (!live) {
+		gwin->get_tqueue()->pause(SDL_GetTicks());
+	}
 
 	const Mouse::Mouse_shapes saveshape = Mouse::mouse()->get_shape();
 	if (shape != Mouse::dontchange) {
@@ -1096,7 +1099,11 @@ bool Gump_manager::do_modal_gump(
 	}
 	do {
 		Delay();                         // Wait a fraction of a second.
-		Friend_mode_background_poll();    // Keep Friend Mode peers connected.
+		if (live) {
+			Friend_mode_live_pass();
+		} else {
+			Friend_mode_background_poll();    // Keep Friend Mode peers connected.
+		}
 		Mouse::mouse()->hide();          // Turn off mouse.
 		Mouse::mouse_update = false;
 		SDL_Event event;
@@ -1135,7 +1142,9 @@ bool Gump_manager::do_modal_gump(
 	gwin->paint();
 	gwin->show(true);
 	// Resume the game
-	gwin->get_tqueue()->resume(SDL_GetTicks());
+	if (!live) {
+		gwin->get_tqueue()->resume(SDL_GetTicks());
+	}
 
 	if (--modal_gump_count == 0) {
 		Friend_mode_modal_menu(false);

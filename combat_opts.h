@@ -48,6 +48,10 @@ public:
 	}
 
 	static bool charmed_more_difficult;
+	// Friend Mode: explosions the party sets off hurt the party too (U7's way).
+	static bool friendly_fire;
+	// Friend Mode: melee blows from the side and back land more often and harder.
+	static bool positional_damage;
 };
 
 #endif
