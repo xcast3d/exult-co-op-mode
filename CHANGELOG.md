@@ -30,6 +30,8 @@ both in `--version` and the version files saved with each game.
 
 - **The update window on a Mac** now says Quest of the Companions has a new
   version, not exult.
+- **The spellbook opens like a book:** with it targeted, Space or the item menu now
+  opens it, and Shift+Space or the menu drops it if you're carrying it.
 
 ## 0.8.3, 2026-11-04 (build 249)
 

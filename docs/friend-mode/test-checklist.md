@@ -790,6 +790,9 @@ resolution.
       not the whole chest).
 - [x] **In your pack:** Space reads it; Shift+Space drops it beside you,
       with no confirm.
+- [ ] **The spellbook:** the same, saying "Open" and opening the book, in your
+      pack, in a companion's window, in a chest and on the floor; the item menu
+      lists Open first, and Drop when you carry it. A guest's stays as it was.
 
 ## Tidy containers (2026-10-19)
 

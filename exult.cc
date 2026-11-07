@@ -4030,8 +4030,18 @@ static bool Friend_is_theft(Game_object* obj) {
 // and the cloth map.  Space reads it wherever it is; Shift+Space picks it
 // up, or drops one's own.
 static bool Friend_is_readable(const Game_object* obj) {
+	// The spellbook opens as a book does, for whoever may cast from it (a guest's
+	// only says "The Avatar must do this", so there it stays as it was).
+	if (obj->as_spellbook() && !Friend_mode_is_guest()) {
+		return true;
+	}
 	const int shape = obj->get_shapenum();
 	return GAME_BG && (shape == 642 || shape == 797 || shape == 178);
+}
+
+// What Space says for one of those.
+static const char* Friend_read_word(const Game_object* obj) {
+	return obj->as_spellbook() ? "Open" : "Read";
 }
 
 // Something on the map that Space uses rather than takes (Shift+Space
@@ -4040,6 +4050,9 @@ static bool Friend_is_readable(const Game_object* obj) {
 // sundial).  A list, not every script: food
 // or a gem on a merchant's table is taken, never eaten or "used".
 static bool Friend_is_usable_thing(const Game_object* obj) {
+	if (obj->as_spellbook()) {
+		return Friend_is_readable(obj);    // In either game.
+	}
 	if (!GAME_BG) {
 		return false;
 	}
@@ -4811,7 +4824,7 @@ static std::string Friend_space_hint() {
 		const bool        worn = member->find_readied(obj) >= 0;
 		const std::string some_away = worn && stack ? "Put some away" : some;
 		if (Friend_is_readable(obj)) {
-			return two("Read", take, take);
+			return two(Friend_read_word(obj), take, take);
 		}
 		if (Friend_is_wearable(member, obj)) {
 			return two(worn ? "Put away" : "Ready", take, some_away);
@@ -4824,7 +4837,7 @@ static std::string Friend_space_hint() {
 	if (mine) {
 		const std::string drop = stack ? (own->find_readied(obj) >= 0 ? "Put some away" : "Drop some") : "";
 		if (Friend_is_readable(obj)) {
-			return two("Read", "Drop", drop);
+			return two(Friend_read_word(obj), "Drop", drop);
 		}
 		if (obj->as_container() || obj->usecode_exists()) {
 			return two(obj->as_container() ? "Open" : "Use", "Drop", drop);
@@ -4852,7 +4865,7 @@ static std::string Friend_space_hint() {
 			}
 		}
 		if (Friend_is_readable(obj)) {
-			return two("Read", all, take);
+			return two(Friend_read_word(obj), all, take);
 		}
 		if (obj->as_container()) {
 			return two("Open", all, take);
@@ -4878,7 +4891,7 @@ static std::string Friend_space_hint() {
 		return two(std::string("Use ") + tool->name, "");
 	}
 	if (Friend_is_usable_thing(obj)) {
-		const char* what = Friend_is_readable(obj) ? "Read" : obj->get_shapenum() == 893 ? "Drink" : "Use";
+		const char* what = Friend_is_readable(obj) ? Friend_read_word(obj) : obj->get_shapenum() == 893 ? "Drink" : "Use";
 		return two(what, "", pick_up);
 	}
 	switch (Friend_thing_group_of(obj)) {
