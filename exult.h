@@ -192,6 +192,11 @@ Friend_item_use Friend_mode_guest_item_use(int shape, int frame = -1);
 // Read-only objects (signs, books, map, telescope...): a guest uses them on
 // its own copy of the world, and only the guest sees the result.
 bool Friend_mode_guest_local_shape(int shape, int frame = -1);
+// The same for one thing: also its quality (a plaque that only reads, not
+// the one that falls on Lord British).
+bool Friend_mode_guest_local_item(const Game_object* obj);
+// What a crafting thing (wool, thread, dough) is used on: its shape, or -1.
+int Friend_craft_target(int shape);
 // Guest: ask the host to use 'item' on 'target'.
 void Friend_mode_request_item_use(Game_object* item, Game_object* target, Game_object* second = nullptr);
 // Guest: use an allowed item (picking its targets); false if not allowed.

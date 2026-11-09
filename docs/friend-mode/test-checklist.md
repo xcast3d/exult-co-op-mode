@@ -1588,6 +1588,46 @@ a cart (with its title).
 - [ ] Over the internet: the ride stays smooth for a guest some distance
       away (one step message per frame while the vehicle moves).
 
+## Feedback round 2026-11-08 (protocol 40)
+
+See [feedback-2026-11-08.md](feedback-2026-11-08.md).
+
+- [ ] **Pocketwatch on a guest:** double-click, the W key or the controller
+      ring's Watch: the time shows over the guest's companion (over the pack
+      window when it is open), on the guest only. W and the ring use a watch
+      anyone in the party carries (Shamino's). The host's watch and abacus
+      show only on the host.
+- [ ] **Spell bar after Journey Onward:** put spells on the bar, save, quit,
+      Journey Onward: the bar has them (as after Load).
+- [ ] **Strength tester (Britain's fair) on a guest:** Space or a
+      double-click: the guest's companion walks there and swings; the host
+      sees it; the prize goes to the party. Note if the host's open windows
+      close (the script closes windows on the machine running it).
+- [ ] **Plaques on a guest:** the ones by the strength tester and the sword
+      in the stone read on the guest; Lord British's falling plaque still
+      says "The Avatar must do this".
+- [ ] **Wool and thread:** on the host and a guest, a bale of wool on the
+      floor or in the pack: Space says Use, the crosshair asks for the
+      spinning wheel (E aims at it), the companion spins; Space on the
+      spinning wheel itself uses a bale you carry ("Needs a Bale of Wool"
+      without one). The same for a spindle of thread and a loom.
+- [ ] **Shears:** on the host and a guest, double-click the shears or Space
+      on them in the pack: the crosshair, then cloth (in the pack or within
+      reach) becomes bandages. Space on cloth in the pack says "Use Shears"
+      ("Needs Shears" without). Shears on the floor: Space says Use (the
+      crosshair), Alt+Space takes them; cloth on the floor is taken.
+- [ ] **Bread:** on the host and a guest: E finds the flour (kitchen items,
+      a sack); Space says Pour Flour, the crosshair asks for a table (E aims
+      at the kitchen tables there) and flour lies on it. Fill the bucket at a
+      well or trough, use it on the flour (dough), then Space on the dough
+      (or on a baking hearth with dough in the pack): bread after a moment,
+      seen on both.
+- [ ] **Names:** the guest targets a peasant, the Avatar asks the name: the
+      guest's label and target now show the name, right away.
+- [ ] **NPCs who leave:** free Weston (Lord British), then go to the prison:
+      gone on the guest too. The guest's log says "host took NPC ... off the
+      map".
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".

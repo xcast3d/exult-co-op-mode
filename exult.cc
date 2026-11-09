@@ -888,6 +888,9 @@ bool Friend_mode_guest_usable_shape(int shape) {
 	case 695:
 	case 889:    // Lamp post (unlit).
 	case 526:    // Lit lamp (a lit lamp post swaps to this shape).
+	case 743:    // The fair's strength tester (2026-11-08): its script walks
+				 // the user there and tests the user's strength (-356, which
+				 // is the guest's companion while the host runs it for them).
 		return true;
 	default:
 		return false;
@@ -2759,11 +2762,18 @@ bool Friend_mode_guest_local_shape(int shape, int frame) {
 	case 178:    // Cloth map.
 	case 379:    // Sign.
 	case 715:    // Tombstone.
+	case 820:    // Plaque (2026-11-08): its script (0x334), when used, says a
+				 // few lines (Penumbra's) and shows the runes for its quality;
+				 // quality 48 is the plaque that falls on Lord British
+				 // (Friend_mode_guest_local_item keeps that one the Avatar's).
 	case 642:    // Book.
 	case 797:    // Scroll.
 	case 744:    // Telescope.
 	case 650:    // Sextant: says where you are.
 	case 284:    // Sundial: says the time.
+	case 159:    // Pocketwatch: says the time (2026-11-08: was run on the
+				 // host, which said it over a pack the host has no window for,
+				 // so guests saw nothing).  The guest's clock is the host's.
 	case 770:    // Orrery viewer.
 	case 729:    // Crystal ball.
 	case 944:    // Pot: a remark.  (Frame 0, the spittoon, goes to the
@@ -2780,6 +2790,49 @@ bool Friend_mode_guest_local_shape(int shape, int frame) {
 	}
 }
 
+// What a crafting thing is used on (Friend_mode_guest_item_use), or -1.
+int Friend_craft_target(int shape) {
+	if (!GAME_BG) {
+		return -1;
+	}
+	switch (shape) {
+	case 653:
+		return 651;    // Bale of wool: spinning wheel.
+	case 654:
+		return 261;    // Spindle of thread: loom.
+	case 658:
+		return 831;    // Dough: baking hearth.
+	case 698:
+		return 851;    // Shears: cloth.
+	case 863:
+		return 1003;    // Kitchen items: flour on a table (or 1018), the rest on dough.
+	default:
+		return -1;
+	}
+}
+
+// Whether a crafting thing works on 'target' (Friend_mode_use_item_for_guest).
+static bool Friend_craft_wants(const Game_object* item, const Game_object* target) {
+	const int shape = target->get_shapenum();
+	if (item->get_shapenum() == 863) {
+		return item->get_framenum() == 0 ? shape == 1003 || shape == 1018 : shape == 658;
+	}
+	return shape == Friend_craft_target(item->get_shapenum());
+}
+
+// Tables the flour's script takes (2026-11-08): E aims at them in a
+// crosshair, though they aren't offered otherwise.
+static bool Friend_is_flour_table(const Game_object* obj) {
+	return GAME_BG && (obj->get_shapenum() == 1003 || obj->get_shapenum() == 1018);
+}
+
+bool Friend_mode_guest_local_item(const Game_object* obj) {
+	if (!obj || !Friend_mode_guest_local_shape(obj->get_shapenum(), obj->get_framenum())) {
+		return false;
+	}
+	return !(obj->get_shapenum() == 820 && obj->get_quality() == 48);
+}
+
 Friend_item_use Friend_mode_guest_item_use(int shape, int frame) {
 	if (!GAME_BG) {
 		return Friend_item_use::none;    // Serpent Isle shapes not reviewed yet.
@@ -2793,11 +2846,24 @@ Friend_item_use Friend_mode_guest_item_use(int shape, int frame) {
 	case 616:    // Bottle (drinks): the food script.
 	case 595:    // Torch: lights it.
 	case 701:    // Lit torch: puts it out.
-	case 159:    // Pocketwatch: says the time.
 		return Friend_item_use::on_self;
 	case 641:    // Key.
 	case 627:    // Lockpick.
 		return Friend_item_use::on_target;
+	// Crafting (2026-11-08; Friend_craft_target says what each wants).  Each
+	// script takes the thing into the user's pack (walking to it if on the
+	// map), asks "on what?", then walks to that and works it.
+	case 653:    // Bale of wool: on a spinning wheel (0x28D, 0x62D).
+	case 654:    // Spindle of thread: on a loom (0x28E, 0x62E).
+	case 698:    // Shears: on cloth, which becomes bandages (0x2BA).
+		return Friend_item_use::on_target;
+	case 863:    // Kitchen items (0x35F): the flour (frame 0) is poured on a
+				 // table (1003, 1018), making the dough water works; frames 8
+				 // and 9 work dough (frame 2 to 1).  The rest have no use.
+		return frame == 0 || frame == 8 || frame == 9 ? Friend_item_use::on_target : Friend_item_use::none;
+	case 658:    // Dough: on a baking hearth (0x292), frames 1 and 2; frame 0
+				 // is flour, which the bucket's water makes into dough.
+		return frame == 1 || frame == 2 ? Friend_item_use::on_target : Friend_item_use::none;
 	case 823:    // Artist's equipment: the brush paints (two clicks, see
 				 // Friend_mode_guest_use_item); the pigments only get a remark.
 		return Friend_item_use::on_self;
@@ -2868,7 +2934,7 @@ bool Friend_mode_guest_activate(Game_object* item) {
 	if (Friend_mode_guest_use_item(item)) {
 		return true;
 	}
-	if (Friend_mode_guest_local_shape(item->get_shapenum(), item->get_framenum())) {    // Shows something, here only.
+	if (Friend_mode_guest_local_item(item)) {    // Shows something, here only.
 		gwin->get_usecode()->init_conversation();
 		Actor* const before = Friend_mode_set_usecode_walker(own);    // We stand in for the Avatar.
 		item->activate();
@@ -2954,6 +3020,20 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 		// The gavel: U7 sets no reach on what it strikes; keep it near.
 		const Game_object* outer = target->get_outermost();
 		if (target != actor && (outer->get_map() != actor->get_map() || actor->distance(outer) > 8)) {
+			return refuse("target out of reach");
+		}
+	} else if (Friend_craft_target(item->get_shapenum()) >= 0) {
+		// The script walks there, so not reach: near, on the same map.
+		const Game_object* outer = target->get_outermost();
+		if (!Friend_craft_wants(item, target)) {
+			return refuse("not what this is used on");
+		}
+		if (item->get_shapenum() == 698 || item->get_shapenum() == 863) {
+			// The shears' and kitchen things' scripts don't walk: within reach.
+			if (!Friend_guest_may_touch(actor, target)) {
+				return refuse("cloth out of reach or not theirs");
+			}
+		} else if (outer->get_map() != actor->get_map() || actor->distance(outer) > 12) {
 			return refuse("target out of reach");
 		}
 	} else if (target->as_actor() || !(target->get_info().is_door() || target->as_container())) {
@@ -3342,6 +3422,13 @@ static int Friend_aim_distance(Game_object* obj) {
 // ceilings work differently: never hidden there.
 static bool Friend_is_hidden_by_roof(const Game_object* obj) {
 	if (!obj || gwin->is_in_dungeon()) {
+		return false;
+	}
+	// Inside, roofs at our level and above aren't drawn, ours nor the next
+	// house's: what is found above a thing is the top of a wall it stands
+	// against (2026-11-08: drawers by a wall, at lift 0 under a wall reaching
+	// lift 4, were never offered).  Walls in between are the path check's.
+	if (gwin->is_main_actor_inside()) {
 		return false;
 	}
 	const Game_object* outer = obj->get_outermost();
@@ -3772,7 +3859,7 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 			// the loom and the oven want.
 			264, 815, 770, 947, 677, 653, 654, 658};
 	static const std::unordered_set<int> furniture{
-			336, 338, 997, 873, 697, 702, 704, 812, 813, 987, 992, 995, 1013};
+			336, 338, 997, 873, 697, 704, 812, 813, 987, 992, 995, 1013};
 	// Usable things (2026-10-23; was levers and switches): levers (787),
 	// switches (788), the bucket (810), artist's equipment (823: pigments
 	// and the paint brush) and the easel (837, was furniture); the gavel
@@ -3801,7 +3888,9 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 			583, 696, 787, 788, 810, 823, 837, 949, 950, 1011, 410, 261, 651, 431, 470, 740, 719, 741,
 			258, 434, 210, 307, 252, 695, 284, 744, 729, 848, 689, 690, 745, 743, 725, 809, 763, 503,
 			708, 709, 734, 735, 150, 781, 251, 301, 652, 660, 757, 773, 774, 796, 840, 893,
-			739, 991, 748, 577, 888, 155, 990, 968, 418};
+			739, 991, 748, 577, 888, 155, 990, 968, 418,
+			831,    // The baking hearth (2026-11-08: Space bakes the dough there).
+			702};   // Cannons (2026-11-08, were furniture): fire with a powder keg and a cannon ball beside.
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
 	// walls (828, 845) that slide open; the Abbey's door (250), metal walls
 	// (303, 876) and portcullises (935, 936), which have door scripts.
@@ -3814,6 +3903,7 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 		return Friend_thing_group::box;
 	}
 	if (usable.count(shape) || (shape == 675 && frame == 0)    // 675 frame 0: the gavel.
+		|| (shape == 863 && (frame == 0 || frame == 8 || frame == 9))    // Flour and what works dough (2026-11-08).
 		|| (shape == 932 && (frame == 2 || frame == 3))) {     // The stone a pick cuts (the rest of 932 are trees).
 		return Friend_thing_group::usable;
 	}
@@ -4062,7 +4152,9 @@ static bool Friend_is_usable_thing(const Game_object* obj) {
 	}
 	return Friend_is_readable(obj) || (shape == 675 && obj->get_framenum() == 0)    // Gavel (a desk item).
 		   || shape == 810 || shape == 893                                          // Bucket, pool of water.
-		   || Friend_mode_guest_local_shape(shape, obj->get_framenum()) || Friend_mode_guest_usable_shape(shape);
+		   || (Friend_craft_target(shape) >= 0                                      // Wool, thread, dough, shears (2026-11-08).
+			   && Friend_mode_guest_item_use(shape, obj->get_framenum()) != Friend_item_use::none)
+		   || Friend_mode_guest_local_item(obj) || Friend_mode_guest_usable_shape(shape);
 }
 
 // What Space uses on a thing that does nothing by itself: the tool whose
@@ -4070,16 +4162,32 @@ static bool Friend_is_usable_thing(const Game_object* obj) {
 struct Friend_tool {
 	int         shape;
 	const char* name;
+	bool        craft = false;    // Wool, thread, dough: guests use them too.
 };
 
 static const Friend_tool* Friend_tool_for(const Game_object* obj) {
 	static const Friend_tool pick{624, "Pick"};
 	static const Friend_tool blank{668, "Sword Blank"};
 	static const Friend_tool cage{747, "Soul Cage"};
+	// What the spinning wheel, loom and baking hearth work (2026-11-08).
+	static const Friend_tool wool{653, "Bale of Wool", true};
+	static const Friend_tool thread{654, "Spindle of Thread", true};
+	static const Friend_tool dough{658, "Dough", true};
+	static const Friend_tool shears{698, "Shears", true};
 	if (!GAME_BG) {
 		return nullptr;
 	}
 	switch (obj->get_shapenum()) {
+	case 651:
+		return &wool;
+	case 261:
+		return &thread;
+	case 831:
+		return &dough;
+	case 851:
+		// Cloth one carries: Space cuts it into bandages.  On the map or
+		// in a chest it is taken, as before.
+		return obj->get_outermost()->as_actor() ? &shears : nullptr;
 	case 932:
 		return obj->get_framenum() >= 2 ? &pick : nullptr;    // The bleeding stone.
 	case 739:
@@ -4285,13 +4393,65 @@ static std::string Friend_key_label(const std::string& key);
 // Space on a thing that needs a tool: the party's tool used on it, its "on
 // what?" answered.  The tool's own script says if it must be held.  False
 // if this thing has none, or for a guest (who has the crosshair).
+// The tool 'own' (a guest's companion) or, for the host, the party has:
+// one its script works (dough only once it is dough, frames 1 and 2).
+static Game_object* Friend_find_tool(Actor* own, const Friend_tool& tool) {
+	auto works = [&tool](Game_object* each) {
+		return each && (!tool.craft || Friend_mode_guest_item_use(each->get_shapenum(), each->get_framenum())
+										   != Friend_item_use::none);
+	};
+	std::vector<Actor*> people;
+	if (Friend_mode_is_guest()) {
+		people.push_back(own);
+	} else {
+		Actor* party[9];
+		const int count = gwin->get_party(party, 1);
+		people.assign(party, party + count);
+	}
+	for (Actor* person : people) {
+		Game_object_vector all;
+		if (person) {
+			person->get_objects(all, tool.shape, c_any_qual, c_any_framenum);
+		}
+		for (Game_object* each : all) {
+			if (works(each)) {
+				return each;
+			}
+		}
+	}
+	return nullptr;
+}
+
 static bool Friend_mode_use_tool_on(Game_object* obj) {
 	const Friend_tool* tool = Friend_tool_for(obj);
-	if (!tool || Friend_mode_is_guest()) {
+	if (!tool || (Friend_mode_is_guest() && !tool->craft)) {
 		return false;
 	}
-	if (!is_party_item(tool->shape)) {
-		Friend_mode_target_notice(std::string("Needs a ") + tool->name);
+	Actor*       own   = gwin->get_controlled_actor();
+	Game_object* found = Friend_find_tool(own, *tool);
+	if (!found) {
+		Friend_mode_target_notice(std::string("Needs ") + (tool->shape == 658 ? "some " : tool->shape == 698 ? "" : "a ") + tool->name);
+		return true;
+	}
+	if (Friend_mode_is_guest()) {
+		Friend_mode_request_item_use(found, obj);    // The host runs it, its "on what?" answered.
+		return true;
+	}
+	if (tool->craft) {
+		// This one (dough, not the flour beside it), by whoever carries it.
+		Usecode_machine* usecode = gwin->get_usecode();
+		Game_object*     old_target;
+		Tile_coord*      old_tile;
+		usecode->save_intercept(old_target, old_tile);
+		usecode->intercept_click_on_item(obj);
+		Actor* carrier = found->get_outermost()->as_actor();
+		Actor* const before
+				= carrier && carrier != gwin->get_main_actor() ? Friend_mode_set_usecode_walker(carrier) : nullptr;
+		found->activate();
+		if (carrier && carrier != gwin->get_main_actor()) {
+			Friend_mode_set_usecode_walker(before);
+		}
+		usecode->restore_intercept(old_target, old_tile);
 		return true;
 	}
 	Usecode_machine* usecode = gwin->get_usecode();
@@ -4633,6 +4793,9 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		if (alt && Friend_mode_put_some_away(own, obj, window)) {
 			return true;
 		}
+		if (plain && Friend_tool_for(obj) && Friend_mode_use_tool_on(obj)) {
+			return true;    // Cloth: cut with the shears (2026-11-08).
+		}
 		if (plain && (obj->as_container() || obj->usecode_exists())) {
 			gwin->double_clicked_object(obj, true);
 		} else if (plain && Friend_is_wearable(own, obj)) {
@@ -4839,6 +5002,12 @@ static std::string Friend_space_hint() {
 		if (Friend_is_readable(obj)) {
 			return two(Friend_read_word(obj), "Drop", drop);
 		}
+		if (const Friend_tool* tool = Friend_tool_for(obj); tool && tool->craft) {
+			return two(std::string("Use ") + tool->name, "Drop", drop);
+		}
+		if (GAME_BG && obj->get_shapenum() == 863 && obj->get_framenum() == 0) {
+			return two("Pour Flour", "Drop", drop);
+		}
 		if (obj->as_container() || obj->usecode_exists()) {
 			return two(obj->as_container() ? "Open" : "Use", "Drop", drop);
 		}
@@ -4887,11 +5056,14 @@ static std::string Friend_space_hint() {
 	if (const std::string drive = Friend_vehicle_action(obj); !drive.empty()) {
 		return two(drive, "", pick_up);
 	}
-	if (const Friend_tool* tool = Friend_tool_for(obj); tool && !Friend_mode_is_guest()) {
+	if (const Friend_tool* tool = Friend_tool_for(obj); tool && (tool->craft || !Friend_mode_is_guest())) {
 		return two(std::string("Use ") + tool->name, "");
 	}
 	if (Friend_is_usable_thing(obj)) {
-		const char* what = Friend_is_readable(obj) ? Friend_read_word(obj) : obj->get_shapenum() == 893 ? "Drink" : "Use";
+		const char* what = Friend_is_readable(obj)       ? Friend_read_word(obj)
+						   : obj->get_shapenum() == 893 ? "Drink"
+						   : GAME_BG && obj->get_shapenum() == 863 && obj->get_framenum() == 0 ? "Pour Flour"
+																							   : "Use";
 		return two(what, "", pick_up);
 	}
 	switch (Friend_thing_group_of(obj)) {
@@ -5074,9 +5246,11 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		// up but is used (2026-11-01: it was never offered).
 		const bool fixture = group == Friend_thing_group::interactive || group == Friend_thing_group::usable
 							 || group == Friend_thing_group::furniture || Friend_is_usable_thing(obj);
+		// In a crosshair, also the tables flour is poured on (2026-11-08).
+		const bool table   = friend_crosshair_things && Friend_is_flour_table(obj);
 		const bool offered = obj->is_dragable() || fixture || group == Friend_thing_group::box
-							 || group == Friend_thing_group::sign;
-		if (Friend_thing_group_on(group) && offered && from.distance(at) <= friend_thing_reach_tiles
+							 || group == Friend_thing_group::sign || table;
+		if ((Friend_thing_group_on(group) || table) && offered && from.distance(at) <= friend_thing_reach_tiles
 			&& !Friend_is_hidden_by_roof(obj)
 			&& view.has_point(at.tx, at.ty) && std::abs(at.tz - from.tz) <= 5
 			&& (cheat.in_hack_mover()
@@ -6699,6 +6873,101 @@ static void Friend_mode_apply_story_flags(const std::vector<unsigned char>& data
 	}
 }
 
+// Host: every NPC's state guests can't see from the moves near the players
+// (2026-11-08): whether the Avatar has met them (Exult names only those met:
+// a guest kept "peasant" after the name was asked) and whether they are on
+// the map, with their tile (Weston freed from Britain's prison stayed in
+// his cell on the guest).  Sent for the NPCs that changed: npc (2), flags
+// (1: 1 met, 2 off the map), tile (2, 2, 1).
+static std::vector<unsigned char> friend_npc_roster_sent;    // Per NPC: flags, tile (6 bytes).
+
+static void Friend_mode_npc_roster_pass(bool force) {
+	const int                  count = gwin->get_num_npcs();
+	std::vector<unsigned char> payload;
+	if (force || friend_npc_roster_sent.size() != static_cast<size_t>(count) * 6) {
+		friend_npc_roster_sent.assign(static_cast<size_t>(count) * 6, 0xff);
+	}
+	for (int num = 1; num < count; ++num) {
+		Actor* npc = gwin->get_npc(num);
+		if (!npc || npc->is_unused()) {
+			continue;
+		}
+		const bool    off   = !npc->get_chunk() || npc->is_pos_invalid() || npc->get_map() != gwin->get_map();
+		const uint8   flags = (npc->get_flag(Obj_flags::met) ? 1 : 0) | (off ? 2 : 0);
+		const Tile_coord at = off ? Tile_coord(0, 0, 0) : npc->get_tile();
+		unsigned char entry[6] = {flags,
+								  static_cast<unsigned char>(at.tx & 0xff),
+								  static_cast<unsigned char>((at.tx >> 8) & 0xff),
+								  static_cast<unsigned char>(at.ty & 0xff),
+								  static_cast<unsigned char>((at.ty >> 8) & 0xff),
+								  static_cast<unsigned char>(at.tz & 0xff)};
+		unsigned char* sent = &friend_npc_roster_sent[static_cast<size_t>(num) * 6];
+		// A move counts only past a few tiles: the moves near the players
+		// (100 ms) carry the rest.
+		const int  sent_tx  = sent[1] | (sent[2] << 8);
+		const int  sent_ty  = sent[3] | (sent[4] << 8);
+		const bool moved    = std::abs(sent_tx - at.tx) > 8 || std::abs(sent_ty - at.ty) > 8;
+		if (sent[0] == flags && !moved) {
+			continue;
+		}
+		std::copy(entry, entry + 6, sent);
+		Friend_put16(payload, num);
+		Friend_put8(payload, flags);
+		Friend_put16(payload, at.tx);
+		Friend_put16(payload, at.ty);
+		Friend_put8(payload, at.tz);
+	}
+	if (!payload.empty()) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::npc_roster, payload);
+	}
+}
+
+// Guest: the host's NPC roster.  Our own companion and the party come by
+// their own messages; the rest are named as the host names them, taken off
+// our map when the host's are gone, and put where the host's are when far.
+static void Friend_mode_apply_npc_roster(const std::vector<unsigned char>& data) {
+	size_t pos = 0;
+	while (pos + 8 <= data.size()) {
+		const int        num   = Friend_get16(data, pos);
+		const int        flags = data[pos++];
+		const int        tx    = Friend_get16(data, pos);
+		const int        ty    = Friend_get16(data, pos);
+		const int        tz    = data[pos++];
+		Actor*           npc   = gwin->get_npc(num);
+		if (!npc || npc == gwin->get_main_actor() || npc == gwin->get_controlled_actor()) {
+			continue;
+		}
+		if (flags & 1) {
+			npc->set_flag(Obj_flags::met);
+		} else {
+			npc->clear_flag(Obj_flags::met);
+		}
+		if (npc->is_in_party() || npc->is_dead()) {
+			continue;    // The party list and the deaths say where these are.
+		}
+		const bool here = npc->get_chunk() && !npc->is_pos_invalid();
+		if (flags & 2) {
+			if (here) {
+				// As Usecode's remove_npc: off the map, kept.
+				npc->set_schedule_type(Schedule::wait);
+				gwin->add_dirty(npc);
+				Game_object_shared keep;
+				npc->remove_this(&keep);
+				cout << "Friend Mode: host took NPC " << num << " off the map" << endl;
+			}
+			continue;
+		}
+		const Tile_coord at(tx, ty, tz);
+		if (!here || npc->get_tile().distance(at) > 8) {
+			npc->set_schedule_type(Schedule::wait);
+			npc->stop();
+			npc->move(at);
+			gwin->add_dirty(npc);
+		}
+	}
+	gwin->set_all_dirty();    // Names on labels and the target's.
+}
+
 // Both sides: say when our journal opens or closes, so the other side can
 // show "Someone is writing in the party journal."
 static bool friend_journal_open_sent = false;
@@ -7674,6 +7943,7 @@ static void Friend_mode_send_world(int to = Friend_mode_session::everyone) {
 		Friend_mode_journal_open_pass(true);
 		Friend_mode_send_music();    // Join mid-tune.
 		Friend_mode_story_flags_pass(true);
+		Friend_mode_npc_roster_pass(true);
 		Friend_mode_scene_pass(true);    // Joining mid-scene: watch it.
 		friend_health_sent.clear();
 		friend_player_list_sent.clear();    // The newcomer needs it too.
@@ -8904,6 +9174,8 @@ void Friend_mode_note_speech(Game_object* source, const char* text) {
 		// Doors and chests ("Locked", "Unlocked"): send the tile and shape of
 		// the object, or of whatever it is inside on the map.
 		Game_object* outer = source->get_outermost();
+		// Something in a pack (the pocketwatch, the abacus) says it only to
+		// whoever used it (2026-11-08: the host's time showed on guests).
 		if (outer->as_actor() || !outer->get_chunk()) {
 			return;
 		}
@@ -10288,8 +10560,21 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 	entries.push_back({"Eat", Controller_bar_picture(8), {}, food, or_say(food, "No food", []() {
 						   Controller_feed_hungriest();
 					   })});
+	// The watch: anyone's in the party (a guest's runs on its own copy, as
+	// the abacus below; 2026-11-08: a guest's ring found Shamino's watch but
+	// used only its own companion's).
 	entries.push_back({"Watch", Controller_shape_picture(159, 0, SF_SHAPES_VGA), {}, has(159),
-					   or_say(has(159), "No watch", item(159, c_any_framenum))});
+					   or_say(has(159), "No watch", []() {
+						   Game_object* found = is_party_item(159);
+						   if (!found) {
+							   return;
+						   }
+						   if (Friend_mode_is_guest()) {
+							   Friend_mode_guest_activate(found);
+						   } else {
+							   found->activate();
+						   }
+					   })});
 	entries.push_back({"Map", Controller_bar_picture(2), {}, has(178, 0), or_say(has(178, 0), "No map", item(178, 0))});
 	entries.push_back({"Journal", Controller_bar_picture(6), {}, true, action("NOTEBOOK")});
 	entries.push_back({"Lockpick", Controller_shape_picture(627, 7, SF_SHAPES_VGA), {}, has(627),
@@ -11121,6 +11406,10 @@ static void Init() {
 	gwin->init_files();
 	gwin->read_gwin();
 	gwin->setup_game(arg_edit_mode);    // This will start the scene.
+	// Journey Onward (and a new game) doesn't go through Game_window::read(),
+	// which tells Friend Mode the world is loaded: the Avatar's spell bar
+	// stayed empty until a Load (2026-11-08).
+	Friend_mode_note_world_loaded();
 	if (arg_friend_host) {
 		Friend_mode_start_hosting();
 	} else if (!arg_friend_join.empty() && friend_session.mode() == Friend_mode_session::Mode::off) {
@@ -11528,6 +11817,7 @@ static void Handle_events() {
 					friend_next_clock_sync = now + friend_clock_sync_ms;
 					Friend_mode_clock_pass(false);
 					Friend_mode_story_flags_pass(false);
+					Friend_mode_npc_roster_pass(false);
 				}
 				if (now >= friend_next_journal_sync) {
 					friend_next_journal_sync = now + friend_journal_sync_ms;
@@ -11885,6 +12175,8 @@ static void Handle_events() {
 					Friend_mode_apply_sound(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::story_flags) {
 					Friend_mode_apply_story_flags(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::npc_roster) {
+					Friend_mode_apply_npc_roster(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::scene) {
 					Friend_mode_apply_scene(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::player_list) {
@@ -13966,6 +14258,12 @@ bool Get_click(
 	get_click_space_continues = save_space;
 	gwin->get_tqueue()->resume(Game::get_ticks());
 	Mouse::mouse()->set_shape(saveshape);
+	// A table E aimed at for the flour isn't a pick to keep: it would offer
+	// to steal a table (2026-11-08).
+	if (const Game_object_shared pick = friend_object_target.lock(); pick && Friend_is_flour_table(pick.get())) {
+		friend_object_target.reset();
+		gwin->set_all_dirty();
+	}
 	return ret;
 }
 
