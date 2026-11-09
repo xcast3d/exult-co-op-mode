@@ -358,12 +358,8 @@ Game_window::Game_window(
 	config->value("config/gameplay/combat/charmDifficulty", str, "normal");
 	Combat::charmed_more_difficult = (str == "hard");
 	config->set("config/gameplay/combat/charmDifficulty", str, false);
-	config->value("config/gameplay/combat/positional_damage", str, "no");
-	Combat::positional_damage = (str == "yes");
-	config->set("config/gameplay/combat/positional_damage", str, false);
-	config->value("config/gameplay/combat/friendly_fire", str, "no");
-	Combat::friendly_fire = (str == "yes");
-	config->set("config/gameplay/combat/friendly_fire", str, false);
+	// Friend Mode's friendly fire and positional damage: the Combat System
+	// page's (Friend_battle_load_settings).
 	config->value("config/gameplay/combat/mode", str, "original");
 	if (str == "keypause") {
 		Combat::mode = Combat::keypause;

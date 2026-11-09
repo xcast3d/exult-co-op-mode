@@ -29,6 +29,13 @@
 
 #include "Configuration.h"
 #include "Gump_manager.h"
+#include "Modal_gump.h"
+#include "Text_button.h"
+#include "Gump_ToggleButton.h"
+#include "font.h"
+#include "ibuf8.h"
+#include "items.h"
+#include "mouse.h"
 #include "actors.h"
 #include "chunks.h"
 #include "combat_opts.h"
@@ -50,6 +57,8 @@
 #include <SDL3/SDL.h>
 
 #include <algorithm>
+#include <array>
+#include <memory>
 #include <climits>
 #include <cstdlib>
 #include <iostream>
@@ -61,7 +70,9 @@
 using std::string;
 using std::vector;
 
-bool Friend_enemy_tactics = true;
+bool Friend_battle_orders    = true;
+bool Friend_enemy_tactics    = true;
+bool Friend_combat_walk_pace = true;
 
 // From exult.cc, where the party's Hold and the notices live.
 bool         Friend_mode_party_holding();
@@ -434,8 +445,10 @@ Friend_battle_steer_result Steer_by_order(Actor* npc) {
  *  Positional damage.
  */
 
-constexpr int side_hit_bonus    = 3;    // On the d30 hit roll: 10%.
-constexpr int back_hit_bonus    = 6;    // 20%.
+// 2026-11-09, after a test (most first blows from behind missed a troll):
+// were 3 and 6.
+constexpr int side_hit_bonus    = 6;     // On the d30 hit roll: 20%.
+constexpr int back_hit_bonus    = 12;    // 40%.
 constexpr int back_extra_damage = 2;    // Before armour.
 
 constexpr uint32 announce_ms = 2000;    // Between lines over one target.
@@ -740,6 +753,13 @@ Friend_strike_position Friend_battle_position(const Actor* attacker, Game_object
 	return away <= 1 ? friend_strike_front : away == 2 ? friend_strike_side : friend_strike_back;
 }
 
+bool Friend_battle_sure_back(Friend_strike_position position, Game_object* target) {
+	const Actor* foe = target ? target->as_actor() : nullptr;
+	return position == friend_strike_back && foe
+		   && (foe->get_schedule_type() != Schedule::combat || foe->get_flag(Obj_flags::asleep)
+			   || foe->get_flag(Obj_flags::paralyzed));
+}
+
 int Friend_battle_hit_bonus(Friend_strike_position position) {
 	return position == friend_strike_back ? back_hit_bonus : position == friend_strike_side ? side_hit_bonus : 0;
 }
@@ -771,19 +791,41 @@ void Friend_battle_announce_strike(Actor* target, Friend_strike_position positio
 	const char* text = position == friend_strike_back ? "*back stab*" : "*flanked*";
 	// With hit numbers on, the number here already says so (Actor::attacked).
 	if (!Combat::show_hits) {
+		// Exult drops new text over someone who already has some (2026-11-09:
+		// a troll's bark always won, so the notice never showed): it goes first.
+		Gwin()->get_effects()->remove_text_effect(target);
 		Gwin()->get_effects()->add_text(text, target);
 	}
 	Friend_mode_note_speech(target, text);    // Guests see it too.
 }
 
+// Kept under config/friend/combat (2026-11-09; enemy tactics was
+// config/friend/enemy_tactics, friendly fire and positional damage were in
+// config/gameplay/combat, positional damage off by default).
 void Friend_battle_load_settings() {
-	config->value("config/friend/enemy_tactics", Friend_enemy_tactics, true);
+	config->value("config/friend/combat/orders", Friend_battle_orders, true);
+	config->value("config/friend/combat/enemy_tactics", Friend_enemy_tactics, true);
+	config->value("config/friend/combat/positional_damage", Combat::positional_damage, true);
+	config->value("config/friend/combat/friendly_fire", Combat::friendly_fire, false);
+	config->value("config/friend/combat/walk_pace", Friend_combat_walk_pace, true);
 }
 
 void Friend_battle_save_settings() {
-	if (!Friend_mode_is_guest()) {
-		config->set("config/friend/enemy_tactics", Friend_enemy_tactics ? "yes" : "no", false);
+	auto put = [](const char* key, bool on) {
+		config->set(key, on ? "yes" : "no", false);
+	};
+	if (!Friend_mode_is_guest()) {    // A guest plays by the host's rules.
+		put("config/friend/combat/orders", Friend_battle_orders);
+		put("config/friend/combat/enemy_tactics", Friend_enemy_tactics);
+		put("config/friend/combat/positional_damage", Combat::positional_damage);
+		put("config/friend/combat/friendly_fire", Combat::friendly_fire);
 	}
+	put("config/friend/combat/walk_pace", Friend_combat_walk_pace);
+	config->write_back();
+}
+
+int Friend_combat_speed_factor() {
+	return Friend_combat_walk_pace ? Mouse::medium_speed_factor : Mouse::medium_combat_speed_factor;
 }
 
 void Friend_battle_frame() {
@@ -802,6 +844,9 @@ void Friend_battle_frame() {
 	if (paused) {
 		return;
 	}
+	if (!Friend_battle_orders && current_order != Order::freely) {
+		Clear_order();    // Turned off on the Combat System page.
+	}
 	Check_order();
 	static uint32 next_foe_look = 0;
 	if (const uint32 now = SDL_GetTicks();
@@ -817,7 +862,8 @@ void Friend_battle_frame() {
 
 bool Friend_orders_available() {
 	Game_window* gwin = Gwin();
-	return !Friend_mode_is_guest() && gwin->in_combat() && gwin->get_party_man()->get_count() > 0;
+	return Friend_battle_orders && !Friend_mode_is_guest() && gwin->in_combat()
+		   && gwin->get_party_man()->get_count() > 0;
 }
 
 void Friend_orders_request() {
@@ -885,4 +931,125 @@ void Friend_battle_flee_spot(const Actor* npc, Tile_coord& pos) {
 	const int len = std::max(std::abs(dx), std::abs(dy));
 	pos.tx        = at.tx + dx * flee_tiles / len;
 	pos.ty        = at.ty + dy * flee_tiles / len;
+}
+
+/*
+ *  The Combat System page (game menu, under the Class System; 2026-11-09).
+ */
+
+namespace {
+
+class Combat_options_gump : public Modal_gump {
+	enum setting_ids { set_orders, set_tactics, set_positional, set_friendly_fire, set_pace, set_count };
+
+	enum button_ids { id_ok, id_cancel, id_first_setting, id_count = id_first_setting + set_count };
+
+	std::array<int, set_count>                         settings{};
+	std::array<std::unique_ptr<Gump_button>, id_count> buttons;
+
+	static const char* label(int setting) {
+		static const char* const labels[set_count] = {"Battle orders:", "Enemy tactics:", "Positional damage:",
+													  "Friendly fire:", "Walking pace:"};
+		return labels[setting];
+	}
+
+	// Guests: the game rules are the host's.
+	static bool shown(int id) {
+		return id < id_first_setting || !Friend_mode_is_guest() || id - id_first_setting == set_pace;
+	}
+
+	using Button = CallbackTextButton<Combat_options_gump>;
+	using Toggle = CallbackToggleTextButton<Combat_options_gump>;
+
+	template <int setting>
+	void toggle(int state) {
+		settings[setting] = state;
+	}
+
+public:
+	Combat_options_gump() : Modal_gump(nullptr, -1) {
+		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 2)), -1);
+		settings = {Friend_battle_orders ? 1 : 0, Friend_enemy_tactics ? 1 : 0, Combat::positional_damage ? 1 : 0,
+					Combat::friendly_fire ? 1 : 0, Friend_combat_walk_pace ? 1 : 0};
+		buttons[id_ok]     = std::make_unique<Button>(this, &Combat_options_gump::close, GumpStrings::OK(), 25,
+													  yForRow(set_count + 1), 50);
+		buttons[id_cancel] = std::make_unique<Button>(this, &Combat_options_gump::cancel, GumpStrings::CANCEL(), 75,
+													  yForRow(set_count + 1), 50);
+		const std::vector<std::string> yesNo = {GumpStrings::No(), GumpStrings::Yes()};
+		using Callback                       = void (Combat_options_gump::*)(int);
+		Callback toggles[set_count] = {&Combat_options_gump::toggle<0>, &Combat_options_gump::toggle<1>,
+				&Combat_options_gump::toggle<2>, &Combat_options_gump::toggle<3>, &Combat_options_gump::toggle<4>};
+		for (int i = 0; i < set_count; ++i) {
+			buttons[id_first_setting + i] = std::make_unique<Toggle>(this, std::move(toggles[i]), yesNo, settings[i],
+					get_button_pos_for_label(label(i)), yForRow(i), 44);
+		}
+		ResizeWidthToFitWidgets(tcb::span(buttons.data(), id_count));
+		HorizontalArrangeWidgets(tcb::span(buttons.data() + id_ok, 2));
+		RightAlignWidgets(tcb::span(buttons.data() + id_first_setting, set_count));
+	}
+
+	void close() override {
+		if (!Friend_mode_is_guest()) {
+			Friend_battle_orders      = settings[set_orders] != 0;
+			Friend_enemy_tactics      = settings[set_tactics] != 0;
+			Combat::positional_damage = settings[set_positional] != 0;
+			Combat::friendly_fire     = settings[set_friendly_fire] != 0;
+		}
+		Friend_combat_walk_pace = settings[set_pace] != 0;
+		Friend_battle_save_settings();
+		Gwin()->set_all_dirty();    // The minimap's button: Orders or Hold.
+		done = true;
+	}
+
+	void cancel() {
+		done = true;
+	}
+
+	Gump_button* on_button(int mx, int my) override {
+		for (int id = 0; id < id_count; ++id) {
+			auto& btn   = buttons[id];
+			auto  found = btn && shown(id) ? btn->on_button(mx, my) : nullptr;
+			if (found) {
+				return found;
+			}
+		}
+		return Modal_gump::on_button(mx, my);
+	}
+
+	void paint() override {
+		Modal_gump::paint();
+		for (int id = 0; id < id_count; ++id) {
+			if (buttons[id] && shown(id)) {
+				buttons[id]->paint();
+			}
+		}
+		Image_window8* iwin = Gwin()->get_win();
+		for (int i = 0; i < set_count; ++i) {
+			if (shown(id_first_setting + i)) {
+				font->paint_text(iwin->get_ib8(), label(i), x + label_margin, y + yForRow(i) + 1);
+			}
+		}
+		if (Friend_mode_is_guest()) {
+			font->paint_text(iwin->get_ib8(), "The host sets the rest.", x + label_margin,
+							 y + yForRow(set_count) + 1);
+		}
+		paint_focus();    // Controller support: the highlight.
+		Gwin()->set_painted();
+	}
+
+	// Controller support: the highlight.
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		for (int id = 0; id < id_count; ++id) {
+			if (buttons[id] && shown(id)) {
+				list.push_back(buttons[id].get());
+			}
+		}
+	}
+};
+
+}    // namespace
+
+void Friend_combat_options() {
+	Combat_options_gump options;
+	Gwin()->get_gump_man()->do_modal_gump(&options, Mouse::hand);
 }

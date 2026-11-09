@@ -1389,6 +1389,7 @@ bool Combat_schedule::attack_target(
 		// Friend Mode: Positional damage, a blow from the side or back.
 		const Friend_strike_position strike = Friend_battle_position(att, target);
 		attval += Friend_battle_hit_bonus(strike);
+		autohit = autohit || Friend_battle_sure_back(strike, target);    // Sneaking up.
 		if (!autohit && !target->try_to_hit(attacker, attval)) {
 			Friend_class_note_miss(attacker, target);    // Friend Mode: Riposte.
 			return false;    // Missed.

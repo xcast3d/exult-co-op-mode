@@ -27,11 +27,22 @@ class Actor;
 class Game_object;
 class Tile_coord;
 
-// A game rule, the host's: enemies fight by role and can lose their nerve.
+// The Combat System page (game menu; 2026-11-09), all on by default.  The
+// host's rules: battle orders, enemy tactics (enemies fight by role and can
+// lose their nerve), positional damage (Combat::positional_damage) and
+// friendly fire (Combat::friendly_fire, off: party blasts spare the party).
+// Each machine's own: walking pace in combat.
+extern bool Friend_battle_orders;
 extern bool Friend_enemy_tactics;
+extern bool Friend_combat_walk_pace;
 
 void Friend_battle_load_settings();
 void Friend_battle_save_settings();
+void Friend_combat_options();    // Show the options page.
+
+// The Avatar's speed in combat (Mouse's factors): walking pace, or U7's
+// slower step with the Combat System's walking pace off.
+int Friend_combat_speed_factor();
 
 // Each frame, from the main loop: opens a requested menu, ends orders that
 // are over, and watches enemy morale.
@@ -67,6 +78,9 @@ enum Friend_strike_position {
 };
 Friend_strike_position Friend_battle_position(const Actor* attacker, Game_object* target);
 int                    Friend_battle_hit_bonus(Friend_strike_position position);
+// A blow from behind on someone who isn't fighting (or is asleep or
+// paralyzed): it always lands (2026-11-09).
+bool Friend_battle_sure_back(Friend_strike_position position, Game_object* target);
 // Around the blow landing: Actor::apply_damage and the hit numbers ask.
 void        Friend_battle_set_strike(Friend_strike_position position);
 int         Friend_battle_strike_damage();

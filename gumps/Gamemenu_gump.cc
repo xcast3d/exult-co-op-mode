@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "exult.h"
 #include "controller.h"
 #include "friendclass.h"
+#include "friendbattle.h"
 #include "gameclk.h"
 #include "gamewin.h"
 #include "items.h"
@@ -337,6 +338,8 @@ void Gamemenu_gump::createButtons() {
 			this, &Gamemenu_gump::targeting_options, "Target System", margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_class_system] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::class_options, "Class System", margin, yForRow(y++), preferred_button_width, 11);
+	buttons[id_combat_system] = std::make_unique<Gamemenu_button>(
+			this, &Gamemenu_gump::combat_options, "Combat System", margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_controller] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::controller_page, "Controller", margin, yForRow(y++), preferred_button_width, 11);
 
@@ -467,6 +470,10 @@ void Gamemenu_gump::targeting_options() {
 
 void Gamemenu_gump::class_options() {
 	Friend_class_options();
+}
+
+void Gamemenu_gump::combat_options() {
+	Friend_combat_options();
 }
 
 void Gamemenu_gump::controller_page() {

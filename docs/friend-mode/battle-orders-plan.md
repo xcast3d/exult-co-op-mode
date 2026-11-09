@@ -75,9 +75,9 @@ The end of combat clears the order. Orders aren't saved.
 
 ## Enemy tactics
 
-A host option, **Enemy tactics** (Game menu, Class System; on by default, kept in
-`config/friend/enemy_tactics`). It is on that page because it's a game rule, but
-works with the Class System on or off. Off means U7's own behaviour. It runs only
+A host option, **Enemy tactics** (Game menu, Combat System; on by default, kept in
+`config/friend/combat/enemy_tactics`; it was on the Class System page, kept in
+`config/friend/enemy_tactics`, until 2026-11-09). Off means U7's own behaviour. It runs only
 on the host, for hostiles in the combat schedule; duels, tournaments and berserk
 monsters keep U7's behaviour.
 
@@ -117,9 +117,10 @@ the nearest party member (it was random). The monster's own mode returns after.
 
 ## Positional damage
 
-Decided 2026-11-06, off by default while it's tuned, so it can be tried with and
-without. **Positional damage** in the Game Engine options, under Friendly fire,
-kept as `config/gameplay/combat/positional_damage`. A game rule: the host's in
+Decided 2026-11-06, off by default while it was tuned; on by default since
+2026-11-09. **Positional damage** on the Combat System page, kept as
+`config/friend/combat/positional_damage` (was in the Game Engine options, as
+`config/gameplay/combat/positional_damage`). A game rule: the host's in
 co-op, and guests don't see the line.
 
 Before this, Exult's hit and damage rolls ignored position and facing entirely.
@@ -127,8 +128,20 @@ Before this, Exult's hit and damage rolls ignored position and facing entirely.
 | The blow lands from | Chance to hit (on the d30 roll) | Extra damage, before armour |
 | --- | --- | --- |
 | The front (ahead, or an eighth of a turn off) | Unchanged | None |
-| The side (a quarter turn) | +3, about 10% | None |
-| The back (more than a quarter turn) | +6, about 20% | +2 |
+| The side (a quarter turn) | +6, about 20% | None |
+| The back (more than a quarter turn) | +12, about 40%; always, on someone not fighting, asleep or paralyzed | +2 |
+
+Raised 2026-11-09 (were +3 and +6): in a test against unaware trolls, the
+position was found for each first blow from behind, but most missed, and a miss
+turns the target round, so sneaking up rarely paid. The notices didn't show either:
+Exult adds no text over someone who already has some, so a troll's bark won; the
+notice now replaces it (host and guest). Tested 2026-11-09 on host and guest, with
+the side blows too.
+
+Found in the same test: a guest didn't see its own companion swing until the
+host moved it. After the guest's last step, every update from the host carries
+that step's number and was taken for its echo, frames and all; the frame is now
+shown while the companion stands on that step.
 
 - **Melee only.** Shots, spells and explosions are unchanged.
 - **Everyone.** Enemies get it against the party too, so being surrounded is
@@ -158,14 +171,33 @@ The Avatar stops walking while choosing. See "Cursors and short lists" in the
 | `friendbattle.cc`, `.h` | New: orders, roles, morale, the option |
 | `combat.cc` | `now_what` asks the new code each step; `approach_foe` and `run_away` each get a hook |
 | `exult.cc` | Ctrl+C, LT + Y, the button, the crosshair prompt, the frame call |
-| `friendclass.cc` | The option's line on the Class System page |
+| `friendbattle.cc` | The Combat System page (`Friend_combat_options`) and its settings |
 | `Makefile.am`, `Makefile.common`, `msvcstuff/vs2019/*` | The new file |
+
+## The Combat System page (2026-11-09)
+
+Game menu → Combat System, under Target System and Class System, so each
+change to U7's combat can be turned off. All on by default:
+
+| Line | What it turns on | Whose |
+| --- | --- | --- |
+| Battle orders | The Orders menu (Ctrl+C, LT + Y, the minimap's button). Off: the button is Hold again, and a standing order ends. | The host's |
+| Enemy tactics | Enemies by role, packs, morale. | The host's |
+| Positional damage | *flanked* and *back stab*. | The host's |
+| Friendly fire | Off (the default): party blasts spare the party. | The host's |
+| Walking pace | Walking pace in combat, not U7's slower step. | Each player's |
+
+A guest sees only Walking pace ("The host sets the rest."). The settings are
+kept under `config/friend/combat/`, so the old keys' saved values don't carry
+over (positional damage was saved as off).
 
 ## Combat movement
 
 Decided 2026-11-06. The Avatar and companions led by the keys or mouse move at
 walking pace at the slowest in combat, and with hostiles near, instead of U7's
-in-between speed (`Mouse::medium_combat_speed_factor`, was 150 and now 200). Running
+in-between speed (`Mouse::medium_combat_speed_factor`, 150; walking is 200).
+The Combat System's **Walking pace** (on by default, each machine's own, kept as
+`config/friend/combat/walk_pace`) turns it off (`Friend_combat_speed_factor`). Running
 is still not allowed in combat, and the short mouse arrow still gives the slowest
 speed. Nothing else about the fight's timing changes.
 

@@ -1666,6 +1666,7 @@ struct Friend_test_fight {
 	const char*                  label;
 	bool                         hostile;
 	std::vector<Friend_test_foe> foes;
+	bool                         unaware = false;    // Standing, facing north: to sneak up behind.
 };
 
 constexpr int friend_test_bow      = 597;
@@ -1682,6 +1683,9 @@ static const std::vector<Friend_test_fight>& Friend_test_fights() {
 			{    "Skeletons and slimes (never flee)", true,                              {{"skeleton", 3}, {"slime", 3}}},
 			{                     "Mixed (tough fight)", true, {{"troll", 2}, {"headless", 2}, {"skeleton", 2}}},
 			{ "Peaceful (Attack order, not hostile)", false,                {{"deer", 1}, {"rabbit", 1}, {"cow", 1}}},
+			// 2026-11-09, positional damage: they face north, away from the
+			// Avatar's side; walk round to the south of one and strike first.
+			{"Unaware trolls (sneak up behind: back stab)", false, {{"troll", 3}}, true},
 	};
 	return fights;
 }
@@ -1710,14 +1714,18 @@ static void Friend_mode_spawn_test_fight(const Friend_test_fight& fight) {
 				continue;
 			}
 			const Game_object_shared obj
-					= fight.hostile ? Monster_actor::create(shape, pos, Schedule::combat, Actor::evil, true, foe.weapon < 0)
-									: Monster_actor::create(shape, pos);
+					= fight.hostile   ? Monster_actor::create(shape, pos, Schedule::combat, Actor::evil, true, foe.weapon < 0)
+					  : fight.unaware ? Monster_actor::create(shape, pos, Schedule::wait, Actor::neutral, true, true)
+									  : Monster_actor::create(shape, pos);
 			Actor* actor = obj ? obj->as_actor() : nullptr;
 			if (!actor) {
 				continue;
 			}
 			if (foe.weapon >= 0) {
 				Friend_test_arm(actor, foe);
+			}
+			if (fight.unaware) {
+				actor->change_frame(actor->get_dir_framenum(north, Actor::standing));
 			}
 			if (foe.leader) {
 				actor->set_property(Actor::strength, actor->get_property(Actor::strength) + 15);
@@ -12566,6 +12574,14 @@ static void Main_loop_pass(bool input) {
 				const bool echo = sent != guest_sent_steps.end() && sent->second == state;
 				if (echo) {
 					guest_sent_steps.erase(guest_sent_steps.begin(), sent);
+					// Standing on our last step (nothing sent since): the host's
+					// frames are ours to show, a swing in a fight (2026-11-09: each
+					// update after our last step echoed it, so swings weren't drawn
+					// until the host moved us).
+					if (actor && guest_sent_steps.size() == 1 && actor->get_tile() == state && !actor->is_moving()
+						&& actor->get_framenum() != frame) {
+						actor->change_frame(frame);
+					}
 				} else if (actor && actor->get_tile() != state) {
 					const Tile_coord at = actor->get_tile();
 					cout << "Friend Mode: host put us at " << state.tx << ',' << state.ty << ',' << state.tz << " from "
@@ -12656,6 +12672,10 @@ static void Main_loop_pass(bool input) {
 						? static_cast<Actor*>(Friend_creature_by_id(speech_source))
 						: gwin->get_npc(static_cast<int>(speech_source));
 				if (speaker) {
+					// Positional damage's notices go over a bark, as on the host.
+					if (speech_text == "*back stab*" || speech_text == "*flanked*") {
+						gwin->get_effects()->remove_text_effect(speaker);
+					}
 					speaker->say(speech_text.c_str());
 				}
 			}

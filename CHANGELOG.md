@@ -35,20 +35,16 @@ both in `--version` and the version files saved with each game.
 - **Enemy tactics:** enemies now fight by what they carry. Archers keep their
   distance, packs spread out instead of queueing, and a group can break and run
   when its leader falls or half of it is gone.
-  You can turn this off under Enemy tactics in the Class System options.
-- **Positional damage (optional, off by default):** turn it on in the Game Engine
-  options, and melee blows from the side or back land more often, with blows from
-  behind also hitting harder, and "flanked" or "back stab" appears over the target.
-  It works for enemies too.
+- **Positional damage:** melee blows from the side or back land more often, with
+  blows from behind also hitting harder, and "flanked" or "back stab" appears over
+  the target. It works for enemies too.
 - **No more friendly fire from explosions:** blasts your party sets off, like the
   firedoom staff's, no longer hurt your party or summoned creatures. Powder kegs,
-  traps and enemy blasts still do. To play it the old way, set Friendly fire to
-  Yes in the Game Engine options.
-
-### Fixed
-
-- **Stepping back when hit:** fighters no longer step back in the wrong direction
-  when struck.
+  traps and enemy blasts still do.
+- **Combat System options:** a new page in the game menu, under Target System and
+  Class System, turns each of these combat changes on or off: Battle orders, Enemy
+  tactics, Positional damage, Friendly fire and Walking pace in combat. All are on
+  except Friendly fire, which plays the old way when on.
 
 ### Changed
 
@@ -75,6 +71,10 @@ both in `--version` and the version files saved with each game.
 
 ### Fixed
 
+- **Co-op:** a guest sees its own companion swing in a fight right away, not
+  only once the companion has moved.
+- **Stepping back when hit:** fighters no longer step back in the wrong direction
+  when struck.
 - **Co-op:** guests can tell the time with any watch in the party, and the
   watch and the abacus now show only to whoever used them.
 - **Co-op:** guests can read plaques, such as the ones at Britain's fair,

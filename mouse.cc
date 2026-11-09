@@ -45,6 +45,7 @@
 #include "fnames.h"
 #include "gamewin.h"
 #include "mouse.h"
+#include "friendbattle.h"
 #include "schedule.h" /* To get Schedule::combat */
 #include "ucsched.h"
 
@@ -510,7 +511,7 @@ void Mouse::set_speed_cursor() {
 			// rectangle
 			if (gwin->in_combat()) {
 				cursor       = get_medium_combat_arrow(dir);    // No long combat arrows exist
-				avatar_speed = base_speed / medium_combat_speed_factor;
+				avatar_speed = base_speed / Friend_combat_speed_factor();
 			} else if (nearby_hostile || has_active_nohalt_scr) {
 				cursor       = get_medium_arrow(dir);
 				avatar_speed = base_speed / medium_speed_factor;
@@ -533,7 +534,7 @@ void Mouse::set_speed_cursor() {
 				cursor = get_medium_arrow(dir);
 			}
 			if (gwin->in_combat() || nearby_hostile) {
-				avatar_speed = base_speed / medium_combat_speed_factor;
+				avatar_speed = base_speed / Friend_combat_speed_factor();
 			} else {
 				avatar_speed = base_speed / medium_speed_factor;
 			}

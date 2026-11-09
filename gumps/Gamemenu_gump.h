@@ -39,6 +39,7 @@ private:
 		id_input,
 		id_targeting,
 		id_class_system,
+		id_combat_system,
 		id_controller,
 		id_open_coop,
 		id_updates,
@@ -85,6 +86,7 @@ public:
 	void input_options();
 	void targeting_options();    // Friend Mode: Q, E and Space.
 	void class_options();        // Friend Mode: companion skills.
+	void combat_options();       // Friend Mode: battle orders, enemy tactics...
 	void controller_page();      // Controller support: the pad's buttons.
 	void open_coop();    // Co-Op Mode: host, how guests join, closing.
 	void check_for_updates();    // Our updater's window (qotcupdates.h).

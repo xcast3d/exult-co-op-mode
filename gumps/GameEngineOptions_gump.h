@@ -38,8 +38,6 @@ private:
 	int                      show_hits;
 	int                      mode;
 	bool                     charmDiff;
-	int                      friendly_fire;
-	int                      positional_damage;
 	int                      cheats;
 	int                      feeding;
 	int                      enhancements;
@@ -58,8 +56,6 @@ private:
 		id_mode,
 		id_charmDiff,
 		id_difficulty,
-		id_friendly_fire,
-		id_positional_damage,
 		id_cheats,
 		id_feeding,
 		id_enhancements,
@@ -118,14 +114,6 @@ public:
 
 	void toggle_charmDiff(int state) {
 		charmDiff = state;
-	}
-
-	void toggle_friendly_fire(int state) {
-		friendly_fire = state;
-	}
-
-	void toggle_positional_damage(int state) {
-		positional_damage = state;
 	}
 
 	void toggle_cheats(int state) {

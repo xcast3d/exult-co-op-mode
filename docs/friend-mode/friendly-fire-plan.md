@@ -72,8 +72,9 @@ skipped target takes no hit and sends no hit message.
 
 ## The option
 
-"Friendly fire" in the Game Engine options, under the combat difficulty, kept as
-`config/gameplay/combat/friendly_fire` (`Combat::friendly_fire`). **No**, the
+"Friendly fire" on the Combat System page (game menu; until 2026-11-09 in the
+Game Engine options, as `config/gameplay/combat/friendly_fire`), kept as
+`config/friend/combat/friendly_fire` (`Combat::friendly_fire`). **No**, the
 default, spares the party; **Yes** is U7's behaviour. In co-op the host's setting
 decides, because the host runs the fights, and guests don't see the line.
 

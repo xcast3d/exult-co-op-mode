@@ -1640,6 +1640,23 @@ See [feedback-2026-11-08.md](feedback-2026-11-08.md).
       gone on the guest too. The guest's log says "host took NPC ... off the
       map".
 
+## Combat System page (2026-11-09)
+
+- [x] Game menu: Combat System sits under Class System. A fresh config shows
+      Battle orders, Enemy tactics, Positional damage and Walking pace Yes,
+      Friendly fire No. The Class System page no longer has Enemy tactics,
+      and Game Engine no longer has Friendly fire or Positional damage.
+- [ ] Battle orders No: in combat the minimap's button stays Hold and Ctrl+C
+      / LT + Y do nothing; an order given before turning it off ends.
+- [x] Positional damage Yes: *flanked* and *back stab* show (host and guest,
+      2026-11-09); No: they don't. Shift+F9's "Unaware trolls" (test-key
+      builds) stand facing north: the first blow from behind always lands.
+- [ ] Walking pace No: the Avatar moves at U7's slower combat step; Yes:
+      walking pace.
+- [ ] Guest: the page shows only Walking pace and "The host sets the rest";
+      it changes only the guest's own movement.
+- [ ] Settings stay after quitting and starting again.
+
 ## Leaving
 
 - [ ] Close the guest. Host: "<name> has left; <companion> rejoins the party".

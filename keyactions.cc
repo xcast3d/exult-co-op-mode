@@ -40,6 +40,7 @@
 #include "effects.h"
 #include "exult.h"
 #include "exult_constants.h"
+#include "friendbattle.h"
 #include "game.h"
 #include "gamemap.h"
 #include "gamerend.h"
@@ -660,7 +661,7 @@ int get_walking_speed(const int* params) {
 	if (parm == 2) {
 		speed = Mouse::slow_speed_factor;
 	} else if (gwin->in_combat() || (gwin->is_hostile_nearby() && !cheat.in_god_mode())) {
-		speed = Mouse::medium_combat_speed_factor;
+		speed = Friend_combat_speed_factor();
 	} else if (parm == 1) {
 		speed = Mouse::medium_speed_factor;
 	} else {

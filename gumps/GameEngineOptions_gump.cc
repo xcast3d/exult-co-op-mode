@@ -228,16 +228,6 @@ void GameEngineOptions_gump::build_buttons() {
             this, &GameEngineOptions_gump::toggle_difficulty, std::move(diffs), difficulty,
             get_button_pos_for_label(Strings::CombatDifficulty_()), yForRow(++y_index), large_size);
 
-	// Friend Mode: a game rule, the host's, who runs every fight.
-	if (!Friend_mode_is_guest()) {
-		buttons[id_friendly_fire] = std::make_unique<GameEngineTextToggle>(
-				this, &GameEngineOptions_gump::toggle_friendly_fire, yesNo, friendly_fire,
-				get_button_pos_for_label("Friendly fire:"), yForRow(++y_index), small_size);
-		buttons[id_positional_damage] = std::make_unique<GameEngineTextToggle>(
-				this, &GameEngineOptions_gump::toggle_positional_damage, yesNo, positional_damage,
-				get_button_pos_for_label("Positional damage:"), yForRow(++y_index), small_size);
-	}
-
 	buttons[id_enhancements] = std::make_unique<GameEngineTextToggle>(
 			this, &GameEngineOptions_gump::toggle_enhancements, yesNo, enhancements,
 			get_button_pos_for_label(Strings::Enhancements_()), yForRow(++y_index), small_size);
@@ -289,8 +279,6 @@ void GameEngineOptions_gump::load_settings() {
 		mode = 0;
 	}
 	charmDiff             = Combat::charmed_more_difficult;
-	friendly_fire         = Combat::friendly_fire ? 1 : 0;
-	positional_damage     = Combat::positional_damage ? 1 : 0;
 	alternate_drop        = gwin->get_alternate_drop();
 	allow_autonotes       = gwin->get_allow_autonotes();
 	enhancements          = gwin->get_allow_enhancements();
@@ -344,12 +332,6 @@ void GameEngineOptions_gump::save_settings() {
 	config->set("config/gameplay/combat/mode", str, false);
 	Combat::charmed_more_difficult = charmDiff;
 	config->set("config/gameplay/combat/charmDifficulty", charmDiff ? "hard" : "normal", false);
-	if (!Friend_mode_is_guest()) {
-		Combat::friendly_fire = friendly_fire != 0;
-		config->set("config/gameplay/combat/friendly_fire", friendly_fire ? "yes" : "no", false);
-		Combat::positional_damage = positional_damage != 0;
-		config->set("config/gameplay/combat/positional_damage", positional_damage ? "yes" : "no", false);
-	}
 	gwin->set_alternate_drop(alternate_drop);
 	config->set("config/gameplay/alternate_drop", alternate_drop ? "yes" : "no", false);
 	gwin->set_allow_autonotes(allow_autonotes);
@@ -386,10 +368,6 @@ void GameEngineOptions_gump::paint() {
 	font->paint_text(iwin->get_ib8(), Strings::CombatpausedwithSpace_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatCharmedDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);
 	font->paint_text(iwin->get_ib8(), Strings::CombatDifficulty_(), x + label_margin, y + yForRow(++y_index) + 1);
-	if (buttons[id_friendly_fire]) {
-		font->paint_text(iwin->get_ib8(), "Friendly fire:", x + label_margin, y + yForRow(++y_index) + 1);
-		font->paint_text(iwin->get_ib8(), "Positional damage:", x + label_margin, y + yForRow(++y_index) + 1);
-	}
 	font->paint_text(iwin->get_ib8(), Strings::Enhancements_(), x + label_margin, y + yForRow(++y_index) + 1);
 	if (buttons[id_cheats]) {
 		font->paint_text(iwin->get_ib8(), Strings::Cheats_(), x + label_margin, y + yForRow(++y_index) + 1);

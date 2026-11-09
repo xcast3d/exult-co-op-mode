@@ -3609,7 +3609,7 @@ void Paint_circles(bool paused) {
 class Class_options_gump : public Modal_gump {
 	// "Require class items" is kept in the config but off the page until
 	// there are items (a story question, decided later).
-	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_foe, set_ai, set_exp, set_tactics, set_count };
+	enum setting_ids { set_enabled, set_bar, set_icons, set_ranges, set_foe, set_ai, set_exp, set_count };
 
 	enum button_ids { id_ok, id_cancel, id_first_setting, id_count = id_first_setting + set_count };
 
@@ -3619,13 +3619,13 @@ class Class_options_gump : public Modal_gump {
 	static const char* label(int setting) {
 		static const char* const labels[set_count]
 				= {"Enable:", "Skill bar:", "Skill icons:", "Show skill ranges:", "Skills on a foe:", "Class AI:",
-				   "Experience:", "Enemy tactics:"};
+				   "Experience:"};
 		return labels[setting];
 	}
 
 	// Guests: the game rules are the host's.
 	static bool host_only(int setting) {
-		return setting == set_enabled || setting == set_ai || setting == set_exp || setting == set_tactics;
+		return setting == set_enabled || setting == set_ai || setting == set_exp;
 	}
 
 	bool shown(int id) const {
@@ -3636,9 +3636,8 @@ class Class_options_gump : public Modal_gump {
 		if (Is_guest() && host_only(setting)) {
 			return false;
 		}
-		// Experience and enemy tactics are rules with or without skills.
-		return setting == set_enabled || setting == set_exp || setting == set_tactics || settings[set_enabled] != 0
-			   || Is_guest();
+		// Experience is a rule with or without skills.
+		return setting == set_enabled || setting == set_exp || settings[set_enabled] != 0 || Is_guest();
 	}
 
 	using Button = CallbackTextButton<Class_options_gump>;
@@ -3657,7 +3656,7 @@ public:
 		SetProceduralBackground(TileRect(0, 0, 100, yForRow(set_count + 2)), -1);
 		settings = {Friend_class_enabled ? 1 : 0, Friend_class_bar_position, Friend_class_icon_style - friend_icons_colour,
 					Friend_class_show_ranges ? 1 : 0, Friend_class_auto_foe ? 1 : 0, Friend_class_ai ? 1 : 0,
-					Friend_class_shared_exp ? 1 : 0, Friend_enemy_tactics ? 1 : 0};
+					Friend_class_shared_exp ? 1 : 0};
 		buttons[id_ok]     = std::make_unique<Button>(this, &Class_options_gump::close, GumpStrings::OK(), 25,
 													  yForRow(set_count + 1), 50);
 		buttons[id_cancel] = std::make_unique<Button>(this, &Class_options_gump::cancel, GumpStrings::CANCEL(), 75,
@@ -3675,7 +3674,7 @@ public:
 		using Callback          = void (Class_options_gump::*)(int);
 		Callback toggles[set_count] = {&Class_options_gump::toggle<0>, &Class_options_gump::toggle<1>,
 				&Class_options_gump::toggle<2>, &Class_options_gump::toggle<3>, &Class_options_gump::toggle<4>,
-				&Class_options_gump::toggle<5>, &Class_options_gump::toggle<6>, &Class_options_gump::toggle<7>};
+				&Class_options_gump::toggle<5>, &Class_options_gump::toggle<6>};
 		for (int i = 0; i < set_count; ++i) {
 			buttons[id_first_setting + i] = std::make_unique<Toggle>(this, std::move(toggles[i]),
 					i == set_bar ? places
@@ -3693,7 +3692,6 @@ public:
 			Friend_class_enabled       = settings[set_enabled] != 0;
 			Friend_class_ai            = settings[set_ai] != 0;
 			Friend_class_shared_exp    = settings[set_exp] != 0;
-			Friend_enemy_tactics       = settings[set_tactics] != 0;
 		}
 		Friend_class_bar_position = settings[set_bar];
 		Friend_class_icon_style   = settings[set_icons] + friend_icons_colour;
