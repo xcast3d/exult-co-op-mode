@@ -64,6 +64,31 @@ both in `--version` and the version files saved with each game.
   when combat turns on or off, since the mouse pointer that shows it is hidden.
 - **The update window on a Mac** now says Quest of the Companions has a new
   version, not exult.
+- **The spellbook opens like a book:** with it targeted, Space or the item menu now
+  opens it, and Shift+Space or the menu drops it if you're carrying it.
+- **Spinning, weaving and baking with Space:** a bale of wool, a spindle of
+  thread or dough on the floor says Use and asks what to use it on; Space on
+  a spinning wheel, loom or baking hearth uses the wool, thread or dough you
+  carry. E now finds baking hearths and cannons, and flour, which Space
+  pours on a table (E aims at the table in the crosshair). Space on cloth you carry cuts it into
+  bandages with the party's shears, and Space on shears asks what to cut.
+
+### Fixed
+
+- **Co-op:** guests can tell the time with any watch in the party, and the
+  watch and the abacus now show only to whoever used them.
+- **Co-op:** guests can read plaques, such as the ones at Britain's fair,
+  and use the strength tester.
+- **Co-op:** guests can spin wool, weave thread, pour flour, bake dough and
+  cut cloth into bandages with shears (filling the bucket and watering the
+  flour already worked).
+- **Co-op:** after the Avatar learns someone's name, guests see the name
+  too, without the game being loaded again; and someone who leaves (like
+  Weston, freed from Britain's prison) is gone for guests as well.
+- **The Target System** finds drawers and other things standing against a
+  wall inside a house.
+- **The spell bar** is filled in after Journey Onward, not only after
+  loading a save.
 
 ## 0.8.3, 2026-11-04 (build 249)
 

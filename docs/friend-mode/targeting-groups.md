@@ -31,7 +31,7 @@ they go on to the next, then "No target", then round again.
 | Decor | off | takes | anything not in another group |
 | Furniture | off | uses (Shift: picks up) | the list below (the anvil moved to Usable, 2026-11-04); also pieces fixed in the map, which can't be picked up (2026-11-01: they were never offered, so the cradles in Lord British's castle never came up) |
 | Doors, hidden walls, lamps | on | uses (a locked one: Unlock with a key that fits, else Pick Lock with lockpicks where they work; 2026-11-01) | doors, door-like walls and portcullises (250, 303, 876, 935, 936; 2026-11-04), secret walls (828, 845), shutters, sconces, curtains, lamp posts, torches fixed on walls (595, 701 that can't be picked up; 2026-11-01). On by default since 2026-10-24 (was off: with it on, E finds secret walls, which Black Gate means to be found by looking) |
-| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture), beds (696, 1011) and the bed roll (583, was loot; Space sleeps, 2026-10-29), winches (949, 950; 2026-10-31). From a scan of every shape with a script that E never offered (2026-11-01): the mining machine (410, the mines' ore extractor), loom (261), spinning wheel (651), bellows (431), wells (470, 740), water troughs (719, 741), keg and cask (258, 434), chicken coop (210), laboratory burner (307), grandfather clocks (252, 695), sundial (284), telescope (744), crystal ball (729), mirror (848), harpsichord, xylophone, harp (689, 690, 745), the fair's strength tester, Virtue Roulette Wheel, Triples, Rat Race (743, 725, 809, 763), puppet show (503), stocks (708), guillotines (709, 734), archery target (735). Vehicles (2026-11-01; Space names the action from the vehicle's state, host and single player only): the gangplank (150 lowered, 781 raised), sails (251), carts (301, 652, 660, 757, 773, 774) and the draft horse (796), the flying carpet (840). The pool of water (893, fountains; Space drinks; was decor, 2026-11-01). What tools and quests ask for (2026-11-04, see below): firepit (739), anvil (991), Well of Souls (748), pedestals (577), the ferry's horns (888), the Ferryman (155), the Dark Core (990), the Enclosed Prism (968), giant bones (418), the bleeding stone (932 frames 2 and 3). Decor is what has no use (2026-10-23) |
+| Usable (was levers and switches) | on | uses (Shift: picks up) | levers (787), switches (788), the bucket (810), the gavel (675 frame 0), artist's equipment (823: pigments, paint brush), the easel (837, was furniture), beds (696, 1011) and the bed roll (583, was loot; Space sleeps, 2026-10-29), winches (949, 950; 2026-10-31). From a scan of every shape with a script that E never offered (2026-11-01): the mining machine (410, the mines' ore extractor), loom (261), spinning wheel (651), bellows (431), wells (470, 740), water troughs (719, 741), keg and cask (258, 434), chicken coop (210), laboratory burner (307), grandfather clocks (252, 695), sundial (284), telescope (744), crystal ball (729), mirror (848), harpsichord, xylophone, harp (689, 690, 745), the fair's strength tester, Virtue Roulette Wheel, Triples, Rat Race (743, 725, 809, 763), puppet show (503), stocks (708), guillotines (709, 734), archery target (735). Vehicles (2026-11-01; Space names the action from the vehicle's state, host and single player only): the gangplank (150 lowered, 781 raised), sails (251), carts (301, 652, 660, 757, 773, 774) and the draft horse (796), the flying carpet (840). The pool of water (893, fountains; Space drinks; was decor, 2026-11-01). What tools and quests ask for (2026-11-04, see below): firepit (739), anvil (991), Well of Souls (748), pedestals (577), the ferry's horns (888), the Ferryman (155), the Dark Core (990), the Enclosed Prism (968), giant bones (418), the bleeding stone (932 frames 2 and 3), the baking hearth (831; 2026-11-08), flour and what works dough (863 frames 0, 8, 9; was decor; 2026-11-08: Space says Pour Flour on the sack, and in a crosshair E also aims at the tables 1003 and 1018 its script takes), cannons (702, was furniture; 2026-11-08: their script fires with a powder keg and a cannon ball beside, the Avatar's on a guest). Decor is what has no use (2026-10-23) |
 | Signs, plaques, graves | on | reads | sign (379), plaque (820), tombstone (715); picture signs (360, 361) have nothing to read |
 
 **Loot (besides weapons, armour and ammunition):** pocketwatch, cloth map,
@@ -49,7 +49,7 @@ viewer (770), bee stingers (947), sacks of wheat (677), bale and spindle (653,
 654), dough (658).
 
 **Furniture:** light sources (lit, unlit and spent: candles and the like),
-chair, podium, cannon, powder keg, Iron Maiden, the Rack,
+chair, podium, powder keg, Iron Maiden, the Rack,
 anvil, cradle and baby in a cradle, cauldron, rocking horse.
 
 **Decor (everything else):** debris, small rock, top, iron bars, banner,
@@ -103,6 +103,13 @@ and the shapes it compares the answer with, so a tool's target can be offered.
 Space uses the tool itself on the stone, firepit and Well
 (`Friend_tool_for`); the others go through the tool's own crosshair, where E
 aims at the target.
+
+Crafting (2026-11-08, guests too): the bale of wool (653) wants the spinning
+wheel (651), the spindle of thread (654) the loom (261), and dough (658,
+frames 1 and 2; frame 0 is flour, which the bucket's water makes into dough)
+the baking hearth (831). On the map, Space on one says Use (its crosshair);
+Space on the wheel, loom or hearth uses one the party carries (a guest: its
+own companion's), its "on what?" answered (`Friend_craft_target`).
 
 Eggs that fire when something lands on them (`something_on`): Penumbra's
 plaque (egg at 2727,1394, within 5 tiles, script 0334 wants hammers, then a

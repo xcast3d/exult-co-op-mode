@@ -2745,6 +2745,16 @@ bool Game_window::activate_item(
 		// companion's items, through the host like a double-click.
 		Actor* own = network_friend_control ? controlled_actor : nullptr;
 		Game_object* obj = own && own != main_actor ? own->find_item(shnum, qual, frnum) : nullptr;
+		if (!obj && own && own != main_actor) {
+			// What only shows something (the watch, the abacus) runs on our
+			// copy, whoever in the party carries it (2026-11-08).
+			Actor*    party[9];
+			const int count = get_party(party, 1);
+			for (int i = 0; i < count && !obj; i++) {
+				Game_object* found = party[i]->find_item(shnum, qual, frnum);
+				obj = found && Friend_mode_guest_local_item(found) ? found : nullptr;
+			}
+		}
 		return obj && Friend_mode_guest_activate(obj);
 	}
 	Actor*    party[9];    // Get party.
@@ -3290,7 +3300,7 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 			effects->add_text("Locked", obj);    // A key or lockpick opens it.
 			return;
 		}
-		if (!clicked_actor && Friend_mode_guest_local_shape(obj->get_shapenum(), obj->get_framenum())) {
+		if (!clicked_actor && Friend_mode_guest_local_item(obj)) {
 			effects->remove_text_effects();    // Only shows something: run it here.
 			usecode->init_conversation();
 			// Our companion stands in for the Avatar (the spittoon's "ptui!").
@@ -3336,7 +3346,7 @@ void Game_window::double_clicked_object(Game_object* obj, bool gump) {
 		}
 		const Friend_item_use lead_use
 				= clicked_actor ? Friend_item_use::none : Friend_mode_guest_item_use(shape, obj->get_framenum());
-		if (!clicked_actor && (lead_use != Friend_item_use::none || Friend_mode_guest_local_shape(shape, obj->get_framenum()))) {
+		if (!clicked_actor && (lead_use != Friend_item_use::none || Friend_mode_guest_local_item(obj))) {
 			// Food, potions, keys and lockpicks, the gavel, the bucket and
 			// pools of water; signs, books and the like.  What a guest uses
 			// on itself is used by the one led (a drink from a pool).
