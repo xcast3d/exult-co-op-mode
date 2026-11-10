@@ -24,32 +24,38 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## Unreleased (0.8.4)
+## 0.8.4, 2026-11-09 (build 258)
 
 ### Added
 
-- **Battle orders:** in combat, the Hold button under the minimap becomes
-  Orders (Ctrl+C, or LT + Y on a controller). The game pauses while you tell
-  your companions to attack a target, protect someone, fall back or hold, then
-  the fight carries on. In co-op nothing stops: the fight goes on while you choose.
-- **Enemy tactics:** enemies now fight by what they carry. Archers keep their
-  distance, packs spread out instead of queueing, and a group can break and run
-  when its leader falls or half of it is gone.
-- **Positional damage:** melee blows from the side or back land more often, with
-  blows from behind also hitting harder, and "flanked" or "back stab" appears over
-  the target. It works for enemies too.
-- **No more friendly fire from explosions:** blasts your party sets off, like the
-  firedoom staff's, no longer hurt your party or summoned creatures. Powder kegs,
-  traps and enemy blasts still do.
-- **Combat System options:** a new page in the game menu, under Target System and
-  Class System, turns each of these combat changes on or off: Battle orders, Enemy
-  tactics, Positional damage, Friendly fire and Walking pace in combat. All are on
-  except Friendly fire, which plays the old way when on.
+- **A Combat System:** more say in a fight, and enemies that think. It has its
+  own page in the game menu, under Target System and Class System, where each
+  part can be turned off. All are on, except Friendly fire.
+  - **Battle orders:** in combat, the Hold button under the minimap becomes
+    Orders (Ctrl+C, or LT + Y on a controller). Tell your companions to fight
+    freely, attack your target, protect someone, fall back or hold. In single
+    player the fight pauses while you choose; in co-op it carries on.
+  - **Enemy tactics:** enemies fight by what they carry. Archers and mages keep
+    their distance, packs spread out instead of queueing, and a group can break
+    and run when its leader falls or half of it is gone.
+  - **Back stabs and flanking:** melee blows from the side land more often, and
+    from behind more often still and harder, with "flanked" or "back stab" over
+    the target. Your first blow from behind on a foe who isn't fighting yet
+    always lands. Enemies can flank you too.
+  - **No friendly fire from your blasts:** explosions your party sets off, like
+    the firedoom staff's, no longer hurt your party or summoned creatures.
+    Powder kegs, traps and enemy blasts still do.
+  - **Walking pace:** you walk at your normal pace in a fight, instead of the
+    slower combat step that could feel like lag.
+- **Spinning, weaving, baking and bandages with Space:** a bale of wool, a
+  spindle of thread, flour or dough says Use and asks what to use it on, and
+  Space on a spinning wheel, loom or baking hearth uses the one you carry. E
+  finds flour, baking hearths and cannons, and aims at the table to pour the
+  flour on. Space on cloth you carry cuts it into bandages with the party's
+  shears.
 
 ### Changed
 
-- **Faster movement in combat:** you now walk at normal walking pace during a
-  fight, instead of the slower combat speed that could feel like lag.
 - **Fewer interruptions in co-op:** aiming a crosshair (drops, spells, items that
   ask for a target) and short lists such as the item menu no longer stop anyone;
   the game carries on for everyone while you choose.
@@ -58,37 +64,28 @@ both in `--version` and the version files saved with each game.
   while paused.
 - **Combat Mode and Peaceful Mode on a controller:** a message at the top now says
   when combat turns on or off, since the mouse pointer that shows it is hidden.
-- **The update window on a Mac** now says Quest of the Companions has a new
-  version, not exult.
 - **The spellbook opens like a book:** with it targeted, Space or the item menu now
   opens it, and Shift+Space or the menu drops it if you're carrying it.
-- **Spinning, weaving and baking with Space:** a bale of wool, a spindle of
-  thread or dough on the floor says Use and asks what to use it on; Space on
-  a spinning wheel, loom or baking hearth uses the wool, thread or dough you
-  carry. E now finds baking hearths and cannons, and flour, which Space
-  pours on a table (E aims at the table in the crosshair). Space on cloth you carry cuts it into
-  bandages with the party's shears, and Space on shears asks what to cut.
+- **The update window on a Mac** now says Quest of the Companions has a new
+  version, not exult.
 
 ### Fixed
 
+- **Co-op:** after the Avatar learns someone's name, guests see the name too,
+  and someone who leaves (like Weston, freed from Britain's prison) is gone for
+  guests as well.
+- **Co-op:** guests can read plaques, such as the ones at Britain's fair, use
+  the strength tester, spin, weave, pour flour, bake and make bandages.
+- **Co-op:** guests can tell the time with any watch in the party, and the
+  watch and the abacus show only to whoever used them.
 - **Co-op:** a guest sees its own companion swing in a fight right away, not
   only once the companion has moved.
-- **Stepping back when hit:** fighters no longer step back in the wrong direction
-  when struck.
-- **Co-op:** guests can tell the time with any watch in the party, and the
-  watch and the abacus now show only to whoever used them.
-- **Co-op:** guests can read plaques, such as the ones at Britain's fair,
-  and use the strength tester.
-- **Co-op:** guests can spin wool, weave thread, pour flour, bake dough and
-  cut cloth into bandages with shears (filling the bucket and watering the
-  flour already worked).
-- **Co-op:** after the Avatar learns someone's name, guests see the name
-  too, without the game being loaded again; and someone who leaves (like
-  Weston, freed from Britain's prison) is gone for guests as well.
 - **The Target System** finds drawers and other things standing against a
   wall inside a house.
-- **The spell bar** is filled in after Journey Onward, not only after
-  loading a save.
+- **The spell bar** is filled in after Journey Onward, not only after loading
+  a save.
+- **Stepping back when hit:** fighters no longer step back in the wrong
+  direction when struck.
 
 ## 0.8.3, 2026-11-04 (build 249)
 

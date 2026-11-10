@@ -5,6 +5,15 @@ Take an item off this list once it's on the site.
 
 ## To add
 
+### Combat System (new in 0.8.4)
+
+Written on the site 2026-11-09 (site 455fb55): a fourth system card
+("04 / Tactics"), a Combat chapter on the home page (`#combat`), Ctrl+C in
+the shortcuts table, and a Combat System section in the guide, with two
+screenshots (`qotc-combat-orders.avif`, `qotc-position-damage.avif`). Maybe
+later: an archer keeping its distance, for Enemy tactics. At release: the
+guide's "Written for version" and changelog.html (`node scripts/changelog.mjs`).
+
 ### Aimed drops (new in 0.8.3)
 
 A small section of its own on the site, with screenshots. A video comes
