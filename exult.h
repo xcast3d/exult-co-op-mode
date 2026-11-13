@@ -150,6 +150,8 @@ bool Friend_mode_guest_usable_shape(int shape);
 // Host: while using an object for a guest, the guest's companion (not the
 // Avatar) walks to it for scripts that path the Avatar there first.
 Actor* Friend_mode_usecode_walker();
+// Host: whether that companion is a guest's (not the one the host leads).
+bool Friend_mode_walker_is_guest();
 // Set (or clear, with null) the companion a script runs for; returns the
 // one before, to put back.  While set, scripts asking for the Avatar (-356)
 // get it instead, so it is the one who walks, fills a bucket or drinks.
@@ -255,6 +257,10 @@ bool Friend_mode_journal_end_edit(
 		int index, bool changed, int day, int hour, int minute, int tx, int ty, const std::string& text);
 // Allows world-object speech to enter the host's Friend Mode event stream.
 void Friend_mode_note_speech(Game_object* source, const char* text);
+// Who says what a carried thing says (the watch, the abacus): the one who
+// used it, not whoever carries it.  'obj' itself if not carried or not in
+// a session.
+Game_object* Friend_mode_item_speaker(Game_object* obj);
 void Friend_mode_note_dialogue_reset();
 void Friend_mode_note_dialogue_face(int shape, int frame, int slot);
 void Friend_mode_note_dialogue_face_frame(int frame, int slot);

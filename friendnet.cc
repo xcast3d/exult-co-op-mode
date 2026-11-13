@@ -13,7 +13,7 @@
 #include <random>
 
 namespace {
-constexpr unsigned short protocol_version = 40;
+constexpr unsigned short protocol_version = 41;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;
@@ -658,9 +658,9 @@ bool Friend_mode_session::take_creature_state(uint32& creature, int& tx, int& ty
 	return true;
 }
 
-void Friend_mode_session::send_speech(uint32 source, bool creature, const std::string& text) {
+void Friend_mode_session::send_speech(uint32 source, bool creature, const std::string& text, int except) {
 	stage_text(Text_kind::speech, text, 1024, source | (creature ? 0x80000000U : 0U));
-	deliver(everyone);
+	deliver(everyone, except);
 }
 
 bool Friend_mode_session::take_speech(uint32& source, bool& creature, std::string& text) {

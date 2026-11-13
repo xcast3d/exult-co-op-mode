@@ -291,6 +291,11 @@ void Party_manager::get_followers(int dir    // Direction (0-7) Avatar just step
 		if (!npc || npc->get_flag(Obj_flags::asleep) || npc->get_flag(Obj_flags::paralyzed) || npc->is_dead()) {
 			continue;    // Not available.
 		}
+		// Friend Mode: a guest's companion steps only for its guest (one
+		// seated in a chair was pulled along, then walked back to it).
+		if (Friend_mode_player_playing(npc) >= 0) {
+			continue;
+		}
 		const int sched = npc->get_schedule_type();
 		// Skip if in combat or set to 'wait'.
 		if (sched != Schedule::combat && sched != Schedule::wait &&

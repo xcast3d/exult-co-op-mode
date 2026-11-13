@@ -2540,6 +2540,11 @@ void Game_window::start_actor(
 				if (npc == nullptr || npc->get_flag(Obj_flags::asleep) || npc->is_dead()) {
 					continue;
 				}
+				// Friend Mode: a guest's companion goes where its guest takes
+				// it (2026-11-12: one seated in a chair stood up to follow).
+				if (Friend_mode_player_playing(npc) >= 0) {
+					continue;
+				}
 				npc->set_schedule_type(Schedule::follow_avatar);
 			}
 		}
@@ -2608,6 +2613,9 @@ void Game_window::get_leader_followers() {
 	auto get = [leader](Actor* npc) {
 		if (!npc || npc == leader || npc->get_flag(Obj_flags::asleep) || npc->is_dead()) {
 			return;
+		}
+		if (Friend_mode_player_playing(npc) >= 0) {
+			return;    // A guest's companion: its guest moves it (a seated one too).
 		}
 		const int sched = npc->get_schedule_type();
 		if (sched == Schedule::combat || sched == Schedule::wait || sched == Schedule::loiter) {

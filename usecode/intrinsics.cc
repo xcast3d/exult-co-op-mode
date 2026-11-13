@@ -3344,6 +3344,11 @@ USECODE_INTRINSIC(get_party_list2) {
 
 USECODE_INTRINSIC(set_camera) {
 	// Set_camera(actor)
+	// Friend Mode: a script the host runs for a guest (the ferry's horn)
+	// leaves the host's view and windows alone; the guest's camera is its own.
+	if (Friend_mode_walker_is_guest()) {
+		return no_ret;
+	}
 	gumpman->close_all_gumps();
 	Actor* actor = as_actor(get_item(parms[0]));
 	if (actor) {

@@ -912,6 +912,8 @@ void Usecode_internal::item_say(Usecode_value& objval, Usecode_value& strval) {
 	const char*  str = strval.get_str_value();
 	if (obj && str && *str) {
 		Effects_manager* eman = gwin->get_effects();
+		// Friend Mode: a carried thing speaks over the one who used it.
+		obj = Friend_mode_item_speaker(obj);
 		// Added Nov01,01 to fix 'locate':
 		eman->remove_text_effect(obj);
 		if (gwin->failed_copy_protection()) {

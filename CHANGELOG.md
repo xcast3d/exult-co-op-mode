@@ -24,6 +24,24 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (heading for 0.8.5)
+
+### Fixed
+
+- Guests can play the harpsichord, xylophone and harp, a lyre or lute
+  (their own or one lying about), the whistle, and the ferry's horn, which
+  also calls the Ferryman. Everyone hears the tune.
+- The lyre, lute and whistle are offered by the Target System: Space
+  plays them, Alt+Space takes them.
+- The mysterious craft is offered by the Target System: Space inspects it,
+  and everyone hears it. Guests can inspect it too.
+- Guests can sit on a chair themselves (Space says Sit); only their own
+  companion sits, and walking stands it up.
+- What the pocketwatch and abacus say shows over whoever used them, not
+  whoever carries them, and everyone sees it.
+- A guest's coin toss ("Call it.", heads or tails) shows on the host and
+  the other guests.
+
 ## 0.8.4, 2026-11-09 (build 258)
 
 ### Added

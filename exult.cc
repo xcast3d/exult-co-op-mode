@@ -327,6 +327,8 @@ struct Friend_guest {
 	bool             following = false;    // The party's AI drives its companion.
 	bool             menu_following = false;    // ...only while the guest is in a menu.
 	uint32           move_seq  = 0;        // Number of its last step handled.
+	uint32           speech_at = 0;        // Ticks its last few lines (guest_speech) began.
+	int              speech_count = 0;     // Lines since then.
 };
 static std::map<int, Friend_guest> friend_guests;
 
@@ -892,6 +894,17 @@ bool Friend_mode_guest_usable_shape(int shape) {
 	case 743:    // The fair's strength tester (2026-11-08): its script walks
 				 // the user there and tests the user's strength (-356, which
 				 // is the guest's companion while the host runs it for them).
+	// 2026-11-12: instruments and the like whose scripts only play a tune.
+	// The host plays it for the guest, and the host's music reaches everyone.
+	case 689:    // Harpsichord.
+	case 690:    // Xylophone.
+	case 745:    // Harp.
+	case 267:    // The mysterious craft: its tune.
+	case 888:    // The ferry's horn: frame 1 also calls the Ferryman (the
+				 // host's camera stays put: Friend_mode_walker_is_guest).
+	case 873:    // Chair (2026-11-12): the host sits the guest's companion
+				 // alone (Friend_mode_use_object_for_guest), not the script,
+				 // which sits the whole party too.
 		return true;
 	default:
 		return false;
@@ -965,6 +978,35 @@ static Actor* friend_usecode_walker = nullptr;
 
 Actor* Friend_mode_usecode_walker() {
 	return friend_usecode_walker;
+}
+
+Game_object* Friend_mode_item_speaker(Game_object* obj) {
+	if (!obj || !Friend_mode_in_session()) {
+		return obj;
+	}
+	Game_object* outer = obj->get_outermost();
+	if (outer == obj || !outer->as_actor()) {
+		return obj;
+	}
+	// The one a script runs for (a guest's companion on the host, our own
+	// on a guest), else whoever this player controls.
+	if (friend_usecode_walker) {
+		return friend_usecode_walker;
+	}
+	Actor* own = gwin->get_controlled_actor();
+	return own ? own : gwin->get_main_actor();
+}
+
+bool Friend_mode_walker_is_guest() {
+	if (!friend_usecode_walker || friend_session.mode() != Friend_mode_session::Mode::host) {
+		return false;
+	}
+	for (const auto& each : gwin->get_remote_friends()) {
+		if (each.actor == friend_usecode_walker) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // Host: a guest's item target its script didn't use at once (the bucket
@@ -1212,6 +1254,22 @@ static void Friend_mode_use_object_for_guest(const Friend_mode_session::Object_f
 	// Same reach rule as the guest's double-click (and the Avatar's).
 	if (!Fast_pathfinder_client::is_grabable(actor, obj)) {
 		cout << "Friend Mode: refused object use (out of reach)" << endl;
+		return;
+	}
+	if (GAME_BG && obj->get_shapenum() == 873) {
+		// A chair: just this companion sits (as sit_down does).  Its next
+		// step stands it up (the move requests).
+		if (Sit_schedule::is_occupied(obj, actor)) {
+			gwin->get_effects()->add_text("Taken", obj);
+			cout << "Friend Mode: refused chair (taken)" << endl;
+			return;
+		}
+		if (actor->get_schedule_type() == Schedule::combat) {
+			cout << "Friend Mode: refused chair (fighting)" << endl;
+			return;
+		}
+		actor->set_schedule_type(Schedule::sit, std::make_unique<Sit_schedule>(actor, obj));
+		cout << "Friend Mode: " << actor->get_name() << " sits for guest at " << tile.tx << ',' << tile.ty << endl;
 		return;
 	}
 	friend_usecode_walker = actor;
@@ -2962,7 +3020,12 @@ Friend_item_use Friend_mode_guest_item_use(int shape, int frame) {
 	case 616:    // Bottle (drinks): the food script.
 	case 595:    // Torch: lights it.
 	case 701:    // Lit torch: puts it out.
+	case 691:    // Lyre and lute (2026-11-12): a tune, which everyone hears.
+	case 692:
 		return Friend_item_use::on_self;
+	case 693:    // Whistle: frame 0 a tune; frame 1 also stirs the wisps
+				 // nearby (closes windows, sets their schedule), the Avatar's.
+		return frame == 0 ? Friend_item_use::on_self : Friend_item_use::none;
 	case 641:    // Key.
 	case 627:    // Lockpick.
 		return Friend_item_use::on_target;
@@ -3968,7 +4031,7 @@ enum class Friend_thing_group { box, loot, decor, furniture, interactive, usable
 static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 	static const std::unordered_set<int> loot{
 			159, 178, 194, 285, 295, 296, 298, 330, 340, 377, 444, 581, 584, 585, 616, 627, 640, 641, 642, 644,
-			645, 646, 648, 649, 650, 662, 668, 691, 692, 693, 726, 728, 738, 746, 747, 754, 756, 760, 761, 769, 771,
+			645, 646, 648, 649, 650, 662, 668, 726, 728, 738, 746, 747, 754, 756, 760, 761, 769, 771,
 			772, 785, 786, 790, 797, 827, 838, 839, 842, 877, 914, 915, 916, 921, 937, 955, 981,
 			// Things quests ask for, from a scan of the scripts (2026-11-04):
 			// iron bars (Trent's cage), stone chips, the orrery viewer, bee
@@ -4007,7 +4070,9 @@ static Friend_thing_group Friend_thing_group_of(Game_object* obj) {
 			708, 709, 734, 735, 150, 781, 251, 301, 652, 660, 757, 773, 774, 796, 840, 893,
 			739, 991, 748, 577, 888, 155, 990, 968, 418,
 			831,    // The baking hearth (2026-11-08: Space bakes the dough there).
-			702};   // Cannons (2026-11-08, were furniture): fire with a powder keg and a cannon ball beside.
+			702,    // Cannons (2026-11-08, were furniture): fire with a powder keg and a cannon ball beside.
+			691, 692, 693,    // Lyre, lute, whistle (2026-11-12, were loot): Space plays, Alt+Space takes.
+			267};   // The mysterious craft (2026-11-12, was decor): Space inspects (its tune).
 	// Shutters, sconces, lit lamp, curtains, lamp post, and the secret
 	// walls (828, 845) that slide open; the Abbey's door (250), metal walls
 	// (303, 876) and portcullises (935, 936), which have door scripts.
@@ -4273,6 +4338,30 @@ static bool Friend_is_usable_thing(const Game_object* obj) {
 		   || (Friend_craft_target(shape) >= 0                                      // Wool, thread, dough, shears (2026-11-08).
 			   && Friend_mode_guest_item_use(shape, obj->get_framenum()) != Friend_item_use::none)
 		   || Friend_mode_guest_local_item(obj) || Friend_mode_guest_usable_shape(shape);
+}
+
+// The word for Space's use of a thing: instruments play (2026-11-12),
+// the mysterious craft is inspected, the rest are used.
+static const char* Friend_use_word(const Game_object* obj) {
+	if (GAME_BG) {
+		switch (obj->get_shapenum()) {
+		case 689:    // Harpsichord, xylophone, harp, lyre, lute, whistle, horn.
+		case 690:
+		case 745:
+		case 691:
+		case 692:
+		case 693:
+		case 888:
+			return "Play";
+		case 267:
+			return "Inspect";
+		case 873:
+			return "Sit";
+		default:
+			break;
+		}
+	}
+	return "Use";
 }
 
 // What Space uses on a thing that does nothing by itself: the tool whose
@@ -5141,7 +5230,7 @@ static std::string Friend_space_hint() {
 			return two("Pour Flour", "Drop", drop);
 		}
 		if (obj->as_container() || obj->usecode_exists()) {
-			return two(obj->as_container() ? "Open" : "Use", "Drop", drop);
+			return two(obj->as_container() ? "Open" : Friend_use_word(obj), "Drop", drop);
 		}
 		if (Friend_is_wearable(own, obj)) {
 			return two(own->find_readied(obj) >= 0 ? "Put away" : "Ready", "Drop", drop);
@@ -5195,7 +5284,7 @@ static std::string Friend_space_hint() {
 		const char* what = Friend_is_readable(obj)       ? Friend_read_word(obj)
 						   : obj->get_shapenum() == 893 ? "Drink"
 						   : GAME_BG && obj->get_shapenum() == 863 && obj->get_framenum() == 0 ? "Pour Flour"
-																							   : "Use";
+																							   : Friend_use_word(obj);
 		return two(what, "", pick_up);
 	}
 	switch (Friend_thing_group_of(obj)) {
@@ -5207,7 +5296,7 @@ static std::string Friend_space_hint() {
 		if (GAME_BG && (obj->get_shapenum() == 583 || obj->get_shapenum() == 696 || obj->get_shapenum() == 1011)) {
 			return two("Sleep", "", pick_up);    // Beds and the bedroll.
 		}
-		return two("Use", "", pick_up);
+		return two(Friend_use_word(obj), "", pick_up);
 	case Friend_thing_group::interactive:
 	case Friend_thing_group::furniture:
 		return two("Use", "", pick_up);
@@ -9347,18 +9436,47 @@ static void Friend_mode_ensure_dialogue() {
 	}
 }
 
+// Guest: what a script we run ourselves says (the watch, the abacus, a
+// coin toss: Friend_mode_guest_activate's local ones, and their later
+// steps, which keep the walker) goes to the host, who shows it to all.
+static void Friend_mode_relay_guest_speech(Game_object* source, const char* text) {
+	if (!friend_session.connected() || !Friend_mode_usecode_walker()) {
+		return;    // Not our own script: the host's speech, or nothing to send.
+	}
+	Actor* actor = source->as_actor() ? source->as_actor() : source->get_outermost()->as_actor();
+	if (!actor || actor->get_npc_num() < 0 || !*text) {
+		return;    // Things on the map speak on the host's copy if at all.
+	}
+	std::vector<unsigned char> payload;
+	Friend_put16(payload, actor->get_npc_num());
+	payload.insert(payload.end(), text, text + std::min<std::size_t>(std::strlen(text), 200));
+	friend_session.send_blob(Friend_mode_session::Blob_kind::guest_speech, payload);
+	friend_session.poll();
+}
+
 void Friend_mode_note_speech(Game_object* source, const char* text) {
-	if (!source || !text || friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()) {
+	if (!source || !text) {
+		return;
+	}
+	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
+		Friend_mode_relay_guest_speech(source, text);
+		return;
+	}
+	if (friend_session.mode() != Friend_mode_session::Mode::host || !friend_session.connected()) {
 		return;
 	}
 	Actor* actor = source->as_actor();
+	// Something in a pack speaks as whoever carries it (2026-11-12, reverts
+	// 2026-11-08's "only to whoever used it": it looks like them saying it).
+	// item_say already put it over the one who used it.
+	if (!actor && source->get_outermost()->as_actor()) {
+		actor = source->get_outermost()->as_actor();
+	}
 	if (!actor) {
 		// Doors and chests ("Locked", "Unlocked"): send the tile and shape of
 		// the object, or of whatever it is inside on the map.
 		Game_object* outer = source->get_outermost();
-		// Something in a pack (the pocketwatch, the abacus) says it only to
-		// whoever used it (2026-11-08: the host's time showed on guests).
-		if (outer->as_actor() || !outer->get_chunk()) {
+		if (!outer->get_chunk()) {
 			return;
 		}
 		const Tile_coord           t = outer->get_tile();
@@ -9387,6 +9505,45 @@ void Friend_mode_note_speech(Game_object* source, const char* text) {
 	// Conversations and scripted speech may wait in nested input loops, so do
 	// not rely on the outer game loop to flush the event.
 	friend_session.poll();
+}
+
+// Host: a guest's own script spoke (Friend_mode_relay_guest_speech).  A
+// guest's bytes are untrusted: only its companion, the Avatar or the party
+// speak, plain text, a few lines at a time.
+static void Friend_mode_guest_speech(const std::vector<unsigned char>& data, Friend_guest& guest, int player) {
+	auto refuse = [](const char* why) {
+		cout << "Friend Mode: refused guest speech (" << why << ')' << endl;
+	};
+	Actor* own = guest.actor >= 0 ? gwin->get_npc(guest.actor) : nullptr;
+	if (!own) {
+		return refuse("no companion");
+	}
+	if (data.size() < 3 || data.size() > 2 + 200) {
+		return refuse("bad size");
+	}
+	const int npc     = data[0] | (data[1] << 8);
+	Actor*    speaker = npc < gwin->get_num_npcs() ? gwin->get_npc(npc) : nullptr;
+	if (!speaker || speaker->is_dead()
+		|| (speaker != own && speaker != gwin->get_main_actor() && !speaker->is_in_party())) {
+		return refuse("not the party");
+	}
+	const std::string text(data.begin() + 2, data.end());
+	for (const unsigned char c : text) {
+		if (c < 32 || c > 126) {
+			return refuse("not plain text");
+		}
+	}
+	const uint32 now = SDL_GetTicks();
+	if (now - guest.speech_at > 2000) {
+		guest.speech_at    = now;
+		guest.speech_count = 0;
+	}
+	if (++guest.speech_count > 6) {
+		return refuse("too many");
+	}
+	gwin->get_effects()->remove_text_effect(speaker);
+	gwin->get_effects()->add_text(text.c_str(), speaker);
+	friend_session.send_speech(static_cast<uint32>(npc), false, text, player);    // The others.
 }
 
 void Friend_mode_note_dialogue_reset() {
@@ -12133,6 +12290,9 @@ static void Main_loop_pass(bool input) {
 					&& gwin->friend_leash_allows(actor->get_tile(), requested)) {
 					cout << "Friend Mode: host accepted move to " << tx << ',' << ty << ',' << tz << endl;
 					Friend_mode_end_guest_attack(*guest, "guest moved");    // Walking takes over.
+					if (actor->get_schedule_type() == Schedule::sit) {
+						actor->set_schedule_type(Schedule::wait);    // Gets up from a chair.
+					}
 					// The guest already collision-tested this adjacent step. Applying it
 					// directly avoids a second pathfinder disagreeing about door state.
 					const Tile_coord from = actor->get_tile();
@@ -12169,6 +12329,8 @@ static void Main_loop_pass(bool input) {
 						Friend_return_held_item(guest->held);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_use_item) {
 						Friend_mode_use_item_for_guest(request, guest_actor);
+					} else if (kind == Friend_mode_session::Blob_kind::guest_speech) {
+						Friend_mode_guest_speech(request, *guest, requester);
 					} else if (kind == Friend_mode_session::Blob_kind::roster_request) {
 						Friend_mode_send_roster(requester);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_attack) {

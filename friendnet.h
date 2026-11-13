@@ -154,7 +154,8 @@ public:
 		class_marks     = 35,   // Host: status icons under people (Class System).
 		scene           = 36,   // Host: the Avatar is in a scene; the Avatar hidden (opening).
 		barge_step      = 37,   // Host: a vehicle under way started, stepped or stopped.
-		npc_roster      = 38    // Host: NPCs' met flag, and where they are when far or gone.
+		npc_roster      = 38,   // Host: NPCs' met flag, and where they are when far or gone.
+		guest_speech    = 39    // Guest: what its own scripts said (the watch, a coin toss).
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to = everyone, int except = -1);
 	// 'from' (optional) is the sending player; on a guest always the host.
@@ -222,7 +223,7 @@ public:
 	bool take_npc_state(uint32& npc, int& tx, int& ty, int& tz, int& frame);
 	void send_creature_state(uint32 creature, int tx, int ty, int tz, int frame);
 	bool take_creature_state(uint32& creature, int& tx, int& ty, int& tz, int& frame);
-	void send_speech(uint32 source, bool creature, const std::string& text);
+	void send_speech(uint32 source, bool creature, const std::string& text, int except = -1);
 	bool take_speech(uint32& source, bool& creature, std::string& text);
 	// Speaker is the sender's controlled NPC number, or chat_spectator;
 	// 'player' is who said it.  The host relays with 'except' the sender.
