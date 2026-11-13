@@ -79,7 +79,7 @@ int  Friend_class_bar_position  = friend_bar_above_status;
 bool Friend_class_show_ranges   = true;
 int  Friend_class_icon_style    = friend_icons_parchment;
 bool Friend_class_ai            = true;
-bool Friend_class_require_items = false;
+bool Friend_class_require_items = true;
 bool Friend_class_auto_foe      = false;
 bool Friend_class_shared_exp    = true;
 
@@ -441,8 +441,11 @@ struct Companion_class {
 	const char*              npc_name;      // As Black Gate names them.
 	const char*              class_name;
 	Placement                placement;
-	int                      item_shape;    // Class item, or -1 (none defined yet).
-	const char*              item_name;
+	// The class item (2026-11-12): any of these shapes, anywhere in the
+	// companion's inventory, lights the bar; its shots need one readied.
+	// Empty: nothing needed.
+	std::vector<int>         item_shapes;
+	const char*              item_name;     // "a lute", for "Needs a lute".
 	std::vector<Class_skill> skills;
 };
 
@@ -513,8 +516,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Iolo",
 			 "Bard",
 			 Placement::ranged,
-			 -1,
-			 "Iolo's Lute",
+			 {692},
+			 "a lute",
 			 {
 					 // Hostiles in the circle drowse for a few seconds (each
 					 // rolls).  First since 2026-10-22, Warding second.
@@ -555,8 +558,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Shamino",
 			 "Ranger",
 			 Placement::ranged,
-			 -1,
-			 "Shamino's Bow",
+			 {597, 606},
+			 "a bow",
 			 {
 					 Class_skill(22, "Vanish")
 							 .describe("Invisible for a moment; foes lose him")
@@ -588,8 +591,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Jaana",
 			 "Druid",
 			 Placement::support,
-			 -1,
-			 "Jaana's Staff",
+			 {},
+			 nullptr,
 			 {
 					 // A full heal on one: the most hurt in the party.
 					 Class_skill(33, "Greater Heal")
@@ -627,8 +630,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Dupre",
 			 "Paladin",
 			 Placement::front,
-			 -1,
-			 "Dupre's Shield",
+			 {},
+			 nullptr,
 			 {
 					 // Shield Ally first, the heal second (2026-10-25).
 					 // Blows on the ward land on Dupre while he stays within
@@ -666,8 +669,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Spark",
 			 "Boy with a sling",
 			 Placement::ranged,
-			 -1,
-			 "Spark's Sling",
+			 {474},
+			 "a sling",
 			 {
 					 // A stone that stops the target in its tracks (decided 2026-10-20).
 					 Class_skill(50, "Stun Shot")
@@ -706,8 +709,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Sentri",
 			 "Swordmaster",
 			 Placement::front,
-			 -1,
-			 "Sentri's Blade",
+			 {},
+			 nullptr,
 			 {
 					 Class_skill(60, "Riposte")
 							 .describe("For ten seconds, answers every melee miss")
@@ -750,8 +753,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Tseramed",
 			 "Huntsman",
 			 Placement::ranged,
-			 -1,
-			 "Tseramed's Bow",
+			 {597, 606},
+			 "a bow",
 			 {
 					 Class_skill(70, "Sleep Arrow")
 							 .describe("An arrow that puts the target to sleep")
@@ -792,8 +795,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Julia",
 			 "Tinker",
 			 Placement::ranged,
-			 -1,
-			 "Julia's Hammer",
+			 {},
+			 nullptr,
 			 {
 					 // Caltrops at her feet, for whoever chases her; the party is spared.
 					 Class_skill(83, "Set Trap")
@@ -831,8 +834,8 @@ const std::vector<Companion_class>& Classes() {
 			{"Katrina",
 			 "Shepherd",
 			 Placement::support,
-			 -1,
-			 "Katrina's Crook",
+			 {},
+			 nullptr,
 			 {
 					 Class_skill(91, "Summon Dogs")
 							 .describe("Her sheepdogs fight beside you a while")
@@ -1146,10 +1149,15 @@ std::vector<Actor*> Hostiles(const Actor* user, int range) {
 }
 
 bool Has_class_item(const Actor* user, const Companion_class& cls) {
-	if (!Friend_class_require_items || cls.item_shape < 0) {
-		return true;    // Not asked for, or no item made yet.
+	if (!Friend_class_require_items || cls.item_shapes.empty()) {
+		return true;    // Not asked for, or nothing needed.
 	}
-	return const_cast<Actor*>(user)->find_item(cls.item_shape, c_any_qual, c_any_framenum) != nullptr;
+	for (const int shape : cls.item_shapes) {
+		if (const_cast<Actor*>(user)->find_item(shape, c_any_qual, c_any_framenum)) {
+			return true;
+		}
+	}
+	return false;
 }
 
 // A shield in the off hand (rhand): anything with armour there (as
@@ -1177,6 +1185,17 @@ bool May_use(const Actor* user, const Companion_class& cls, const Class_skill& s
 	if (!Has_class_item(user, cls)) {
 		why = std::string("Needs ") + cls.item_name;
 		return false;
+	}
+	if (Friend_class_require_items && !cls.item_shapes.empty() && skill.effect == Skill_effect::volley
+		&& !skill.dash && skill.range > 1) {
+		// A shot: with the class item itself (Spark's sling, not a crossbow).
+		const Game_object* held = user->get_readied(lhand);
+		if (!held
+			|| std::find(cls.item_shapes.begin(), cls.item_shapes.end(), held->get_shapenum())
+					   == cls.item_shapes.end()) {
+			why = std::string("Needs ") + cls.item_name + " readied";
+			return false;
+		}
 	}
 	if (!Able(user)) {
 		why = std::string(user->get_npc_name()) + " can't now";
@@ -3800,7 +3819,7 @@ void Friend_class_load_settings() {
 	config->value("config/friend/class/show_ranges", Friend_class_show_ranges, true);
 	config->value("config/friend/class/ai", Friend_class_ai, true);
 	config->value("config/friend/class/auto_foe", Friend_class_auto_foe, false);
-	config->value("config/friend/class/require_items", Friend_class_require_items, false);
+	config->value("config/friend/class/class_items", Friend_class_require_items, true);    // Was require_items (off, and saved as such: 2026-11-12 turned it on).
 	config->value("config/friend/class/shared_exp", Friend_class_shared_exp, true);
 	Friend_battle_load_settings();
 	if (Friend_class_bar_position < 0 || Friend_class_bar_position >= friend_bar_place_count) {
@@ -3820,7 +3839,7 @@ void Friend_class_save_settings() {
 	if (!Is_guest()) {
 		put("config/friend/class/enabled", Friend_class_enabled);
 		put("config/friend/class/ai", Friend_class_ai);
-		put("config/friend/class/require_items", Friend_class_require_items);
+		put("config/friend/class/class_items", Friend_class_require_items);
 		put("config/friend/class/shared_exp", Friend_class_shared_exp);
 		Friend_battle_save_settings();
 	}

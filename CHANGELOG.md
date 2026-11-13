@@ -42,6 +42,13 @@ both in `--version` and the version files saved with each game.
 - A guest's coin toss ("Call it.", heads or tails) shows on the host and
   the other guests.
 
+### Changed
+
+- Some companions' skills need their own kind of item: Iolo a lute, Spark a
+  sling, Shamino and Tseramed a bow (or magic bow), anywhere in their
+  inventory. Their shots need it readied: Spark's stones fly from a sling,
+  not a crossbow. Without it the skill bar is grey and says what's missing.
+
 ## 0.8.4, 2026-11-09 (build 258)
 
 ### Added

@@ -392,6 +392,16 @@ touched (U7 already has sparkles, glows and the heal effect).
 
 ## Class items
 
+**As built (2026-11-12), simpler than the plan below:** the item is a kind
+of thing, any quality, anywhere in the companion's inventory
+(`Companion_class::item_shapes`): Iolo a lute (692), Spark a sling (474),
+Shamino and Tseramed a bow or magic bow (597, 606). The others need none;
+Dupre's Shield Ally keeps needing a shield readied. A shot (a volley skill
+with reach) also needs that item readied ("Needs a sling readied"), so a
+crossbow doesn't count for these four. On by default; the setting is
+`config/friend/class/class_items` (renamed from `require_items`, which was
+saved "no" everywhere). No special named items are placed in homes.
+
 Each companion's skills come from one item of their own: Iolo's lute,
 Shamino's bow, Jaana's staff or herb pouch, Dupre's shield, Spark's
 sling, and so on. With it in their pack or hands the skill bar lights up;
