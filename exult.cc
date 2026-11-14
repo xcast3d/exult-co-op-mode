@@ -5523,9 +5523,9 @@ static std::vector<Game_object*> Friend_window_reading_order(Gump* gump) {
 	std::vector<Game_object*> inside;
 	Object_iterator           next(gump->get_container()->get_objects());
 	while (Game_object* obj = next.get_next()) {
-		if (!obj->get_flag(Obj_flags::invisible)) {
-			inside.push_back(obj);
-		}
+		// Invisible things too (2026-11-15: caltrops, traps until taken):
+		// windows draw them like the rest, and E skipped them there.
+		inside.push_back(obj);
 	}
 	if (gump->get_container()->as_actor()) {
 		std::stable_sort(inside.begin(), inside.end(), [](const Game_object* a, const Game_object* b) {
@@ -5642,7 +5642,11 @@ private:
 static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 	const Friend_walkable_area walkable(own);
 	Game_object_vector nearby;
-	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0);
+	// See-through shapes and invisible things too (0x80 FindMask::Transparent,
+	// 0x20 Invisible; 2026-11-15: the caltrops laid as traps in the caves by
+	// Cove are invisible, which Exult draws faintly for everyone, and E never
+	// saw them).  People are skipped below; what E offers is decided there.
+	own->find_nearby(nearby, c_any_shapenum, friend_attack_max_tiles, 0xa0);
 	const TileRect            view = gwin->get_win_tile_rect();
 	const Tile_coord          from = own->get_tile();
 	std::vector<Game_object*> things;

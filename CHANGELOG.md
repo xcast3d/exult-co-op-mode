@@ -48,6 +48,8 @@ both in `--version` and the version files saved with each game.
 - Guests see the Light spell brighten the world when the Avatar casts it.
 - "Straying from the Avatar" no longer stacks up when walking along the
   edge of the leash.
+- The Target System finds caltrops laid as traps, and other faint, hidden
+  things the game shows on the ground; it skipped them before.
 - Rudyom's Wand can be used from the Target System (Space and the item
   menu say Use), and guests can use it on blackrock.
 - A guest's drop or move that the Avatar's game refuses now says why ("Too
