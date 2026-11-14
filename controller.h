@@ -184,5 +184,7 @@ void Controller_screen_event(SDL_Event& event, bool menu);
 // The name on the first button doing 'action' ("A", "Cross", "LB",
 // "LT"...), or empty with none.  'key_name' for key_binding actions.
 std::string Controller_label(Controller_action action, const char* key_name = nullptr);
+// The button that does 'action' when held (the item menu: Cross), or "".
+std::string Controller_hold_label(Controller_action action);
 
 #endif

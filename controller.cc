@@ -1018,6 +1018,15 @@ std::string Controller_label(Controller_action action, const char* key_name) {
 	return {};
 }
 
+std::string Controller_hold_label(Controller_action action) {
+	for (const auto& entry : input_names) {
+		if (state.hold_map[Mapped_input(entry.input)].action == action) {
+			return Input_label(entry.input);
+		}
+	}
+	return {};
+}
+
 // The Controller page (the game menu): the live map, a page of buttons at a
 // time; left / right (or LB / RB, or the arrows) turn the pages.
 namespace {
@@ -1644,6 +1653,17 @@ public:
 
 	int get_chosen() const {
 		return chosen;
+	}
+
+	// W and S move up and down too (2026-11-15), as the arrows and the pad
+	// do: the hand stays on WASD, the mouse where it is.
+	bool key_down(SDL_Keycode chr, SDL_Keycode unicode) override {
+		if (chr == SDLK_W) {
+			chr = SDLK_UP;
+		} else if (chr == SDLK_S) {
+			chr = SDLK_DOWN;
+		}
+		return Modal_gump::key_down(chr, unicode);
 	}
 
 	void paint() override {

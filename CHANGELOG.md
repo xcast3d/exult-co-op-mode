@@ -60,8 +60,18 @@ both in `--version` and the version files saved with each game.
 ### Added
 
 - Eating (F, or Eat on the controller's ring) shows a list of the party's
-  food and drink by kind, with how many of each. Pick one: the Avatar then
-  chooses who eats it; a guest eats it itself.
+  food and drink by kind, with how many of each. Pick one, then who eats it
+  from a list of the party, or Auto for the hungriest; a guest eats it
+  itself.
+- W and S move up and down in the action menus (orders, food, the item
+  menu), as the arrow keys and the controller do.
+- The Target System's hint says "More" when the item menu (Ctrl+Space, or
+  the controller's button held) has actions beyond the ones shown, such as
+  Split, Give or Drop all; then it shows two actions and More.
+- Every party member's pack works like the Avatar's own: a thing's own
+  action first (Use, Read, Ready...), then Drop, Split and Give, on Space,
+  Shift+Space and Alt+Space in that order; no more Take between party
+  members. The hint lists them, or the first two and More.
 - The item menu (Ctrl+Space, or Cross held) has Give all and Drop all when a
   window holds more of the very same item, so several loaves of bread move
   to one companion, or to the floor, at once. Guests get Drop all.

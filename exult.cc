@@ -3046,6 +3046,29 @@ static bool Friend_is_wand(const Game_object* obj) {
 	return GAME_BG && obj->get_shapenum() == 771;
 }
 
+static bool Friend_is_wearable(Actor* own, Game_object* obj);
+static void Friend_mode_give(Game_object* obj);
+
+// An action on the pick: the item menu's entries, and in the party's packs
+// what Space, Shift+Space and Alt+Space do, in that order (2026-11-15).
+struct Friend_menu_choice {
+	std::string           label;
+	std::function<void()> run;
+};
+
+// A thing in the party's packs (one's own, or for the host and single
+// player any party member's: all the player's own): its actions in order,
+// its own (read, use, ready, open), Drop, Split, Give, then Give all and
+// Drop all.  Empty for anything else.
+static std::vector<Friend_menu_choice> Friend_inventory_actions(Actor* own, const Game_object_shared& thing);
+
+// In a party member's window, Space uses a thing with a use (2026-11-15: the
+// abacus in Iolo's pack only said Take): not what is worn or opened there.
+static bool Friend_window_use(Actor* member, Game_object* obj) {
+	return Friend_is_wand(obj)
+		   || (obj->usecode_exists() && !obj->as_container() && !Friend_is_wearable(member, obj));
+}
+
 bool Friend_mode_party_food(const Game_object* obj) {
 	if (!GAME_BG || !obj || (obj->get_shapenum() != 377 && obj->get_shapenum() != 616)) {
 		return false;    // Food and drinks only.
@@ -5076,6 +5099,15 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		return true;
 	}
 	const bool plain = !shift && !alt;
+	// The party's packs: Space, Shift+Space and Alt+Space are the first three
+	// of the thing's actions (as the hint lists them).
+	if (const std::vector<Friend_menu_choice> acts = Friend_inventory_actions(own, thing); !acts.empty()) {
+		const std::size_t which = plain ? 0 : shift ? 1 : 2;
+		if (which < acts.size()) {
+			acts[which].run();
+		}
+		return true;
+	}
 	// Something to read: Space reads it wherever it is, and Alt+Space takes
 	// it (2026-10-29: in a window Space took it).
 	const bool readable = Friend_is_readable(obj);
@@ -5083,13 +5115,15 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		gwin->double_clicked_object(obj, window != nullptr || mine);
 		return true;
 	}
-	// A party member's window: Space readies, swaps or puts away on them
-	// (or opens a bag); Alt+Space puts some of a worn stack away; anything
-	// else, and Shift+Space, takes it into one's own pack (below).
+	// A party member's window: Space uses, readies, swaps or puts away on
+	// them (or opens a bag); Alt+Space puts some of a worn stack away.  It is
+	// all the player's own, so nothing is taken from one to another
+	// (2026-11-15): Shift+Space, and Space on what has no other action,
+	// gives it to someone in the party.
 	Actor* member = Friend_window_member(own, obj, window != nullptr);
 	if (member) {
-		if (plain && Friend_is_wand(obj)) {
-			gwin->double_clicked_object(obj, true);    // Its "on what?" crosshair.
+		if (plain && Friend_window_use(member, obj)) {
+			gwin->double_clicked_object(obj, true);    // The abacus, food, the wand's crosshair...
 			return true;
 		}
 		if (plain && Friend_is_wearable(member, obj)) {
@@ -5100,9 +5134,14 @@ static bool Friend_mode_space(bool shift, bool alt) {
 			gwin->double_clicked_object(obj, true);
 			return true;
 		}
-		if (alt && Friend_mode_put_some_away(member, obj, window)) {
+		if (alt) {
+			Friend_mode_put_some_away(member, obj, window);
 			return true;
 		}
+		if (obj->is_dragable() && !Friend_mode_is_guest()) {    // Giving is the Avatar's.
+			Friend_mode_give(obj);
+		}
+		return true;
 	}
 	// One's own.  Space: use, ready or put away; what has none of those is
 	// dropped where the crosshair says, as Shift+Space drops anything;
@@ -5236,28 +5275,39 @@ static std::string Friend_key_label(const std::string& key) {
 		}
 	} else if (key == "C") {
 		button = Friend_pad_glyph(Controller_label(Controller_action::key_binding, "TOGGLE_COMBAT"));
+	} else if (key == "Ctrl+Space") {
+		// The item menu: the button held (controller-plan.md, "Items").
+		// (A held button's: the tap map has none, 2026-11-15.)
+		const std::string held = Friend_pad_glyph(Controller_hold_label(Controller_action::item_menu));
+		const std::string tap  = Friend_pad_glyph(Controller_label(Controller_action::item_menu));
+		button                 = !held.empty() ? "hold " + held : tap;
 	}
 	return button.empty() ? key : button;
 }
 
-static std::string Friend_space_hint() {
-	if (friend_drop_cursor) {
-		return Friend_drop_hint();
-	}
+// What Space, Shift+Space and Alt+Space do to the pick (2026-11-15).
+struct Friend_hint_parts {
+	std::string space, shift, alt;
+};
+
+// The item menu's entries for the pick, by label (Friend_space_hint).
+static std::vector<std::string> Friend_item_menu_labels();
+
+// The hint's line with Space's and Shift+Space's actions; all three are in
+// 'parts' (Friend_space_hint adds Alt+Space's, or "More").
+static std::string Friend_space_hint_line(Friend_hint_parts& parts) {
 	Actor*                   own    = gwin->get_controlled_actor();
 	Actor*                   target = gwin->get_action_target();
 	const Game_object_shared thing  = friend_object_target.lock();
 	if (!own || (!target && !thing)) {
 		return {};
 	}
-	auto two = [](const std::string& space, const std::string& shift, const std::string& alt = {}) {
+	auto two = [&parts](const std::string& space, const std::string& shift, const std::string& alt = {}) {
 		std::string line = space + " (" + Friend_key_label("Space") + ")";
 		if (!shift.empty()) {
 			line += "  " + shift + " (" + Friend_key_label("Shift+Space") + ")";
 		}
-		if (!alt.empty()) {
-			line += "  " + alt + " (" + Friend_key_label("Alt+Space") + ")";
-		}
+		parts = {space, shift, alt};
 		return line;
 	};
 	// People (2026-10-26): oneself, Space views one's character; the party,
@@ -5303,20 +5353,22 @@ static std::string Friend_space_hint() {
 	// A party member's window: ready / put away on them, Shift takes.
 	if (Actor* member = Friend_window_member(own, obj, window)) {
 		const bool        worn = member->find_readied(obj) >= 0;
-		const std::string some_away = worn && stack ? "Put some away" : some;
+		// No Take between party members (2026-11-15): Give.
+		const std::string give = obj->is_dragable() && !Friend_mode_is_guest() ? "Give to..." : "";
+		const std::string away = worn && stack ? "Put some away" : "";
 		if (Friend_is_readable(obj)) {
-			return two(Friend_read_word(obj), take, take);
+			return two(Friend_read_word(obj), give, away);
 		}
-		if (Friend_is_wand(obj)) {
-			return two("Use", take, take);
+		if (Friend_window_use(member, obj)) {
+			return two(Friend_use_word(obj), give, away);
 		}
 		if (Friend_is_wearable(member, obj)) {
-			return two(worn ? "Put away" : "Ready", take, some_away);
+			return two(worn ? "Put away" : "Ready", give, away);
 		}
 		if (obj->as_container()) {
-			return two("Open", take, some);
+			return two("Open", give, away);
 		}
-		return two(take, "", some);
+		return give.empty() ? std::string() : two(give, "", away);
 	}
 	if (mine) {
 		const std::string drop = stack ? (own->find_readied(obj) >= 0 ? "Put some away" : "Drop some") : "";
@@ -5403,6 +5455,51 @@ static std::string Friend_space_hint() {
 	default:
 		return two(take, "", some);
 	}
+}
+
+// What Space, Shift+Space and Alt+Space do to the pick; when the item menu
+// (Ctrl+Space, the pad's button held) has more than those three, the first
+// two and "More" (2026-11-15: players didn't know the menu was there, and a
+// fourth crowded the line).
+static std::string Friend_space_hint() {
+	if (friend_drop_cursor) {
+		return Friend_drop_hint();
+	}
+	const Game_object_shared thing = friend_object_target.lock();
+	// The party's packs: the actions in order; all of them when three or
+	// fewer, else the first two and More (a cup: Drop, Give; bolts: Ready,
+	// Drop, More, which has Split and Give).
+	if (thing && !friend_drop_cursor) {
+		const std::vector<Friend_menu_choice> acts = Friend_inventory_actions(gwin->get_controlled_actor(), thing);
+		if (!acts.empty()) {
+			static const char* const keys[] = {"Space", "Shift+Space", "Alt+Space"};
+			const std::size_t        shown  = acts.size() <= 3 ? acts.size() : 2;
+			std::string              text;
+			for (std::size_t i = 0; i < shown; ++i) {
+				text += (i ? "  " : "") + acts[i].label + " (" + Friend_key_label(keys[i]) + ")";
+			}
+			if (shown < acts.size()) {
+				text += "  More (" + Friend_key_label("Ctrl+Space") + ")";
+			}
+			return text;
+		}
+	}
+	Friend_hint_parts parts;
+	const std::string line = Friend_space_hint_line(parts);
+	if (line.empty() || !thing) {
+		return line;
+	}
+	bool more = false;
+	for (const std::string& label : Friend_item_menu_labels()) {
+		if (label != parts.space && label != parts.shift && label != parts.alt) {
+			more = true;
+			break;
+		}
+	}
+	if (more) {
+		return line + "  More (" + Friend_key_label("Ctrl+Space") + ")";
+	}
+	return parts.alt.empty() ? line : line + "  " + parts.alt + " (" + Friend_key_label("Alt+Space") + ")";
 }
 
 // The newest open container window (the list runs oldest to newest), or
@@ -10886,25 +10983,120 @@ static void Friend_mode_give_all(Game_object* obj, const std::vector<Game_object
 									  : std::string("No room"));
 }
 
-static void Friend_mode_item_menu() {
-	Actor*                   own   = gwin->get_controlled_actor();
-	const Game_object_shared thing = friend_object_target.lock();
-	if (!own || !thing) {
-		Friend_mode_target_notice("Pick a thing first");
-		return;
+static std::vector<Friend_menu_choice> Friend_inventory_actions(Actor* own, const Game_object_shared& thing) {
+	std::vector<Friend_menu_choice> acts;
+	Game_object* obj = thing.get();
+	if (!own || !obj) {
+		return acts;
+	}
+	const bool in_window = friend_object_in_window;
+	const bool mine      = obj->get_outermost() == own;
+	const bool guest     = Friend_mode_is_guest();
+	Actor*     member    = mine || guest ? nullptr : Friend_window_member(own, obj, in_window);
+	if (!mine && !member) {
+		return acts;
+	}
+	Actor* wearer = mine ? own : member;
+	auto   window = [thing]() {
+        return friend_object_in_window ? gwin->get_gump_man()->find_gump(thing.get()) : nullptr;
+	};
+	auto use = [thing]() {
+		gwin->double_clicked_object(thing.get(), true);
+	};
+	// Its own action.
+	const Friend_tool* tool = mine ? Friend_tool_for(obj) : nullptr;
+	if (Friend_is_readable(obj)) {
+		acts.push_back({Friend_read_word(obj), use});
+	} else if (tool && tool->craft) {
+		acts.push_back({std::string("Use ") + tool->name, [thing]() {
+							Friend_mode_use_tool_on(thing.get());    // Cloth: the shears.
+						}});
+	} else if (GAME_BG && obj->get_shapenum() == 863 && obj->get_framenum() == 0) {
+		acts.push_back({"Pour Flour", use});
+	} else if (obj->as_container()) {
+		acts.push_back({"Open", use});
+	} else if (mine ? obj->usecode_exists() : Friend_window_use(member, obj)) {
+		acts.push_back({Friend_use_word(obj), use});
+	} else if (Friend_is_wearable(wearer, obj)) {
+		acts.push_back({wearer->find_readied(obj) >= 0 ? "Put away" : "Ready", [thing, wearer, window]() {
+							Friend_mode_equip(wearer, thing.get(), window());
+						}});
+	}
+	if (!obj->is_dragable()) {
+		return acts;
+	}
+	// Drop, then the rest (staying in place in the window after a drop).
+	auto drop = [thing, in_window](int count, const std::vector<Game_object*>& more) {
+		Game_object* item  = thing.get();
+		const int    index = in_window ? Friend_window_index(item) : 0;
+		if (count > 0 && Friend_mode_drop_where(item, count, more) && in_window && friend_object_in_window) {
+			Friend_mode_pick_next_in_window(index);
+		}
+	};
+	acts.push_back({"Drop", [thing, drop]() {
+						drop(thing->get_quantity(), {});
+					}});
+	if (obj->get_quantity() > 1) {
+		// Some of it: put away from a worn stack, else dropped.
+		acts.push_back({"Split", [thing, wearer, window, drop]() {
+							if (wearer->find_readied(thing.get()) >= 0) {
+								Friend_mode_put_some_away(wearer, thing.get(), window());
+							} else {
+								drop(Friend_how_many(thing.get(), true), {});
+							}
+						}});
+	}
+	if (!guest) {
+		acts.push_back({"Give", [thing]() {
+							Friend_mode_give(thing.get());
+						}});
+	}
+	if (in_window) {
+		const std::vector<Game_object*> same = Friend_same_items(obj);
+		if (!same.empty()) {
+			int total = obj->get_quantity();
+			std::vector<Game_object_weak> others;
+			for (Game_object* each : same) {
+				total += each->get_quantity();
+				others.push_back(weak_from_obj(each));
+			}
+			auto still = [others]() {
+				std::vector<Game_object*> left;
+				for (const Game_object_weak& each : others) {
+					if (const Game_object_shared item = each.lock()) {
+						left.push_back(item.get());
+					}
+				}
+				return left;
+			};
+			const std::string all = " all (" + std::to_string(total) + ")";
+			acts.push_back({"Drop" + all, [thing, still, drop]() {
+								drop(thing->get_quantity(), still());
+							}});
+			if (!guest) {
+				acts.push_back({"Give" + all + " to...", [thing, still]() {
+									Friend_mode_give_all(thing.get(), still());
+								}});
+			}
+		}
+	}
+	return acts;
+}
+
+// The item menu's entries for 'thing', the pick.
+static std::vector<Friend_menu_choice> Friend_item_menu_choices(Actor* own, const Game_object_shared& thing) {
+	if (std::vector<Friend_menu_choice> acts = Friend_inventory_actions(own, thing); !acts.empty()) {
+		return acts;    // The party's packs: every action, in the hint's order.
 	}
 	Game_object* obj    = thing.get();
 	Game_object* outer  = obj->get_outermost();
 	Actor*       holder = outer ? outer->as_actor() : nullptr;
 	const bool   party  = holder && (holder == gwin->get_main_actor() || holder->is_in_party());
 	const bool   guest  = Friend_mode_is_guest();
-	struct Choice {
-		std::string           label;
-		std::function<void()> run;
-	};
-	std::vector<Choice> choices;
+	std::vector<Friend_menu_choice> choices;
 	// What Space would do, by its hint ("Ready (Space)  Take (Shift+Space)").
-	std::string hint = Friend_space_hint();
+	Friend_hint_parts parts;
+	std::string       hint = Friend_space_hint_line(parts);
 	if (hint.rfind("Locked", 0) == 0) {
 		hint = hint.substr(std::min(hint.size(), std::string("Locked  ").size()));    // Not a choice.
 	}
@@ -10917,7 +11109,7 @@ static void Friend_mode_item_menu() {
 	// Take, when Space reads, opens or uses it instead: as Alt+Space (in a
 	// party member's window, Shift+Space).  Not one's own.
 	const std::string take = Friend_is_theft(obj) ? "Steal" : "Take";
-	if (first != take && obj->is_dragable() && outer != own) {
+	if (first != take && obj->is_dragable() && outer != own && !party) {    // The party's: Give (2026-11-15).
 		const bool member = Friend_window_member(own, obj, friend_object_in_window) != nullptr;
 		choices.push_back({take, [member]() {
 							   Friend_mode_space(member, !member);
@@ -10928,7 +11120,7 @@ static void Friend_mode_item_menu() {
 							   Friend_mode_give(thing.get());
 						   }});
 	}
-	if (obj->get_quantity() > 1) {
+	if (obj->get_quantity() > 1 && (!party || outer == own)) {    // Not between party members.
 		choices.push_back({"Split", []() {
 							   Friend_mode_space(false, true);    // As Alt+Space: how many.
 						   }});
@@ -10972,11 +11164,44 @@ static void Friend_mode_item_menu() {
 							   }});
 		}
 	}
+	// Once each (2026-11-15: a cup in one's pack, which Space drops, said
+	// Drop twice).
+	std::vector<Friend_menu_choice> once;
+	for (auto& choice : choices) {
+		if (std::none_of(once.begin(), once.end(), [&choice](const Friend_menu_choice& seen) {
+				return seen.label == choice.label;
+			})) {
+			once.push_back(std::move(choice));
+		}
+	}
+	return once;
+}
+
+static std::vector<std::string> Friend_item_menu_labels() {
+	Actor*                   own   = gwin->get_controlled_actor();
+	const Game_object_shared thing = friend_object_target.lock();
 	std::vector<std::string> labels;
+	if (own && thing) {
+		for (const auto& choice : Friend_item_menu_choices(own, thing)) {
+			labels.push_back(choice.label);
+		}
+	}
+	return labels;
+}
+
+static void Friend_mode_item_menu() {
+	Actor*                   own   = gwin->get_controlled_actor();
+	const Game_object_shared thing = friend_object_target.lock();
+	if (!own || !thing) {
+		Friend_mode_target_notice("Pick a thing first");
+		return;
+	}
+	const std::vector<Friend_menu_choice> choices = Friend_item_menu_choices(own, thing);
+	std::vector<std::string>              labels;
 	for (const auto& choice : choices) {
 		labels.push_back(choice.label);
 	}
-	const int chosen = Controller_choose(Friend_thing_name(obj), labels);
+	const int chosen = Controller_choose(Friend_thing_name(thing.get()), labels);
 	if (chosen >= 0 && friend_object_target.lock() == thing) {
 		choices[chosen].run();
 	}
@@ -11102,9 +11327,42 @@ bool Friend_mode_choose_food() {
 	}
 	Game_object* food = kinds[chosen].obj;
 	if (Friend_mode_is_guest()) {
-		return Friend_mode_guest_activate(food);
+		return Friend_mode_guest_activate(food);    // A guest feeds its own companion.
 	}
-	food->activate();    // Its script asks who eats.
+	// Who eats (2026-11-15: a list like Give's, not the crosshair), Auto
+	// first: the hungriest, as the ring's Eat did.
+	std::vector<Actor*>      eaters;
+	std::vector<std::string> names{"Auto (hungriest)"};
+	Actor*                   hungriest = nullptr;
+	int                      least     = 0;
+	for (int i = 0; i <= gwin->get_party_man()->get_count(); ++i) {
+		Actor* who = Friend_party_member(i);
+		if (!who || who->is_dead() || who->get_info().does_not_eat()) {
+			continue;
+		}
+		eaters.push_back(who);
+		names.push_back(Friend_target_name(who));
+		const int level = who->get_property(static_cast<int>(Actor::food_level));
+		if (!hungriest || level < least) {
+			hungriest = who;
+			least     = level;
+		}
+	}
+	if (!hungriest) {
+		return true;
+	}
+	const int picked = Controller_choose("Feed " + Friend_thing_name(food) + " to", names);
+	if (picked < 0) {
+		return true;
+	}
+	Actor* eater = picked == 0 ? hungriest : eaters[picked - 1];
+	Usecode_machine* usecode = gwin->get_usecode();
+	Game_object*     old_target;
+	Tile_coord*      old_tile;
+	usecode->save_intercept(old_target, old_tile);
+	usecode->intercept_click_on_item(eater);    // The food's "on whom?" answered.
+	food->activate();
+	usecode->restore_intercept(old_target, old_tile);
 	return true;
 }
 
