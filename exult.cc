@@ -4824,10 +4824,19 @@ Game_object* Friend_mode_aim_for_orders(const std::string& prompt) {
 	return answered ? gwin->find_object(x, y) : nullptr;
 }
 
-static bool Friend_mode_drop_where(Game_object* obj, int count) {
+// 'more' (Drop all, 2026-11-15): the same item's other ones, dropped whole
+// where the first goes.
+static bool Friend_mode_drop_where(Game_object* obj, int count, const std::vector<Game_object*>& more = {}) {
 	const Game_object_shared keep = obj->shared_from_this();
-	const std::string name = count < obj->get_quantity() ? std::to_string(count) + " of " + Friend_thing_name(obj)
-														 : Friend_thing_name(obj);
+	std::vector<Game_object_shared> keep_more;
+	int                             total = count;
+	for (Game_object* each : more) {
+		keep_more.push_back(each->shared_from_this());
+		total += each->get_quantity();
+	}
+	const std::string name = !more.empty()                  ? std::to_string(total) + " " + Friend_thing_name(obj)
+							 : count < obj->get_quantity() ? std::to_string(count) + " of " + Friend_thing_name(obj)
+														   : Friend_thing_name(obj);
 	if (gwin->get_action_target()) {
 		Friend_mode_clear_target();    // A foe picked earlier isn't where this goes.
 	}
@@ -4867,10 +4876,24 @@ static bool Friend_mode_drop_where(Game_object* obj, int count) {
 			return false;
 		}
 	}
-	Gump* from = gwin->get_gump_man()->find_gump(obj);
-	const bool dropped = on || x >= 0 ? gwin->drop_object_at(obj, from, x, y, count, on, inside)
-									  : gwin->move_object(obj, from, nullptr, -1, count);
-	Friend_mode_target_notice(dropped ? "Dropped " + name : "Can't drop that there");
+	auto drop_one = [&](Game_object* item, int how_many) {
+		Gump* from = gwin->get_gump_man()->find_gump(item);
+		return on || x >= 0 ? gwin->drop_object_at(item, from, x, y, how_many, on, inside)
+							: gwin->move_object(item, from, nullptr, -1, how_many);
+	};
+	const bool dropped = drop_one(obj, count);
+	int        left    = 0;    // Of the others, how many didn't go.
+	if (dropped) {
+		for (const Game_object_shared& each : keep_more) {
+			// Still where it was (a guest's resend may have changed things).
+			if (each->get_owner() && !drop_one(each.get(), each->get_quantity())) {
+				++left;
+			}
+		}
+	}
+	Friend_mode_target_notice(!dropped ? "Can't drop that there"
+							  : left   ? "Dropped some; " + std::to_string(left) + " didn't fit"
+									   : "Dropped " + name);
 	return dropped;
 }
 
@@ -10796,6 +10819,73 @@ static void Friend_mode_give(Game_object* obj) {
 	}
 }
 
+// The same item's other ones in its window (2026-11-15: Give all, Drop all):
+// same shape and frame, in the same container, not 'obj'.
+static std::vector<Game_object*> Friend_same_items(Game_object* obj) {
+	std::vector<Game_object*> found;
+	Container_game_object*    owner = obj->get_owner();
+	if (!owner) {
+		return found;
+	}
+	Object_iterator next(owner->get_objects());
+	while (Game_object* each = next.get_next()) {
+		if (each != obj && each->get_shapenum() == obj->get_shapenum() && each->get_framenum() == obj->get_framenum()
+			&& each->is_dragable()) {
+			found.push_back(each);
+		}
+	}
+	return found;
+}
+
+// Give all (the host and single player): 'obj' and its like to one party
+// member's pack, asked once.
+static void Friend_mode_give_all(Game_object* obj, const std::vector<Game_object*>& more) {
+	Actor*              own    = gwin->get_controlled_actor();
+	Actor*              holder = obj->get_outermost()->as_actor();
+	std::vector<Actor*> members;
+	std::vector<std::string> names;
+	for (int i = 0; i <= gwin->get_party_man()->get_count(); ++i) {
+		Actor* who = Friend_party_member(i);
+		if (who && who != holder && !who->is_dead()) {
+			members.push_back(who);
+			names.push_back(Friend_target_name(who));
+		}
+	}
+	int total = obj->get_quantity();
+	for (Game_object* each : more) {
+		total += each->get_quantity();
+	}
+	const std::string what   = std::to_string(total) + " " + Friend_thing_name(obj);
+	const int         chosen = Controller_choose("Give " + what + " to", names);
+	if (chosen < 0) {
+		return;
+	}
+	Actor* to = members[chosen];
+	if (!cheat.in_hack_mover() && !Fast_pathfinder_client::is_grabable(own, to)) {
+		Friend_mode_target_notice("Too far away");
+		return;
+	}
+	Container_game_object* pack = Friend_pack_of(to);
+	if (pack == to) {
+		Friend_mode_target_notice(Friend_target_name(to) + " has no backpack");
+		return;
+	}
+	std::vector<Game_object_shared> items{obj->shared_from_this()};
+	for (Game_object* each : more) {
+		items.push_back(each->shared_from_this());
+	}
+	int given = 0;
+	for (const Game_object_shared& item : items) {
+		if (item->get_owner()
+			&& gwin->move_object(item.get(), gwin->get_gump_man()->find_gump(item.get()), pack, -1, item->get_quantity())) {
+			++given;
+		}
+	}
+	Friend_mode_target_notice(given == static_cast<int>(items.size()) ? "Gave " + what + " to " + Friend_target_name(to)
+							  : given ? "Gave some to " + Friend_target_name(to) + "; the rest didn't fit"
+									  : std::string("No room"));
+}
+
 static void Friend_mode_item_menu() {
 	Actor*                   own   = gwin->get_controlled_actor();
 	const Game_object_shared thing = friend_object_target.lock();
@@ -10848,6 +10938,39 @@ static void Friend_mode_item_menu() {
 							   Game_object* item = thing.get();
 							   Friend_mode_drop_where(item, item->get_quantity());
 						   }});
+	}
+	// More of the very same item in this window (2026-11-15): all at once.
+	if (party && obj->is_dragable() && friend_object_in_window) {
+		const std::vector<Game_object*> same = Friend_same_items(obj);
+		if (!same.empty()) {
+			int total = obj->get_quantity();
+			for (Game_object* each : same) {
+				total += each->get_quantity();
+			}
+			const std::string all = " all (" + std::to_string(total) + ")";
+			std::vector<Game_object_weak> others;
+			for (Game_object* each : same) {
+				others.push_back(weak_from_obj(each));
+			}
+			auto still = [others]() {
+				std::vector<Game_object*> left;
+				for (const Game_object_weak& each : others) {
+					if (const Game_object_shared item = each.lock()) {
+						left.push_back(item.get());
+					}
+				}
+				return left;
+			};
+			if (!guest) {
+				choices.push_back({"Give" + all + " to...", [thing, still]() {
+									   Friend_mode_give_all(thing.get(), still());
+								   }});
+			}
+			choices.push_back({"Drop" + all, [thing, still]() {
+								   Game_object* item = thing.get();
+								   Friend_mode_drop_where(item, item->get_quantity(), still());
+							   }});
+		}
 	}
 	std::vector<std::string> labels;
 	for (const auto& choice : choices) {
@@ -10916,34 +11039,73 @@ static std::function<void(Image_buffer8*, int, int)> Controller_bar_picture(int 
 	return Controller_shape_picture(icon->normal.shape, icon->normal.frame, icon->normal.get_shapefile());
 }
 
-// Eat: the hungriest in the party who eats is fed from the party's food (or
-// drink), as if they had been clicked on, with no crosshair.  False with no
-// food.
-static bool Controller_feed_hungriest() {
-	Actor* hungriest = nullptr;
-	int    least     = 0;
+// Eat (F, the ring; 2026-11-15): a list of the party's food and drink by
+// kind, with how many ("Bread (3)"); one kind goes straight on.  The host
+// then gets the food's own crosshair (who eats); a guest's companion eats it
+// itself (Friend_mode_party_food lets it take any party member's).  False
+// with none.
+bool Friend_mode_choose_food() {
+	if (!GAME_BG) {
+		return gwin->activate_item(377) || gwin->activate_item(616);
+	}
+	Actor* own = gwin->get_controlled_actor();
+	if (!own) {
+		own = gwin->get_main_actor();
+	}
+	struct Kind {
+		int          shape;
+		int          frame;
+		Game_object* obj;      // One to eat: one's own first.
+		int          total;
+	};
+	std::vector<Kind> kinds;
+	auto add = [&](Actor* who) {
+		if (!who || who->is_dead()) {
+			return;
+		}
+		for (const int shape : {377, 616}) {
+			Game_object_vector found;
+			who->get_objects(found, shape, c_any_qual, c_any_framenum);
+			for (Game_object* each : found) {
+				auto kind = std::find_if(kinds.begin(), kinds.end(), [each](const Kind& k) {
+					return k.shape == each->get_shapenum() && k.frame == each->get_framenum();
+				});
+				if (kind == kinds.end()) {
+					kinds.push_back({each->get_shapenum(), each->get_framenum(), each, each->get_quantity()});
+				} else {
+					kind->total += each->get_quantity();
+				}
+			}
+		}
+	};
+	add(own);
 	for (int i = 0; i <= gwin->get_party_man()->get_count(); ++i) {
 		Actor* who = Friend_party_member(i);
-		if (!who || who->is_dead() || who->get_info().does_not_eat()) {
-			continue;
-		}
-		const int food = who->get_property(static_cast<int>(Actor::food_level));
-		if (!hungriest || food < least) {
-			hungriest = who;
-			least     = food;
+		if (who != own) {
+			add(who);
 		}
 	}
-	if (!hungriest) {
+	if (kinds.empty()) {
 		return false;
 	}
-	Usecode_machine* usecode = gwin->get_usecode();
-	Game_object*     old_target;
-	Tile_coord*      old_tile;
-	usecode->save_intercept(old_target, old_tile);
-	usecode->intercept_click_on_item(hungriest);    // The food's "on whom?" answered.
-	const bool fed = gwin->activate_item(377) || gwin->activate_item(616);    // Food, else drink.
-	usecode->restore_intercept(old_target, old_tile);
-	return fed;
+	std::size_t chosen = 0;
+	if (kinds.size() > 1) {
+		std::vector<std::string> labels;
+		for (const Kind& kind : kinds) {
+			labels.push_back(Friend_thing_name(kind.obj) + " (" + std::to_string(kind.total) + ")");
+		}
+		const int picked = Controller_choose("Eat what?", labels);
+		if (picked < 0) {
+			return true;    // There is food; the player changed their mind.
+		}
+		chosen = static_cast<std::size_t>(picked);
+	}
+	Game_object* food = kinds[chosen].obj;
+	if (Friend_mode_is_guest()) {
+		return Friend_mode_guest_activate(food);
+	}
+	food->activate();    // Its script asks who eats.
+	return true;
 }
 
 // Utilities: always the same order, so it becomes muscle memory.  An entry
@@ -10993,7 +11155,7 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 	std::vector<Controller_ring_entry> entries;
 	const bool food = has(377) || has(616);
 	entries.push_back({"Eat", Controller_bar_picture(8), {}, food, or_say(food, "No food", []() {
-						   Controller_feed_hungriest();
+						   Friend_mode_choose_food();
 					   })});
 	// The watch: anyone's in the party (a guest's runs on its own copy, as
 	// the abacus below; 2026-11-08: a guest's ring found Shamino's watch but

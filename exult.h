@@ -204,6 +204,8 @@ bool Friend_mode_guest_local_shape(int shape, int frame = -1);
 // Food or drink in the pack of the Avatar or a party member: a guest's
 // companion may eat it (2026-11-14).
 bool Friend_mode_party_food(const Game_object* obj);
+// Eat (F, the ring): a list of the party's food by kind, then eat it.
+bool Friend_mode_choose_food();
 // The same for one thing: also its quality (a plaque that only reads, not
 // the one that falls on Lord British).
 bool Friend_mode_guest_local_item(const Game_object* obj);

@@ -57,6 +57,15 @@ both in `--version` and the version files saved with each game.
 - A skill picked from the controller's ring no longer gets lost when the
   ring closes; if it can't be used, it says so.
 
+### Added
+
+- Eating (F, or Eat on the controller's ring) shows a list of the party's
+  food and drink by kind, with how many of each. Pick one: the Avatar then
+  chooses who eats it; a guest eats it itself.
+- The item menu (Ctrl+Space, or Cross held) has Give all and Drop all when a
+  window holds more of the very same item, so several loaves of bread move
+  to one companion, or to the floor, at once. Guests get Drop all.
+
 ### Changed
 
 - Some companions' skills need their own kind of item: Iolo a lute, Spark a
