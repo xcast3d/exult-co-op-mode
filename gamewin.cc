@@ -2756,7 +2756,9 @@ bool Game_window::activate_item(
 			const int count = get_party(party, 1);
 			for (int i = 0; i < count && !obj; i++) {
 				Game_object* found = party[i]->find_item(shnum, qual, frnum);
-				obj = found && Friend_mode_guest_local_item(found) ? found : nullptr;
+				// Food and drink too (2026-11-14): one of the party
+				// often carries it all.  Our own companion eats it.
+				obj = found && (Friend_mode_guest_local_item(found) || Friend_mode_party_food(found)) ? found : nullptr;
 			}
 		}
 		return obj && Friend_mode_guest_activate(obj);

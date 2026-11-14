@@ -761,6 +761,23 @@ public:
 		ambient_light = state;
 	}
 
+	// Friend Mode: a guest takes the host's light spell (its end, as a game
+	// minute, and the permanent kind); true if it changed.
+	bool set_network_light(unsigned long ends, bool ambient) {
+		const bool changed = special_light != ends || ambient_light != ambient;
+		special_light      = ends;
+		ambient_light      = ambient;
+		return changed;
+	}
+
+	unsigned long get_special_light() const {
+		return special_light;
+	}
+
+	bool get_ambient_light() const {
+		return ambient_light;
+	}
+
 	// Handle 'stop time' spell.
 	void set_time_stopped(long delay);
 

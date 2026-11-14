@@ -42,6 +42,21 @@ both in `--version` and the version files saved with each game.
 - A guest's coin toss ("Call it.", heads or tails) shows on the host and
   the other guests.
 
+- On a controller, Left and Right page through the companions when choosing
+  one.
+- A guest can eat food or drink any party member carries, not only its own.
+- Guests see the Light spell brighten the world when the Avatar casts it.
+- "Straying from the Avatar" no longer stacks up when walking along the
+  edge of the leash.
+- Rudyom's Wand can be used from the Target System (Space and the item
+  menu say Use), and guests can use it on blackrock.
+- A guest's drop or move that the Avatar's game refuses now says why ("Too
+  far away to drop there", "Too heavy") instead of the item silently going
+  back into the pack. Guests can also drop things twice as far away as
+  before (16 tiles).
+- A skill picked from the controller's ring no longer gets lost when the
+  ring closes; if it can't be used, it says so.
+
 ### Changed
 
 - Some companions' skills need their own kind of item: Iolo a lute, Spark a

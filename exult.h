@@ -201,6 +201,9 @@ Friend_item_use Friend_mode_guest_item_use(int shape, int frame = -1);
 // Read-only objects (signs, books, map, telescope...): a guest uses them on
 // its own copy of the world, and only the guest sees the result.
 bool Friend_mode_guest_local_shape(int shape, int frame = -1);
+// Food or drink in the pack of the Avatar or a party member: a guest's
+// companion may eat it (2026-11-14).
+bool Friend_mode_party_food(const Game_object* obj);
 // The same for one thing: also its quality (a plaque that only reads, not
 // the one that falls on Lord British).
 bool Friend_mode_guest_local_item(const Game_object* obj);

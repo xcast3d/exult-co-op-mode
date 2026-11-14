@@ -13,7 +13,7 @@
 #include <random>
 
 namespace {
-constexpr unsigned short protocol_version = 41;
+constexpr unsigned short protocol_version = 42;
 constexpr unsigned char  hello_packet      = 1;
 constexpr unsigned char  accepted_packet   = 2;
 constexpr unsigned char  rejected_packet   = 3;

@@ -3171,13 +3171,15 @@ private:
 // inside the click: a spell or skill may bring up the crosshair, whose own
 // click loop replaces the drag the button's click is still part of
 // (Dragging_info::drop then went on in freed memory, 2026-10-23).
-int pending_slot = -1;
+int    pending_slot       = -1;
+uint32 pending_slot_until = 0;    // Waits this long for the game to stop waiting (2026-11-14).
 
 bool Skill_button::activate(MouseButton button) {
 	if (button != MouseButton::Left || !the_bar) {
 		return false;
 	}
-	pending_slot = index;
+	pending_slot       = index;
+	pending_slot_until = Now() + 1500;
 	return true;
 }
 
@@ -3923,7 +3925,8 @@ bool Friend_class_use_slot(int index) {
 	if (!the_bar || !the_bar->slot(index)) {
 		return false;
 	}
-	pending_slot = index;    // On the next frame, as a click.
+	pending_slot       = index;    // On the next frame, as a click.
+	pending_slot_until = Now() + 1500;
 	return true;
 }
 
@@ -4020,8 +4023,17 @@ void Friend_class_frame() {
 	// A bar click while the game waits is dropped (no skills during the
 	// host's conversation or a pause, or under a cursor, which doesn't pause in
 	// co-op: a second cast from there would stop the world under its own cursor).
-	if (const int index = std::exchange(pending_slot, -1);
-		index >= 0 && the_bar && !paused && !Friend_mode_in_live_pass()) {
+	// A press from the controller's ring came while the ring still held the
+	// game, and was dropped without a word (2026-11-14: Jaana's heal from
+	// the pad did nothing, the keyboard's worked): it waits a moment now,
+	// and says so if it can't be used.
+	if (pending_slot >= 0 && (paused || Friend_mode_in_live_pass())) {
+		if (Now() >= pending_slot_until) {
+			cout << "Friend Class: slot " << pending_slot << " dropped (the game was waiting)" << endl;
+			Friend_mode_class_notice("Not now: the game is waiting");
+			pending_slot = -1;
+		}
+	} else if (const int index = std::exchange(pending_slot, -1); index >= 0 && the_bar) {
 		if (const Bar_slot* slot = the_bar->slot(index)) {
 			const Bar_slot copy = *slot;    // Using it may rebuild the bar.
 			Use_slot(copy, index);

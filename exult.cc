@@ -836,19 +836,32 @@ static void Friend_mode_paint_maps() {
 }
 
 static void Friend_mode_update_leash_zone(Actor* actor) {
+	// Walking along a line crossed it again and again, and the notices
+	// stacked (2026-11-14): back out of a zone takes 2 tiles more, and each
+	// notice comes at most once each 10 seconds.
+	constexpr int    slack  = 2;
+	constexpr uint32 gap_ms = 10000;
+	static uint32    straying_said_at = 0;
+	static uint32    beyond_said_at   = 0;
 	Friend_leash_zone zone = Friend_leash_zone::near;
 	if (actor && actor != gwin->get_main_actor()) {
-		const int dist = gwin->friend_leash_distance(actor->get_tile());
-		if (dist > Game_window::friend_leash_max_tiles) {
+		const int dist  = gwin->friend_leash_distance(actor->get_tile());
+		const int max   = Game_window::friend_leash_max_tiles - (friend_leash_zone == Friend_leash_zone::beyond ? slack : 0);
+		const int warn  = Game_window::friend_leash_warn_tiles - (friend_leash_zone != Friend_leash_zone::near ? slack : 0);
+		if (dist > max) {
 			zone = Friend_leash_zone::beyond;
-		} else if (dist > Game_window::friend_leash_warn_tiles) {
+		} else if (dist > warn) {
 			zone = Friend_leash_zone::straying;
 		}
 	}
 	if (zone != friend_leash_zone) {
-		if (zone == Friend_leash_zone::straying && friend_leash_zone == Friend_leash_zone::near) {
+		const uint32 now = SDL_GetTicks();
+		if (zone == Friend_leash_zone::straying && friend_leash_zone == Friend_leash_zone::near
+			&& (straying_said_at == 0 || now - straying_said_at >= gap_ms)) {
+			straying_said_at = now;
 			gwin->get_effects()->add_chat_text("Straying from the Avatar", actor);
-		} else if (zone == Friend_leash_zone::beyond) {
+		} else if (zone == Friend_leash_zone::beyond && (beyond_said_at == 0 || now - beyond_said_at >= gap_ms)) {
+			beyond_said_at = now;
 			gwin->get_effects()->add_chat_text("The Avatar needs you", actor);
 		}
 		gwin->set_all_dirty();
@@ -2759,15 +2772,34 @@ void Friend_mode_saving(bool before) {
 }
 
 // Host: a guest picked an item up.
+// How far from its companion a guest may drop a thing on the floor (was 8;
+// 2026-11-14: doubled, 8 felt very short with the drop cursor).
+constexpr int friend_guest_drop_tiles = 16;
+
+// Host: tell one guest why its move was refused (2026-11-14: an item that
+// went back into the pack said nothing).
+static void Friend_mode_tell_guest(int player, const std::string& text) {
+	if (player >= 0 && friend_session.connected()) {
+		const size_t length = std::min<size_t>(text.size(), 120);
+		friend_session.send_blob(
+				Friend_mode_session::Blob_kind::notice, std::vector<unsigned char>(text.begin(), text.begin() + length), player);
+	}
+}
+
 static void Friend_mode_guest_lift(
-		const std::vector<unsigned char>& data, Actor* actor, Friend_held_item& friend_guest_held) {
+		const std::vector<unsigned char>& data, Actor* actor, Friend_held_item& friend_guest_held, int player) {
 	Friend_return_held_item(friend_guest_held);    // Only one item in hand at a time.
 	std::size_t  pos = 0;
 	Game_object* src = nullptr;
 	Tile_coord   tile;
-	if (!actor || !Friend_read_path(data, pos, src, tile) || !src || src->as_actor()
-		|| !Friend_guest_may_touch(actor, src)) {
-		cout << "Friend Mode: refused guest pick-up (not found, out of reach or not theirs)" << endl;
+	const char*  why = !actor                                          ? "no companion"
+					   : !Friend_read_path(data, pos, src, tile) || !src ? "not found"
+					   : src->as_actor()                                ? "a person"
+					   : !Friend_guest_may_touch(actor, src)            ? "out of reach or not theirs"
+																		  : nullptr;
+	if (why) {
+		cout << "Friend Mode: refused guest pick-up (" << why << ')' << endl;
+		Friend_mode_tell_guest(player, std::strcmp(why, "out of reach or not theirs") == 0 ? "Can't take that" : "Couldn't move that");
 		Friend_force_item_resync(actor);
 		return;
 	}
@@ -2785,9 +2817,16 @@ static void Friend_mode_guest_lift(
 
 // Host: carry out a guest's item move after checking it.
 static void Friend_mode_perform_guest_move(
-		const std::vector<unsigned char>& data, Actor* actor, Friend_held_item& friend_guest_held) {
+		const std::vector<unsigned char>& data, Actor* actor, Friend_held_item& friend_guest_held, int player) {
 	auto refuse = [&](const char* why) {
 		cout << "Friend Mode: refused guest item move (" << why << ')' << endl;
+		// What the guest sees, as its item goes back.
+		const std::string reason(why);
+		Friend_mode_tell_guest(player, reason == "too heavy"                ? "Too heavy"
+									   : reason == "drop spot out of reach" ? "Too far away to drop there"
+									   : reason == "no room"                ? "No room"
+									   : reason.find("out of reach") != std::string::npos ? "Too far away"
+																						  : "Couldn't move that");
 		Friend_force_item_resync(actor);
 	};
 	if (!actor) {
@@ -2844,7 +2883,7 @@ static void Friend_mode_perform_guest_move(
 			&& (holder->get_weight() + src->get_weight()) / 10 > holder->get_max_weight()) {
 			return refuse_drop("too heavy");
 		}
-	} else if (actor->get_tile().distance(dst_tile) > 8 || dst_tile.tz > actor->get_lift() + 5) {
+	} else if (actor->get_tile().distance(dst_tile) > friend_guest_drop_tiles || dst_tile.tz > actor->get_lift() + 5) {
 		return refuse_drop("drop spot out of reach");
 	}
 	// Lift the item, splitting a stack if only part moves.
@@ -2980,6 +3019,8 @@ int Friend_craft_target(int shape) {
 		return 851;    // Shears: cloth.
 	case 863:
 		return 1003;    // Kitchen items: flour on a table (or 1018), the rest on dough.
+	case 771:
+		return 914;    // Rudyom's Wand: blackrock (2026-11-14; the Black Gate is the Avatar's).
 	default:
 		return -1;
 	}
@@ -2998,6 +3039,19 @@ static bool Friend_craft_wants(const Game_object* item, const Game_object* targe
 // crosshair, though they aren't offered otherwise.
 static bool Friend_is_flour_table(const Game_object* obj) {
 	return GAME_BG && (obj->get_shapenum() == 1003 || obj->get_shapenum() == 1018);
+}
+
+// Rudyom's Wand (2026-11-14): used wherever it is, a party member's window too.
+static bool Friend_is_wand(const Game_object* obj) {
+	return GAME_BG && obj->get_shapenum() == 771;
+}
+
+bool Friend_mode_party_food(const Game_object* obj) {
+	if (!GAME_BG || !obj || (obj->get_shapenum() != 377 && obj->get_shapenum() != 616)) {
+		return false;    // Food and drinks only.
+	}
+	const Actor* holder = obj->get_outermost()->as_actor();
+	return holder && !holder->is_dead() && (holder == gwin->get_main_actor() || holder->is_in_party());
 }
 
 bool Friend_mode_guest_local_item(const Game_object* obj) {
@@ -3035,6 +3089,9 @@ Friend_item_use Friend_mode_guest_item_use(int shape, int frame) {
 	case 653:    // Bale of wool: on a spinning wheel (0x28D, 0x62D).
 	case 654:    // Spindle of thread: on a loom (0x28E, 0x62E).
 	case 698:    // Shears: on cloth, which becomes bandages (0x2BA).
+	case 771:    // Rudyom's Wand (0x303, 2026-11-14): on blackrock the user
+				 // blasts it (set_to_attack, -356: the guest's companion).  On
+				 // the Black Gate it's the endgame: refused (Friend_craft_wants).
 		return Friend_item_use::on_target;
 	case 863:    // Kitchen items (0x35F): the flour (frame 0) is poured on a
 				 // table (1003, 1018), making the dough water works; frames 8
@@ -3178,7 +3235,10 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 	if (use == Friend_item_use::none) {
 		return refuse("item not allowed");
 	}
-	if (!Friend_guest_may_touch(actor, item)) {
+	// Food and drink a party member carries, the guest's companion eats too
+	// (2026-11-14: parties keep their food on one of them).
+	const bool party_food = use == Friend_item_use::on_self && target == actor && Friend_mode_party_food(item);
+	if (!party_food && !Friend_guest_may_touch(actor, item)) {
 		return refuse("item out of reach or not theirs");
 	}
 	if (Friend_is_paint_brush(item)) {
@@ -3207,7 +3267,7 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 		if (!Friend_craft_wants(item, target)) {
 			return refuse("not what this is used on");
 		}
-		if (item->get_shapenum() == 698 || item->get_shapenum() == 863) {
+		if (item->get_shapenum() == 698 || item->get_shapenum() == 863 || item->get_shapenum() == 771) {
 			// The shears' and kitchen things' scripts don't walk: within reach.
 			if (!Friend_guest_may_touch(actor, target)) {
 				return refuse("cloth out of reach or not theirs");
@@ -4797,6 +4857,16 @@ static bool Friend_mode_drop_where(Game_object* obj, int count) {
 	}
 	const bool inside = on && Friend_drop_goes_inside(on);
 	friend_drop_item  = nullptr;
+	// A guest: the host takes drops within 16 tiles of its companion, and
+	// one further went back into the pack (2026-11-14).  Say so first.
+	if (Friend_mode_is_guest() && !inside && x >= 0) {
+		const Tile_coord spot(gwin->get_scrolltx() + x / c_tilesize, gwin->get_scrollty() + y / c_tilesize, 0);
+		const Tile_coord at = gwin->get_controlled_actor()->get_tile();
+		if (std::max(std::abs(spot.tx - at.tx), std::abs(spot.ty - at.ty)) > friend_guest_drop_tiles) {
+			Friend_mode_target_notice("Too far away to drop there");
+			return false;
+		}
+	}
 	Gump* from = gwin->get_gump_man()->find_gump(obj);
 	const bool dropped = on || x >= 0 ? gwin->drop_object_at(obj, from, x, y, count, on, inside)
 									  : gwin->move_object(obj, from, nullptr, -1, count);
@@ -4995,6 +5065,10 @@ static bool Friend_mode_space(bool shift, bool alt) {
 	// else, and Shift+Space, takes it into one's own pack (below).
 	Actor* member = Friend_window_member(own, obj, window != nullptr);
 	if (member) {
+		if (plain && Friend_is_wand(obj)) {
+			gwin->double_clicked_object(obj, true);    // Its "on what?" crosshair.
+			return true;
+		}
 		if (plain && Friend_is_wearable(member, obj)) {
 			Friend_mode_equip(member, obj, window);
 			return true;
@@ -5209,6 +5283,9 @@ static std::string Friend_space_hint() {
 		const std::string some_away = worn && stack ? "Put some away" : some;
 		if (Friend_is_readable(obj)) {
 			return two(Friend_read_word(obj), take, take);
+		}
+		if (Friend_is_wand(obj)) {
+			return two("Use", take, take);
 		}
 		if (Friend_is_wearable(member, obj)) {
 			return two(worn ? "Put away" : "Ready", take, some_away);
@@ -7448,6 +7525,12 @@ static void Friend_mode_clock_pass(bool force) {
 	Friend_put8(out, clock->get_minute());
 	Friend_put8(out, clock->get_ticks());
 	Friend_put8(out, gwin->get_effects()->get_weather());
+	// The Light spell (2026-11-14): when it ends, as a game minute (0: none),
+	// and the permanent kind.  The guest's clock is ours, so it ends there too.
+	const unsigned long light = gwin->get_special_light();
+	Friend_put16(out, static_cast<int>(light & 0xffff));
+	Friend_put16(out, static_cast<int>((light >> 16) & 0xffff));
+	Friend_put8(out, gwin->get_ambient_light() ? 1 : 0);
 	if (force || out != friend_last_clock) {
 		friend_session.send_blob(Friend_mode_session::Blob_kind::game_clock, out);
 		friend_last_clock = std::move(out);
@@ -7466,6 +7549,13 @@ static void Friend_mode_apply_clock(const std::vector<unsigned char>& data) {
 	if (weather != friend_guest_weather) {
 		friend_guest_weather = weather;
 		Egg_object::set_weather(weather, 0, nullptr);    // Lasts until the host's changes.
+	}
+	if (data.size() >= 13) {
+		const unsigned long light = static_cast<unsigned long>(data[8] | (data[9] << 8))
+									| (static_cast<unsigned long>(data[10] | (data[11] << 8)) << 16);
+		if (gwin->set_network_light(light, data[12] != 0)) {
+			clock->set_palette();    // Brighter, or back to the hour's.
+		}
 	}
 }
 
@@ -9886,6 +9976,12 @@ public:
 	}
 
 	bool handle_event(SDL_Event& event) override {
+		// Left and Right page the companions, as the arrows do (2026-11-14:
+		// the pad's D-pad comes as these keys, and only Up and Down moved).
+		if (event.type == SDL_EVENT_KEY_DOWN && (event.key.key == SDLK_LEFT || event.key.key == SDLK_RIGHT)) {
+			set_id(event.key.key == SDLK_LEFT ? -2 : -3);
+			return true;
+		}
 		return (event.type == SDL_EVENT_KEY_DOWN && (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER))
 			   || event.type == SDL_EVENT_MOUSE_BUTTON_UP;
 	}
@@ -12322,9 +12418,9 @@ static void Main_loop_pass(bool input) {
 						continue;    // The Class System's.
 					}
 					if (kind == Friend_mode_session::Blob_kind::guest_lift) {
-						Friend_mode_guest_lift(request, guest_actor, guest->held);
+						Friend_mode_guest_lift(request, guest_actor, guest->held, requester);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_move) {
-						Friend_mode_perform_guest_move(request, guest_actor, guest->held);
+						Friend_mode_perform_guest_move(request, guest_actor, guest->held, requester);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_put_back) {
 						Friend_return_held_item(guest->held);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_use_item) {
