@@ -321,7 +321,7 @@ void ActionUseFood(const int* params) {
 		p[0] = 1557;
 		p[1] = 0;
 		ActionCallUsecode(p);
-	} else if (Friend_mode_choose_food()) {    // Food and drinks, by kind (2026-11-15).
+	} else if (Friend_mode_choose_food()) {    // Food and drinks, by kind (2026-11-14).
 		Mouse::mouse()->set_speed_cursor();
 	}
 }

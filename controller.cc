@@ -1065,7 +1065,7 @@ std::string Describe(const Controller_binding& binding) {
 	case Controller_action::sort_window:
 		return "Sort the newest window";
 	case Controller_action::item_menu:
-		return "Item menu: give, put in, drop...";
+		return "Item menu: every action (More)";
 	case Controller_action::next_window:
 		return "Next window to the front";
 	case Controller_action::arrange_windows:
@@ -1655,7 +1655,7 @@ public:
 		return chosen;
 	}
 
-	// W and S move up and down too (2026-11-15), as the arrows and the pad
+	// W and S move up and down too (2026-11-14), as the arrows and the pad
 	// do: the hand stays on WASD, the mouse where it is.
 	bool key_down(SDL_Keycode chr, SDL_Keycode unicode) override {
 		if (chr == SDLK_W) {

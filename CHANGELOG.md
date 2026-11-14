@@ -24,66 +24,61 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## Unreleased (heading for 0.8.5)
-
-### Fixed
-
-- Guests can play the harpsichord, xylophone and harp, a lyre or lute
-  (their own or one lying about), the whistle, and the ferry's horn, which
-  also calls the Ferryman. Everyone hears the tune.
-- The lyre, lute and whistle are offered by the Target System: Space
-  plays them, Alt+Space takes them.
-- The mysterious craft is offered by the Target System: Space inspects it,
-  and everyone hears it. Guests can inspect it too.
-- Guests can sit on a chair themselves (Space says Sit); only their own
-  companion sits, and walking stands it up.
-- What the pocketwatch and abacus say shows over whoever used them, not
-  whoever carries them, and everyone sees it.
-- A guest's coin toss ("Call it.", heads or tails) shows on the host and
-  the other guests.
-
-- On a controller, Left and Right page through the companions when choosing
-  one.
-- A guest can eat food or drink any party member carries, not only its own.
-- Guests see the Light spell brighten the world when the Avatar casts it.
-- "Straying from the Avatar" no longer stacks up when walking along the
-  edge of the leash.
-- The Target System finds caltrops laid as traps, and other faint, hidden
-  things the game shows on the ground; it skipped them before.
-- Rudyom's Wand can be used from the Target System (Space and the item
-  menu say Use), and guests can use it on blackrock.
-- A guest's drop or move that the Avatar's game refuses now says why ("Too
-  far away to drop there", "Too heavy") instead of the item silently going
-  back into the pack. Guests can also drop things twice as far away as
-  before (16 tiles).
-- A skill picked from the controller's ring no longer gets lost when the
-  ring closes; if it can't be used, it says so.
+## 0.8.5, 2026-11-14 (build 265)
 
 ### Added
 
-- Eating (F, or Eat on the controller's ring) shows a list of the party's
-  food and drink by kind, with how many of each. Pick one, then who eats it
-  from a list of the party, or Auto for the hungriest; a guest eats it
-  itself.
-- W and S move up and down in the action menus (orders, food, the item
+- **Feeding, your way:** F (or Eat on the controller's Utilities ring) lists
+  the party's food and drink by kind, with how many of each. Pick one, then
+  who eats it, or Auto for the hungriest. In co-op a guest eats it itself,
+  from anyone's pack.
+- **Your party's packs are all yours:** whoever carries a thing, it shows its
+  own action first (Use, Read, Ready), then Drop, Split and Give, on Space,
+  Shift+Space and Alt+Space in that order. No more taking from one companion
+  to give to another: Give does it.
+- **More:** the Target System's hint shows up to three actions; when the
+  item menu (Ctrl+Space, or Cross held) has more, it shows two and "More".
+- **Give all and Drop all** in the item menu, when a pack holds several of
+  the very same item: five loaves of bread to your food carrier, or to the
+  floor, at once. Guests get Drop all.
+- W and S move up and down in every action list (orders, food, the item
   menu), as the arrow keys and the controller do.
-- The Target System's hint says "More" when the item menu (Ctrl+Space, or
-  the controller's button held) has actions beyond the ones shown, such as
-  Split, Give or Drop all; then it shows two actions and More.
-- Every party member's pack works like the Avatar's own: a thing's own
-  action first (Use, Read, Ready...), then Drop, Split and Give, on Space,
-  Shift+Space and Alt+Space in that order; no more Take between party
-  members. The hint lists them, or the first two and More.
-- The item menu (Ctrl+Space, or Cross held) has Give all and Drop all when a
-  window holds more of the very same item, so several loaves of bread move
-  to one companion, or to the floor, at once. Guests get Drop all.
 
 ### Changed
 
-- Some companions' skills need their own kind of item: Iolo a lute, Spark a
-  sling, Shamino and Tseramed a bow (or magic bow), anywhere in their
-  inventory. Their shots need it readied: Spark's stones fly from a sling,
-  not a crossbow. Without it the skill bar is grey and says what's missing.
+- **Companion skills need their gear:** Iolo needs a lute, Spark a sling,
+  Shamino and Tseramed a bow, anywhere in their inventory, and their shots
+  need it readied (Spark's stones fly from a sling, not a crossbow). Without
+  it the skill bar is grey and says what's missing. Dupre's Shield Ally needs
+  a shield, as before.
+- Guests can drop things twice as far away as before (16 tiles).
+
+### Fixed
+
+- **Co-op:**
+  - Guests can play the harpsichord, xylophone, harp, lyre, lute, whistle
+    and the ferry's horn (which also calls the Ferryman), and inspect the
+    mysterious craft. Everyone hears the tune.
+  - Guests can sit on a chair themselves; walking stands them up, and the
+    Avatar moving off no longer pulls them out of it.
+  - The pocketwatch, the abacus and a coin toss show over whoever used them,
+    on every screen.
+  - A guest can eat food or drink any party member carries.
+  - Guests see the Light spell brighten the world.
+  - "Straying from the Avatar" no longer stacks up along the edge of the
+    leash.
+  - A drop the Avatar's game refuses says why ("Too far away to drop
+    there", "Too heavy") instead of the item jumping back into the pack.
+- **Target System:**
+  - It offers the lyre, lute and whistle (Space plays them) and the
+    mysterious craft (Space inspects it).
+  - It finds caltrops laid as traps, and other faint, hidden things on the
+    ground and in packs.
+  - Rudyom's Wand has Use, and guests can use it on blackrock.
+- **Controller:**
+  - Left and Right page through the companions when choosing one.
+  - A skill picked from the Skills ring no longer gets lost as the ring
+    closes; if it can't be used, it says why.
 
 ## 0.8.4, 2026-11-09 (build 258)
 

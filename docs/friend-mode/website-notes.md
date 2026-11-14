@@ -5,6 +5,15 @@ Take an item off this list once it's on the site.
 
 ## To add
 
+### Feeding and the party's packs (new in 0.8.5)
+
+Written on the site 2026-11-14: the guide's Target System section (the hint's
+first, second and third actions, More, the party's packs as one inventory,
+Drop all and Give all, W and S in lists), an Eating line in its General list,
+the controller notes (the second action, the item menu), and on the home page
+a "Feeding, your way" card and Ctrl+Space and F in the shortcuts table.
+Maybe later: a screenshot of the food list and the who-eats list.
+
 ### Combat System (new in 0.8.4)
 
 Written on the site 2026-11-09 (site 455fb55): a fourth system card
