@@ -413,7 +413,7 @@ public:
 		};
 		label(row_enabled, "Lighting:");
 		label(row_shadows, "Shadows:");
-		label(row_strength, "Shadow strength:");
+		label(row_strength, "Strength:");
 		label(row_sunlight, "Sunlight:");
 		label(row_night, "Night edges:");
 		label(row_colour, "Colour:");
