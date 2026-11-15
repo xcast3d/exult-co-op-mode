@@ -37,12 +37,1138 @@
 #include "gameclk.h"
 #include "gamemap.h"
 #include "gamewin.h"
+#include "items.h"
 #include "ignore_unused_variable_warning.h"
 #include "objiter.h"
 #include "perf.h"
 
+#include "Configuration.h"
+#include "endianio.h"
+#include "palette.h"
+#include "vgafile.h"
+
 #include <algorithm>
+#include <cctype>
+#include <cmath>
 #include <cstdio>
+#include <cstring>
+#include <string>
+#include <vector>
+
+/*
+ *  Relight (experimental).  See gamerend.h.
+ *
+ *  Heights are in screen pixels: one lift raises a pixel 4 pixels up and
+ *  left, so a point at world (wx, wy, z) shows at (wx - z, wy - z).
+ */
+namespace Relight {
+	namespace {
+		Settings cur_settings;
+		bool     settings_read = false;
+		View     cur_view      = normal;
+
+		// Height of each pixel, and which way it faces, laid out like the
+		// 8-bit game buffer.
+		enum Face : unsigned char {
+			face_top = 0,
+			face_east,
+			face_south
+		};
+
+		std::vector<unsigned char> heights, faces;
+		// Indoors, the roof Exult hides: its heights still cast shadows
+		// (casters = heights + roofs), and the floor under it is covered.
+		std::vector<unsigned char> casters, covered;
+		unsigned char*             hbase = nullptr;    // At game (0, 0).
+		unsigned char*             fbase = nullptr;
+		int                        hline = 0;
+		int                        hmin_x = 0, hmin_y = 0, hmax_x = 0, hmax_y = 0;
+
+		// Shade tables built from the current palette.
+		// Levels 0..15 darken (k / 15); 16..19 brighten in steps of 7.5%.
+		constexpr int     num_levels    = 20;
+		constexpr int     unlit_level   = 15;
+		inline float      level_factor(int k) {
+            return k <= unlit_level ? float(k) / unlit_level : 1.0f + 0.075f * (k - unlit_level);
+		}
+		inline int        level_for(float lum) {
+            const int k = lum <= 1.0f ? int(lum * unlit_level + 0.5f) : unlit_level + int((lum - 1.0f) / 0.075f + 0.5f);
+            return std::clamp(k, 0, num_levels - 1);
+		}
+		constexpr int     first_cycling = 0xe0;    // Water etc. stay as is.
+		unsigned char     shade[num_levels][256];
+		unsigned char     gray[num_levels];
+		unsigned char     pal_seen[768];
+		bool              pal_valid = false;
+		std::vector<unsigned char> shadow;    // Scratch: 1 = in sun shadow.
+		std::vector<float>         light;     // Scratch: RGB light per pixel.
+
+		// Full colour: the light layer, and the map as painted, so what is
+		// drawn over it afterwards (gumps, text) can be left unlit.
+		std::vector<uint32>        overlay;
+		std::vector<unsigned char> map_copy;
+		int                        ov_x = 0, ov_y = 0, ov_w = 0, ov_h = 0;
+		bool                       ov_pending = false;
+
+		constexpr int margin = 128;
+		int           view_x0 = 0, view_y0 = 0, view_x1 = 0, view_y1 = 0;    // Painted area.
+
+		void ensure_buffer(Image_window8* win) {
+			// The buffer reaches 'margin' pixels past the screen on every side,
+			// so things just out of view still cast their shadows into it.
+			const int line   = win->get_full_width() + 2 * margin;
+			const int rows   = win->get_full_height() + 2 * margin;
+			const int sx     = win->get_start_x() - margin;
+			const int sy     = win->get_start_y() - margin;
+			if (heights.size() != size_t(line) * rows || hline != line || hmin_x != sx || hmin_y != sy) {
+				heights.assign(size_t(line) * rows, 0);
+				faces.assign(size_t(line) * rows, face_top);
+				casters.assign(size_t(line) * rows, 0);
+				covered.assign(size_t(line) * rows, 0);
+				hline  = line;
+				hmin_x = sx;
+				hmin_y = sy;
+				hbase  = heights.data() - sy * line - sx;
+				fbase  = faces.data() - sy * line - sx;
+				hmax_x = sx + line;
+				hmax_y = sy + rows;
+			}
+		}
+
+		inline bool in_buffer(int x, int y) {
+			return x >= hmin_x && y >= hmin_y && x < hmax_x && y < hmax_y;
+		}
+
+		inline int idx(int x, int y) {    // Into the vectors.
+			return (y - hmin_y) * hline + (x - hmin_x);
+		}
+
+		inline int height_at(int x, int y) {
+			return in_buffer(x, y) ? hbase[y * hline + x] : 0;
+		}
+
+		inline int caster_at(int x, int y) {
+			return in_buffer(x, y) ? casters[idx(x, y)] : 0;
+		}
+
+		void rebuild_tables(const Palette* pal) {
+			unsigned char cur[768];
+			for (int i = 0; i < 256; i++) {
+				cur[3 * i]     = pal->get_red(i);
+				cur[3 * i + 1] = pal->get_green(i);
+				cur[3 * i + 2] = pal->get_blue(i);
+			}
+			if (pal_valid && std::memcmp(cur, pal_seen, sizeof(cur)) == 0) {
+				return;
+			}
+			std::memcpy(pal_seen, cur, sizeof(cur));
+			pal_valid = true;
+			auto nearest = [&](float r, float g, float b) {
+				int   best      = 0;
+				float best_dist = 1e30f;
+				for (int j = 0; j < first_cycling; j++) {
+					const float dr = cur[3 * j] - r;
+					const float dg = cur[3 * j + 1] - g;
+					const float db = cur[3 * j + 2] - b;
+					// Weighted toward green, as the eye is.
+					const float d = 2 * dr * dr + 4 * dg * dg + 3 * db * db;
+					if (d < best_dist) {
+						best_dist = d;
+						best      = j;
+					}
+				}
+				return static_cast<unsigned char>(best);
+			};
+			int maxc = 1;
+			for (const unsigned char c : cur) {
+				maxc = std::max<int>(maxc, c);
+			}
+			for (int k = 0; k < num_levels; k++) {
+				const float f = level_factor(k);
+				for (int i = 0; i < 256; i++) {
+					if (i >= first_cycling || k == unlit_level) {
+						shade[k][i] = static_cast<unsigned char>(i);
+					} else {
+						auto c      = [&](int v) {
+                            return std::min<float>(maxc, v * f);
+						};
+						shade[k][i] = nearest(c(cur[3 * i]), c(cur[3 * i + 1]), c(cur[3 * i + 2]));
+					}
+				}
+				const float g = std::min<float>(maxc, maxc * float(k) / (num_levels - 1));
+				gray[k]       = nearest(g, g, g);
+			}
+		}
+
+		// Record heights for a painted shape whose 3D box has its lower
+		// south-east corner at screen (hotx, hoty), on lift 'lift', 'zt'
+		// lifts tall.  Each pixel gets the highest point of the box along
+		// its line of sight: the top, or the east or south face.
+		// stamp_outside records only pixels off the painted area, keeping
+		// the higher height (there is no painting order to follow there).
+		// stamp_roof is for a hidden roof: it raises the casters and marks
+		// the floor below it ('floor' high) as covered.
+		enum Stamp_mode {
+			stamp_paint,
+			stamp_outside,
+			stamp_roof
+		};
+
+
+		void stamp(Shape_frame* frame, int hotx, int hoty, int lift, int zt, int cx, int cy, int cw, int ch,
+				   Stamp_mode mode = stamp_paint, int floor = 0) {
+			if (!frame || !frame->get_data()) {
+				return;
+			}
+			const int base = 4 * lift;
+			const int top  = 4 * (lift + zt);
+			auto      put  = [&](int x, int y) {
+                const int east  = base + hotx - x;
+                const int south = base + hoty - y;
+                int       h     = std::min({top, east, south});
+                Face      f     = h == top ? face_top : east <= south ? face_east : face_south;
+                if (h <= base) {
+                    h = base;
+                    f = face_top;
+                }
+                // A rim a lift or so deep (the edge of a roof piece) reads
+                // as part of the top, or every piece gets an outline.
+                if (top - h <= 5) {
+                    h = top;
+                    f = face_top;
+                }
+                const auto hv = static_cast<unsigned char>(std::min(h, 255));
+                if (mode == stamp_roof) {
+                    unsigned char& c = casters[idx(x, y)];
+                    c                = std::max(c, hv);
+                    const int d      = h - floor;    // Straight down to the floor.
+                    if (in_buffer(x + d, y + d)) {
+                        covered[idx(x + d, y + d)] = 1;
+                    }
+                    return;
+                }
+                if (mode == stamp_outside) {
+                    if ((x >= view_x0 && x < view_x1 && y >= view_y0 && y < view_y1) || hbase[y * hline + x] >= hv) {
+                        return;
+                    }
+                }
+                hbase[y * hline + x] = hv;
+                fbase[y * hline + x] = f;
+			};
+			auto run = [&](int x, int y, int n) {
+				if (y < cy || y >= cy + ch) {
+					return;
+				}
+				const int x0 = std::max(x, cx);
+				const int x1 = std::min(x + n, cx + cw);
+				for (int px = x0; px < x1; px++) {
+					put(px, y);
+				}
+			};
+			if (!frame->is_rle()) {
+				for (int y = 0; y < c_tilesize; y++) {
+					run(hotx - c_tilesize, hoty - c_tilesize + y, c_tilesize);
+				}
+				return;
+			}
+			const unsigned char* in = frame->get_data();
+			int                  scanlen;
+			while ((scanlen = little_endian::Read2(in)) != 0) {
+				const int encoded = scanlen & 1;
+				scanlen >>= 1;
+				int       scanx = hotx + static_cast<sint16>(little_endian::Read2(in));
+				const int scany = hoty + static_cast<sint16>(little_endian::Read2(in));
+				if (!encoded) {
+					run(scanx, scany, scanlen);
+					in += scanlen;
+					continue;
+				}
+				while (scanlen > 0) {
+					const int bcnt_raw = *in++;
+					const int repeat   = bcnt_raw & 1;
+					const int bcnt     = bcnt_raw >> 1;
+					run(scanx, scany, bcnt);
+					in += repeat ? 1 : bcnt;
+					scanx += bcnt;
+					scanlen -= bcnt;
+				}
+			}
+		}
+
+		void read_settings() {
+			if (settings_read) {
+				return;
+			}
+			settings_read = true;
+			std::string val;
+			config->value("config/video/lighting/enabled", val, "no");
+			cur_settings.enabled = val == "yes";
+			config->value("config/video/lighting/shadows", val, "soft");
+			cur_settings.soft = val != "hard";
+			config->value("config/video/lighting/strength", val, "medium");
+			cur_settings.strength = val == "low" ? 0 : val == "high" ? 2 : 1;
+			config->value("config/video/lighting/colour", val, "full");
+			cur_settings.full_colour = val != "palette";
+			config->value("config/video/lighting/sunlight", val, "soft");
+			cur_settings.sunlight = val == "off" ? 0 : val == "bright" ? 2 : 1;
+			config->value("config/video/lighting/night_edges", val, "subtle");
+			cur_settings.night_edges = val == "off" ? 0 : val == "deeper" ? 2 : 1;
+		}
+	}    // namespace
+
+	const Settings& settings() {
+		read_settings();
+		return cur_settings;
+	}
+
+	void set_settings(const Settings& s) {
+		settings_read = true;
+		cur_settings  = s;
+		config->set("config/video/lighting/enabled", s.enabled ? "yes" : "no", false);
+		config->set("config/video/lighting/shadows", s.soft ? "soft" : "hard", false);
+		config->set("config/video/lighting/strength", s.strength == 0 ? "low" : s.strength == 2 ? "high" : "medium", false);
+		config->set("config/video/lighting/sunlight", s.sunlight == 0 ? "off" : s.sunlight == 2 ? "bright" : "soft", false);
+		config->set("config/video/lighting/night_edges", s.night_edges == 0 ? "off" : s.night_edges == 2 ? "deeper" : "subtle", false);
+		config->set("config/video/lighting/colour", s.full_colour ? "full" : "palette", true);
+		Game_window* gwin = Game_window::get_instance();
+		if (!active()) {
+			gwin->get_win()->clear_light_overlay();
+		}
+		gwin->set_all_dirty();
+	}
+
+	View view() {
+		return cur_view;
+	}
+
+	void cycle_view() {
+		cur_view = static_cast<View>((cur_view + 1) % num_views);
+	}
+
+	const char* view_name() {
+		switch (cur_view) {
+		case show_height:
+			return "Relight: height view";
+		case show_light:
+			return "Relight: light view";
+		default:
+			return "Relight: normal view";
+		}
+	}
+
+	namespace {
+		int paused = 0;
+	}
+
+	Pause::Pause() {
+		paused++;
+	}
+
+	Pause::~Pause() {
+		paused--;
+	}
+
+	bool active() {
+		return !paused && (settings().enabled || cur_view != normal);
+	}
+
+	void begin_map(Image_window8* win, int x, int y, int w, int h) {
+		ensure_buffer(win);
+		// The whole frame is painted each time (see Game_window::paint).
+		std::fill(heights.begin(), heights.end(), 0);
+		std::fill(faces.begin(), faces.end(), face_top);
+		std::fill(covered.begin(), covered.end(), 0);
+		view_x0 = x;
+		view_y0 = y;
+		view_x1 = x + w;
+		view_y1 = y + h;
+	}
+
+	namespace {
+		struct Lamp {
+			float x, y, z;    // World pixels (z up).
+			float radius;
+			float power  = 1.0f;     // Carried torches are a little softer.
+			bool  indoor = false;    // Under a roof: lights the room evenly.
+			bool  spell  = false;    // The Light spell: pale and soft.
+			bool  window = false;    // Daylight through a window, indoors only.
+			bool  magic  = false;    // Moongates and magic things: a blue glow.
+			bool  worn   = false;    // Magic things the party wears.
+			bool  radial = false;    // A plain round glow on screen (x, y), no shadows.
+		};
+
+		std::vector<Lamp> lamps;
+
+		// Moongates and magic things glow blue; found by name like windows.
+		bool is_magic(int shnum) {
+			static std::vector<signed char> known;
+			if (shnum < 0) {
+				return false;
+			}
+			if (size_t(shnum) >= known.size()) {
+				known.resize(shnum + 1, -1);
+			}
+			if (known[shnum] < 0) {
+				std::string name;
+				if (shnum < get_num_item_names() && get_item_name(shnum)) {
+					name = get_item_name(shnum);
+				}
+				for (auto& c : name) {
+					c = char(std::tolower(static_cast<unsigned char>(c)));
+				}
+				static const char* const words[]
+						= {"magic", "moongate", "orb of the moons", "crystal", "energy field", "wand", "glimmer"};
+				known[shnum] = 0;
+				for (const char* w : words) {
+					// Not spell names like "dispel magic" or "unlock magic".
+					if (name.find(w) != std::string::npos && name.find("dispel") == std::string::npos
+						&& name.find("unlock") == std::string::npos) {
+						known[shnum] = 1;
+					}
+				}
+			}
+			return known[shnum] > 0;
+		}
+
+		// Windows and open shutters let daylight in; found by name so it
+		// works for either game.
+		bool is_window(int shnum) {
+			static std::vector<signed char> known;
+			if (shnum < 0) {
+				return false;
+			}
+			if (size_t(shnum) >= known.size()) {
+				known.resize(shnum + 1, -1);
+			}
+			if (known[shnum] < 0) {
+				std::string name;
+				if (shnum < get_num_item_names() && get_item_name(shnum)) {
+					name = get_item_name(shnum);
+				}
+				for (auto& c : name) {
+					c = char(std::tolower(static_cast<unsigned char>(c)));
+				}
+				known[shnum] = name.find("closed") == std::string::npos
+							   && (name.find("window") != std::string::npos || name.find("shutters") != std::string::npos);
+			}
+			return known[shnum] > 0;
+		}
+		std::vector<float>    glow;       // Lamp light to add on top (full colour).
+		std::vector<uint32>   glow_px;    // The same, coloured, for the window.
+		std::vector<uint16_t> spill;      // Distance to daylight, indoors.
+		std::vector<unsigned char> spill_v;    // How bright that daylight is.
+		bool              roofed     = false;    // Hidden roof over the viewer?
+		int               roof_floor = 0;        // The viewer's floor (screen px).
+
+		// Call f(chunk) for every chunk under the buffer, plus room for tall
+		// things standing below or right of it (they show up and left).
+		template <typename F>
+		void for_chunks(Game_window* gwin, F&& f) {
+			const int tx0 = gwin->get_scrolltx() + (hmin_x / c_tilesize) - 1;
+			const int ty0 = gwin->get_scrollty() + (hmin_y / c_tilesize) - 1;
+			const int tx1 = gwin->get_scrolltx() + (hmax_x / c_tilesize) + 10;
+			const int ty1 = gwin->get_scrollty() + (hmax_y / c_tilesize) + 10;
+			const int ncx = (tx1 - tx0) / c_tiles_per_chunk + 2;
+			const int ncy = (ty1 - ty0) / c_tiles_per_chunk + 2;
+			const int cx0 = ((tx0 + c_num_tiles) % c_num_tiles) / c_tiles_per_chunk;
+			const int cy0 = ((ty0 + c_num_tiles) % c_num_tiles) / c_tiles_per_chunk;
+			for (int j = 0; j < ncy; j++) {
+				for (int i = 0; i < ncx; i++) {
+					f(gwin->get_map()->get_chunk((cx0 + i) % c_num_chunks, (cy0 + j) % c_num_chunks));
+				}
+			}
+		}
+	}    // namespace
+
+	/*
+	 *  Record heights for what stands just out of view (not painted), so
+	 *  its shadows reach onto the screen; indoors, the hidden roof; and
+	 *  find the lamps.
+	 */
+	void scan_world(Game_window* gwin) {
+		const int skip = gwin->get_render_skip_lift();
+		for_chunks(gwin, [&](Map_chunk* chunk) {
+			Nonflat_object_iterator next(chunk);
+			Game_object*            obj;
+			while ((obj = next.get_next()) != nullptr) {
+				if (obj->get_lift() >= skip) {
+					continue;
+				}
+				int hx, hy;
+				gwin->get_shape_location(obj, hx, hy);
+				stamp(obj->get_shape(), hx, hy, obj->get_lift(), obj->get_info().get_3d_height(), hmin_x, hmin_y,
+					  hmax_x - hmin_x, hmax_y - hmin_y, stamp_outside);
+			}
+		});
+		casters = heights;
+		roofed  = gwin->is_main_actor_inside();
+		if (roofed) {
+			const Actor* viewer = gwin->get_camera_actor() ? gwin->get_camera_actor() : gwin->get_main_actor();
+			const int    floor  = viewer ? 4 * viewer->get_lift() : 0;
+			roof_floor          = floor;
+			for_chunks(gwin, [&](Map_chunk* chunk) {
+				Nonflat_object_iterator next(chunk);
+				Game_object*            obj;
+				while ((obj = next.get_next()) != nullptr) {
+					if (obj->get_lift() < skip) {
+						continue;
+					}
+					int hx, hy;
+					gwin->get_shape_location(obj, hx, hy);
+					stamp(obj->get_shape(), hx, hy, obj->get_lift(), obj->get_info().get_3d_height(), hmin_x, hmin_y,
+						  hmax_x - hmin_x, hmax_y - hmin_y, stamp_roof, floor);
+				}
+			});
+		}
+		lamps.clear();
+		const bool dungeon = gwin->is_in_dungeon();
+		for_chunks(gwin, [&](Map_chunk* chunk) {
+			for (const auto& obj : dungeon ? chunk->get_dungeon_lights() : chunk->get_non_dungeon_lights()) {
+				const Shape_info& info  = obj->get_info();
+				const int         light = info.get_object_light(obj->get_framenum());
+				if (light <= 0 || obj->get_lift() >= skip) {
+					continue;
+				}
+				int hx, hy;
+				gwin->get_shape_location(obj, hx, hy);
+				const int lift = obj->get_lift();
+				const int xt   = info.get_3d_xtiles(obj->get_framenum());
+				const int yt   = info.get_3d_ytiles(obj->get_framenum());
+				// The middle of its top, in world pixels.
+				Lamp l;
+				l.z      = 4.0f * (lift + info.get_3d_height());
+				l.x      = hx + 4.0f * lift - 4.0f * xt;
+				l.y      = hy + 4.0f * lift - 4.0f * yt;
+				l.radius = 40.0f + 20.0f * std::min(light, 5);
+				// Inside a building (or a dungeon), light fills the room:
+				// about 16 tiles, stopped by the walls.
+				const int fx = hx - 4 * xt, fy = hy - 4 * yt;
+				if (gwin->is_in_dungeon() || (in_buffer(fx, fy) && covered[idx(fx, fy)])) {
+					l.radius = 128.0f;
+					l.indoor = true;
+				}
+				l.magic = is_magic(obj->get_shapenum());
+				if (l.magic) {
+					l.radius = std::max(l.radius, 110.0f);
+				}
+				lamps.push_back(l);
+			}
+		});
+		// Magic things that aren't light sources (a magic sword on a
+		// table, an energy field) give a small blue glow; moongates a big one.
+		for_chunks(gwin, [&](Map_chunk* chunk) {
+			Nonflat_object_iterator next(chunk);
+			Game_object*            obj;
+			while ((obj = next.get_next()) != nullptr) {
+				if (obj->get_lift() >= skip || !is_magic(obj->get_shapenum()) || obj->as_actor()) {
+					continue;
+				}
+				const Shape_info& info = obj->get_info();
+				const int         fr   = obj->get_framenum();
+				if (info.get_object_light(fr) > 0) {
+					continue;    // Already in the list above.
+				}
+				int hx, hy;
+				gwin->get_shape_location(obj, hx, hy);
+				const int lift = obj->get_lift();
+				const int xt = info.get_3d_xtiles(fr), yt = info.get_3d_ytiles(fr);
+				Lamp      l;
+				// The glow hangs a little above the thing, so it lights the
+				// floor around it.
+				l.z      = 4.0f * (lift + std::max(info.get_3d_height(), 1)) + 10.0f;
+				l.x      = hx + 4.0f * lift - 4.0f * xt;
+				l.y      = hy + 4.0f * lift - 4.0f * yt;
+				l.magic  = true;
+				const bool gate = xt >= 3 || yt >= 3;    // Moongates are big.
+				l.radius = gate ? 110.0f : 40.0f;
+				l.power  = gate ? 1.0f : 0.9f;
+				// Small things: a plain round glow around the middle of the
+				// picture, like a little blue torch.
+				if (!gate) {
+					if (const Shape_frame* pic = obj->get_shape()) {
+						l.x = hx + (pic->get_xright() - pic->get_xleft()) / 2.0f;
+						l.y = hy + (pic->get_ybelow() - pic->get_yabove()) / 2.0f;
+					} else {
+						l.x = hx - 4.0f;
+						l.y = hy - 4.0f;
+					}
+					l.z      = 0;
+					l.radial = true;
+				}
+				lamps.push_back(l);
+			}
+		});
+		// Torches and other lights the party carries.
+		Actor*    party[9];
+		const int cnt = gwin->get_party(party, 1);
+		for (int i = 0; i < cnt; i++) {
+			Actor* act = party[i];
+			if (!act || act->get_light_source() <= 0 || act->get_lift() >= skip) {
+				continue;
+			}
+			int hx, hy;
+			gwin->get_shape_location(act, hx, hy);
+			const Shape_info& info = act->get_info();
+			const int         lift = act->get_lift();
+			// Held about head high, at the top of the figure.
+			Lamp l;
+			l.z      = 4.0f * (lift + std::max(info.get_3d_height(), 4));
+			l.x      = hx + 4.0f * lift - 2.0f;
+			l.y      = hy + 4.0f * lift - 2.0f;
+			l.radius = 70.0f + 15.0f * std::min(act->get_light_source(), 4);
+			l.power  = 0.8f;
+			if (gwin->is_in_dungeon() || (in_buffer(hx, hy) && covered[idx(hx, hy)])) {
+				l.radius = 128.0f;
+				l.indoor = true;
+			}
+			lamps.push_back(l);
+		}
+		// Daylight through windows and open shutters, falling into the room
+		// (add_lamps keeps it to the floor under the roof).
+		if (roofed && !dungeon) {
+			for_chunks(gwin, [&](Map_chunk* chunk) {
+				Nonflat_object_iterator next(chunk);
+				Game_object*            obj;
+				while ((obj = next.get_next()) != nullptr) {
+					if (obj->get_lift() >= skip || !is_window(obj->get_shapenum())) {
+						continue;
+					}
+					const Shape_info& info = obj->get_info();
+					const int         fr   = obj->get_framenum();
+					const int         lift = obj->get_lift();
+					const int         xt = info.get_3d_xtiles(fr), yt = info.get_3d_ytiles(fr);
+					int               hx, hy;
+					gwin->get_shape_location(obj, hx, hy);
+					const float cx = hx + 4.0f * lift - 4.0f * xt, cy = hy + 4.0f * lift - 4.0f * yt;
+					// The room is on one side of the wall; try both.
+					const bool along_x = xt >= yt;
+					for (const int side : {-1, 1}) {
+						const float px = along_x ? cx : cx + 10.0f * side;
+						const float py = along_x ? cy + 10.0f * side : cy;
+						const int   fx = int(px) - 4 * lift, fy = int(py) - 4 * lift;
+						if (!in_buffer(fx, fy) || !covered[idx(fx, fy)]) {
+							continue;
+						}
+						Lamp l;
+						l.x      = px;
+						l.y      = py;
+						l.z      = 4.0f * lift + 2.0f * info.get_3d_height();
+						l.radius = 64.0f;
+						l.power  = 0.8f;
+						l.indoor = true;
+						l.window = true;
+						lamps.push_back(l);
+						break;
+					}
+				}
+			});
+		}
+		// Magic things the party wears give a faint blue glow: each about a
+		// fifth of a torch.
+		for (int i = 0; i < cnt; i++) {
+			Actor* act = party[i];
+			if (!act || act->get_lift() >= skip) {
+				continue;
+			}
+			int worn = 0;
+			for (int spot = 0; spot < 18; spot++) {
+				const Game_object* it = act->get_readied(spot);
+				if (it && is_magic(it->get_shapenum()) && it->get_info().get_object_light(it->get_framenum()) <= 0) {
+					worn++;
+				}
+			}
+			if (!worn) {
+				continue;
+			}
+			int hx, hy;
+			gwin->get_shape_location(act, hx, hy);
+			const int lift = act->get_lift();
+			Lamp      l;
+			l.z      = 4.0f * (lift + std::max(act->get_info().get_3d_height(), 4));
+			l.x      = hx + 4.0f * lift - 2.0f;
+			l.y      = hy + 4.0f * lift - 2.0f;
+			if (const Shape_frame* pic = act->get_shape()) {
+				l.x = hx + (pic->get_xright() - pic->get_xleft()) / 2.0f;
+				l.y = hy + (pic->get_ybelow() - pic->get_yabove()) / 2.0f;
+			} else {
+				l.x = hx - 4.0f;
+				l.y = hy - 8.0f;
+			}
+			l.z      = 0;
+			l.radial = true;
+			l.radius = 60.0f;
+			l.power  = 0.9f * std::min(1.0f, 0.2f * worn);
+			l.magic  = true;
+			l.worn   = true;
+			if (gwin->is_in_dungeon() || (in_buffer(hx, hy) && covered[idx(hx, hy)])) {
+				l.indoor = true;
+			}
+			lamps.push_back(l);
+		}
+		// The Light spell: a wide, pale glow over whoever the view follows.
+		const Actor* viewer = gwin->get_camera_actor() ? gwin->get_camera_actor() : gwin->get_main_actor();
+		if (gwin->is_special_light() && viewer && viewer->get_lift() < skip) {
+			int hx, hy;
+			gwin->get_shape_location(viewer, hx, hy);
+			const int lift = viewer->get_lift();
+			Lamp      l;
+			l.z      = 4.0f * (lift + 10);
+			l.x      = hx + 4.0f * lift - 2.0f;
+			l.y      = hy + 4.0f * lift - 2.0f;
+			l.radius = 200.0f;
+			l.power  = 0.7f;
+			l.indoor = true;    // Even spread.
+			l.spell  = true;
+			lamps.push_back(l);
+		}
+	}
+
+	void stamp_object(Game_object* obj) {
+		Game_window* gwin = Game_window::get_instance();
+		int          hx, hy;
+		gwin->get_shape_location(obj, hx, hy);
+		const Shape_info& info = obj->get_info();
+		int               cx, cy, cw, ch;
+		gwin->get_win()->get_ib8()->get_clip(cx, cy, cw, ch);
+		stamp(obj->get_shape(), hx, hy, obj->get_lift(), info.get_3d_height(), cx, cy, cw, ch);
+	}
+
+	/*
+	 *  Warm pools of light around lamps, torches and fires: fading with
+	 *  distance, brighter on surfaces that face them, blocked by walls.
+	 *  Full strength at night, in dungeons and under roofs.
+	 */
+	void add_lamps(Game_window* gwin, int x, int y, int w, int h, float sun_up, bool sunlit, bool tint, std::vector<float>& dest) {
+		if (lamps.empty()) {
+			return;
+		}
+		const float day      = sunlit ? std::clamp(sun_up * 4.0f, 0.0f, 1.0f) : 0.0f;
+		const float night    = gwin->is_in_dungeon() ? 1.0f : 1.0f - day;
+		const float warm_r   = 1.0f, warm_g = tint ? 0.72f : 1.0f, warm_b = tint ? 0.42f : 1.0f;
+		const float strength = 0.9f;
+		for (const Lamp& l : lamps) {
+			const float r = l.radius;
+			// Where the lamp shows on screen, and the pixels it can reach.
+			const int lx = int(l.x - l.z), ly = int(l.y - l.z);
+			const int x0 = std::max(x, lx - int(r) - 64), x1 = std::min(x + w, int(l.x + r) + 2);
+			const int y0 = std::max(y, ly - int(r) - 64), y1 = std::min(y + h, int(l.y + r) + 2);
+			float lr = l.spell ? 0.85f : warm_r, lg = l.spell ? 0.92f : warm_g, lb = l.spell ? 1.0f : warm_b;
+			if (l.magic && tint) {    // Cool blue.
+				lr = 0.45f;
+				lg = 0.7f;
+				lb = 1.3f;
+			}
+			if (l.window) {    // Soft daylight.
+				lr = 1.05f;
+				lg = tint ? 0.98f : 1.0f;
+				lb = tint ? 0.88f : 1.0f;
+			}
+			for (int gy = y0; gy < y1; gy++) {
+				for (int gx = x0; gx < x1; gx++) {
+					const int   i     = idx(gx, gy);
+					const bool  under = covered[i] != 0;
+					float       amt   = l.window ? (under ? day : 0.0f) : under ? 1.0f : night;    // Indoors, lamps are always lit.
+					if (l.magic && !l.worn) {
+						amt = std::max(amt, 0.4f);    // Magic glows faintly even by day.
+					}
+					if (amt <= 0.01f) {
+						continue;
+					}
+					if (l.radial) {
+						const float rx = gx - l.x, ry = gy - l.y;
+						const float rd = std::sqrt(rx * rx + ry * ry);
+						if (rd >= r) {
+							continue;
+						}
+						const float u = 1.0f - rd / r;
+						const float k = amt * strength * l.power * u * u;
+						float*      o = &dest[(size_t(gy - y) * w + (gx - x)) * 3];
+						o[0] += k * lr;
+						o[1] += k * lg;
+						o[2] += k * lb;
+						continue;
+					}
+					const float hp = hbase[gy * hline + gx];
+					// This pixel's point in the world, and the way to the lamp.
+					const float wx = gx + hp, wy = gy + hp;
+					const float dx = l.x - wx, dy = l.y - wy, dz = l.z - hp;
+					const float d  = std::sqrt(dx * dx + dy * dy + dz * dz);
+					if (d >= r) {
+						continue;
+					}
+					// Blocked?  Walk toward the lamp through the heights.
+					bool blocked = false;
+					// Only what is shown blocks lamps: the hidden roof (or a
+					// dungeon's ceiling) would shut every light in.  Longer
+					// paths take bigger steps to keep big rooms quick.  Low
+					// clutter (grass, reeds, rubble) doesn't count, and things
+					// standing above the light (tree tops, roofs) take a
+					// gentler share unblocked, so the pool has no hard rim.
+					const bool  above = hp > l.z + 4.0f;
+					const float step  = std::max(3.0f, d / 24.0f);
+					for (float t = 4.0f; !above && t < d - 6.0f; t += step) {
+						const float qx = wx + dx * t / d, qy = wy + dy * t / d, qz = hp + dz * t / d;
+						if (height_at(int(qx - qz), int(qy - qz)) > qz + 9.0f) {
+							blocked = true;
+							break;
+						}
+					}
+					if (blocked) {
+						continue;
+					}
+					float hit;
+					switch (fbase[gy * hline + gx]) {
+					case face_east:
+						hit = dx / std::max(d, 1.0f);
+						break;
+					case face_south:
+						hit = dy / std::max(d, 1.0f);
+						break;
+					default:
+						hit = dz / std::max(d, 1.0f);
+						break;
+					}
+					// Indoors the light spreads evenly, then fades near its reach.
+					const float u    = 1.0f - d / r;
+					const float fall = l.indoor ? std::min(1.0f, u * 1.6f) * 0.75f : u * u;
+					const float k    = amt * strength * l.power * fall * (above ? 0.45f : l.magic ? 1.0f : 0.4f + 0.6f * std::max(0.0f, hit));
+					float*      out  = &dest[(size_t(gy - y) * w + (gx - x)) * 3];
+					out[0] += k * lr;
+					out[1] += k * lg;
+					out[2] += k * lb;
+				}
+			}
+		}
+	}
+
+	/*
+	 *  Light the map pixels in the rectangle (game coordinates).
+	 */
+	void apply(Game_window* gwin, int x, int y, int w, int h) {
+		Image_buffer8* ib = gwin->get_win()->get_ib8();
+		rebuild_tables(gwin->get_pal());
+		ov_pending = false;
+		x          = std::max(x, hmin_x);
+		y          = std::max(y, hmin_y);
+		w          = std::min(x + w, hmax_x) - x;
+		h          = std::min(y + h, hmax_y) - y;
+		if (w <= 0 || h <= 0) {
+			return;
+		}
+		scan_world(gwin);
+		unsigned char* bits = ib->get_bits();
+		const int      line = ib->get_line_width();
+		if (cur_view == show_height) {
+			for (int py = y; py < y + h; py++) {
+				for (int px = x; px < x + w; px++) {
+					const int hv         = hbase[py * hline + px];
+					bits[py * line + px] = gray[std::min(num_levels - 1, 2 + hv * (num_levels - 3) / 96)];
+				}
+			}
+			return;
+		}
+		const Settings& set = settings();
+		// Sun: rises in the east (+x), swings round through the north (-y)
+		// at noon, sets in the west, so noon shadows fall toward the viewer.
+		// It stays fairly low (at most about 50 degrees) to keep shadows long.
+		const Game_clock* clock   = gwin->get_clock();
+		const float       hour    = clock->get_hour() + clock->get_minute() / 60.0f;
+		const float       a       = float(M_PI) * (hour - 6.0f) / 12.0f;
+		const float       sun_up  = std::sin(a);
+		// Indoors the sun still lights the outside; the floor under the
+		// hidden roof counts as shade (see scan_world).
+		const bool        outdoor = !gwin->is_in_dungeon();
+		const bool        sunlit  = outdoor && sun_up > 0.05f;
+		static const float strengths[3] = {0.18f, 0.3f, 0.45f};    // Low, medium, high.
+		// Shadows fade in after dawn and out before dusk.
+		// Sunlight: brightens what the sun reaches (not shadows, not
+		// indoors), fading in after dawn like the shadows.
+		static const float boosts[3] = {0.0f, 0.12f, 0.25f};
+		const float        sun_boost
+				= 1.0f + (sunlit ? boosts[set.sunlight] * std::min(1.0f, sun_up * 4.0f) : 0.0f);
+		const float shadow_amt = sunlit ? strengths[set.strength] * std::min(1.0f, sun_up * 4.0f) : 0.0f;
+		const float ao_amt     = 0.15f + 0.5f * strengths[set.strength];
+		const float elev       = 0.10f + 0.78f * sun_up;    // Radians.
+		const float slope      = std::tan(elev);
+		const float ux = std::cos(a), uy = -std::sin(a);
+		const float un   = std::sqrt(ux * ux + uy * uy);
+		const float dirx = ux / un - slope, diry = uy / un - slope;
+		// How squarely the sun hits each face (top, east, south).
+		const float sn       = std::sqrt(1.0f + slope * slope);
+		const float hit_top  = slope / sn;
+		const float hit_east = std::max(0.0f, ux / un / sn);
+		const float hit_south = std::max(0.0f, uy / un / sn);
+		auto        facing   = [&](int f) {
+            const float hit = f == face_east ? hit_east : f == face_south ? hit_south : hit_top;
+            return std::clamp(1.0f + 0.6f * (hit - hit_top), 0.75f, 1.3f);
+		};
+		// Warm sun (golden when low), cool sky in the shade.
+		const float t     = std::clamp(sun_up * 2.0f, 0.0f, 1.0f);
+		const float sun_r = 1.12f + (1.03f - 1.12f) * t;
+		const float sun_g = 0.92f + (1.00f - 0.92f) * t;
+		const float sun_b = 0.72f + (0.95f - 0.72f) * t;
+		const float sky_r = 0.92f, sky_g = 0.97f, sky_b = 1.10f;
+
+		const int maxh = *std::max_element(casters.begin(), casters.end());
+		shadow.assign(size_t(w) * h, 0);
+		const int   blur           = set.soft ? 2 : 0;
+		const float step_dead_zone = 5.0f;    // Just over a lift.
+		if (sunlit) {
+			for (int py = 0; py < h; py++) {
+				for (int px = 0; px < w; px++) {
+					const int hp = hbase[(y + py) * hline + x + px];
+					if (covered[idx(x + px, y + py)]) {
+						shadow[py * w + px] = 1;
+						continue;
+					}
+					for (float st = 1.5f; st < 240.0f; st += (st < 12.0f ? 1.0f : 2.0f)) {
+						const float rz = hp + st * slope;
+						if (rz > maxh) {
+							break;
+						}
+						const int sx = x + px + int(std::lround(st * dirx));
+						const int sy = y + py + int(std::lround(st * diry));
+						if (caster_at(sx, sy) > rz + step_dead_zone) {
+							shadow[py * w + px] = 1;
+							break;
+						}
+					}
+				}
+			}
+		}
+		// Ambient occlusion: how much higher the surroundings are.
+		static const int dirs[8][2] = {
+				{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}};
+		light.assign(size_t(w) * h * 3, 1.0f);
+		const bool tint = set.full_colour && cur_view == normal;
+		for (int py = 0; py < h; py++) {
+			for (int px = 0; px < w; px++) {
+				const int gx  = x + px, gy = y + py;
+				const int hp  = hbase[gy * hline + gx];
+				float     occ = 0;
+				for (const int r : {3, 7}) {
+					for (const auto& d : dirs) {
+						const int dh = height_at(gx + d[0] * r, gy + d[1] * r) - hp;
+						// Ignore steps of a lift or so, such as the rows of
+						// a sloped roof; only walls and the like count.
+						if (dh > step_dead_zone) {
+							occ += std::min(1.0f, (dh - step_dead_zone) / (1.5f * r));
+						}
+					}
+				}
+				const float ao = 1.0f - ao_amt * occ / 16.0f;
+				float       lr = ao, lg = ao, lb = ao;
+				if (sunlit) {
+					float sh = 0;    // Shadow fraction, softened for Soft.
+					if (shadow_amt > 0) {
+						int sum = 0;
+						for (int oy = -blur; oy <= blur; oy++) {
+							for (int ox = -blur; ox <= blur; ox++) {
+								const int qx = std::clamp(px + ox, 0, w - 1);
+								const int qy = std::clamp(py + oy, 0, h - 1);
+								sum += shadow[qy * w + qx];
+							}
+						}
+						sh = sum / float((2 * blur + 1) * (2 * blur + 1));
+					}
+					const float lit  = (1.0f - sh) * facing(fbase[gy * hline + gx]) * sun_boost;
+					// Under a roof the shade is gentler than a shadow outside.
+					const bool  inside = covered[idx(gx, gy)] != 0;
+					const float dark   = sh * (1.0f - (inside ? 0.8f : 1.0f) * shadow_amt);
+					if (tint) {
+						lr *= lit * sun_r + dark * sky_r;
+						lg *= lit * sun_g + dark * sky_g;
+						lb *= lit * sun_b + dark * sky_b;
+					} else {
+						lr *= lit + dark;
+						lg = lb = lr;
+					}
+				}
+				float* out = &light[(size_t(py) * w + px) * 3];
+				out[0]     = lr;
+				out[1]     = lg;
+				out[2]     = lb;
+			}
+		}
+		// Daylight through doorways: indoors, the floor near an opening to
+		// the open air takes some of the light outside (all of it from sunlit
+		// ground, about half from shade), fading over several tiles.  It
+		// spreads only across the floor, so walls stop it.
+		if (sunlit && roofed && shadow_amt > 0) {
+			const int      range = 56;    // Pixels.
+			const uint16_t far   = 0xffff;
+			spill.assign(size_t(w) * h, far);
+			spill_v.assign(size_t(w) * h, 0);
+			auto passable = [&](int px, int py) {
+				return hbase[(y + py) * hline + x + px] <= roof_floor + 8;
+			};
+			for (int py = 0; py < h; py++) {
+				for (int px = 0; px < w; px++) {
+					const int gx = x + px, gy = y + py;
+					if (!covered[idx(gx, gy)] && passable(px, py)) {
+						spill[py * w + px]   = 0;
+						spill_v[py * w + px] = shadow[py * w + px] ? 140 : 255;
+					}
+				}
+			}
+			// Two-pass chamfer distance (3 straight, 4 diagonal) over the
+			// floor under the roof.
+			auto relax = [&](int px, int py, int qx, int qy, int cost) {
+				if (qx < 0 || qy < 0 || qx >= w || qy >= h) {
+					return;
+				}
+				const uint16_t from = spill[qy * w + qx];
+				if (from != far && from + cost < spill[py * w + px]) {
+					spill[py * w + px]   = uint16_t(from + cost);
+					spill_v[py * w + px] = spill_v[qy * w + qx];
+				}
+			};
+			for (int py = 0; py < h; py++) {
+				for (int px = 0; px < w; px++) {
+					if (spill[py * w + px] == 0 || !covered[idx(x + px, y + py)] || !passable(px, py)) {
+						continue;
+					}
+					relax(px, py, px - 1, py, 3);
+					relax(px, py, px, py - 1, 3);
+					relax(px, py, px - 1, py - 1, 4);
+					relax(px, py, px + 1, py - 1, 4);
+				}
+			}
+			for (int py = h - 1; py >= 0; py--) {
+				for (int px = w - 1; px >= 0; px--) {
+					if (spill[py * w + px] == 0 || !covered[idx(x + px, y + py)] || !passable(px, py)) {
+						continue;
+					}
+					relax(px, py, px + 1, py, 3);
+					relax(px, py, px, py + 1, 3);
+					relax(px, py, px + 1, py + 1, 4);
+					relax(px, py, px - 1, py + 1, 4);
+				}
+			}
+			const float tr = tint ? sun_r : 1.0f, tg = tint ? sun_g : 1.0f, tb = tint ? sun_b : 1.0f;
+			for (int py = 0; py < h; py++) {
+				for (int px = 0; px < w; px++) {
+					const uint16_t dist = spill[py * w + px];
+					if (dist == 0 || dist >= 3 * range || !covered[idx(x + px, y + py)]) {
+						continue;
+					}
+					const float f   = 1.0f - dist / (3.0f * range);
+					const float amt = 0.75f * f * f * (spill_v[py * w + px] / 255.0f) * std::min(1.0f, sun_up * 4.0f);
+					float*      out = &light[(size_t(py) * w + px) * 3];
+					out[0] += amt * (tr * sun_boost - out[0]);
+					out[1] += amt * (tg * sun_boost - out[1]);
+					out[2] += amt * (tb * sun_boost - out[2]);
+				}
+			}
+		}
+		// Night: the edges of the view fade into the dark, a little like
+		// fog of war, while the middle stays as the game shows it.  Lamps
+		// are added after, so they still glow out at the edges.
+		if (set.night_edges > 0 && cur_view == normal) {
+			const float day   = std::clamp((sun_up + 0.05f) * 4.0f, 0.0f, 1.0f);
+			const float night = gwin->is_in_dungeon() ? 0.7f : 1.0f - day;
+			static const float depths[3] = {0.0f, 0.35f, 0.55f};
+			const float depth = depths[set.night_edges] * night;
+			if (depth > 0.01f) {
+				const TileRect game = gwin->get_game_rect();
+				const float    cx = game.x + game.w * 0.5f, cy = game.y + game.h * 0.5f;
+				const float    rx = game.w * 0.5f, ry = game.h * 0.5f;
+				for (int py = 0; py < h; py++) {
+					const float ny = (y + py - cy) / ry;
+					for (int px = 0; px < w; px++) {
+						const float nx = (x + px - cx) / rx;
+						// 0 inside the middle oval, rising smoothly to 1 at the corners.
+						float e = std::clamp((std::sqrt(nx * nx + ny * ny) - 0.45f) / 0.95f, 0.0f, 1.0f);
+						e       = e * e * (3.0f - 2.0f * e);
+						const float k   = 1.0f - depth * e;
+						float*      out = &light[(size_t(py) * w + px) * 3];
+						out[0] *= k;
+						out[1] *= k;
+						out[2] *= k;
+					}
+				}
+			}
+		}
+		// In full colour, lamp light is added on top in the colours the
+		// things have by day, so a lamp brings them out of the dark (even
+		// a dungeon's near-black) instead of only scaling what is there.
+		if (tint) {
+			glow.assign(size_t(w) * h * 3, 0.0f);
+			add_lamps(gwin, x, y, w, h, sun_up, sunlit, tint, glow);
+		} else {
+			add_lamps(gwin, x, y, w, h, sun_up, sunlit, tint, light);
+		}
+		if (set.full_colour && cur_view == normal) {
+			// Hand the light to the window as a layer; keep the map as
+			// painted to tell it from what is drawn on top later.
+			overlay.resize(size_t(w) * h);
+			glow_px.resize(size_t(w) * h);
+			map_copy.resize(size_t(w) * h);
+			const Palette& day   = gwin->get_pal()->day_palette();
+			const float    scale = 255.0f / std::max(1, gwin->get_pal()->get_max_val());
+			for (int py = 0; py < h; py++) {
+				std::memcpy(&map_copy[size_t(py) * w], bits + (y + py) * line + x, w);
+				for (int px = 0; px < w; px++) {
+					const float* l  = &light[(size_t(py) * w + px) * 3];
+					auto         ch = [](float v) {
+                        return uint32(std::clamp(int(v * 128.0f + 0.5f), 0, 255));
+					};
+					overlay[size_t(py) * w + px] = 0xff000000u | (ch(l[0]) << 16) | (ch(l[1]) << 8) | ch(l[2]);
+					const float*        gl = &glow[(size_t(py) * w + px) * 3];
+					const unsigned char c  = map_copy[size_t(py) * w + px];
+					auto                add = [&](float k, int v) {
+                        return uint32(std::clamp(int(k * v * scale + 0.5f), 0, 255));
+					};
+					glow_px[size_t(py) * w + px] = 0xff000000u | (add(gl[0], day.get_red(c)) << 16)
+												   | (add(gl[1], day.get_green(c)) << 8) | add(gl[2], day.get_blue(c));
+				}
+			}
+			ov_x = x;
+			ov_y = y;
+			ov_w = w;
+			ov_h = h;
+			ov_pending = true;
+			return;
+		}
+		for (int py = 0; py < h; py++) {
+			unsigned char* row = bits + (y + py) * line + x;
+			for (int px = 0; px < w; px++) {
+				const float* l   = &light[(size_t(py) * w + px) * 3];
+				const float  lum = 0.3f * l[0] + 0.59f * l[1] + 0.11f * l[2];
+				const int    k   = level_for(lum);
+				row[px]          = cur_view == show_light ? gray[k] : shade[k][row[px]];
+			}
+		}
+	}
+
+	/*
+	 *  After the whole frame is painted: hand over the full-colour light
+	 *  layer, leaving unlit whatever was drawn over the map since.
+	 */
+	void finish(Game_window* gwin) {
+		Image_window8* win = gwin->get_win();
+		if (!ov_pending) {
+			win->clear_light_overlay();
+			return;
+		}
+		ov_pending                 = false;
+		Image_buffer8*       ib    = win->get_ib8();
+		const unsigned char* bits  = ib->get_bits();
+		const int            line  = ib->get_line_width();
+		for (int py = 0; py < ov_h; py++) {
+			const unsigned char* row  = bits + (ov_y + py) * line + ov_x;
+			const unsigned char* was  = &map_copy[size_t(py) * ov_w];
+			uint32*              lrow = &overlay[size_t(py) * ov_w];
+			for (int px = 0; px < ov_w; px++) {
+				if (row[px] != was[px]) {
+					lrow[px]                         = 0xff808080u;
+					glow_px[size_t(py) * ov_w + px] = 0xff000000u;
+				}
+			}
+		}
+		win->set_light_overlay(overlay.data(), glow_px.data(), ov_x, ov_y, ov_w, ov_h);
+	}
+}    // namespace Relight
 
 /*
  *  Paint just the map with given top-left-corner tile.
@@ -224,6 +1350,9 @@ int Game_render::paint_map(
 	}
 	int cx;
 	int cy;    // Chunk #'s.
+	if (Relight::active()) {
+		Relight::begin_map(gwin->get_win(), x, y, w, h);
+	}
 	// Paint all the flat scenery.
 	for (cy = start_chunky; cy != stop_chunky; cy = INCR_CHUNK(cy)) {
 		const int yoff = Figure_screen_offset(cy, scrollty) - gwin->get_scrollty_lo();
@@ -334,6 +1463,13 @@ void Game_window::paint(
 	if (!win->ready()) {
 		return;
 	}
+	if (Relight::active() && main_actor) {
+		// Shadows reach across the screen, so light it all at once.
+		x = 0;
+		y = 0;
+		w = get_width();
+		h = get_height();
+	}
 	// This will adjust and clip the rectangle as appropriate, it may end up
 	// bigger or smaller
 	win->BeginPaintIntoGuardBand(&x, &y, &w, &h);
@@ -361,6 +1497,9 @@ void Game_window::paint(
 
 	if (main_actor) {
 		light_sources = render->paint_map(gx, gy, gw, gh);
+		if (Relight::active() && skip_lift) {
+			Relight::apply(this, gx, gy, gw, gh);
+		}
 	} else {
 		win->fill8(0);
 	}
@@ -414,6 +1553,12 @@ void Game_window::paint(
 		}
 		// Set palette for lights.
 		clock->set_light_source(carried_light + light_sources, in_dungeon);
+	}
+
+	if (main_actor && Relight::active()) {
+		Relight::finish(this);
+	} else {
+		win->clear_light_overlay();
 	}
 
 	win->EndPaintIntoGuardBand();
@@ -587,8 +1732,12 @@ void Game_render::paint_chunk_flat_rles(
 	Map_chunk*           olist = gwin->map->get_chunk(cx, cy);
 	Flat_object_iterator next(olist);    // Do flat RLE objects.
 	Game_object*         obj;
+	const bool           relight = Relight::active();
 	while ((obj = next.get_next()) != nullptr) {
 		obj->paint();
+		if (relight) {
+			Relight::stamp_object(obj);
+		}
 	}
 }
 
@@ -656,6 +1805,9 @@ void Game_render::paint_object(Game_object* obj) {
 				bbox_x, bbox_y, obj->get_framenum(), Game_window::get_instance()->get_win()->get_ib8(), bbox_palindex, 2);
 	}
 	obj->paint();    // Finally, paint this one.
+	if (Relight::active()) {
+		Relight::stamp_object(obj);
+	}
 	// paint bbox front
 	if (bbox_palindex != -1) {
 		obj->get_info().paint_bbox(

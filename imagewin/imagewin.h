@@ -445,6 +445,33 @@ protected:
 	// destroyed).  The layers and their buffers are kept.
 	void free_layer_textures();
 
+	// Relight (experimental): a light layer at the game's own pixel size,
+	// drawn over the game area as "multiply x2" (128 = unchanged).
+	struct SDL_Texture*  light_texture  = nullptr;
+	struct SDL_Texture*  glow_texture   = nullptr;    // Added on top: lamp light.
+	bool                 glow_on        = false;
+	int                  light_w        = 0;
+	int                  light_h        = 0;
+	int                  light_gx       = 0;
+	int                  light_gy       = 0;
+	bool                 light_on       = false;
+	bool                 light_mul2     = true;    // false: plain multiply.
+	void                 render_light_overlay(const SDL_FRect* fullRect);
+	void                 free_light_texture();
+
+public:
+	// Set the light layer for the game area at (gx, gy), w x h game pixels,
+	// one ARGB8888 value each.  Shown until cleared.
+	// glow (may be null) is added on top, after the multiply: lamp light
+	// that can bring colour back out of the dark.
+	void set_light_overlay(const uint32* argb, const uint32* glow, int gx, int gy, int w, int h);
+	void clear_light_overlay() {
+		light_on = false;
+		glow_on  = false;
+	}
+
+private:
+
 	/*
 	 *   Scaled blits:
 	 */
@@ -735,6 +762,8 @@ public:
 	// an actual game palette number is done by the caller (palette code).
 	void set_ui_layer_palette(UiLayerKind kind, int mode);
 	int  get_ui_layer_palette_mode(UiLayerKind kind) const;
+	// Has a fixed-palette override been worked out for this layer yet?
+	bool has_ui_layer_palette_colors(UiLayerKind kind) const;
 	// Push the (gamma-corrected, 768-byte RGB) palette a layer should draw with,
 	// or nullptr to clear the override so the layer follows the live palette.
 	void set_ui_layer_palette_colors(UiLayerKind kind, const unsigned char* colors768);

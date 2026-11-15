@@ -24,6 +24,31 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.6)
+
+### Added
+
+- **Lighting (experimental, off by default):** a light layer over the
+  original pixels, without changing any of the game's art. Turn it on in the
+  game menu under Lighting, or with Ctrl+Shift+L.
+  - Sun shadows that swing round with the time of day, long at dawn and dusk,
+    soft or hard, and three strengths. Sunlit ground can be brightened a
+    little.
+  - Lamps, sconces, candles, fires and carried torches cast warm pools of
+    light at night, stopped by walls; indoors and in dungeons they fill the
+    room. The Light spell gives a wide, pale glow.
+  - Daylight comes in through doorways, windows and open shutters.
+  - Moongates and magic items glow blue; a party member wearing magic gives
+    off a faint blue glow.
+  - At night the edges of the view fade gently into the dark (Night edges:
+    off, subtle or deeper).
+  - Full colour, or the game's own 256 colours.
+
+### Fixed
+
+- Menus set to use the day palette at night no longer darken while the
+  game's palette is changing (dusk, dawn, after jumping the time).
+
 ## 0.8.5, 2026-11-14 (build 265)
 
 ### Added
