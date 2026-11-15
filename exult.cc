@@ -78,6 +78,7 @@
 #include "iregobjs.h"
 #include "objiter.h"
 #include "gamemgr/modmgr.h"
+#include "gamerend.h"
 #include "gamewin.h"
 #include "gump_utils.h"
 #include "ignore_unused_variable_warning.h"
@@ -14673,6 +14674,22 @@ static void Handle_event(SDL_Event& event) {
 		break;
 	case SDL_EVENT_KEY_DOWN:    // Keystroke.
 	case SDL_EVENT_KEY_UP:
+		// Experimental relighting: Ctrl+Shift+L turns it on or off;
+		// with Alt as well it cycles the debug views.
+		if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_L && !event.key.repeat
+			&& (event.key.mod & SDL_KMOD_CTRL) && (event.key.mod & SDL_KMOD_SHIFT)) {
+			if (event.key.mod & SDL_KMOD_ALT) {
+				Relight::cycle_view();
+				gwin->get_effects()->center_text(Relight::view_name());
+			} else {
+				Relight::Settings s = Relight::settings();
+				s.enabled           = !s.enabled;
+				Relight::set_settings(s);
+				gwin->get_effects()->center_text(s.enabled ? "Lighting on" : "Lighting off");
+			}
+			gwin->set_all_dirty();
+			break;
+		}
 		if (!dragging &&    // ESC while dragging causes crashes.
 			!gwin->get_gump_man()->handle_kbd_event(&event)) {
 			keybinder->HandleEvent(event);

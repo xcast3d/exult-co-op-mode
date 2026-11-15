@@ -36,6 +36,7 @@ private:
 		id_audio_options,
 		id_game_display_options,
 		id_game_engine_options,
+		id_lighting,
 		id_input,
 		id_targeting,
 		id_class_system,
@@ -83,6 +84,7 @@ public:
 	void audio_options();
 	void game_display_options();
 	void game_engine_options();
+	void lighting_options();    // Relight (experimental).
 	void input_options();
 	void targeting_options();    // Friend Mode: Q, E and Space.
 	void class_options();        // Friend Mode: companion skills.

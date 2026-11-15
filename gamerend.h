@@ -63,4 +63,46 @@ public:
 	}
 };
 
+/*
+ *  Relight (experimental): a light layer over the original pixels.  While
+ *  the map paints, a height is recorded for every pixel from each shape's
+ *  3D box; then sun shadows and ambient occlusion are traced through those
+ *  heights and the frame is darkened through the current palette, so the
+ *  colours stay the game's own.
+ */
+namespace Relight {
+	// Chosen on the Lighting page of the game menu (config/video/lighting).
+	struct Settings {
+		bool enabled     = false;
+		bool soft        = true;    // Soft or hard shadow edges.
+		int  strength    = 1;       // Shadows: 0 low, 1 medium, 2 high.
+		bool full_colour = true;    // Or stay in the game's 256 colours.
+		int  sunlight    = 1;       // Brighten sunlit areas: 0 off, 1 soft, 2 bright.
+		int  night_edges = 1;       // Darken the view's edges at night: 0 off, 1 subtle, 2 deeper.
+	};
+
+	// Debug views, cycled with Ctrl+Alt+Shift+L (Ctrl+Shift+L turns lighting on/off).
+	enum View {
+		normal = 0,
+		show_height,
+		show_light,
+		num_views
+	};
+
+	const Settings& settings();
+	void            set_settings(const Settings& s);    // Also saves them.
+	View            view();
+	void            cycle_view();
+	const char*     view_name();
+	bool            active();    // Anything to do?
+
+	// Lighting is left out while one of these is alive (save thumbnails).
+	struct Pause {
+		Pause();
+		~Pause();
+		Pause(const Pause&)            = delete;
+		Pause& operator=(const Pause&) = delete;
+	};
+}    // namespace Relight
+
 #endif

@@ -271,15 +271,18 @@ void Palette::update_ui_layer_palettes() {
 	};
 
 	const int cur = palette;    // Current palette number (-1 = custom/transition).
-	// While the palette number is -1 we are mid cross-fade and don't want the UI layers to change their palette.
-	if (cur < 0) {
-		return;
-	}
 	std::array<unsigned char, 768> out;
 	for (int k = 0; k < Image_window::NumUiLayerKinds; ++k) {
 		const auto kind    = static_cast<Image_window::UiLayerKind>(k);
 		const int  mode    = win->get_ui_layer_palette_mode(kind);
 		const int  pal_num = ui_palette_mode_to_number(mode);
+		// While the palette number is -1 we are mid cross-fade (dusk, dawn,
+		// teleporting) and don't want a layer's palette to change under it.
+		// But a layer with no override yet would follow the darkening live
+		// palette for the whole fade, so give it its fixed one now.
+		if (cur < 0 && (pal_num < 0 || win->has_ui_layer_palette_colors(kind))) {
+			continue;
+		}
 		if (pal_num < 0 || cur == PALETTE_DAY) {
 			win->set_ui_layer_palette_colors(kind, nullptr);
 			continue;

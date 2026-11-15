@@ -834,6 +834,7 @@ void Image_window::free_surface() {
 	draw_surface     = nullptr;
 	ibuf->bits       = nullptr;
 	free_layer_textures();
+	free_light_texture();
 	if (screen_renderer != nullptr) {
 		SDL_DestroyRenderer(screen_renderer);
 	}
@@ -1882,6 +1883,13 @@ int Image_window::get_ui_layer_palette_mode(UiLayerKind kind) const {
 	return ui_cfgs[static_cast<int>(kind)].ui_palette;
 }
 
+bool Image_window::has_ui_layer_palette_colors(UiLayerKind kind) const {
+	if (kind < UiLayerDefault || kind >= NumUiLayerKinds) {
+		return false;
+	}
+	return !ui_cfgs[static_cast<int>(kind)].ui_palette_colors.empty();
+}
+
 void Image_window::set_ui_layer_palette_colors(UiLayerKind kind, const unsigned char* colors768) {
 	if (kind < UiLayerDefault || kind >= NumUiLayerKinds) {
 		return;
@@ -2094,6 +2102,102 @@ void Image_window::free_layer_textures() {
 	}
 }
 
+void Image_window::free_light_texture() {
+	if (light_texture != nullptr) {
+		SDL_DestroyTexture(light_texture);
+		light_texture = nullptr;
+	}
+	if (glow_texture != nullptr) {
+		SDL_DestroyTexture(glow_texture);
+		glow_texture = nullptr;
+	}
+	glow_on = false;
+	light_w = light_h = 0;
+	light_on          = false;
+}
+
+void Image_window::set_light_overlay(const uint32* argb, const uint32* glow, int gx, int gy, int w, int h) {
+	if (screen_renderer == nullptr || w <= 0 || h <= 0) {
+		return;
+	}
+	if (light_texture == nullptr || light_w != w || light_h != h) {
+		if (light_texture != nullptr) {
+			SDL_DestroyTexture(light_texture);
+		}
+		if (glow_texture != nullptr) {
+			SDL_DestroyTexture(glow_texture);
+			glow_texture = nullptr;
+		}
+		light_texture = SDL_CreateTexture(screen_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+		if (light_texture == nullptr) {
+			return;
+		}
+		light_w = w;
+		light_h = h;
+		// Keep the light as chunky as the game's pixels.
+		SDL_SetTextureScaleMode(light_texture, SDL_SCALEMODE_NEAREST);
+		// result = 2 * src * dst, so 128 leaves a pixel as it is and
+		// higher values brighten.  Plain multiply if that is unsupported.
+		const SDL_BlendMode mul2 = SDL_ComposeCustomBlendMode(
+				SDL_BLENDFACTOR_DST_COLOR, SDL_BLENDFACTOR_SRC_COLOR, SDL_BLENDOPERATION_ADD, SDL_BLENDFACTOR_ZERO,
+				SDL_BLENDFACTOR_ONE, SDL_BLENDOPERATION_ADD);
+		light_mul2 = SDL_SetTextureBlendMode(light_texture, mul2);
+		if (!light_mul2) {
+			SDL_SetTextureBlendMode(light_texture, SDL_BLENDMODE_MOD);
+		}
+	}
+	if (light_mul2) {
+		SDL_UpdateTexture(light_texture, nullptr, argb, w * 4);
+	} else {
+		// Plain multiply: 255 = unchanged, so double and clamp.
+		std::vector<uint32> tmp(argb, argb + size_t(w) * h);
+		for (auto& px : tmp) {
+			const uint32 r = std::min<uint32>(255, ((px >> 16) & 0xff) * 2);
+			const uint32 g = std::min<uint32>(255, ((px >> 8) & 0xff) * 2);
+			const uint32 b = std::min<uint32>(255, (px & 0xff) * 2);
+			px             = 0xff000000u | (r << 16) | (g << 8) | b;
+		}
+		SDL_UpdateTexture(light_texture, nullptr, tmp.data(), w * 4);
+	}
+	glow_on = false;
+	if (glow != nullptr) {
+		if (glow_texture == nullptr) {
+			glow_texture
+					= SDL_CreateTexture(screen_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
+			if (glow_texture != nullptr) {
+				SDL_SetTextureScaleMode(glow_texture, SDL_SCALEMODE_NEAREST);
+				SDL_SetTextureBlendMode(glow_texture, SDL_BLENDMODE_ADD);
+			}
+		}
+		if (glow_texture != nullptr) {
+			SDL_UpdateTexture(glow_texture, nullptr, glow, w * 4);
+			glow_on = true;
+		}
+	}
+	light_gx = gx;
+	light_gy = gy;
+	light_on = true;
+}
+
+void Image_window::render_light_overlay(const SDL_FRect* fullRect) {
+	if (!light_on || light_texture == nullptr || scene_mode || fullRect == nullptr || fullRect->w <= 0
+		|| fullRect->h <= 0) {
+		return;
+	}
+	// fullRect is exactly the game buffer (no guard band) in every scaling
+	// path, and it fills the window, so a game pixel maps straight across:
+	// whatever the scaler and fill scaler did in between.
+	const float kx = float(display_width) / float(get_full_width());
+	const float ky = float(display_height) / float(get_full_height());
+	SDL_FRect   dst
+			= {float(light_gx - get_start_x()) * kx, float(light_gy - get_start_y()) * ky, float(light_w) * kx,
+			   float(light_h) * ky};
+	SDL_RenderTexture(screen_renderer, light_texture, nullptr, &dst);
+	if (glow_on && glow_texture != nullptr) {
+		SDL_RenderTexture(screen_renderer, glow_texture, nullptr, &dst);
+	}
+}
+
 void Image_window::composite_layers() {
 	if (layers.empty() || screen_renderer == nullptr) {
 		return;
@@ -2213,6 +2317,7 @@ void Image_window::UpdateRect(SDL_FRect* dirtyRect, SDL_FRect* fullRect, bool fo
 		}
 	}
 
+	render_light_overlay(fullRect);
 	// Draw overlay layers on top of the main image, before presenting.
 	composite_layers();
 	if (!for_screenshot) {

@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "friendclass.h"
 #include "friendbattle.h"
 #include "gameclk.h"
+#include "gamerend.h"
 #include "gamewin.h"
 #include "items.h"
 #include "mouse.h"
@@ -300,6 +301,130 @@ public:
 		return Modal_gump::run();
 	}
 };
+
+// Lighting (experimental): sun shadows and soft light over the original
+// pixels.  Each setting takes effect as soon as it is clicked.
+class Lighting_options_gump : public Modal_gump {
+	enum button_ids { id_ok, id_enabled, id_shadows, id_strength, id_sunlight, id_night, id_colour, id_count };
+	enum rows { row_enabled, row_shadows, row_strength, row_sunlight, row_night, row_colour, row_ok = row_colour + 2 };
+
+	static constexpr int width       = 190;
+	static constexpr int field_x     = 92;
+	static constexpr int field_width = 90;
+
+	std::array<std::unique_ptr<Gump_button>, id_count> buttons;
+
+	using Button = CallbackTextButton<Lighting_options_gump>;
+	using Toggle = CallbackToggleTextButton<Lighting_options_gump>;
+
+	template <typename F>
+	void change(F&& f) {
+		Relight::Settings s = Relight::settings();
+		f(s);
+		Relight::set_settings(s);
+		gwin->paint();    // Show it behind the page right away.
+	}
+
+	void set_enabled(int state) {
+		change([&](Relight::Settings& s) {
+			s.enabled = state == 1;
+		});
+	}
+
+	void set_shadows(int state) {
+		change([&](Relight::Settings& s) {
+			s.soft = state == 0;
+		});
+	}
+
+	void set_strength(int state) {
+		change([&](Relight::Settings& s) {
+			s.strength = state;
+		});
+	}
+
+	void set_sunlight(int state) {
+		change([&](Relight::Settings& s) {
+			s.sunlight = state;
+		});
+	}
+
+	void set_night(int state) {
+		change([&](Relight::Settings& s) {
+			s.night_edges = state;
+		});
+	}
+
+	void set_colour(int state) {
+		change([&](Relight::Settings& s) {
+			s.full_colour = state == 0;
+		});
+	}
+
+public:
+	Lighting_options_gump() : Modal_gump(nullptr, -1) {
+		const Relight::Settings& s = Relight::settings();
+		SetProceduralBackground(TileRect(0, 0, width, yForRow(row_ok + 1)), -1);
+		buttons[id_enabled]  = std::make_unique<Toggle>(this, &Lighting_options_gump::set_enabled,
+                std::vector<std::string>{"Off", "On"}, s.enabled ? 1 : 0, field_x, yForRow(row_enabled), field_width);
+		buttons[id_shadows]  = std::make_unique<Toggle>(this, &Lighting_options_gump::set_shadows,
+                std::vector<std::string>{"Soft", "Hard"}, s.soft ? 0 : 1, field_x, yForRow(row_shadows), field_width);
+		buttons[id_strength] = std::make_unique<Toggle>(this, &Lighting_options_gump::set_strength,
+				std::vector<std::string>{"Low", "Medium", "High"}, s.strength, field_x, yForRow(row_strength),
+				field_width);
+		buttons[id_sunlight] = std::make_unique<Toggle>(this, &Lighting_options_gump::set_sunlight,
+				std::vector<std::string>{"Off", "Soft", "Bright"}, s.sunlight, field_x, yForRow(row_sunlight),
+				field_width);
+		buttons[id_night]    = std::make_unique<Toggle>(this, &Lighting_options_gump::set_night,
+				std::vector<std::string>{"Off", "Subtle", "Deeper"}, s.night_edges, field_x, yForRow(row_night),
+				field_width);
+		buttons[id_colour]   = std::make_unique<Toggle>(this, &Lighting_options_gump::set_colour,
+                std::vector<std::string>{"Full colour", "Game palette"}, s.full_colour ? 0 : 1, field_x,
+                yForRow(row_colour), field_width);
+		buttons[id_ok]       = std::make_unique<Button>(
+                this, &Lighting_options_gump::close, GumpStrings::OK(), (width - 50) / 2, yForRow(row_ok), 50);
+		set_pos();    // Centred.
+	}
+
+	void close() override {
+		done = true;
+	}
+
+	Gump_button* on_button(int mx, int my) override {
+		for (auto& btn : buttons) {
+			auto found = btn ? btn->on_button(mx, my) : nullptr;
+			if (found) {
+				return found;
+			}
+		}
+		return Modal_gump::on_button(mx, my);
+	}
+
+	void paint() override {
+		Modal_gump::paint();
+		for (auto& btn : buttons) {
+			if (btn) {
+				btn->paint();
+			}
+		}
+		Image_window8* iwin  = gwin->get_win();
+		auto           label = [&](int row, const char* text) {
+            font->paint_text(iwin->get_ib8(), text, x + label_margin, y + yForRow(row) + 1);
+		};
+		label(row_enabled, "Lighting:");
+		label(row_shadows, "Shadows:");
+		label(row_strength, "Shadow strength:");
+		label(row_sunlight, "Sunlight:");
+		label(row_night, "Night edges:");
+		label(row_colour, "Colour:");
+		paint_focus();    // Controller support: the highlight.
+		gwin->set_painted();
+	}
+
+	void focus_widgets(std::vector<Gump_widget*>& list) override {
+		add_focus(list, buttons);
+	}
+};
 }    // namespace
 
 Gamemenu_gump::Gamemenu_gump() : Modal_gump(nullptr, -1) {
@@ -332,6 +457,8 @@ void Gamemenu_gump::createButtons() {
 			this, &Gamemenu_gump::game_engine_options, Strings::GameEngine(), margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_game_display_options] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::game_display_options, Strings::GameDisplay(), margin, yForRow(y++), preferred_button_width, 11);
+	buttons[id_lighting] = std::make_unique<Gamemenu_button>(
+			this, &Gamemenu_gump::lighting_options, "Lighting", margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_input] = std::make_unique<Gamemenu_button>(
 			this, &Gamemenu_gump::input_options, Strings::GameInput(), margin, yForRow(y++), preferred_button_width, 11);
 	buttons[id_targeting] = std::make_unique<Gamemenu_button>(
@@ -442,6 +569,11 @@ void Gamemenu_gump::game_engine_options() {
 	auto* cbt_opts = new GameEngineOptions_gump();
 	gumpman->do_modal_gump(cbt_opts, Mouse::hand);
 	delete cbt_opts;
+}
+
+void Gamemenu_gump::lighting_options() {
+	Lighting_options_gump lighting;
+	gumpman->do_modal_gump(&lighting, Mouse::hand);
 }
 
 void Gamemenu_gump::open_coop() {

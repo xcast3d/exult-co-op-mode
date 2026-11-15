@@ -505,6 +505,7 @@ Game_window::Game_window(
  *  Blank out screen.
  */
 void Game_window::clear_screen(bool update) {
+	win->clear_light_overlay();    // Relight: menus and scenes stay unlit.
 	win->BeginPaintIntoGuardBand(nullptr, nullptr, nullptr, nullptr);
 	win->fill8(0, win->get_full_width(), win->get_full_height(), win->get_start_x(), win->get_start_y());
 
@@ -4023,8 +4024,11 @@ bool Game_window::emulate_is_move_allowed(int tx, int ty) {
 
 // create mini-screenshot (96x60) for use in savegames
 unique_ptr<Shape_file> Game_window::create_mini_screenshot() {
-	set_all_dirty();
-	render->paint_map(0, 0, get_width(), get_height());
+	{
+		const Relight::Pause no_lighting;    // Keep the thumbnail plain.
+		set_all_dirty();
+		render->paint_map(0, 0, get_width(), get_height());
+	}
 
 	unique_ptr<unsigned char[]> img(win->mini_screenshot());
 	unique_ptr<Shape_file>      sh;
@@ -4056,6 +4060,8 @@ void Game_window::setup_load_palette() {
 		plasma_cycle_range = SI_PLASMA_CYCLE_RANGE;
 	}
 
+	// The lighting layer belongs to the map, not the load screen.
+	win->clear_light_overlay();
 	// Put up the plasma to the screen
 	plasma(win->get_full_width(), win->get_full_height(), win->get_start_x(), win->get_start_y(), plasma_start_color,
 		   plasma_start_color + plasma_cycle_range - 1);
