@@ -37,9 +37,11 @@ both in `--version` and the version files saved with each game.
   - Lamps, sconces, candles, fires and carried torches cast warm pools of
     light at night, stopped by walls; indoors and in dungeons they fill the
     room. The Light spell gives a wide, pale glow.
-  - Daylight comes in through doorways, windows and open shutters.
-  - Moongates and magic items glow blue; a party member wearing magic gives
-    off a faint blue glow.
+  - Daylight comes in through doorways, windows and open shutters, with
+    sunbeams slanting in through open doors; by day a room open to the
+    outside is lit almost as brightly as outdoors.
+  - Moongates and magic items glow blue (moongates cast no shadow); a party
+    member wearing magic gives off a faint blue glow.
   - At night the edges of the view fade gently into the dark (Night edges:
     off, subtle or deeper).
   - Full colour, or the game's own 256 colours.
@@ -48,6 +50,8 @@ both in `--version` and the version files saved with each game.
 
 - Menus set to use the day palette at night no longer darken while the
   game's palette is changing (dusk, dawn, after jumping the time).
+- Save game thumbnails taken at night no longer come out as red and black
+  speckle.
 
 ## 0.8.5, 2026-11-14 (build 265)
 

@@ -151,7 +151,10 @@ public:
 	static void get_gamma(double& r, double& g, double& b);
 	static void set_gamma(double r, double g, double b);
 
-	std::unique_ptr<unsigned char[]> mini_screenshot();
+	// pal768: the colours to average and match with (the day palette, so a
+	// shot taken at night doesn't map through the dark palette); null for
+	// the current one.
+	std::unique_ptr<unsigned char[]> mini_screenshot(const unsigned char* pal768 = nullptr);
 
 protected:
 	// Convert an overlay layer's 8-bit paletted pixels to its texture, using

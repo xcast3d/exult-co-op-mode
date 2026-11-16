@@ -178,11 +178,12 @@ static inline int pow2(int x) {
 }
 
 // a nearest-average-colour 1/3 scaler
-unique_ptr<unsigned char[]> Image_window8::mini_screenshot() {
+unique_ptr<unsigned char[]> Image_window8::mini_screenshot(const unsigned char* pal768) {
 	int i;
 	if (!paletted_surface) {
 		return nullptr;
 	}
+	const unsigned char* colors = pal768 ? pal768 : this->colors;
 
 	auto                 buf    = make_unique<Uint8[]>(96 * 60);
 	const int            w      = 3 * 96;

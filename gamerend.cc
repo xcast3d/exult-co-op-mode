@@ -395,9 +395,47 @@ namespace Relight {
 			bool  magic  = false;    // Moongates and magic things: a blue glow.
 			bool  worn   = false;    // Magic things the party wears.
 			bool  radial = false;    // A plain round glow on screen (x, y), no shadows.
+			float top    = 0;        // Radial: the thing's own height (screen px).
 		};
 
 		std::vector<Lamp> lamps;
+
+		// Moongates are light, not solid: no shadow, no occlusion.
+		bool is_moongate(int shnum) {
+			static std::vector<signed char> known;
+			if (shnum < 0) {
+				return false;
+			}
+			if (size_t(shnum) >= known.size()) {
+				known.resize(shnum + 1, -1);
+			}
+			if (known[shnum] < 0) {
+				std::string name;
+				if (shnum < get_num_item_names() && get_item_name(shnum)) {
+					name = get_item_name(shnum);
+				}
+				for (auto& c : name) {
+					c = char(std::tolower(static_cast<unsigned char>(c)));
+				}
+				known[shnum] = name.find("moongate") != std::string::npos;
+			}
+			return known[shnum] > 0;
+		}
+
+		// A round glow centred on an object's picture, like a small torch.
+		template <typename L>
+		void centre_on_picture(L& l, Game_object* obj, int hx, int hy) {
+			if (const Shape_frame* pic = obj->get_shape()) {
+				l.x = hx + (pic->get_xright() - pic->get_xleft()) / 2.0f;
+				l.y = hy + (pic->get_ybelow() - pic->get_yabove()) / 2.0f;
+			} else {
+				l.x = hx - 4.0f;
+				l.y = hy - 4.0f;
+			}
+			l.top    = l.z;
+			l.z      = 0;
+			l.radial = true;
+		}
 
 		// Moongates and magic things glow blue; found by name like windows.
 		bool is_magic(int shnum) {
@@ -455,6 +493,7 @@ namespace Relight {
 		}
 		std::vector<float>    glow;       // Lamp light to add on top (full colour).
 		std::vector<uint32>   glow_px;    // The same, coloured, for the window.
+		std::vector<unsigned char> beam;    // Indoor floor the sun reaches.
 		std::vector<uint16_t> spill;      // Distance to daylight, indoors.
 		std::vector<unsigned char> spill_v;    // How bright that daylight is.
 		bool              roofed     = false;    // Hidden roof over the viewer?
@@ -491,7 +530,7 @@ namespace Relight {
 			Nonflat_object_iterator next(chunk);
 			Game_object*            obj;
 			while ((obj = next.get_next()) != nullptr) {
-				if (obj->get_lift() >= skip) {
+				if (obj->get_lift() >= skip || is_moongate(obj->get_shapenum())) {
 					continue;
 				}
 				int hx, hy;
@@ -549,7 +588,13 @@ namespace Relight {
 				}
 				l.magic = is_magic(obj->get_shapenum());
 				if (l.magic) {
-					l.radius = std::max(l.radius, 110.0f);
+					// A round blue glow on the picture, like magic items,
+					// bigger and brighter for a moongate.
+					const bool gate = is_moongate(obj->get_shapenum());
+					centre_on_picture(l, obj, hx, hy);
+					l.indoor = false;
+					l.radius = gate ? 72.0f : 48.0f;
+					l.power  = gate ? 2.2f : 1.6f;
 				}
 				lamps.push_back(l);
 			}
@@ -579,22 +624,12 @@ namespace Relight {
 				l.x      = hx + 4.0f * lift - 4.0f * xt;
 				l.y      = hy + 4.0f * lift - 4.0f * yt;
 				l.magic  = true;
-				const bool gate = xt >= 3 || yt >= 3;    // Moongates are big.
-				l.radius = gate ? 110.0f : 40.0f;
-				l.power  = gate ? 1.0f : 0.9f;
-				// Small things: a plain round glow around the middle of the
-				// picture, like a little blue torch.
-				if (!gate) {
-					if (const Shape_frame* pic = obj->get_shape()) {
-						l.x = hx + (pic->get_xright() - pic->get_xleft()) / 2.0f;
-						l.y = hy + (pic->get_ybelow() - pic->get_yabove()) / 2.0f;
-					} else {
-						l.x = hx - 4.0f;
-						l.y = hy - 4.0f;
-					}
-					l.z      = 0;
-					l.radial = true;
-				}
+				const bool gate = is_moongate(obj->get_shapenum());
+				l.radius = gate ? 72.0f : 36.0f;
+				l.power  = gate ? 2.2f : 2.4f;    // Small but bright.
+				// A plain round glow around the middle of the picture, like
+				// a little blue torch.
+				centre_on_picture(l, obj, hx, hy);
 				lamps.push_back(l);
 			}
 		});
@@ -724,6 +759,9 @@ namespace Relight {
 	}
 
 	void stamp_object(Game_object* obj) {
+		if (is_moongate(obj->get_shapenum())) {
+			return;    // Light, not a solid thing: no shadow.
+		}
 		Game_window* gwin = Game_window::get_instance();
 		int          hx, hy;
 		gwin->get_shape_location(obj, hx, hy);
@@ -748,6 +786,15 @@ namespace Relight {
 		const float strength = 0.9f;
 		for (const Lamp& l : lamps) {
 			const float r = l.radius;
+			// A light under a roof that is shown (you are outside) is hidden
+			// from view: its light stays inside, off the roof tiles.
+			{
+				const int sx = int(l.x - l.z), sy = int(l.y - l.z);
+				const float own = l.radial ? l.top : l.z;
+				if (!l.worn && in_buffer(sx, sy) && height_at(sx, sy) > own + 12.0f) {
+					continue;
+				}
+			}
 			// Where the lamp shows on screen, and the pixels it can reach.
 			const int lx = int(l.x - l.z), ly = int(l.y - l.z);
 			const int x0 = std::max(x, lx - int(r) - 64), x1 = std::min(x + w, int(l.x + r) + 2);
@@ -767,7 +814,9 @@ namespace Relight {
 				for (int gx = x0; gx < x1; gx++) {
 					const int   i     = idx(gx, gy);
 					const bool  under = covered[i] != 0;
-					float       amt   = l.window ? (under ? day : 0.0f) : under ? 1.0f : night;    // Indoors, lamps are always lit.
+					// Indoors, lamps are always lit, but by day only half as
+					// bright, so daylight through doors and windows leads.
+					float       amt   = l.window ? (under ? day : 0.0f) : under ? std::max(night, 0.5f) : night;
 					if (l.magic && !l.worn) {
 						amt = std::max(amt, 0.4f);    // Magic glows faintly even by day.
 					}
@@ -842,6 +891,71 @@ namespace Relight {
 	}
 
 	/*
+	 *  Is the room the viewer stands in open to the outside: a window or
+	 *  open shutter in this building, or floor leading from the viewer out
+	 *  past the roof's edge (an open door)?
+	 */
+	bool room_is_open(Game_window* gwin, int x, int y, int w, int h) {
+		for (const Lamp& l : lamps) {
+			if (l.window) {
+				return true;
+			}
+		}
+		const Actor* viewer = gwin->get_camera_actor() ? gwin->get_camera_actor() : gwin->get_main_actor();
+		if (!viewer) {
+			return false;
+		}
+		int hx, hy;
+		gwin->get_shape_location(viewer, hx, hy);
+		auto floor_ok = [&](int gx, int gy) {
+			return gx >= x && gy >= y && gx < x + w && gy < y + h && hbase[gy * hline + gx] <= roof_floor + 8;
+		};
+		// Start on the floor at the viewer's feet (the figure itself is tall).
+		int sx = -1, sy = -1;
+		for (int r = 0; r <= 12 && sx < 0; r++) {
+			for (int dy = -r; dy <= r && sx < 0; dy++) {
+				for (int dx = -r; dx <= r; dx++) {
+					const int gx = hx - 4 + dx, gy = hy - 4 + dy;
+					if (floor_ok(gx, gy) && covered[idx(gx, gy)]) {
+						sx = gx;
+						sy = gy;
+						break;
+					}
+				}
+			}
+		}
+		if (sx < 0) {
+			return false;
+		}
+		std::vector<unsigned char> seen(size_t(w) * h, 0);
+		std::vector<int>           todo;
+		todo.push_back((sy - y) * w + (sx - x));
+		seen[todo.back()] = 1;
+		while (!todo.empty()) {
+			const int i = todo.back();
+			todo.pop_back();
+			const int px = i % w, py = i / w;
+			static const int steps[4][2] = {{1, 0}, {-1, 0}, {0, 1}, {0, -1}};
+			for (const auto& st : steps) {
+				const int qx = px + st[0], qy = py + st[1];
+				if (qx < 0 || qy < 0 || qx >= w || qy >= h || seen[qy * w + qx]) {
+					continue;
+				}
+				const int gx = x + qx, gy = y + qy;
+				if (!floor_ok(gx, gy)) {
+					continue;
+				}
+				if (!covered[idx(gx, gy)]) {
+					return true;    // Walked out under the open sky.
+				}
+				seen[qy * w + qx] = 1;
+				todo.push_back(qy * w + qx);
+			}
+		}
+		return false;
+	}
+
+	/*
 	 *  Light the map pixels in the rectangle (game coordinates).
 	 */
 	void apply(Game_window* gwin, int x, int y, int w, int h) {
@@ -887,6 +1001,9 @@ namespace Relight {
 		const float        sun_boost
 				= 1.0f + (sunlit ? boosts[set.sunlight] * std::min(1.0f, sun_up * 4.0f) : 0.0f);
 		const float shadow_amt = sunlit ? strengths[set.strength] * std::min(1.0f, sun_up * 4.0f) : 0.0f;
+		// Under a roof by day the room is dimmer than outside, enough that
+		// light through a door or window shows, whatever the strength.
+		float indoor_dim = sunlit ? (0.2f + 0.4f * strengths[set.strength]) * std::min(1.0f, sun_up * 4.0f) : 0.0f;
 		const float ao_amt     = 0.15f + 0.5f * strengths[set.strength];
 		const float elev       = 0.10f + 0.78f * sun_up;    // Radians.
 		const float slope      = std::tan(elev);
@@ -936,6 +1053,13 @@ namespace Relight {
 				}
 			}
 		}
+		// By day, a room open to the outside (an open window or shutter, or
+		// an open doorway you can walk out of from where you stand) is lit
+		// almost to full brightness, however big it is; only a shut room
+		// stays dim.  The sunbeams and doorway light still show on top.
+		if (indoor_dim > 0 && room_is_open(gwin, x, y, w, h)) {
+			indoor_dim = 0.06f * std::min(1.0f, sun_up * 4.0f);
+		}
 		// Ambient occlusion: how much higher the surroundings are.
 		static const int dirs[8][2] = {
 				{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}};
@@ -974,7 +1098,7 @@ namespace Relight {
 					const float lit  = (1.0f - sh) * facing(fbase[gy * hline + gx]) * sun_boost;
 					// Under a roof the shade is gentler than a shadow outside.
 					const bool  inside = covered[idx(gx, gy)] != 0;
-					const float dark   = sh * (1.0f - (inside ? 0.8f : 1.0f) * shadow_amt);
+					const float dark   = sh * (1.0f - (inside ? indoor_dim : shadow_amt));
 					if (tint) {
 						lr *= lit * sun_r + dark * sky_r;
 						lg *= lit * sun_g + dark * sky_g;
@@ -994,7 +1118,7 @@ namespace Relight {
 		// the open air takes some of the light outside (all of it from sunlit
 		// ground, about half from shade), fading over several tiles.  It
 		// spreads only across the floor, so walls stop it.
-		if (sunlit && roofed && shadow_amt > 0) {
+		if (sunlit && roofed && indoor_dim > 0) {
 			const int      range = 56;    // Pixels.
 			const uint16_t far   = 0xffff;
 			spill.assign(size_t(w) * h, far);
@@ -1058,6 +1182,68 @@ namespace Relight {
 					out[0] += amt * (tr * sun_boost - out[0]);
 					out[1] += amt * (tg * sun_boost - out[1]);
 					out[2] += amt * (tb * sun_boost - out[2]);
+				}
+			}
+		}
+		// Sunbeams: indoors, floor that can see the sun out through a door
+		// or window (walls in the way block it, and the ray must leave
+		// below the eaves, not through the roof) gets a patch of direct
+		// sunlight, slanting in with the time of day.
+		if (sunlit && roofed && indoor_dim > 0) {
+			const float eaves = roof_floor + 26.0f;    // About a door's height.
+			beam.assign(size_t(w) * h, 0);
+			for (int py = 0; py < h; py++) {
+				for (int px = 0; px < w; px++) {
+					const int gx = x + px, gy = y + py;
+					if (!covered[idx(gx, gy)]) {
+						continue;
+					}
+					const int hp = hbase[gy * hline + gx];
+					if (hp > roof_floor + 8) {
+						continue;    // Walls and tall furniture.
+					}
+					for (float st = 1.5f; st < 96.0f; st += 1.0f) {
+						const float rz = hp + st * slope;
+						if (rz > eaves) {
+							break;    // Would have to pass through the roof.
+						}
+						const int sx = gx + int(std::lround(st * dirx));
+						const int sy = gy + int(std::lround(st * diry));
+						if (!in_buffer(sx, sy) || height_at(sx, sy) > rz + step_dead_zone) {
+							break;
+						}
+						if (!covered[idx(sx, sy)]) {
+							// Out in the open: lit if that spot is in sun.
+							const int lx = sx - x, ly = sy - y;
+							const bool shaded = lx >= 0 && ly >= 0 && lx < w && ly < h && shadow[ly * w + lx];
+							beam[py * w + px] = shaded ? 0 : 1;
+							break;
+						}
+					}
+				}
+			}
+			const int   bb   = set.soft ? 2 : 0;
+			const float fade = std::min(1.0f, sun_up * 4.0f);
+			const float tr = tint ? sun_r : 1.0f, tg = tint ? sun_g : 1.0f, tb = tint ? sun_b : 1.0f;
+			for (int py = 0; py < h; py++) {
+				for (int px = 0; px < w; px++) {
+					int sum = 0;
+					for (int oy = -bb; oy <= bb; oy++) {
+						for (int ox = -bb; ox <= bb; ox++) {
+							const int qx = std::clamp(px + ox, 0, w - 1), qy = std::clamp(py + oy, 0, h - 1);
+							sum += beam[qy * w + qx];
+						}
+					}
+					if (!sum) {
+						continue;
+					}
+					// A touch brighter than open ground, as a sunbeam reads.
+					const float k   = 0.9f * fade * sum / float((2 * bb + 1) * (2 * bb + 1));
+					const float hi  = sun_boost * 1.08f;
+					float*      out = &light[(size_t(py) * w + px) * 3];
+					out[0] += k * (tr * hi - out[0]);
+					out[1] += k * (tg * hi - out[1]);
+					out[2] += k * (tb * hi - out[2]);
 				}
 			}
 		}
