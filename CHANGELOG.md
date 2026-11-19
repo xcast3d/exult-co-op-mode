@@ -24,7 +24,7 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## Unreleased (0.8.6)
+## 0.8.6, 2026-11-19 (build 273)
 
 ### Added
 
@@ -55,7 +55,7 @@ both in `--version` and the version files saved with each game.
 - Guests can give their own things to another party member: Give and Give
   all now show in a guest's item menu, as they do for the host. A guest
   still can't take from, or ready things on, anyone else.
-- The update window shows its release notes as black text on white again;
+- The update window shows its release notes as black text on white;
   on Windows they came up on a black background.
 
 ## 0.8.5, 2026-11-14 (build 265)
