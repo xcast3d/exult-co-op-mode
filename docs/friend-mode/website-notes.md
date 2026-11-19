@@ -11,10 +11,10 @@ Written on the site 2026-11-19: a Lighting chapter on the home page
 (`#lighting`, six cards: sun and shadow, lamps and torches, daylight
 indoors, magic glows, night edges, tuning), Lighting in the menu,
 Ctrl+Shift+L in the shortcuts table, and a Lighting section in the guide
-with the menu's rows. No screenshots yet: before/after pairs (Ctrl+Shift+L)
-would sell it best, e.g. a town at dusk with long shadows, a street or
-dungeon at night with torches, sunbeams through an open door, a moongate.
-A before/after slider would suit it.
+with the menu's rows. Before/after slider carousel added the same day (site
+abf3f0e): Trinsic by day, Lord British's castle, the stables at night, a
+cave. Maybe later: sunbeams through an open door, a moongate, a town at
+dusk.
 
 ### Feeding and the party's packs (new in 0.8.5)
 
