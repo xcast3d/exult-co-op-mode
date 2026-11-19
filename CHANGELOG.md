@@ -52,6 +52,11 @@ both in `--version` and the version files saved with each game.
   game's palette is changing (dusk, dawn, after jumping the time).
 - Save game thumbnails taken at night no longer come out as red and black
   speckle.
+- Guests can give their own things to another party member: Give and Give
+  all now show in a guest's item menu, as they do for the host. A guest
+  still can't take from, or ready things on, anyone else.
+- The update window shows its release notes as black text on white again;
+  on Windows they came up on a black background.
 
 ## 0.8.5, 2026-11-14 (build 265)
 

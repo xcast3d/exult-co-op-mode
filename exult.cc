@@ -2870,7 +2870,18 @@ static void Friend_mode_perform_guest_move(
 		return refuse_drop("destination is not a container");
 	}
 	if (container) {
-		if (!Friend_guest_may_touch(actor, container)) {
+		// A guest may hand its own things to another party member, into
+		// their pack (2026-11-19: Give and Give all), but not ready them
+		// on that member or take anything of theirs.
+		auto gives_to_member = [&]() {
+			const Game_object_shared from = held ? friend_guest_held.owner.lock() : nullptr;
+			Game_object* const       came = held ? (from ? from->get_outermost() : nullptr) : src->get_outermost();
+			Actor* const             to   = container->get_outermost()->as_actor();
+			return came == actor && to && to != actor && !container->as_actor() && spot == 255 && !to->is_dead()
+				   && (to == gwin->get_main_actor() || to->get_flag(Obj_flags::in_party))
+				   && Fast_pathfinder_client::is_grabable(actor, to);
+		};
+		if (!Friend_guest_may_touch(actor, container) && !gives_to_member()) {
 			return refuse_drop("destination out of reach or not yours");
 		}
 		for (Game_object* up = container; up; up = up->get_owner()) {
@@ -10879,8 +10890,9 @@ static void Friend_mode_arrange_windows() {
 // the pad, Ctrl+Space): what can be done with the pick, the entries that
 // apply only.
 //
-// Give to...: a party member's pack (the host and single player; a guest
-// doesn't give).  Within reach, or "Too far away"; how many of a stack.
+// Give to...: a party member's pack (anyone's for the host and single
+// player; a guest gives only its own).  Within reach, or "Too far away";
+// how many of a stack.
 static void Friend_mode_give(Game_object* obj) {
 	Actor*              own    = gwin->get_controlled_actor();
 	Game_object*        outer  = obj->get_outermost();
@@ -10939,8 +10951,8 @@ static std::vector<Game_object*> Friend_same_items(Game_object* obj) {
 	return found;
 }
 
-// Give all (the host and single player): 'obj' and its like to one party
-// member's pack, asked once.
+// Give all: 'obj' and its like to one party member's pack, asked once (a
+// guest only its own).
 static void Friend_mode_give_all(Game_object* obj, const std::vector<Game_object*>& more) {
 	Actor*              own    = gwin->get_controlled_actor();
 	Actor*              holder = obj->get_outermost()->as_actor();
@@ -11051,7 +11063,7 @@ static std::vector<Friend_menu_choice> Friend_inventory_actions(Actor* own, cons
 							}
 						}});
 	}
-	if (!guest) {
+	if (mine || !guest) {    // A guest gives its own (2026-11-19).
 		acts.push_back({"Give", [thing]() {
 							Friend_mode_give(thing.get());
 						}});
@@ -11078,7 +11090,7 @@ static std::vector<Friend_menu_choice> Friend_inventory_actions(Actor* own, cons
 			acts.push_back({"Drop" + all, [thing, still, drop]() {
 								drop(thing->get_quantity(), still());
 							}});
-			if (!guest) {
+			if (mine || !guest) {
 				acts.push_back({"Give" + all + " to...", [thing, still]() {
 									Friend_mode_give_all(thing.get(), still());
 								}});
@@ -11120,7 +11132,7 @@ static std::vector<Friend_menu_choice> Friend_item_menu_choices(Actor* own, cons
 							   Friend_mode_space(member, !member);
 						   }});
 	}
-	if (party && !guest && obj->is_dragable()) {
+	if (party && (!guest || outer == own) && obj->is_dragable()) {
 		choices.push_back({"Give to...", [thing]() {
 							   Friend_mode_give(thing.get());
 						   }});
@@ -11158,7 +11170,7 @@ static std::vector<Friend_menu_choice> Friend_item_menu_choices(Actor* own, cons
 				}
 				return left;
 			};
-			if (!guest) {
+			if (!guest || outer == own) {
 				choices.push_back({"Give" + all + " to...", [thing, still]() {
 									   Friend_mode_give_all(thing.get(), still());
 								   }});

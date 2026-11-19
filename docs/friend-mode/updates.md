@@ -149,7 +149,9 @@ build already in the feed, before copying anything.
 plain HTML: `tools/downloads/release-notes.py` takes the newest release in
 CHANGELOG.md at the build's commit (Unreleased, until the release steps
 move it under its version). The website's changelog page isn't used, so
-the window doesn't get the site's look and cursor. The Mac feed still
+the window doesn't get the site's look and cursor. The notes set their own black-on-white
+colours (and `color-scheme: only light`), since an unstyled page followed
+Windows' dark mode and came up black (2026-11-19). The Mac feed still
 links the full changelog for Sparkle's version history.
 
 For a Windows `-setup.exe`, deploy.sh takes the build number and version

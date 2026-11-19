@@ -15,9 +15,16 @@ import html
 import re
 import sys
 
+# Always black on white: without colours of its own the update window
+# follows the system's dark mode, and on Windows the notes came up on
+# black (2026-11-19).  "only light" keeps the window from darkening them.
 STYLE = (
+    '<meta name="color-scheme" content="only light">'
     "<style>"
+    ":root{color-scheme:only light}"
+    "html,body{background:#fff!important;color:#000!important}"
     "body{font:13px/1.45 system-ui,'Segoe UI',-apple-system,sans-serif;margin:8px}"
+    "b,h3,li,p,code{color:#000!important}"
     "h3{font-size:13px;margin:12px 0 4px}"
     "ul{margin:0;padding-left:18px}li{margin:3px 0}p{margin:6px 0}"
     "</style>"
