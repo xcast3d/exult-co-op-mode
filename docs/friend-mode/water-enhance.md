@@ -1,10 +1,11 @@
 # Water enhancement experiment
 
-Status: **parked; not part of the main build** (2026-11-16).
+Status: **abandoned** (2026-11-19). Not part of the main build, and no Water
+option appears in any menu.
 
 The prototype is preserved on branch `feature/water`, commit `fe596291f`
 (`Prototype and park water visual enhancements`). It was deliberately not
-merged into `feature/friend-mode`. We may revisit it later.
+merged into `feature/friend-mode`.
 
 ## What the prototype proved
 
@@ -27,7 +28,11 @@ merged into `feature/friend-mode`. We may revisit it later.
 - shoreline-oriented incoming crests;
 - subtle moving shadow bands;
 - a shallow-water cyan gradient;
-- sparse directional sun glints.
+- sparse directional sun glints;
+- (2026-11-19, not committed) a bold, static colour pass instead of
+  marks: lighter, greener shallows near shore fading into deep blue, and
+  the water tinted by the hour (bright blue at midday, gold and rose at
+  sunrise and sunset, silver at night), with a murky green on swamp.
 
 The later versions fit the original pixel art much better than the initial
 smooth overlay and preserved the game's palette-cycled water. Even so, the
@@ -36,8 +41,12 @@ complexity and continuous repaint cost.
 
 ## Decision
 
-Keep Water out of the main build for now. If the idea is revisited, start from
-the preserved branch rather than reimplementing the masks. The most promising
-next experiment is a smaller shore-only treatment or restrained lamp/window
-reflections; it should establish a clear visual win before restoring general
-open-water animation.
+Abandoned on 2026-11-19. Without new art, every treatment was either barely
+noticeable or read as a layer pasted over the game; none looked like a
+remaster. Reflections of the game's own pixels were considered but not
+built: they would only show at harbours and on ships, since the game never
+draws a sky to reflect on open sea.
+
+`feature/water` is kept as a record. If water is ever revisited, it likely
+needs new art (a remaster texture pack), which is outside the "enhance
+without changing" approach.
