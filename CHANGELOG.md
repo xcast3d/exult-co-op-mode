@@ -26,6 +26,14 @@ both in `--version` and the version files saved with each game.
 
 ## Unreleased (0.8.9)
 
+### Added
+
+- Smooth walking (Game Display, on by default): people and creatures
+  glide from tile to tile instead of jumping a tile with each step, and
+  the view glides with your own steps. NPCs no longer pause on a standing
+  frame between steps. It takes the place of smooth scrolling, which now
+  only moves ships and carts.
+
 ### Fixed
 
 - With lighting on and Game Mode set to Fill, opening the save menu no
