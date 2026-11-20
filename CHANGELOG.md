@@ -24,6 +24,18 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.7)
+
+### Fixed
+
+- Lighting is much faster, above all around dawn and dusk, when it could
+  slow the game to a crawl at high resolutions. The menu cursor no longer
+  drags while lighting is on.
+- Save game thumbnails taken at night look like night again (they came
+  out in day colours), without the old red and black speckle.
+- Loading a save at night no longer undoes the menus' day palette
+  setting: menus stayed dark until the setting was changed again.
+
 ## 0.8.6, 2026-11-19 (build 273)
 
 ### Added

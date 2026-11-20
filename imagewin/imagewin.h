@@ -464,7 +464,10 @@ public:
 	// one ARGB8888 value each.  Shown until cleared.
 	// glow (may be null) is added on top, after the multiply: lamp light
 	// that can bring colour back out of the dark.
-	void set_light_overlay(const uint32* argb, const uint32* glow, int gx, int gy, int w, int h);
+	// Only rows row0..row1-1 are sent to the GPU (the rest are as last set),
+	// unless the layer is new; row1 < 0 sends them all.
+	void set_light_overlay(
+			const uint32* argb, const uint32* glow, int gx, int gy, int w, int h, int row0 = 0, int row1 = -1);
 	void clear_light_overlay() {
 		light_on = false;
 		glow_on  = false;

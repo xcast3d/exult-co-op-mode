@@ -154,7 +154,11 @@ public:
 	// pal768: the colours to average and match with (the day palette, so a
 	// shot taken at night doesn't map through the dark palette); null for
 	// the current one.
-	std::unique_ptr<unsigned char[]> mini_screenshot(const unsigned char* pal768 = nullptr);
+	// pal768: the colours the screen has now (default: the window's).
+	// match768: the palette the thumbnail is shown in, to pick its colours
+	// from (default: pal768).
+	std::unique_ptr<unsigned char[]> mini_screenshot(
+			const unsigned char* pal768 = nullptr, const unsigned char* match768 = nullptr);
 
 protected:
 	// Convert an overlay layer's 8-bit paletted pixels to its texture, using

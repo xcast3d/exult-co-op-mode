@@ -4030,17 +4030,23 @@ unique_ptr<Shape_file> Game_window::create_mini_screenshot() {
 		render->paint_map(0, 0, get_width(), get_height());
 	}
 
-	// Average through the day palette: the shot is shown in day colours,
-	// and at night the dark palette maps many colours to near-black, so
-	// picking the nearest colour there gave red and black speckle.
+	// Average the colours as they look now (dark at night), then pick the
+	// nearest ones from the day palette, which the save menu shows the
+	// thumbnail in.  Picking them from the night palette, where many
+	// colours are near-black, gave red and black speckle; averaging through
+	// the day palette made night saves look like day.
+	unsigned char  now_colors[768];
 	unsigned char  day_colors[768];
 	const Palette& day = get_pal()->day_palette();
 	for (int i = 0; i < 256; i++) {
+		now_colors[3 * i]     = pal->get_red(i);
+		now_colors[3 * i + 1] = pal->get_green(i);
+		now_colors[3 * i + 2] = pal->get_blue(i);
 		day_colors[3 * i]     = day.get_red(i);
 		day_colors[3 * i + 1] = day.get_green(i);
 		day_colors[3 * i + 2] = day.get_blue(i);
 	}
-	unique_ptr<unsigned char[]> img(win->mini_screenshot(day_colors));
+	unique_ptr<unsigned char[]> img(win->mini_screenshot(now_colors, day_colors));
 	unique_ptr<Shape_file>      sh;
 	if (img) {
 		sh = make_unique<Shape_file>(make_unique<Shape_frame>(std::move(img), 96, 60, 0, 0, true));

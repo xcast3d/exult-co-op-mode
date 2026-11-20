@@ -178,12 +178,13 @@ static inline int pow2(int x) {
 }
 
 // a nearest-average-colour 1/3 scaler
-unique_ptr<unsigned char[]> Image_window8::mini_screenshot(const unsigned char* pal768) {
+unique_ptr<unsigned char[]> Image_window8::mini_screenshot(const unsigned char* pal768, const unsigned char* match768) {
 	int i;
 	if (!paletted_surface) {
 		return nullptr;
 	}
 	const unsigned char* colors = pal768 ? pal768 : this->colors;
+	const unsigned char* target = match768 ? match768 : colors;
 
 	auto                 buf    = make_unique<Uint8[]>(96 * 60);
 	const int            w      = 3 * 96;
@@ -213,7 +214,7 @@ unique_ptr<unsigned char[]> Image_window8::mini_screenshot(const unsigned char* 
 			int bestdist  = INT_MAX;
 			int bestindex = -1;
 			for (i = 0; i < 224; i++) {
-				const int dist = pow2(colors[3 * i + 0] - r) + pow2(colors[3 * i + 1] - g) + pow2(colors[3 * i + 2] - b);
+				const int dist = pow2(target[3 * i + 0] - r) + pow2(target[3 * i + 1] - g) + pow2(target[3 * i + 2] - b);
 				if (dist < bestdist) {
 					bestdist  = dist;
 					bestindex = i;

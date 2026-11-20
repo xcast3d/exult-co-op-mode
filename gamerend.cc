@@ -48,11 +48,19 @@
 #include "vgafile.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cctype>
+#include <chrono>
 #include <cmath>
+#include <condition_variable>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
+#include <functional>
+#include <iostream>
+#include <mutex>
 #include <string>
+#include <thread>
 #include <vector>
 
 /*
@@ -313,6 +321,130 @@ namespace Relight {
 			cur_settings.sunlight = val == "off" ? 0 : val == "bright" ? 2 : 1;
 			config->value("config/video/lighting/night_edges", val, "subtle");
 			cur_settings.night_edges = val == "off" ? 0 : val == "deeper" ? 2 : 1;
+		}
+
+		/*
+		 *  Splits the lighting's row loops across the CPU's cores; the
+		 *  calling thread takes bands too.  Rows are independent, so the
+		 *  result is the same as working through them in order.
+		 */
+		class Row_pool {
+		public:
+			Row_pool() {
+				const int cores = int(std::thread::hardware_concurrency());
+				const int n     = std::clamp(cores - 1, 0, 7);
+				for (int i = 0; i < n; i++) {
+					threads.emplace_back([this] {
+						work();
+					});
+				}
+			}
+
+			~Row_pool() {
+				{
+					const std::lock_guard<std::mutex> lock(mutex);
+					stop = true;
+				}
+				wake.notify_all();
+				for (auto& t : threads) {
+					t.join();
+				}
+			}
+
+			Row_pool(const Row_pool&)            = delete;
+			Row_pool& operator=(const Row_pool&) = delete;
+
+			bool serial = false;    // For timing: one core only.
+
+			// Call f(begin, end) for bands of [0, n), on every core.
+			void run(int n, const std::function<void(int, int)>& f) {
+				if (n <= 0) {
+					return;
+				}
+				if (threads.empty() || serial || n < 32) {
+					f(0, n);
+					return;
+				}
+				{
+					const std::lock_guard<std::mutex> lock(mutex);
+					job   = &f;
+					total = n;
+					band  = std::max(4, n / (int(threads.size() + 1) * 6));
+					next  = 0;
+					busy  = int(threads.size());
+					generation++;
+				}
+				wake.notify_all();
+				take();
+				std::unique_lock<std::mutex> lock(mutex);
+				done.wait(lock, [this] {
+					return busy == 0;
+				});
+				job = nullptr;
+			}
+
+		private:
+			std::vector<std::thread>                 threads;
+			std::mutex                               mutex;
+			std::condition_variable                  wake, done;
+			const std::function<void(int, int)>*     job        = nullptr;
+			int                                      total      = 0;
+			int                                      band       = 1;
+			std::atomic<int>                         next{0};
+			int                                      busy       = 0;
+			unsigned                                 generation = 0;
+			bool                                     stop       = false;
+
+			void take() {
+				for (;;) {
+					const int b = next.fetch_add(band);
+					if (b >= total) {
+						return;
+					}
+					(*job)(b, std::min(total, b + band));
+				}
+			}
+
+			void work() {
+				unsigned seen = 0;
+				for (;;) {
+					{
+						std::unique_lock<std::mutex> lock(mutex);
+						wake.wait(lock, [&] {
+							return stop || generation != seen;
+						});
+						if (stop) {
+							return;
+						}
+						seen = generation;
+					}
+					take();
+					const std::lock_guard<std::mutex> lock(mutex);
+					if (--busy == 0) {
+						done.notify_one();
+					}
+				}
+			}
+		};
+
+		Row_pool& pool() {
+			static Row_pool p;
+			return p;
+		}
+
+		// QOTC_RELIGHT_BENCH=1 in the environment: print how long lighting
+		// takes (to the console), and once, a comparison at three hours.
+		bool bench_wanted() {
+			static const bool on = [] {
+				const char* v = std::getenv("QOTC_RELIGHT_BENCH");
+				return v && *v && *v != '0';
+			}();
+			return on;
+		}
+
+		double now_ms() {
+			using clk = std::chrono::steady_clock;
+			return std::chrono::duration<double, std::milli>(clk::now().time_since_epoch()).count();
 		}
 	}    // namespace
 
@@ -784,6 +916,13 @@ namespace Relight {
 		const float night    = gwin->is_in_dungeon() ? 1.0f : 1.0f - day;
 		const float warm_r   = 1.0f, warm_g = tint ? 0.72f : 1.0f, warm_b = tint ? 0.42f : 1.0f;
 		const float strength = 0.9f;
+		// The lamps that show, with the pixels each can reach and its colour.
+		struct Lit {
+			const Lamp* l;
+			int         x0, x1, y0, y1;
+			float       lr, lg, lb;
+		};
+		std::vector<Lit> lit;
 		for (const Lamp& l : lamps) {
 			const float r = l.radius;
 			// A light under a roof that is shown (you are outside) is hidden
@@ -797,97 +936,125 @@ namespace Relight {
 			}
 			// Where the lamp shows on screen, and the pixels it can reach.
 			const int lx = int(l.x - l.z), ly = int(l.y - l.z);
-			const int x0 = std::max(x, lx - int(r) - 64), x1 = std::min(x + w, int(l.x + r) + 2);
-			const int y0 = std::max(y, ly - int(r) - 64), y1 = std::min(y + h, int(l.y + r) + 2);
-			float lr = l.spell ? 0.85f : warm_r, lg = l.spell ? 0.92f : warm_g, lb = l.spell ? 1.0f : warm_b;
+			Lit       e;
+			e.l  = &l;
+			e.x0 = std::max(x, lx - int(r) - 64);
+			e.x1 = std::min(x + w, int(l.x + r) + 2);
+			e.y0 = std::max(y, ly - int(r) - 64);
+			e.y1 = std::min(y + h, int(l.y + r) + 2);
+			if (e.x0 >= e.x1 || e.y0 >= e.y1) {
+				continue;
+			}
+			e.lr = l.spell ? 0.85f : warm_r;
+			e.lg = l.spell ? 0.92f : warm_g;
+			e.lb = l.spell ? 1.0f : warm_b;
 			if (l.magic && tint) {    // Cool blue.
-				lr = 0.45f;
-				lg = 0.7f;
-				lb = 1.3f;
+				e.lr = 0.45f;
+				e.lg = 0.7f;
+				e.lb = 1.3f;
 			}
 			if (l.window) {    // Soft daylight.
-				lr = 1.05f;
-				lg = tint ? 0.98f : 1.0f;
-				lb = tint ? 0.88f : 1.0f;
+				e.lr = 1.05f;
+				e.lg = tint ? 0.98f : 1.0f;
+				e.lb = tint ? 0.88f : 1.0f;
 			}
-			for (int gy = y0; gy < y1; gy++) {
-				for (int gx = x0; gx < x1; gx++) {
-					const int   i     = idx(gx, gy);
-					const bool  under = covered[i] != 0;
-					// Indoors, lamps are always lit, but by day only half as
-					// bright, so daylight through doors and windows leads.
-					float       amt   = l.window ? (under ? day : 0.0f) : under ? std::max(night, 0.5f) : night;
-					if (l.magic && !l.worn) {
-						amt = std::max(amt, 0.4f);    // Magic glows faintly even by day.
-					}
-					if (amt <= 0.01f) {
+			lit.push_back(e);
+		}
+		if (lit.empty()) {
+			return;
+		}
+		// Row by row, every lamp on that row in turn, so each core has rows
+		// of its own and the lamps add up in the same order as before.
+		pool().run(h, [&](int r0, int r1) {
+			for (int gy = y + r0; gy < y + r1; gy++) {
+				for (const Lit& e : lit) {
+					if (gy < e.y0 || gy >= e.y1) {
 						continue;
 					}
-					if (l.radial) {
-						const float rx = gx - l.x, ry = gy - l.y;
-						const float rd = std::sqrt(rx * rx + ry * ry);
-						if (rd >= r) {
+					const Lamp& l = *e.l;
+					const float r = l.radius;
+					for (int gx = e.x0; gx < e.x1; gx++) {
+						const int  i     = idx(gx, gy);
+						const bool under = covered[i] != 0;
+						// Indoors, lamps are always lit, but by day only half as
+						// bright, so daylight through doors and windows leads.
+						float amt = l.window ? (under ? day : 0.0f) : under ? std::max(night, 0.5f) : night;
+						if (l.magic && !l.worn) {
+							amt = std::max(amt, 0.4f);    // Magic glows faintly even by day.
+						}
+						if (amt <= 0.01f) {
 							continue;
 						}
-						const float u = 1.0f - rd / r;
-						const float k = amt * strength * l.power * u * u;
-						float*      o = &dest[(size_t(gy - y) * w + (gx - x)) * 3];
-						o[0] += k * lr;
-						o[1] += k * lg;
-						o[2] += k * lb;
-						continue;
-					}
-					const float hp = hbase[gy * hline + gx];
-					// This pixel's point in the world, and the way to the lamp.
-					const float wx = gx + hp, wy = gy + hp;
-					const float dx = l.x - wx, dy = l.y - wy, dz = l.z - hp;
-					const float d  = std::sqrt(dx * dx + dy * dy + dz * dz);
-					if (d >= r) {
-						continue;
-					}
-					// Blocked?  Walk toward the lamp through the heights.
-					bool blocked = false;
-					// Only what is shown blocks lamps: the hidden roof (or a
-					// dungeon's ceiling) would shut every light in.  Longer
-					// paths take bigger steps to keep big rooms quick.  Low
-					// clutter (grass, reeds, rubble) doesn't count, and things
-					// standing above the light (tree tops, roofs) take a
-					// gentler share unblocked, so the pool has no hard rim.
-					const bool  above = hp > l.z + 4.0f;
-					const float step  = std::max(3.0f, d / 24.0f);
-					for (float t = 4.0f; !above && t < d - 6.0f; t += step) {
-						const float qx = wx + dx * t / d, qy = wy + dy * t / d, qz = hp + dz * t / d;
-						if (height_at(int(qx - qz), int(qy - qz)) > qz + 9.0f) {
-							blocked = true;
+						if (l.radial) {
+							const float rx = gx - l.x, ry = gy - l.y;
+							const float rd = std::sqrt(rx * rx + ry * ry);
+							if (rd >= r) {
+								continue;
+							}
+							const float u = 1.0f - rd / r;
+							const float k = amt * strength * l.power * u * u;
+							float*      o = &dest[(size_t(gy - y) * w + (gx - x)) * 3];
+							o[0] += k * e.lr;
+							o[1] += k * e.lg;
+							o[2] += k * e.lb;
+							continue;
+						}
+						const float hp = hbase[gy * hline + gx];
+						// This pixel's point in the world, and the way to the lamp.
+						const float wx = gx + hp, wy = gy + hp;
+						const float dx = l.x - wx, dy = l.y - wy, dz = l.z - hp;
+						const float d  = std::sqrt(dx * dx + dy * dy + dz * dz);
+						if (d >= r) {
+							continue;
+						}
+						// Indoors the light spreads evenly, then fades near its reach.
+						const float u    = 1.0f - d / r;
+						const float fall = l.indoor ? std::min(1.0f, u * 1.6f) * 0.75f : u * u;
+						const float most = amt * strength * l.power * fall;
+						if (most < 0.004f) {
+							continue;    // Too faint to show: skip the walk.
+						}
+						// Blocked?  Walk toward the lamp through the heights.
+						// Only what is shown blocks lamps: the hidden roof (or a
+						// dungeon's ceiling) would shut every light in.  At most
+						// 16 steps, so towns full of lamps stay quick.  Low
+						// clutter (grass, reeds, rubble) doesn't count, and things
+						// standing above the light (tree tops, roofs) take a
+						// gentler share unblocked, so the pool has no hard rim.
+						const bool  above   = hp > l.z + 4.0f;
+						const float step    = std::max(3.0f, d / 16.0f);
+						bool        blocked = false;
+						for (float t = 4.0f; !above && t < d - 6.0f; t += step) {
+							const float qx = wx + dx * t / d, qy = wy + dy * t / d, qz = hp + dz * t / d;
+							if (height_at(int(qx - qz), int(qy - qz)) > qz + 9.0f) {
+								blocked = true;
+								break;
+							}
+						}
+						if (blocked) {
+							continue;
+						}
+						float hit;
+						switch (fbase[gy * hline + gx]) {
+						case face_east:
+							hit = dx / std::max(d, 1.0f);
+							break;
+						case face_south:
+							hit = dy / std::max(d, 1.0f);
+							break;
+						default:
+							hit = dz / std::max(d, 1.0f);
 							break;
 						}
+						const float k   = most * (above ? 0.45f : l.magic ? 1.0f : 0.4f + 0.6f * std::max(0.0f, hit));
+						float*      out = &dest[(size_t(gy - y) * w + (gx - x)) * 3];
+						out[0] += k * e.lr;
+						out[1] += k * e.lg;
+						out[2] += k * e.lb;
 					}
-					if (blocked) {
-						continue;
-					}
-					float hit;
-					switch (fbase[gy * hline + gx]) {
-					case face_east:
-						hit = dx / std::max(d, 1.0f);
-						break;
-					case face_south:
-						hit = dy / std::max(d, 1.0f);
-						break;
-					default:
-						hit = dz / std::max(d, 1.0f);
-						break;
-					}
-					// Indoors the light spreads evenly, then fades near its reach.
-					const float u    = 1.0f - d / r;
-					const float fall = l.indoor ? std::min(1.0f, u * 1.6f) * 0.75f : u * u;
-					const float k    = amt * strength * l.power * fall * (above ? 0.45f : l.magic ? 1.0f : 0.4f + 0.6f * std::max(0.0f, hit));
-					float*      out  = &dest[(size_t(gy - y) * w + (gx - x)) * 3];
-					out[0] += k * lr;
-					out[1] += k * lg;
-					out[2] += k * lb;
 				}
 			}
-		}
+		});
 	}
 
 	/*
@@ -955,38 +1122,174 @@ namespace Relight {
 		return false;
 	}
 
-	/*
-	 *  Light the map pixels in the rectangle (game coordinates).
-	 */
-	void apply(Game_window* gwin, int x, int y, int w, int h) {
-		Image_buffer8* ib = gwin->get_win()->get_ib8();
-		rebuild_tables(gwin->get_pal());
-		ov_pending = false;
-		x          = std::max(x, hmin_x);
-		y          = std::max(y, hmin_y);
-		w          = std::min(x + w, hmax_x) - x;
-		h          = std::min(y + h, hmax_y) - y;
-		if (w <= 0 || h <= 0) {
-			return;
+	namespace {
+		// What the light was last worked out from.  When all of it is the
+		// same again (only a menu, the cursor or an animation changed) the
+		// light is reused instead of traced again.
+		struct Light_key {
+			int      x = 0, y = 0, w = 0, h = 0, hx = 0, hy = 0, hl = 0;
+			int      hour = -1, minute = -1;
+			bool     dungeon = false, special = false, roofed = false;
+			int      roof_floor = 0;
+			Settings set;
+			View     view = normal;
+			int      gx = 0, gy = 0, gw = 0, gh = 0;
+		};
+
+		bool same_key(const Light_key& a, const Light_key& b) {
+			return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h && a.hx == b.hx && a.hy == b.hy && a.hl == b.hl
+				   && a.hour == b.hour && a.minute == b.minute && a.dungeon == b.dungeon && a.special == b.special
+				   && a.roofed == b.roofed && a.roof_floor == b.roof_floor && a.set.enabled == b.set.enabled
+				   && a.set.soft == b.set.soft && a.set.strength == b.set.strength
+				   && a.set.full_colour == b.set.full_colour && a.set.sunlight == b.set.sunlight
+				   && a.set.night_edges == b.set.night_edges && a.view == b.view && a.gx == b.gx && a.gy == b.gy
+				   && a.gw == b.gw && a.gh == b.gh;
 		}
-		scan_world(gwin);
-		unsigned char* bits = ib->get_bits();
-		const int      line = ib->get_line_width();
-		if (cur_view == show_height) {
-			for (int py = y; py < y + h; py++) {
-				for (int px = x; px < x + w; px++) {
-					const int hv         = hbase[py * hline + px];
-					bits[py * line + px] = gray[std::min(num_levels - 1, 2 + hv * (num_levels - 3) / 96)];
+
+		bool same_lamps(const std::vector<Lamp>& a, const std::vector<Lamp>& b) {
+			if (a.size() != b.size()) {
+				return false;
+			}
+			for (size_t i = 0; i < a.size(); i++) {
+				const Lamp& p = a[i];
+				const Lamp& q = b[i];
+				if (p.x != q.x || p.y != q.y || p.z != q.z || p.radius != q.radius || p.power != q.power
+					|| p.indoor != q.indoor || p.spell != q.spell || p.window != q.window || p.magic != q.magic
+					|| p.worn != q.worn || p.radial != q.radial || p.top != q.top) {
+					return false;
 				}
 			}
+			return true;
+		}
+
+		Light_key                  last_key;
+		bool                       last_valid = false;
+		std::vector<unsigned char> last_heights, last_faces, last_casters, last_covered;
+		std::vector<Lamp>          last_lamps;
+		std::vector<uint32>        out_overlay, out_glow;    // As last sent to the window.
+
+		// Timing (QOTC_RELIGHT_BENCH).
+		bool   use_march   = false;    // The old per-pixel sun walk, to compare.
+		int    bench_calls = 0, bench_frames = 0, bench_reused = 0;
+		double bench_ms = 0, bench_max = 0;
+		bool   bench_done = false;
+	}    // namespace
+
+	/*
+	 *  Sun shadows: a pixel is in shadow when something on the way toward
+	 *  the sun stands above the sun's ray from it (within 240 steps).
+	 *  Walking that way from every pixel is slow when the sun is low, as
+	 *  the ray climbs so slowly it seldom clears everything.  Instead each
+	 *  line of pixels toward the sun is swept once, keeping the highest
+	 *  thing within reach (a sliding maximum), the same work at any hour.
+	 *  Sets shadow[] (w x h, the view) to 1 where shaded.
+	 */
+	void sweep_shadows(int x, int y, int w, int h, float dirx, float diry, float slope, float dead_zone) {
+		const int   bw      = hline;
+		const int   bh      = hmax_y - hmin_y;
+		const bool  along_x = std::abs(dirx) >= std::abs(diry);
+		const float dmaj    = along_x ? dirx : diry;
+		const float dmin    = along_x ? diry : dirx;
+		if (std::abs(dmaj) < 1e-4f) {
 			return;
 		}
+		const int   nc    = along_x ? bw : bh;    // Pixels along a line.
+		const int   nr    = along_x ? bh : bw;
+		const float fs    = dmin / dmaj;           // Sideways drift per pixel.
+		const int   dir   = dmaj > 0 ? 1 : -1;
+		const float drop  = slope / std::abs(dmaj);    // The ray's climb per pixel.
+		const int   first = std::max(1, int(std::ceil(1.5f * std::abs(dmaj))));
+		const int   last  = std::max(first, int(std::ceil(240.0f * std::abs(dmaj))) - 1);
+		std::vector<int> drift(nc);
+		for (int c = 0; c < nc; c++) {
+			drift[c] = int(std::floor(c * fs + 0.5f));
+		}
+		const int lo = -std::max(drift.front(), drift.back());
+		const int hi = nr - 1 - std::min(drift.front(), drift.back());
+		pool().run(hi - lo + 1, [&](int b0, int b1) {
+			std::vector<int>   cell;
+			std::vector<float> g;
+			std::vector<int>   dq;
+			for (int ln = lo + b0; ln < lo + b1; ln++) {
+				cell.clear();
+				g.clear();
+				// This line's pixels, in order toward the sun.
+				for (int k = 0; k < nc; k++) {
+					const int c = dir > 0 ? k : nc - 1 - k;
+					const int r = ln + drift[c];
+					if (r < 0 || r >= nr) {
+						if (!cell.empty()) {
+							break;
+						}
+						continue;
+					}
+					const int i = along_x ? r * bw + c : c * bw + r;
+					g.push_back(casters[i] - float(cell.size()) * drop);
+					cell.push_back(i);
+				}
+				const int n = int(cell.size());
+				dq.resize(n);
+				int head = 0, tail = 0;
+				// From the sun end back: pixel j sees j + first .. j + last.
+				for (int j = n - 1; j >= 0; j--) {
+					const int add = j + first;
+					if (add < n) {
+						while (tail > head && g[dq[tail - 1]] <= g[add]) {
+							tail--;
+						}
+						dq[tail++] = add;
+					}
+					while (tail > head && dq[head] > j + last) {
+						head++;
+					}
+					if (tail == head) {
+						continue;
+					}
+					const int i  = cell[j];
+					const int gx = i % bw + hmin_x, gy = i / bw + hmin_y;
+					if (gx < x || gy < y || gx >= x + w || gy >= y + h) {
+						continue;
+					}
+					if (g[dq[head]] + j * drop > heights[i] + dead_zone) {
+						shadow[size_t(gy - y) * w + (gx - x)] = 1;
+					}
+				}
+			}
+		});
+	}
+
+	// The old way, kept to compare against (QOTC_RELIGHT_BENCH only).
+	void march_shadows(int x, int y, int w, int h, float dirx, float diry, float slope, float dead_zone, int maxh) {
+		pool().run(h, [&](int r0, int r1) {
+			for (int py = r0; py < r1; py++) {
+				for (int px = 0; px < w; px++) {
+					const int hp = hbase[(y + py) * hline + x + px];
+					for (float st = 1.5f; st < 240.0f; st += (st < 12.0f ? 1.0f : 2.0f)) {
+						const float rz = hp + st * slope;
+						if (rz > maxh) {
+							break;
+						}
+						const int sx = x + px + int(std::lround(st * dirx));
+						const int sy = y + py + int(std::lround(st * diry));
+						if (caster_at(sx, sy) > rz + dead_zone) {
+							shadow[py * w + px] = 1;
+							break;
+						}
+					}
+				}
+			}
+		});
+	}
+
+	/*
+	 *  Work out the light for the rectangle (game coordinates) at the given
+	 *  hour, into light[] (and glow[] in full colour).
+	 */
+	void compute_light(Game_window* gwin, int x, int y, int w, int h, float hour) {
 		const Settings& set = settings();
 		// Sun: rises in the east (+x), swings round through the north (-y)
 		// at noon, sets in the west, so noon shadows fall toward the viewer.
 		// It stays fairly low (at most about 50 degrees) to keep shadows long.
-		const Game_clock* clock   = gwin->get_clock();
-		const float       hour    = clock->get_hour() + clock->get_minute() / 60.0f;
 		const float       a       = float(M_PI) * (hour - 6.0f) / 12.0f;
 		const float       sun_up  = std::sin(a);
 		// Indoors the sun still lights the outside; the floor under the
@@ -1026,32 +1329,26 @@ namespace Relight {
 		const float sun_b = 0.72f + (0.95f - 0.72f) * t;
 		const float sky_r = 0.92f, sky_g = 0.97f, sky_b = 1.10f;
 
-		const int maxh = *std::max_element(casters.begin(), casters.end());
 		shadow.assign(size_t(w) * h, 0);
 		const int   blur           = set.soft ? 2 : 0;
 		const float step_dead_zone = 5.0f;    // Just over a lift.
 		if (sunlit) {
-			for (int py = 0; py < h; py++) {
-				for (int px = 0; px < w; px++) {
-					const int hp = hbase[(y + py) * hline + x + px];
-					if (covered[idx(x + px, y + py)]) {
-						shadow[py * w + px] = 1;
-						continue;
-					}
-					for (float st = 1.5f; st < 240.0f; st += (st < 12.0f ? 1.0f : 2.0f)) {
-						const float rz = hp + st * slope;
-						if (rz > maxh) {
-							break;
-						}
-						const int sx = x + px + int(std::lround(st * dirx));
-						const int sy = y + py + int(std::lround(st * diry));
-						if (caster_at(sx, sy) > rz + step_dead_zone) {
-							shadow[py * w + px] = 1;
-							break;
+			if (use_march) {
+				march_shadows(x, y, w, h, dirx, diry, slope, step_dead_zone,
+							  *std::max_element(casters.begin(), casters.end()));
+			} else {
+				sweep_shadows(x, y, w, h, dirx, diry, slope, step_dead_zone);
+			}
+			// The floor under the hidden roof is in the shade.
+			pool().run(h, [&](int r0, int r1) {
+				for (int py = r0; py < r1; py++) {
+					for (int px = 0; px < w; px++) {
+						if (covered[idx(x + px, y + py)]) {
+							shadow[size_t(py) * w + px] = 1;
 						}
 					}
 				}
-			}
+			});
 		}
 		// By day, a room open to the outside (an open window or shutter, or
 		// an open doorway you can walk out of from where you stand) is lit
@@ -1065,55 +1362,57 @@ namespace Relight {
 				{1, 0}, {-1, 0}, {0, 1}, {0, -1}, {1, 1}, {-1, -1}, {1, -1}, {-1, 1}};
 		light.assign(size_t(w) * h * 3, 1.0f);
 		const bool tint = set.full_colour && cur_view == normal;
-		for (int py = 0; py < h; py++) {
-			for (int px = 0; px < w; px++) {
-				const int gx  = x + px, gy = y + py;
-				const int hp  = hbase[gy * hline + gx];
-				float     occ = 0;
-				for (const int r : {3, 7}) {
-					for (const auto& d : dirs) {
-						const int dh = height_at(gx + d[0] * r, gy + d[1] * r) - hp;
-						// Ignore steps of a lift or so, such as the rows of
-						// a sloped roof; only walls and the like count.
-						if (dh > step_dead_zone) {
-							occ += std::min(1.0f, (dh - step_dead_zone) / (1.5f * r));
-						}
-					}
-				}
-				const float ao = 1.0f - ao_amt * occ / 16.0f;
-				float       lr = ao, lg = ao, lb = ao;
-				if (sunlit) {
-					float sh = 0;    // Shadow fraction, softened for Soft.
-					if (shadow_amt > 0) {
-						int sum = 0;
-						for (int oy = -blur; oy <= blur; oy++) {
-							for (int ox = -blur; ox <= blur; ox++) {
-								const int qx = std::clamp(px + ox, 0, w - 1);
-								const int qy = std::clamp(py + oy, 0, h - 1);
-								sum += shadow[qy * w + qx];
+		pool().run(h, [&](int r0, int r1) {
+			for (int py = r0; py < r1; py++) {
+				for (int px = 0; px < w; px++) {
+					const int gx  = x + px, gy = y + py;
+					const int hp  = hbase[gy * hline + gx];
+					float     occ = 0;
+					for (const int r : {3, 7}) {
+						for (const auto& d : dirs) {
+							const int dh = height_at(gx + d[0] * r, gy + d[1] * r) - hp;
+							// Ignore steps of a lift or so, such as the rows of
+							// a sloped roof; only walls and the like count.
+							if (dh > step_dead_zone) {
+								occ += std::min(1.0f, (dh - step_dead_zone) / (1.5f * r));
 							}
 						}
-						sh = sum / float((2 * blur + 1) * (2 * blur + 1));
 					}
-					const float lit  = (1.0f - sh) * facing(fbase[gy * hline + gx]) * sun_boost;
-					// Under a roof the shade is gentler than a shadow outside.
-					const bool  inside = covered[idx(gx, gy)] != 0;
-					const float dark   = sh * (1.0f - (inside ? indoor_dim : shadow_amt));
-					if (tint) {
-						lr *= lit * sun_r + dark * sky_r;
-						lg *= lit * sun_g + dark * sky_g;
-						lb *= lit * sun_b + dark * sky_b;
-					} else {
-						lr *= lit + dark;
-						lg = lb = lr;
+					const float ao = 1.0f - ao_amt * occ / 16.0f;
+					float       lr = ao, lg = ao, lb = ao;
+					if (sunlit) {
+						float sh = 0;    // Shadow fraction, softened for Soft.
+						if (shadow_amt > 0) {
+							int sum = 0;
+							for (int oy = -blur; oy <= blur; oy++) {
+								for (int ox = -blur; ox <= blur; ox++) {
+									const int qx = std::clamp(px + ox, 0, w - 1);
+									const int qy = std::clamp(py + oy, 0, h - 1);
+									sum += shadow[qy * w + qx];
+								}
+							}
+							sh = sum / float((2 * blur + 1) * (2 * blur + 1));
+						}
+						const float lit  = (1.0f - sh) * facing(fbase[gy * hline + gx]) * sun_boost;
+						// Under a roof the shade is gentler than a shadow outside.
+						const bool  inside = covered[idx(gx, gy)] != 0;
+						const float dark   = sh * (1.0f - (inside ? indoor_dim : shadow_amt));
+						if (tint) {
+							lr *= lit * sun_r + dark * sky_r;
+							lg *= lit * sun_g + dark * sky_g;
+							lb *= lit * sun_b + dark * sky_b;
+						} else {
+							lr *= lit + dark;
+							lg = lb = lr;
+						}
 					}
+					float* out = &light[(size_t(py) * w + px) * 3];
+					out[0]     = lr;
+					out[1]     = lg;
+					out[2]     = lb;
 				}
-				float* out = &light[(size_t(py) * w + px) * 3];
-				out[0]     = lr;
-				out[1]     = lg;
-				out[2]     = lb;
 			}
-		}
+		});
 		// Daylight through doorways: indoors, the floor near an opening to
 		// the open air takes some of the light outside (all of it from sunlit
 		// ground, about half from shade), fading over several tiles.  It
@@ -1170,20 +1469,22 @@ namespace Relight {
 				}
 			}
 			const float tr = tint ? sun_r : 1.0f, tg = tint ? sun_g : 1.0f, tb = tint ? sun_b : 1.0f;
-			for (int py = 0; py < h; py++) {
-				for (int px = 0; px < w; px++) {
-					const uint16_t dist = spill[py * w + px];
-					if (dist == 0 || dist >= 3 * range || !covered[idx(x + px, y + py)]) {
-						continue;
+			pool().run(h, [&](int r0, int r1) {
+				for (int py = r0; py < r1; py++) {
+					for (int px = 0; px < w; px++) {
+						const uint16_t dist = spill[py * w + px];
+						if (dist == 0 || dist >= 3 * range || !covered[idx(x + px, y + py)]) {
+							continue;
+						}
+						const float f   = 1.0f - dist / (3.0f * range);
+						const float amt = 0.75f * f * f * (spill_v[py * w + px] / 255.0f) * std::min(1.0f, sun_up * 4.0f);
+						float*      out = &light[(size_t(py) * w + px) * 3];
+						out[0] += amt * (tr * sun_boost - out[0]);
+						out[1] += amt * (tg * sun_boost - out[1]);
+						out[2] += amt * (tb * sun_boost - out[2]);
 					}
-					const float f   = 1.0f - dist / (3.0f * range);
-					const float amt = 0.75f * f * f * (spill_v[py * w + px] / 255.0f) * std::min(1.0f, sun_up * 4.0f);
-					float*      out = &light[(size_t(py) * w + px) * 3];
-					out[0] += amt * (tr * sun_boost - out[0]);
-					out[1] += amt * (tg * sun_boost - out[1]);
-					out[2] += amt * (tb * sun_boost - out[2]);
 				}
-			}
+			});
 		}
 		// Sunbeams: indoors, floor that can see the sun out through a door
 		// or window (walls in the way block it, and the ray must leave
@@ -1192,60 +1493,64 @@ namespace Relight {
 		if (sunlit && roofed && indoor_dim > 0) {
 			const float eaves = roof_floor + 26.0f;    // About a door's height.
 			beam.assign(size_t(w) * h, 0);
-			for (int py = 0; py < h; py++) {
-				for (int px = 0; px < w; px++) {
-					const int gx = x + px, gy = y + py;
-					if (!covered[idx(gx, gy)]) {
-						continue;
-					}
-					const int hp = hbase[gy * hline + gx];
-					if (hp > roof_floor + 8) {
-						continue;    // Walls and tall furniture.
-					}
-					for (float st = 1.5f; st < 96.0f; st += 1.0f) {
-						const float rz = hp + st * slope;
-						if (rz > eaves) {
-							break;    // Would have to pass through the roof.
+			pool().run(h, [&](int r0, int r1) {
+				for (int py = r0; py < r1; py++) {
+					for (int px = 0; px < w; px++) {
+						const int gx = x + px, gy = y + py;
+						if (!covered[idx(gx, gy)]) {
+							continue;
 						}
-						const int sx = gx + int(std::lround(st * dirx));
-						const int sy = gy + int(std::lround(st * diry));
-						if (!in_buffer(sx, sy) || height_at(sx, sy) > rz + step_dead_zone) {
-							break;
+						const int hp = hbase[gy * hline + gx];
+						if (hp > roof_floor + 8) {
+							continue;    // Walls and tall furniture.
 						}
-						if (!covered[idx(sx, sy)]) {
-							// Out in the open: lit if that spot is in sun.
-							const int lx = sx - x, ly = sy - y;
-							const bool shaded = lx >= 0 && ly >= 0 && lx < w && ly < h && shadow[ly * w + lx];
-							beam[py * w + px] = shaded ? 0 : 1;
-							break;
+						for (float st = 1.5f; st < 96.0f; st += 1.0f) {
+							const float rz = hp + st * slope;
+							if (rz > eaves) {
+								break;    // Would have to pass through the roof.
+							}
+							const int sx = gx + int(std::lround(st * dirx));
+							const int sy = gy + int(std::lround(st * diry));
+							if (!in_buffer(sx, sy) || height_at(sx, sy) > rz + step_dead_zone) {
+								break;
+							}
+							if (!covered[idx(sx, sy)]) {
+								// Out in the open: lit if that spot is in sun.
+								const int  lx = sx - x, ly = sy - y;
+								const bool shaded = lx >= 0 && ly >= 0 && lx < w && ly < h && shadow[ly * w + lx];
+								beam[py * w + px] = shaded ? 0 : 1;
+								break;
+							}
 						}
 					}
 				}
-			}
+			});
 			const int   bb   = set.soft ? 2 : 0;
 			const float fade = std::min(1.0f, sun_up * 4.0f);
 			const float tr = tint ? sun_r : 1.0f, tg = tint ? sun_g : 1.0f, tb = tint ? sun_b : 1.0f;
-			for (int py = 0; py < h; py++) {
-				for (int px = 0; px < w; px++) {
-					int sum = 0;
-					for (int oy = -bb; oy <= bb; oy++) {
-						for (int ox = -bb; ox <= bb; ox++) {
-							const int qx = std::clamp(px + ox, 0, w - 1), qy = std::clamp(py + oy, 0, h - 1);
-							sum += beam[qy * w + qx];
+			pool().run(h, [&](int r0, int r1) {
+				for (int py = r0; py < r1; py++) {
+					for (int px = 0; px < w; px++) {
+						int sum = 0;
+						for (int oy = -bb; oy <= bb; oy++) {
+							for (int ox = -bb; ox <= bb; ox++) {
+								const int qx = std::clamp(px + ox, 0, w - 1), qy = std::clamp(py + oy, 0, h - 1);
+								sum += beam[qy * w + qx];
+							}
 						}
+						if (!sum) {
+							continue;
+						}
+						// A touch brighter than open ground, as a sunbeam reads.
+						const float k   = 0.9f * fade * sum / float((2 * bb + 1) * (2 * bb + 1));
+						const float hi  = sun_boost * 1.08f;
+						float*      out = &light[(size_t(py) * w + px) * 3];
+						out[0] += k * (tr * hi - out[0]);
+						out[1] += k * (tg * hi - out[1]);
+						out[2] += k * (tb * hi - out[2]);
 					}
-					if (!sum) {
-						continue;
-					}
-					// A touch brighter than open ground, as a sunbeam reads.
-					const float k   = 0.9f * fade * sum / float((2 * bb + 1) * (2 * bb + 1));
-					const float hi  = sun_boost * 1.08f;
-					float*      out = &light[(size_t(py) * w + px) * 3];
-					out[0] += k * (tr * hi - out[0]);
-					out[1] += k * (tg * hi - out[1]);
-					out[2] += k * (tb * hi - out[2]);
 				}
-			}
+			});
 		}
 		// Night: the edges of the view fade into the dark, a little like
 		// fog of war, while the middle stays as the game shows it.  Lamps
@@ -1259,20 +1564,22 @@ namespace Relight {
 				const TileRect game = gwin->get_game_rect();
 				const float    cx = game.x + game.w * 0.5f, cy = game.y + game.h * 0.5f;
 				const float    rx = game.w * 0.5f, ry = game.h * 0.5f;
-				for (int py = 0; py < h; py++) {
-					const float ny = (y + py - cy) / ry;
-					for (int px = 0; px < w; px++) {
-						const float nx = (x + px - cx) / rx;
-						// 0 inside the middle oval, rising smoothly to 1 at the corners.
-						float e = std::clamp((std::sqrt(nx * nx + ny * ny) - 0.45f) / 0.95f, 0.0f, 1.0f);
-						e       = e * e * (3.0f - 2.0f * e);
-						const float k   = 1.0f - depth * e;
-						float*      out = &light[(size_t(py) * w + px) * 3];
-						out[0] *= k;
-						out[1] *= k;
-						out[2] *= k;
+				pool().run(h, [&](int r0, int r1) {
+					for (int py = r0; py < r1; py++) {
+						const float ny = (y + py - cy) / ry;
+						for (int px = 0; px < w; px++) {
+							const float nx = (x + px - cx) / rx;
+							// 0 inside the middle oval, rising smoothly to 1 at the corners.
+							float e = std::clamp((std::sqrt(nx * nx + ny * ny) - 0.45f) / 0.95f, 0.0f, 1.0f);
+							e       = e * e * (3.0f - 2.0f * e);
+							const float k   = 1.0f - depth * e;
+							float*      out = &light[(size_t(py) * w + px) * 3];
+							out[0] *= k;
+							out[1] *= k;
+							out[2] *= k;
+						}
 					}
-				}
+				});
 			}
 		}
 		// In full colour, lamp light is added on top in the colours the
@@ -1284,7 +1591,14 @@ namespace Relight {
 		} else {
 			add_lamps(gwin, x, y, w, h, sun_up, sunlit, tint, light);
 		}
-		if (set.full_colour && cur_view == normal) {
+	}
+
+	/*
+	 *  Put the light worked out above onto the frame: in full colour as a
+	 *  layer for the window, else through the palette.
+	 */
+	void present(Game_window* gwin, int x, int y, int w, int h, unsigned char* bits, int line, bool full) {
+		if (full) {
 			// Hand the light to the window as a layer; keep the map as
 			// painted to tell it from what is drawn on top later.
 			overlay.resize(size_t(w) * h);
@@ -1292,44 +1606,174 @@ namespace Relight {
 			map_copy.resize(size_t(w) * h);
 			const Palette& day   = gwin->get_pal()->day_palette();
 			const float    scale = 255.0f / std::max(1, gwin->get_pal()->get_max_val());
-			for (int py = 0; py < h; py++) {
-				std::memcpy(&map_copy[size_t(py) * w], bits + (y + py) * line + x, w);
-				for (int px = 0; px < w; px++) {
-					const float* l  = &light[(size_t(py) * w + px) * 3];
-					auto         ch = [](float v) {
-                        return uint32(std::clamp(int(v * 128.0f + 0.5f), 0, 255));
-					};
-					overlay[size_t(py) * w + px] = 0xff000000u | (ch(l[0]) << 16) | (ch(l[1]) << 8) | ch(l[2]);
-					const float*        gl = &glow[(size_t(py) * w + px) * 3];
-					const unsigned char c  = map_copy[size_t(py) * w + px];
-					auto                add = [&](float k, int v) {
-                        return uint32(std::clamp(int(k * v * scale + 0.5f), 0, 255));
-					};
-					glow_px[size_t(py) * w + px] = 0xff000000u | (add(gl[0], day.get_red(c)) << 16)
-												   | (add(gl[1], day.get_green(c)) << 8) | add(gl[2], day.get_blue(c));
+			pool().run(h, [&](int r0, int r1) {
+				for (int py = r0; py < r1; py++) {
+					std::memcpy(&map_copy[size_t(py) * w], bits + (y + py) * line + x, w);
+					for (int px = 0; px < w; px++) {
+						const float* l  = &light[(size_t(py) * w + px) * 3];
+						auto         ch = [](float v) {
+                            return uint32(std::clamp(int(v * 128.0f + 0.5f), 0, 255));
+						};
+						overlay[size_t(py) * w + px] = 0xff000000u | (ch(l[0]) << 16) | (ch(l[1]) << 8) | ch(l[2]);
+						const float*        gl = &glow[(size_t(py) * w + px) * 3];
+						const unsigned char c  = map_copy[size_t(py) * w + px];
+						auto                add = [&](float k, int v) {
+                            return uint32(std::clamp(int(k * v * scale + 0.5f), 0, 255));
+						};
+						glow_px[size_t(py) * w + px] = 0xff000000u | (add(gl[0], day.get_red(c)) << 16)
+													   | (add(gl[1], day.get_green(c)) << 8) | add(gl[2], day.get_blue(c));
+					}
 				}
-			}
-			ov_x = x;
-			ov_y = y;
-			ov_w = w;
-			ov_h = h;
+			});
+			ov_x       = x;
+			ov_y       = y;
+			ov_w       = w;
+			ov_h       = h;
 			ov_pending = true;
 			return;
 		}
-		for (int py = 0; py < h; py++) {
-			unsigned char* row = bits + (y + py) * line + x;
-			for (int px = 0; px < w; px++) {
-				const float* l   = &light[(size_t(py) * w + px) * 3];
-				const float  lum = 0.3f * l[0] + 0.59f * l[1] + 0.11f * l[2];
-				const int    k   = level_for(lum);
-				row[px]          = cur_view == show_light ? gray[k] : shade[k][row[px]];
+		pool().run(h, [&](int r0, int r1) {
+			for (int py = r0; py < r1; py++) {
+				unsigned char* row = bits + (y + py) * line + x;
+				for (int px = 0; px < w; px++) {
+					const float* l   = &light[(size_t(py) * w + px) * 3];
+					const float  lum = 0.3f * l[0] + 0.59f * l[1] + 0.11f * l[2];
+					const int    k   = level_for(lum);
+					row[px]          = cur_view == show_light ? gray[k] : shade[k][row[px]];
+				}
+			}
+		});
+	}
+
+	/*
+	 *  QOTC_RELIGHT_BENCH: once, time the lighting of this view at dawn,
+	 *  noon and night, the old way and the new, and how many pixels' sun
+	 *  shadow differ between the old walk and the new sweep.
+	 */
+	void run_bench(Game_window* gwin, int x, int y, int w, int h) {
+		bench_done  = true;
+		last_valid  = false;
+		const int cores = int(std::thread::hardware_concurrency());
+		std::cerr << "Relight bench: " << w << "x" << h << " game pixels, " << cores << " cores" << std::endl;
+		auto best = [&](bool march, bool one_core, float hour) {
+			use_march     = march;
+			pool().serial = one_core;
+			double b      = 1e30;
+			for (int i = 0; i < 3; i++) {
+				const double t0 = now_ms();
+				compute_light(gwin, x, y, w, h, hour);
+				b = std::min(b, now_ms() - t0);
+			}
+			use_march     = false;
+			pool().serial = false;
+			return b;
+		};
+		for (const float hour : {6.5f, 7.5f, 12.0f, 17.5f, 21.0f}) {
+			const double old_way  = best(true, true, hour);
+			const std::vector<unsigned char> old_shadow = shadow;
+			const double one_core = best(false, true, hour);
+			const double all      = best(false, false, hour);
+			size_t       differ   = 0;
+			for (size_t i = 0; i < shadow.size() && i < old_shadow.size(); i++) {
+				differ += shadow[i] != old_shadow[i];
+			}
+			char msg[200];
+			std::snprintf(msg, sizeof(msg),
+						  "  %5.2f h: old walk, 1 core %7.1f ms | sweep, 1 core %7.1f ms | sweep, all cores %7.1f ms | "
+						  "shadow differs on %.2f%% of pixels",
+						  hour, old_way, one_core, all, 100.0 * differ / std::max<size_t>(1, shadow.size()));
+			std::cerr << msg << std::endl;
+		}
+	}
+
+	/*
+	 *  Light the map pixels in the rectangle (game coordinates).
+	 */
+	void apply(Game_window* gwin, int x, int y, int w, int h) {
+		const double   t0 = bench_wanted() ? now_ms() : 0;
+		Image_buffer8* ib = gwin->get_win()->get_ib8();
+		rebuild_tables(gwin->get_pal());
+		ov_pending = false;
+		x          = std::max(x, hmin_x);
+		y          = std::max(y, hmin_y);
+		w          = std::min(x + w, hmax_x) - x;
+		h          = std::min(y + h, hmax_y) - y;
+		if (w <= 0 || h <= 0) {
+			return;
+		}
+		scan_world(gwin);
+		unsigned char* bits = ib->get_bits();
+		const int      line = ib->get_line_width();
+		if (cur_view == show_height) {
+			for (int py = y; py < y + h; py++) {
+				for (int px = x; px < x + w; px++) {
+					const int hv         = hbase[py * hline + px];
+					bits[py * line + px] = gray[std::min(num_levels - 1, 2 + hv * (num_levels - 3) / 96)];
+				}
+			}
+			return;
+		}
+		const Settings&   set   = settings();
+		const Game_clock* clock = gwin->get_clock();
+		Light_key         key;
+		key.x          = x;
+		key.y          = y;
+		key.w          = w;
+		key.h          = h;
+		key.hx         = hmin_x;
+		key.hy         = hmin_y;
+		key.hl         = hline;
+		key.hour       = clock->get_hour();
+		key.minute     = clock->get_minute();
+		key.dungeon    = gwin->is_in_dungeon();
+		key.special    = gwin->is_special_light();
+		key.roofed     = roofed;
+		key.roof_floor = roof_floor;
+		key.set        = set;
+		key.view       = cur_view;
+		const TileRect game = gwin->get_game_rect();
+		key.gx         = game.x;
+		key.gy         = game.y;
+		key.gw         = game.w;
+		key.gh         = game.h;
+		if (bench_wanted() && !bench_done && ++bench_calls >= 60) {
+			run_bench(gwin, x, y, w, h);
+		}
+		// Nothing the light depends on changed (a menu or the cursor moved):
+		// keep the light already worked out.
+		const bool reuse = last_valid && same_key(key, last_key) && heights == last_heights && faces == last_faces
+						   && casters == last_casters && covered == last_covered && same_lamps(lamps, last_lamps);
+		if (!reuse) {
+			compute_light(gwin, x, y, w, h, clock->get_hour() + clock->get_minute() / 60.0f);
+			last_key     = key;
+			last_heights = heights;
+			last_faces   = faces;
+			last_casters = casters;
+			last_covered = covered;
+			last_lamps   = lamps;
+			last_valid   = true;
+		}
+		present(gwin, x, y, w, h, bits, line, set.full_colour && cur_view == normal);
+		if (bench_wanted()) {
+			const double ms = now_ms() - t0;
+			bench_ms += ms;
+			bench_max = std::max(bench_max, ms);
+			bench_reused += reuse;
+			if (++bench_frames == 120) {
+				char msg[160];
+				std::snprintf(msg, sizeof(msg), "Relight: %02d:%02d, 120 frames, %.1f ms average, %.1f ms most, %d reused",
+							  clock->get_hour(), clock->get_minute(), bench_ms / 120, bench_max, bench_reused);
+				std::cerr << msg << std::endl;
+				bench_frames = bench_reused = 0;
+				bench_ms = bench_max = 0;
 			}
 		}
 	}
 
 	/*
 	 *  After the whole frame is painted: hand over the full-colour light
-	 *  layer, leaving unlit whatever was drawn over the map since.
+	 *  layer, leaving unlit whatever was drawn over the map since.  Only the
+	 *  rows that differ from what the window already has are sent.
 	 */
 	void finish(Game_window* gwin) {
 		Image_window8* win = gwin->get_win();
@@ -1337,22 +1781,49 @@ namespace Relight {
 			win->clear_light_overlay();
 			return;
 		}
-		ov_pending                 = false;
-		Image_buffer8*       ib    = win->get_ib8();
-		const unsigned char* bits  = ib->get_bits();
-		const int            line  = ib->get_line_width();
-		for (int py = 0; py < ov_h; py++) {
-			const unsigned char* row  = bits + (ov_y + py) * line + ov_x;
-			const unsigned char* was  = &map_copy[size_t(py) * ov_w];
-			uint32*              lrow = &overlay[size_t(py) * ov_w];
-			for (int px = 0; px < ov_w; px++) {
-				if (row[px] != was[px]) {
-					lrow[px]                         = 0xff808080u;
-					glow_px[size_t(py) * ov_w + px] = 0xff000000u;
+		ov_pending                = false;
+		Image_buffer8*       ib   = win->get_ib8();
+		const unsigned char* bits = ib->get_bits();
+		const int            line = ib->get_line_width();
+		const size_t         n    = size_t(ov_w) * ov_h;
+		const bool           all  = out_overlay.size() != n;
+		if (all) {
+			out_overlay.assign(n, 0);
+			out_glow.assign(n, 0);
+		}
+		std::mutex mtx;
+		int        first = ov_h, last = -1;
+		pool().run(ov_h, [&](int r0, int r1) {
+			int lo = ov_h, hi = -1;
+			for (int py = r0; py < r1; py++) {
+				const unsigned char* row     = bits + (ov_y + py) * line + ov_x;
+				const unsigned char* was     = &map_copy[size_t(py) * ov_w];
+				const size_t         o       = size_t(py) * ov_w;
+				bool                 changed = all;
+				for (int px = 0; px < ov_w; px++) {
+					uint32 lv = overlay[o + px], gv = glow_px[o + px];
+					if (row[px] != was[px]) {
+						lv = 0xff808080u;
+						gv = 0xff000000u;
+					}
+					if (out_overlay[o + px] != lv || out_glow[o + px] != gv) {
+						out_overlay[o + px] = lv;
+						out_glow[o + px]    = gv;
+						changed             = true;
+					}
+				}
+				if (changed) {
+					lo = std::min(lo, py);
+					hi = py;
 				}
 			}
-		}
-		win->set_light_overlay(overlay.data(), glow_px.data(), ov_x, ov_y, ov_w, ov_h);
+			if (hi >= 0) {
+				const std::lock_guard<std::mutex> lock(mtx);
+				first = std::min(first, lo);
+				last  = std::max(last, hi);
+			}
+		});
+		win->set_light_overlay(out_overlay.data(), out_glow.data(), ov_x, ov_y, ov_w, ov_h, first, last + 1);
 	}
 }    // namespace Relight
 

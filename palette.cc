@@ -405,6 +405,10 @@ void Palette::set_brightness(int bright) {
 }
 
 void Palette::fade_in(int cycles) {
+	// Fading in (after loading a game, or a scene) sets the window's
+	// palette directly, without apply(): give the menus their fixed
+	// palette now, or at night they would follow the dark one.
+	update_ui_layer_palettes();
 	if (cycles && fades_enabled) {
 		unsigned char fade_pal[768];
 		unsigned int  ticks = SDL_GetTicks() + 20;

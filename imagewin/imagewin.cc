@@ -2116,11 +2116,18 @@ void Image_window::free_light_texture() {
 	light_on          = false;
 }
 
-void Image_window::set_light_overlay(const uint32* argb, const uint32* glow, int gx, int gy, int w, int h) {
+void Image_window::set_light_overlay(
+		const uint32* argb, const uint32* glow, int gx, int gy, int w, int h, int row0, int row1) {
 	if (screen_renderer == nullptr || w <= 0 || h <= 0) {
 		return;
 	}
+	if (row1 < 0) {
+		row0 = 0;
+		row1 = h;
+	}
 	if (light_texture == nullptr || light_w != w || light_h != h) {
+		row0 = 0;    // A new texture: send it all.
+		row1 = h;
 		if (light_texture != nullptr) {
 			SDL_DestroyTexture(light_texture);
 		}
@@ -2146,8 +2153,15 @@ void Image_window::set_light_overlay(const uint32* argb, const uint32* glow, int
 			SDL_SetTextureBlendMode(light_texture, SDL_BLENDMODE_MOD);
 		}
 	}
+	row0 = std::clamp(row0, 0, h);
+	row1 = std::clamp(row1, row0, h);
+	// Only the rows that changed: the whole layer is many megabytes a frame
+	// at high resolutions.
+	const SDL_Rect rows = {0, row0, w, row1 - row0};
 	if (light_mul2) {
-		SDL_UpdateTexture(light_texture, nullptr, argb, w * 4);
+		if (rows.h > 0) {
+			SDL_UpdateTexture(light_texture, &rows, argb + size_t(row0) * w, w * 4);
+		}
 	} else {
 		// Plain multiply: 255 = unchanged, so double and clamp.
 		std::vector<uint32> tmp(argb, argb + size_t(w) * h);
@@ -2161,6 +2175,7 @@ void Image_window::set_light_overlay(const uint32* argb, const uint32* glow, int
 	}
 	glow_on = false;
 	if (glow != nullptr) {
+		SDL_Rect glow_rows = rows;
 		if (glow_texture == nullptr) {
 			glow_texture
 					= SDL_CreateTexture(screen_renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, w, h);
@@ -2168,9 +2183,12 @@ void Image_window::set_light_overlay(const uint32* argb, const uint32* glow, int
 				SDL_SetTextureScaleMode(glow_texture, SDL_SCALEMODE_NEAREST);
 				SDL_SetTextureBlendMode(glow_texture, SDL_BLENDMODE_ADD);
 			}
+			glow_rows = {0, 0, w, h};
 		}
 		if (glow_texture != nullptr) {
-			SDL_UpdateTexture(glow_texture, nullptr, glow, w * 4);
+			if (glow_rows.h > 0) {
+				SDL_UpdateTexture(glow_texture, &glow_rows, glow + size_t(glow_rows.y) * w, w * 4);
+			}
 			glow_on = true;
 		}
 	}
