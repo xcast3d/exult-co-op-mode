@@ -24,7 +24,7 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## Unreleased (0.8.7)
+## 0.8.7, 2026-11-20 (build 277)
 
 ### Fixed
 
@@ -35,6 +35,7 @@ both in `--version` and the version files saved with each game.
   out in day colours), without the old red and black speckle.
 - Loading a save at night no longer undoes the menus' day palette
   setting: menus stayed dark until the setting was changed again.
+- The mouse pointer on the title menu no longer shows pale and cut off.
 
 ## 0.8.6, 2026-11-19 (build 273)
 
