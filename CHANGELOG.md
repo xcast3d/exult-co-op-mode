@@ -445,9 +445,9 @@ both in `--version` and the version files saved with each game.
 The first release builds: an optimized Mac disk image (Apple silicon) and
 a Windows build. Mac and Windows players can play together.
 
-Before 0.8.0 there were no releases. Over 205 commits from 2026-10-14
-(Exult's 1.13.1 development version), the roadmap's first phases were
-built: playing a companion, two and then several players over the network,
+Before 0.8.0 there were no releases. Work on Exult's 1.13.1 development
+version began well before this repository's history, which starts on
+2026-10-14. By build 205 the roadmap's first phases were built: playing a companion, two and then several players over the network,
 overhead chat, a shared world (items, doors, containers, the journal),
 co-op combat and story, shops and trainers for guests, lobby codes over the
 internet, the Class System, the Target System and controller support.
