@@ -2121,11 +2121,15 @@ void Game_window::paint(
 		return;
 	}
 	if (Relight::active() && main_actor) {
-		// Shadows reach across the screen, so light it all at once.
-		x = 0;
-		y = 0;
-		w = get_width();
-		h = get_height();
+		// Shadows reach across the screen, so light it all at once.  Keep
+		// what was asked for outside the game view too (the black bars of
+		// Fill mode), or it was never painted black again.
+		const int x1 = std::max(x + w, get_width());
+		const int y1 = std::max(y + h, get_height());
+		x            = std::min(x, 0);
+		y            = std::min(y, 0);
+		w            = x1 - x;
+		h            = y1 - y;
 	}
 	// This will adjust and clip the rectangle as appropriate, it may end up
 	// bigger or smaller

@@ -54,6 +54,11 @@ class Palette {
 	bool           border255;
 	bool           faded_out;    // true if faded palette to black.
 	bool           fades_enabled;
+	// pal1 came from palettes.flx (the game's palettes).  Menus and scenes
+	// load theirs from other files, and the layers' fixed palettes must not
+	// replace those colours (the cursor turned white, or orange).
+	bool game_pal = false;
+	void note_source(const File_spec& fname0);
 	void           set_loaded(const U7multiobject& pal, const char* xfname, int xindex);
 	void           loadxform(const unsigned char* buf, const char* xfname, int& xindex);
 	// Push fixed-palette overrides to the layers.

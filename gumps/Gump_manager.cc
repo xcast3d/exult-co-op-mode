@@ -1115,6 +1115,10 @@ bool Gump_manager::do_modal_gump(
 			escaped   = !handle_modal_gump_event(gump, event);
 			got_event = true;
 		}
+		if (gump->is_done() || escaped) {
+			// Closed (or a game was loaded meanwhile): don't show it again.
+			break;
+		}
 
 		// A layer-backed gump is redrawn from scratch each frame, so any event
 		// that might have changed it must trigger a full repaint. The gump's
@@ -1137,10 +1141,21 @@ bool Gump_manager::do_modal_gump(
 	} while (!gump->is_done() && !escaped && quitting_time == QUIT_TIME_NO);
 	Mouse::mouse()->hide();
 	remove_gump(gump);
+	// Its overlay layer stays on screen until the gump is deleted, after
+	// this returns: drop it now, or the closing frame shows the menu again
+	// (over the game just loaded from it).
+	gump->free_render_layer();
 	Mouse::mouse()->set_shape(saveshape);
 	// Leave mouse off.
-	gwin->paint();
-	gwin->show(true);
+	if (modal_gump_count > 1) {
+		// Inside another menu, which repaints itself next: showing a frame
+		// now would flash it even when it is about to close (after loading
+		// a game from the game menu).
+		gwin->set_all_dirty();
+	} else {
+		gwin->paint();
+		gwin->show(true);
+	}
 	// Resume the game
 	if (!live) {
 		gwin->get_tqueue()->resume(SDL_GetTicks());

@@ -70,6 +70,7 @@ void Palette::take(Palette* pal) {
 	brightness    = pal->brightness;
 	faded_out     = pal->faded_out;
 	fades_enabled = pal->fades_enabled;
+	game_pal      = pal->game_pal;
 	memcpy(pal1, pal->pal1, 768);
 	memcpy(pal2, pal->pal2, 768);
 }
@@ -293,6 +294,12 @@ void Palette::update_ui_layer_palettes() {
 		const auto kind    = static_cast<Image_window::UiLayerKind>(k);
 		const int  mode    = win->get_ui_layer_palette_mode(kind);
 		const int  pal_num = ui_palette_mode_to_number(mode);
+		// A menu's or scene's own palette (not from palettes.flx): the
+		// layers show its colours, like everything else on screen.
+		if (!game_pal) {
+			win->set_ui_layer_palette_colors(kind, nullptr);
+			continue;
+		}
 		// While the palette number is -1 we are mid cross-fade (dusk, dawn,
 		// teleporting) and don't want a layer's palette to change under it.
 		// But a layer with no override yet would follow the darkening live
@@ -382,7 +389,12 @@ void Palette::set_loaded(const U7multiobject& pal, const char* xfname, int xinde
  *  @param xfname   Optional xform file name.
  *  @param xindex   Optional xform index.
  */
+void Palette::note_source(const File_spec& fname0) {
+	game_pal = fname0.name == PALETTES_FLX;
+}
+
 void Palette::load(const File_spec& fname0, int index, const char* xfname, int xindex) {
+	note_source(fname0);
 	const U7multiobject pal(fname0, index);
 	set_loaded(pal, xfname, xindex);
 }
@@ -397,6 +409,7 @@ void Palette::load(const File_spec& fname0, int index, const char* xfname, int x
  *  @param xindex   Optional xform index.
  */
 void Palette::load(const File_spec& fname0, const File_spec& fname1, int index, const char* xfname, int xindex) {
+	note_source(fname0);
 	const U7multiobject pal(fname0, fname1, index);
 	set_loaded(pal, xfname, xindex);
 }
@@ -413,6 +426,7 @@ void Palette::load(const File_spec& fname0, const File_spec& fname1, int index, 
  */
 void Palette::load(
 		const File_spec& fname0, const File_spec& fname1, const File_spec& fname2, int index, const char* xfname, int xindex) {
+	note_source(fname0);
 	const U7multiobject pal(fname0, fname1, fname2, index);
 	set_loaded(pal, xfname, xindex);
 }

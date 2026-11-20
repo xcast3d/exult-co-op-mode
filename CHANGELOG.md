@@ -24,6 +24,18 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.9)
+
+### Fixed
+
+- With lighting on and Game Mode set to Fill, opening the save menu no
+  longer spreads the map into the black bars beside the game, where it
+  stayed until the next load.
+- Loading a save no longer flashes the menu you loaded from once the game
+  has faded in.
+- The Ultima VII title menu shows its own cursor again, not a pale cut-off
+  one, and going back to Exult's menu no longer turns its cursor orange.
+
 ## 0.8.8, 2026-11-20 (build 278)
 
 ### Fixed

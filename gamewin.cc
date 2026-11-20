@@ -4027,7 +4027,11 @@ unique_ptr<Shape_file> Game_window::create_mini_screenshot() {
 	{
 		const Relight::Pause no_lighting;    // Keep the thumbnail plain.
 		set_all_dirty();
+		// Only the game view: the map's chunks reach past it, into the
+		// black bars of Fill mode.
+		win->set_clip(0, 0, get_width(), get_height());
 		render->paint_map(0, 0, get_width(), get_height());
+		win->clear_clip();
 	}
 
 	// Average the colours as they look now (dark at night), then pick the
