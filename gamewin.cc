@@ -404,6 +404,9 @@ Game_window::Game_window(
 
 	config->value("config/gameplay/smooth_scrolling", lerping_enabled, 0);
 	config->set("config/gameplay/smooth_scrolling", lerping_enabled, false);
+	config->value("config/gameplay/smooth_walking", str, "yes");
+	smooth_walk = str != "no";
+	config->set("config/gameplay/smooth_walking", smooth_walk ? "yes" : "no", false);
 	config->value("config/gameplay/alternate_drop", str, "no");
 	alternate_drop = str == "yes";
 	config->set("config/gameplay/alternate_drop", alternate_drop ? "yes" : "no", false);
@@ -1546,7 +1549,204 @@ TileRect Game_window::get_shape_rect(const Game_object* obj) const {
 	if (t.ty < -c_num_tiles / 2) {
 		t.ty += c_num_tiles;
 	}
-	return get_shape_rect(s, t.tx * c_tilesize - 1 - lftpix, t.ty * c_tilesize - 1 - lftpix);
+	int gx;
+	int gy;
+	get_glide_offset(obj, gx, gy);
+	return get_shape_rect(s, t.tx * c_tilesize - 1 - lftpix + gx, t.ty * c_tilesize - 1 - lftpix + gy);
+}
+
+/*
+ *  Smooth walking.
+ */
+
+static FILE* Glide_log_file() {
+	static bool  tried = false;
+	static FILE* f     = nullptr;
+	if (!tried) {
+		tried            = true;
+		const char* path = std::getenv("QOTC_GLIDE_LOG");
+		if (path && *path) {
+			f = std::fopen(path, "w");
+		}
+	}
+	return f;
+}
+
+bool Glide_log_on() {
+	return Glide_log_file() != nullptr;
+}
+
+void Glide_log(const char* fmt, ...) {
+	FILE* f = Glide_log_file();
+	if (!f) {
+		return;
+	}
+	va_list ap;
+	va_start(ap, fmt);
+	std::vfprintf(f, fmt, ap);
+	va_end(ap);
+	std::fputc('\n', f);
+	std::fflush(f);
+}
+
+void Game_window::get_glide_offset(const Game_object* obj, int& dx, int& dy) const {
+	dx = dy = 0;
+	if (!is_smooth_walk() || gliders.empty()) {
+		return;
+	}
+	const Actor* actor = obj->as_actor();
+	if (actor == nullptr) {
+		return;
+	}
+	// Drawn where the camera puts it, or on the barge it rides.
+	if (moving_barge && moving_barge->contains(main_actor)) {
+		return;
+	}
+	actor->get_glide_offset(dx, dy);
+}
+
+bool Game_window::paint_camera_glide() {
+	const uint32 now  = SDL_GetTicks();
+	const int    full = c_num_tiles * c_tilesize;
+	// What is left of the view's glide.
+	auto offset = [&](int& dx, int& dy) {
+		dx = dy = 0;
+		if (cam_ms <= 0 || now - cam_start >= uint32(cam_ms)) {
+			return false;
+		}
+		const int left = cam_ms - int(now - cam_start);
+		dx             = cam_dx * left / cam_ms;
+		dy             = cam_dy * left / cam_ms;
+		return dx != 0 || dy != 0;
+	};
+	if (cam_last_tx >= 0 && (scrolltx != cam_last_tx || scrollty != cam_last_ty)) {
+		int tx = cam_last_tx - scrolltx;
+		int ty = cam_last_ty - scrollty;
+		if (tx > c_num_tiles / 2) {
+			tx -= c_num_tiles;
+		} else if (tx < -c_num_tiles / 2) {
+			tx += c_num_tiles;
+		}
+		if (ty > c_num_tiles / 2) {
+			ty -= c_num_tiles;
+		} else if (ty < -c_num_tiles / 2) {
+			ty += c_num_tiles;
+		}
+		int ox;
+		int oy;
+		offset(ox, oy);
+		uint32 start;
+		int    ms;
+		if (std::abs(tx) <= 2 && std::abs(ty) <= 2 && camera_actor && camera_actor->get_glide_timing(start, ms)) {
+			// Start where the view was drawn, and glide with the step that
+			// scrolled it, so the camera actor stays put on the screen.
+			cam_dx    = ox + tx * c_tilesize;
+			cam_dy    = oy + ty * c_tilesize;
+			cam_start = start;
+			cam_ms    = ms;
+		} else {
+			cam_ms = 0;    // A jump (teleport, map change): no glide.
+		}
+		if (Glide_log_on()) {
+			Glide_log("%u SCROLL by %d,%d tiles  view carry %d,%d  view start %d,%d  glide start %u (%d ms ago) for %d ms", now,
+					  -tx, -ty, ox, oy, cam_dx, cam_dy, cam_start, int(now - cam_start), cam_ms);
+		}
+	}
+	cam_last_tx = scrolltx;
+	cam_last_ty = scrollty;
+	int dx;
+	int dy;
+	const bool view_moves = offset(dx, dy);
+	if (Glide_log_on() && camera_actor) {
+		static uint32 last_frame = 0;
+		int           ax;
+		int           ay;
+		camera_actor->get_glide_offset(ax, ay);
+		// Where the camera actor lands on screen this frame.
+		const Tile_coord t   = camera_actor->get_tile();
+		const int        sx  = ((t.tx - scrolltx) * c_tilesize - 4 * t.tz) + ax - dx;
+		const int        sy  = ((t.ty - scrollty) * c_tilesize - 4 * t.tz) + ay - dy;
+		static int       lsx = 0, lsy = 0;
+		Glide_log("%u frame +%ums  view %d,%d  actor %d,%d  actor on screen %d,%d (moved %d,%d)  tile %d,%d", now,
+				  now - last_frame, dx, dy, ax, ay, sx, sy, sx - lsx, sy - lsy, t.tx, t.ty);
+		last_frame = now;
+		lsx        = sx;
+		lsy        = sy;
+	}
+	if (!view_moves) {
+		if (cam_gliding) {
+			cam_gliding = false;
+			set_all_dirty();    // Once more where it ended.
+		}
+		return false;
+	}
+	cam_gliding               = true;
+	const int saved_scrolltx  = scrolltx;
+	const int saved_scrollty  = scrollty;
+	const int px              = ((scrolltx * c_tilesize + dx) % full + full) % full;
+	const int py              = ((scrollty * c_tilesize + dy) % full + full) % full;
+	scrolltx                  = px / c_tilesize;
+	scrollty                  = py / c_tilesize;
+	scrolltx_lo               = px % c_tilesize;
+	scrollty_lo               = py % c_tilesize;
+	paint();
+	scrolltx    = saved_scrolltx;
+	scrollty    = saved_scrollty;
+	scrolltx_lo = scrollty_lo = 0;
+	return true;
+}
+
+void Game_window::set_smooth_walk(bool on) {
+	smooth_walk = on;
+	if (!on) {
+		for (auto& g : gliders) {
+			if (auto obj = g.obj.lock()) {
+				if (Actor* actor = obj->as_actor()) {
+					actor->stop_glide();
+				}
+			}
+		}
+		gliders.clear();
+		set_all_dirty();
+	}
+}
+
+void Game_window::add_glider(Actor* actor) {
+	for (auto& g : gliders) {
+		if (g.obj.lock().get() == actor) {
+			return;    // Already listed (it keeps its last area).
+		}
+	}
+	gliders.push_back({actor->weak_from_this(), get_shape_rect(actor)});
+}
+
+void Game_window::update_gliders() {
+	for (auto it = gliders.begin(); it != gliders.end();) {
+		auto obj = it->obj.lock();
+		if (!obj || !obj->get_chunk() || obj->get_map() != map) {
+			it = gliders.erase(it);
+			continue;
+		}
+		// Where it was last drawn, and where it is drawn now.
+		TileRect was = it->last;
+		was.enlarge(1 + c_tilesize / 2);
+		was = clip_to_win(was);
+		if (was.w > 0 && was.h > 0) {
+			add_dirty(was);
+		}
+		Actor* actor = obj->as_actor();
+		if (actor != nullptr) {
+			actor->add_dirty();
+		}
+		it->last = get_shape_rect(obj.get());
+		int dx;
+		int dy;
+		if (actor == nullptr || !actor->get_glide_offset(dx, dy)) {
+			it = gliders.erase(it);    // Arrived: this frame draws it there.
+		} else {
+			++it;
+		}
+	}
 }
 
 /*
@@ -1585,13 +1785,20 @@ void Game_window::get_shape_location(const Game_object* obj, int& x, int& y) {
 	} else {
 		// Smooth scroll the avatar
 		const Actor* actor = obj->as_actor();
-		if (obj == get_camera_actor()) {
+		if (landing_barge && lerping_enabled && landing_barge->is_grouped_member(obj)) {
+			// Keep party and barge in sync during landing.
 			apply_avpos = true;
+		} else if (obj == get_camera_actor() && !is_smooth_walk()) {
+			apply_avpos = true;
+		} else if (actor && is_smooth_walk()) {
+			// Glide between tiles on its own steps.
+			int gx;
+			int gy;
+			get_glide_offset(obj, gx, gy);
+			x += gx;
+			y += gy;
 		} else if (actor && actor->is_in_party() && lerping_enabled) {
 			// Apply the same lerping offset to party members
-			apply_avpos = true;
-		} else if (landing_barge && lerping_enabled && landing_barge->is_grouped_member(obj)) {
-			// Keep party and barge in sync during landing.
 			apply_avpos = true;
 		}
 	}

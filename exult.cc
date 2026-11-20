@@ -13581,8 +13581,17 @@ static void Main_loop_pass(bool input) {
 			gwin->start_actor(joy_aim_x, joy_aim_y, speed);
 		}
 
+		// Smooth walking: repaint actors gliding between tiles, and glide
+		// the view on the camera actor's steps (in place of smooth
+		// scrolling, except on a moving ship or cart).
+		gwin->update_gliders();
+		Barge_object* glide_barge = gwin->get_moving_barge();
+		const bool    view_glides = input && gwin->is_smooth_walk()
+								 && !(glide_barge && glide_barge->contains(gwin->get_main_actor()));
+		const bool    didglide    = view_glides && gwin->paint_camera_glide();
+
 		// Lerping stuff...
-		const int lerp    = input ? gwin->is_lerping_enabled() : 0;
+		const int lerp    = (input && !view_glides) ? gwin->is_lerping_enabled() : 0;
 		bool      didlerp = false;
 
 		// Update gumps every frame (drives auto-repeat for held
@@ -13650,7 +13659,7 @@ static void Main_loop_pass(bool input) {
 				didlerp = true;
 			}
 		}
-		if (!lerp || !didlerp) {       // No lerping
+		if ((!lerp || !didlerp) && !didglide) {    // No lerping
 			if (gwin->is_dirty()) {    // Note the ending else in the above #if!
 				gwin->paint_dirty();
 			}

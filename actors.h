@@ -149,6 +149,13 @@ protected:
 	int                        frame_time;        // Time between frames in msecs.  0 if
 	//   actor not moving.
 	int step_index;    // Index into walking frames, 1 1st.
+	// Smooth walking (see get_glide_offset): the offset at the start of the
+	// glide, which shrinks to nothing over glide_ms from glide_start.
+	int    glide_dx    = 0;
+	int    glide_dy    = 0;
+	uint32 glide_start = 0;
+	int    glide_ms    = 0;
+	uint32 last_step   = 0;    // When it last stepped (SDL ticks).
 	int qsteps;        // # steps since last quake.
 
 	std::unique_ptr<Npc_timer_list> timers;         // Timers for poison, hunger, etc.
@@ -190,7 +197,12 @@ public:
 	void check_temperature(bool freeze);
 
 	// Get frame seq. for given dir.
-	Frames_sequence* get_frames(int dir) const {
+	// Smooth walking: NPCs step left, right, left without the standing
+	// frame between steps, which made them look like they stop every other
+	// tile.
+	Frames_sequence* get_frames(int dir) const;
+
+	Frames_sequence* get_frames_unsmoothed(int dir) const {
 		return frames[dir / 2];
 	}
 
@@ -364,6 +376,22 @@ public:
 
 	int get_frame_time() const {    // Return frame time if moving.
 		return frame_time;
+	}
+
+	// Smooth walking: after a step the actor is drawn sliding from where it
+	// was to its new tile over the step's time, rather than jumping a whole
+	// tile.  The offset (screen pixels) to draw it at now; false if none.
+	bool get_glide_offset(int& dx, int& dy) const;
+
+	void stop_glide() {
+		glide_ms = 0;
+	}
+
+	// When the current glide started and how long it lasts; false if none.
+	bool get_glide_timing(uint32& start, int& ms) const {
+		start = glide_start;
+		ms    = glide_ms;
+		return glide_ms > 0;
 	}
 
 	void set_frame_time(int ftime) {    // Set walking speed.

@@ -44,6 +44,14 @@
 #endif
 
 class Actor;
+// Smooth walking diagnostics: QOTC_GLIDE_LOG=<file> appends a line per
+// frame and per step (time, offsets, where the camera actor is drawn).
+bool Glide_log_on();
+void Glide_log(const char* fmt, ...)
+#ifdef __GNUC__
+		__attribute__((format(printf, 1, 2)))
+#endif
+		;
 class Barge_object;
 class Container_game_object;
 class Map_chunk;
@@ -1097,8 +1105,43 @@ private:
 	int avposx_ld, avposy_ld;
 	// Is lerping enabled
 	int lerping_enabled;
+	// Smooth walking: actors drawn gliding between tiles (see
+	// Actor::get_glide_offset), and the ones gliding now, with the screen
+	// area each was last drawn in.
+	bool smooth_walk = true;
+
+	struct Glider {
+		std::weak_ptr<Game_object> obj;
+		TileRect                   last;
+	};
+
+	std::vector<Glider> gliders;
+	// The offset to draw obj at for smooth walking (0, 0 if none).
+	void get_glide_offset(const Game_object* obj, int& dx, int& dy) const;
+	// The view glides too, on the camera actor's steps: offset (pixels) of
+	// the view from where it is scrolled to, shrinking to nothing.
+	int    cam_dx = 0, cam_dy = 0;
+	uint32 cam_start = 0;
+	int    cam_ms    = 0;
+	int    cam_last_tx = -1, cam_last_ty = -1;
+	bool   cam_gliding = false;
 
 public:
+	// The camera actor never glides: it moves with the view, which smooth
+	// scrolling (a separate option) glides.
+	bool is_smooth_walk() const {
+		return smooth_walk;
+	}
+
+	void set_smooth_walk(bool on);
+	// An actor began gliding to its new tile.
+	void add_glider(Actor* actor);
+	// Each frame: repaint where gliding actors were and are.
+	void update_gliders();
+	// Each frame (smooth walking): follow the view's scrolling, and paint
+	// it glided.  False if the view isn't gliding (paint as usual).
+	bool paint_camera_glide();
+
 	// Reset (well update really) saved lerp scroll positions
 	void lerp_reset();
 

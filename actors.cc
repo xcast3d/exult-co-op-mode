@@ -915,6 +915,14 @@ Game_object* Actor::find_blocking(const Tile_coord& tile, int dir) {
  */
 inline void Actor::movef(Map_chunk* old_chunk, Map_chunk* new_chunk, int new_sx, int new_sy, int new_frame, int new_lift) {
 	const Game_object_shared keep = shared_from_this();
+	// Where it is drawn now, to glide from (in the same map only).
+	const bool       glide = old_chunk && old_chunk->get_map() == new_chunk->get_map() && gwin->is_smooth_walk();
+	const Tile_coord from  = get_tile();
+	int              ox    = 0;
+	int              oy    = 0;
+	if (glide) {
+		get_glide_offset(ox, oy);
+	}
 	if (old_chunk) {    // Remove from current chunk.
 		old_chunk->remove(this);
 	}
@@ -926,6 +934,73 @@ inline void Actor::movef(Map_chunk* old_chunk, Map_chunk* new_chunk, int new_sx,
 		set_lift(new_lift);
 	}
 	new_chunk->add(this);
+	glide_ms = 0;
+	if (glide) {
+		const Tile_coord to = get_tile();
+		int              tx = from.tx - to.tx;
+		int              ty = from.ty - to.ty;
+		// Watch for wrapping.
+		if (tx > c_num_tiles / 2) {
+			tx -= c_num_tiles;
+		} else if (tx < -c_num_tiles / 2) {
+			tx += c_num_tiles;
+		}
+		if (ty > c_num_tiles / 2) {
+			ty -= c_num_tiles;
+		} else if (ty < -c_num_tiles / 2) {
+			ty += c_num_tiles;
+		}
+		const int tz = from.tz - to.tz;
+		// A step (or a run's), not a jump or a teleport.
+		if ((tx || ty || tz) && std::abs(tx) <= 2 && std::abs(ty) <= 2 && std::abs(tz) <= 5) {
+			const uint32 now = SDL_GetTicks();
+			// How long until the next step: the time since the last one,
+			// if it is still walking, else its walking speed.  A glide that
+			// ends before the next step comes leaves it standing still for
+			// a moment (stop and go); one a little too long carries on into
+			// the next step without a seam, so err long.
+			int ms = frame_time > 0 ? frame_time : gwin->get_std_delay();
+			if (last_step != 0) {
+				const int since = int(now - last_step);
+				if (since > 0 && since < 2 * ms) {
+					ms = since;
+				}
+			}
+			glide_dx    = ox + tx * c_tilesize - tz * (c_tilesize / 2);
+			glide_dy    = oy + ty * c_tilesize - tz * (c_tilesize / 2);
+			glide_start = now;
+			glide_ms    = std::max(30, ms + ms / 4);
+			gwin->add_glider(this);
+			if (this == gwin->get_camera_actor() && Glide_log_on()) {
+				Glide_log("%u STEP to %d,%d  %d ms since last  frame_time %d  carry %d,%d  start %d,%d  glide %d ms", now,
+						  to.tx, to.ty, last_step ? int(now - last_step) : -1, frame_time, ox, oy, glide_dx, glide_dy,
+						  glide_ms);
+			}
+		}
+		last_step = SDL_GetTicks();
+	}
+}
+
+Frames_sequence* Actor::get_frames(int dir) const {
+	if (frames == npc_frames && gwin->is_smooth_walk()) {
+		return avatar_frames[dir / 2];
+	}
+	return frames[dir / 2];
+}
+
+bool Actor::get_glide_offset(int& dx, int& dy) const {
+	dx = dy = 0;
+	if (glide_ms <= 0) {
+		return false;
+	}
+	const uint32 gone = SDL_GetTicks() - glide_start;
+	if (gone >= uint32(glide_ms)) {
+		return false;
+	}
+	const int left = glide_ms - int(gone);
+	dx             = glide_dx * left / glide_ms;
+	dy             = glide_dy * left / glide_ms;
+	return dx || dy;
 }
 
 /**
