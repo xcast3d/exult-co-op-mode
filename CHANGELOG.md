@@ -24,6 +24,15 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## 0.8.8, 2026-11-20 (build 278)
+
+### Fixed
+
+- At night, menus set to use the day palette (and the party's faces, the
+  map and the spell bars) no longer turn bright red. It happened whenever
+  the game was started from Exult's own game menu, as the installed game
+  is.
+
 ## 0.8.7, 2026-11-20 (build 277)
 
 ### Fixed

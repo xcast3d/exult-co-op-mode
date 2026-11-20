@@ -233,7 +233,14 @@ static int ui_palette_mode_to_number(int mode) {
 
 const Palette& Palette::day_palette() {
 	static std::unique_ptr<Palette> day;
+	// Loaded again when the game changes: before one is chosen (Exult's
+	// own menu) palettes.flx isn't Black Gate's or Serpent Isle's.
+	static uint32 day_game = 0;
+	if (day && day_game != Game::Get_unique_gamecode()) {
+		day.reset();
+	}
 	if (!day) {
+		day_game = Game::Get_unique_gamecode();
 		day = std::make_unique<Palette>(this);
 		try {
 			day->load(PALETTES_FLX, PATCH_PALETTES, PALETTE_DAY);
@@ -253,6 +260,16 @@ void Palette::update_ui_layer_palettes() {
 	constexpr static int kNumRefPalettes = 13;    // palettes.flx numbers 0..12.
 	static bool          ref_loaded[kNumRefPalettes]{};
 	static unsigned char ref_pal[kNumRefPalettes][768];
+	// Until a game is chosen (Exult's own menu) palettes.flx isn't the
+	// game's, and what was read from it then must not be kept: started
+	// without --bg or --si, the layers took wrong colours (bright red) for
+	// the whole session.  Read them again whenever the game changes.
+	static uint32 ref_game = 0;
+	if (ref_game != Game::Get_unique_gamecode()) {
+		ref_game = Game::Get_unique_gamecode();
+		std::fill(std::begin(ref_loaded), std::end(ref_loaded), false);
+	}
+	const bool in_game = GAME_BG || GAME_SI;
 	auto                 load_ref = [this](int pal_num) -> const unsigned char* {
         if (pal_num < 0 || pal_num >= kNumRefPalettes) {
             return nullptr;
@@ -283,7 +300,7 @@ void Palette::update_ui_layer_palettes() {
 		if (cur < 0 && (pal_num < 0 || win->has_ui_layer_palette_colors(kind))) {
 			continue;
 		}
-		if (pal_num < 0 || cur == PALETTE_DAY) {
+		if (pal_num < 0 || cur == PALETTE_DAY || !in_game) {
 			win->set_ui_layer_palette_colors(kind, nullptr);
 			continue;
 		}
