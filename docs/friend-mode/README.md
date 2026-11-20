@@ -37,7 +37,8 @@ Phase 1 (local possession), for the record:
 
 See [macOS setup](macos-setup.md) and [control-point notes](control-points.md).
 To play with someone outside your network, see [internet play](internet-play.md);
-for Windows, the [Windows build plan](windows-build.md); for the browser
+for Windows, the [Windows build plan](windows-build.md); for Linux and the
+Steam Deck, [Linux support](linux-support.md); for the browser
 version, [playing in a web browser](web-browser.md); how builds update
 themselves, [updates](updates.md); putting out a release, [releasing](releasing.md).
 For a repeatable two-player pass, use the [test checklist](test-checklist.md);
