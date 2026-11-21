@@ -29,17 +29,22 @@
 #include "Face_stats.h"
 #include "ShortcutBar_gump.h"
 #include "actors.h"
+#include "chunks.h"
 #include "dir.h"
 #include "exult.h"
 #include "frameseq.h"
+#include "gamemap.h"
 #include "gamewin.h"
 #include "ignore_unused_variable_warning.h"
 #include "schedule.h"
 
 #include <algorithm>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <string>
+#include <vector>
 
 using std::cout;
 using std::endl;
@@ -365,6 +370,48 @@ void Party_manager::move_followers(
 }
 
 /*
+ *  Is the ground at a tile poisonous (a swamp)?  Only the flat counts, and
+ *  only for one standing on the ground (lift 0), as Actor::step has it.
+ */
+
+static bool Is_poison_ground(Game_map* map, int tx, int ty) {
+	tx = (tx + c_num_tiles) % c_num_tiles;
+	ty = (ty + c_num_tiles) % c_num_tiles;
+	Map_chunk* chunk = map->get_chunk_safely(tx / c_tiles_per_chunk, ty / c_tiles_per_chunk);
+	if (!chunk) {
+		return false;
+	}
+	const ShapeID flat = chunk->get_flat(tx % c_tiles_per_chunk, ty % c_tiles_per_chunk);
+	return flat.get_shapenum() != -1 && flat.get_info().has_contact_effect();
+}
+
+/*
+ *  Would stepping onto a tile poison an NPC (swamp, without boots)?
+ */
+
+static bool Poisons(Actor* npc, const Tile_coord& to) {
+	if (to.tz != 0) {
+		return false;
+	}
+	const int  tx    = (to.tx + c_num_tiles) % c_num_tiles;
+	const int  ty    = (to.ty + c_num_tiles) % c_num_tiles;
+	Map_chunk* chunk = npc->get_map()->get_chunk_safely(tx / c_tiles_per_chunk, ty / c_tiles_per_chunk);
+	if (!chunk) {
+		return false;
+	}
+	bool water;
+	bool poison;
+	Actor::get_tile_info(
+			npc, Game_window::get_instance(), chunk, tx % c_tiles_per_chunk, ty % c_tiles_per_chunk, water, poison);
+	return poison;
+}
+
+// Where the leader has been, latest first (Leader_trail[0] is where it is).
+static std::vector<Tile_coord> Leader_trail;
+// Steps left walking one behind another for a door.
+static int Door_file_left = 0;
+
+/*
  *  Friend Mode (2026-11-01): through doorways in single file.  The
  *  formation's spots, two tiles behind and to each side, could land in the
  *  pocket between an open door's leaf and the wall, and a follower there
@@ -373,7 +420,21 @@ void Party_manager::move_followers(
  *  each follower instead steps into the tile the one ahead of it just
  *  left, so the party threads through behind the leader.
  *
- *  Output: false (formation as usual) with no door near.
+ *  Friend Mode (2026-11-20): the same along swamps and through narrow
+ *  passages.  The formation's spots fan out two tiles to each side, so on
+ *  a dry path through a swamp someone always waded in and was poisoned,
+ *  and in a corridor the outer ones bumped along the walls.  Single file
+ *  also while swamp ground is within 3 tiles of anyone in the party on
+ *  the ground, or while anyone has walls (not party members) within 2
+ *  tiles on both sides, and for a few steps after, so the party doesn't
+ *  flip between the two at the edges.  Here they walk not one right
+ *  behind another (their figures overlapped) but in two columns along
+ *  the leader's trail, a row every two of its steps, one tile to each
+ *  side of it.  A spot that would be wall or swamp puts that one on the
+ *  trail itself, alone in its row, so on a path one tile wide they go in
+ *  single file, two tiles apart.
+ *
+ *  Output: false (formation as usual) with no reason for single file.
  */
 
 bool Party_manager::single_file(Actor* leader, int dir) const {
@@ -384,7 +445,20 @@ bool Party_manager::single_file(Actor* leader, int dir) const {
 		const int      dy   = std::max({foot.y - at.ty, at.ty - (foot.y + foot.h - 1), 0});
 		return std::max(dx, dy);
 	};
-	const Tile_coord   pos = leader->get_tile();
+	const Tile_coord pos = leader->get_tile();
+	// Remember the trail (afresh after a jump, as by a teleport).
+	if (!Leader_trail.empty()) {
+		const Tile_coord& last = Leader_trail.front();
+		if (last.distance_2d(pos) > 2 || std::abs(last.tz - pos.tz) > 4) {
+			Leader_trail.clear();
+		}
+	}
+	if (Leader_trail.empty() || Leader_trail.front() != pos) {
+		Leader_trail.insert(Leader_trail.begin(), pos);
+		if (Leader_trail.size() > 24) {
+			Leader_trail.pop_back();
+		}
+	}
 	Game_object_vector found;
 	Game_object::find_nearby(found, pos, c_any_shapenum, 12, 0);
 	std::vector<Game_object*> doors;
@@ -399,11 +473,90 @@ bool Party_manager::single_file(Actor* leader, int dir) const {
 			return std::abs(door->get_lift() - at.tz) <= 4 && door_distance(door, at) <= 3;
 		});
 	};
-	bool any = near_door(leader);
-	for (size_t i = 0; !any && i < validcnt; ++i) {
-		any = valid[i] != leader && near_door(valid[i]);
+	Game_map* map        = leader->get_map();
+	auto      near_swamp = [&](const Actor* who) {
+		const Tile_coord at = who->get_tile();
+		if (at.tz != 0 || !map) {
+			return false;
+		}
+		for (int dy = -3; dy <= 3; ++dy) {
+			for (int dx = -3; dx <= 3; ++dx) {
+				if (Is_poison_ground(map, at.tx + dx, at.ty + dy)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+	// Blocked, but not by one of the party?
+	auto is_wall = [&](Actor* who, Tile_coord t) {
+		if (!who->is_blocked(t)) {
+			return false;
+		}
+		auto in_party_at = [&](Actor* each) {
+			Tile_coord at = t;
+			at.tz         = each->get_lift();
+			return each != who && each->blocks(at);
+		};
+		if (in_party_at(leader)) {
+			return false;
+		}
+		for (size_t i = 0; i < validcnt; ++i) {
+			if (in_party_at(valid[i])) {
+				return false;
+			}
+		}
+		return true;
+	};
+	// How many tiles to a wall to one side (0 if none within 4, or 3 on
+	// a diagonal, about the same distance).
+	const int reach     = dir % 2 ? 3 : 4;
+	auto      wall_side = [&](Actor* who, int sdir) {
+		Tile_coord t = who->get_tile();
+		for (int n = 1; n <= reach; ++n) {
+			t = t.get_neighbor(sdir);
+			if (is_wall(who, t)) {
+				return n;
+			}
+		}
+		return 0;
+	};
+	// Walls on both sides, across the way the party goes, too close for
+	// the formation (it fans out six tiles to each side)?
+	auto in_passage = [&](Actor* who) {
+		return wall_side(who, (dir + 2) % 8) && wall_side(who, (dir + 6) % 8);
+	};
+	const bool lead_door    = near_door(leader);
+	const bool lead_swamp   = !lead_door && near_swamp(leader);
+	const bool lead_passage = !lead_door && !lead_swamp && in_passage(leader);
+	bool       door         = lead_door;
+	bool       other        = lead_swamp || lead_passage;
+	for (size_t i = 0; !door && i < validcnt; ++i) {
+		if (valid[i] != leader && !valid[i]->is_dead()) {
+			door  = near_door(valid[i]);
+			other = other || (!door && (near_swamp(valid[i]) || in_passage(valid[i])));
+		}
 	}
-	if (!any) {
+	if (const char* log_name = std::getenv("QOTC_PARTY_LOG")) {
+		static std::FILE* log = std::fopen(log_name, "w");
+		if (log) {
+			std::fprintf(
+					log, "%d,%d,%d dir %d  leader: door %d swamp %d walls %d/%d  party: door %d other %d  left %d/%d\n",
+					pos.tx, pos.ty, pos.tz, dir, lead_door, lead_swamp, wall_side(leader, (dir + 6) % 8),
+					wall_side(leader, (dir + 2) % 8), door, other, single_file_left, Door_file_left);
+			std::fflush(log);
+		}
+	}
+	if (door) {
+		Door_file_left = 4;
+	} else if (Door_file_left > 0) {
+		--Door_file_left;
+	}
+	if (door || other) {
+		single_file_left = 4;
+	} else if (single_file_left > 0) {
+		--single_file_left;
+	} else {
 		return false;
 	}
 	// The order: the formation's (its slots, nearest the leader first).
@@ -416,16 +569,68 @@ bool Party_manager::single_file(Actor* leader, int dir) const {
 	std::stable_sort(line.begin(), line.end(), [this](const Actor* a, const Actor* b) {
 		return formation_slot(a) < formation_slot(b);
 	});
-	Actor*     ahead = leader;
-	Tile_coord left  = pos.get_neighbor((dir + 4) % 8);    // Where the leader came from.
-	for (Actor* each : line) {
-		const Tile_coord was = each->get_tile();
-		step(each, ahead, each->get_direction(left), left);
-		if (each->is_dead()) {
-			break;
+	if (Door_file_left > 0 || Leader_trail.size() < 2) {
+		// Through a door: each into the tile the one ahead just left.
+		Actor*     ahead = leader;
+		Tile_coord left  = pos.get_neighbor((dir + 4) % 8);    // Where the leader came from.
+		for (Actor* each : line) {
+			const Tile_coord was = each->get_tile();
+			step(each, ahead, each->get_direction(left), left);
+			if (each->is_dead()) {
+				break;
+			}
+			left  = was;
+			ahead = each;
 		}
-		left  = was;
-		ahead = each;
+		return true;
+	}
+	// Two columns along the trail.
+	auto good_spot = [&](Actor* who, const Tile_coord& t) {
+		return !is_wall(who, t) && !Poisons(who, t);
+	};
+	std::vector<Tile_coord> dest(line.size());
+	std::vector<int>        rows(line.size());
+	for (size_t k = 0, row = 1; k < line.size(); ++row) {
+		const size_t      at     = std::min(2 * row, Leader_trail.size() - 1);
+		const Tile_coord& center = Leader_trail[at];
+		const Tile_coord& nearer = Leader_trail[at - 1];
+		const int         tdir   = nearer == center ? dir : Get_direction(center.ty - nearer.ty, nearer.tx - center.tx);
+		Tile_coord        lspot  = center.get_neighbor((tdir + 6) % 8);
+		Tile_coord        rspot  = center.get_neighbor((tdir + 2) % 8);
+		lspot.tz = rspot.tz = center.tz;
+		if (k + 1 < line.size()) {
+			// The one nearer the left spot takes it.
+			const Tile_coord a = line[k]->get_tile();
+			const Tile_coord b = line[k + 1]->get_tile();
+			if (a.distance_2d(rspot) + b.distance_2d(lspot) < a.distance_2d(lspot) + b.distance_2d(rspot)) {
+				std::swap(line[k], line[k + 1]);
+			}
+			if (good_spot(line[k], lspot) && good_spot(line[k + 1], rspot)) {
+				dest[k] = lspot;
+				dest[k + 1] = rspot;
+				rows[k] = rows[k + 1] = static_cast<int>(row);
+				k += 2;
+				continue;
+			}
+		}
+		dest[k] = center;
+		rows[k] = static_cast<int>(row);
+		++k;
+	}
+	// Front rows first, each following one in the row ahead.
+	Actor* ahead     = leader;
+	Actor* row_ahead = leader;
+	int    cur_row   = 1;
+	for (size_t k = 0; k < line.size(); ++k) {
+		if (rows[k] != cur_row) {
+			cur_row   = rows[k];
+			row_ahead = ahead;
+		}
+		Actor* each = line[k];
+		step(each, row_ahead, each->get_direction(dest[k]), dest[k]);
+		if (!each->is_dead()) {
+			ahead = each;
+		}
 	}
 	return true;
 }
@@ -562,6 +767,10 @@ static int Get_cost(
 	// Get dist**2 in x-y plane.
 	const int xydist2 = diffty * diffty + difftx * difftx;
 	cost += difftz * difftz + xydist2;
+	// Friend Mode: around swamp, rather than through it.
+	if (Poisons(npc, to)) {
+		cost += 32;
+	}
 	if (xydist2 > 2) {    // More than 1 tile away?
 		// Check 1 more tile towards leader.
 		if (!Clear_to_leader(npc, leader, to)) {
@@ -626,6 +835,10 @@ inline bool Is_step_okay(
 		Tile_coord to         // Tile to step to.
 ) {
 	if (npc->is_pos_invalid() || npc->is_blocked(to)) {    // (To.tz is updated.)
+		return false;
+	}
+	// Friend Mode: not into swamp from dry ground (the best step avoids it).
+	if (Poisons(npc, to) && !Poisons(npc, npc->get_tile())) {
 		return false;
 	}
 	int difftz = to.tz - leader->get_lift();

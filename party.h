@@ -51,8 +51,11 @@ class Party_manager : public Game_singletons {
 	size_t validcnt;
 	// Formation-walking:
 	void move_followers(Actor* npc, int vindex, int dir) const;
-	// Friend Mode: near a door, one behind another (false if no door).
+	// Friend Mode: near a door or swamp, or in a narrow passage, one
+	// behind another (false otherwise).
 	bool single_file(Actor* leader, int dir) const;
+	// Steps left in single file after the last reason for it.
+	mutable int single_file_left = 0;
 	// Place in the formation: the party number, with -1 for the leader
 	// (the Avatar, or a companion led in Friend Mode, whose place the
 	// Avatar takes).

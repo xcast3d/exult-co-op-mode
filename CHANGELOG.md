@@ -33,6 +33,10 @@ both in `--version` and the version files saved with each game.
   the view glides with your own steps. NPCs no longer pause on a standing
   frame between steps. It takes the place of smooth scrolling, which now
   only moves ships and carts.
+- Your party walks in two columns behind the leader along swamps and
+  through narrow passages, instead of fanning out into the swamp or
+  along the walls. Where the way is too narrow for two, they go in
+  single file, and they step around swamp rather than through it.
 
 ### Fixed
 
