@@ -49,6 +49,10 @@ both in `--version` and the version files saved with each game.
 
 ### Fixed
 
+- With lighting on, the flying carpet no longer darkens the ground right
+  around it as if it stood there; only its shadow falls on the ground.
+- In co-op, the flying carpet comes down on guests' screens as it lands,
+  rather than its shadow staying up in the air where it stopped.
 - With lighting on and Game Mode set to Fill, opening the save menu no
   longer spreads the map into the black bars beside the game, where it
   stayed until the next load.

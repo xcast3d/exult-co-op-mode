@@ -84,11 +84,16 @@ namespace Relight {
 		};
 
 		std::vector<unsigned char> heights, faces;
+		// The base (4 x lift) of what each pixel's height belongs to: a
+		// flying carpet's is high off the ground, so the ground beside it
+		// isn't darkened as if by a wall (ambient occlusion).
+		std::vector<unsigned char> bases;
 		// Indoors, the roof Exult hides: its heights still cast shadows
 		// (casters = heights + roofs), and the floor under it is covered.
 		std::vector<unsigned char> casters, covered;
 		unsigned char*             hbase = nullptr;    // At game (0, 0).
 		unsigned char*             fbase = nullptr;
+		unsigned char*             bbase = nullptr;
 		int                        hline = 0;
 		int                        hmin_x = 0, hmin_y = 0, hmax_x = 0, hmax_y = 0;
 
@@ -131,6 +136,7 @@ namespace Relight {
 			if (heights.size() != size_t(line) * rows || hline != line || hmin_x != sx || hmin_y != sy) {
 				heights.assign(size_t(line) * rows, 0);
 				faces.assign(size_t(line) * rows, face_top);
+				bases.assign(size_t(line) * rows, 0);
 				casters.assign(size_t(line) * rows, 0);
 				covered.assign(size_t(line) * rows, 0);
 				hline  = line;
@@ -138,6 +144,7 @@ namespace Relight {
 				hmin_y = sy;
 				hbase  = heights.data() - sy * line - sx;
 				fbase  = faces.data() - sy * line - sx;
+				bbase  = bases.data() - sy * line - sx;
 				hmax_x = sx + line;
 				hmax_y = sy + rows;
 			}
@@ -153,6 +160,10 @@ namespace Relight {
 
 		inline int height_at(int x, int y) {
 			return in_buffer(x, y) ? hbase[y * hline + x] : 0;
+		}
+
+		inline int base_at(int x, int y) {
+			return in_buffer(x, y) ? bbase[y * hline + x] : 0;
 		}
 
 		inline int caster_at(int x, int y) {
@@ -262,6 +273,7 @@ namespace Relight {
                 }
                 hbase[y * hline + x] = hv;
                 fbase[y * hline + x] = f;
+                bbase[y * hline + x] = static_cast<unsigned char>(std::min(base, 255));
 			};
 			auto run = [&](int x, int y, int n) {
 				if (y < cy || y >= cy + ch) {
@@ -509,6 +521,7 @@ namespace Relight {
 		// The whole frame is painted each time (see Game_window::paint).
 		std::fill(heights.begin(), heights.end(), 0);
 		std::fill(faces.begin(), faces.end(), face_top);
+		std::fill(bases.begin(), bases.end(), 0);
 		std::fill(covered.begin(), covered.end(), 0);
 		view_x0 = x;
 		view_y0 = y;
@@ -662,7 +675,7 @@ namespace Relight {
 			Nonflat_object_iterator next(chunk);
 			Game_object*            obj;
 			while ((obj = next.get_next()) != nullptr) {
-				if (obj->get_lift() >= skip || is_moongate(obj->get_shapenum())) {
+				if (obj->get_lift() >= skip || is_moongate(obj->get_shapenum()) || obj->as_barge()) {
 					continue;
 				}
 				int hx, hy;
@@ -681,7 +694,7 @@ namespace Relight {
 				Nonflat_object_iterator next(chunk);
 				Game_object*            obj;
 				while ((obj = next.get_next()) != nullptr) {
-					if (obj->get_lift() < skip) {
+					if (obj->get_lift() < skip || obj->as_barge()) {
 						continue;
 					}
 					int hx, hy;
@@ -893,6 +906,9 @@ namespace Relight {
 	void stamp_object(Game_object* obj) {
 		if (is_moongate(obj->get_shapenum())) {
 			return;    // Light, not a solid thing: no shadow.
+		}
+		if (obj->as_barge()) {
+			return;    // A vehicle's frame paints nothing (its parts do): no shadow.
 		}
 		Game_window* gwin = Game_window::get_instance();
 		int          hx, hy;
@@ -1164,7 +1180,7 @@ namespace Relight {
 
 		Light_key                  last_key;
 		bool                       last_valid = false;
-		std::vector<unsigned char> last_heights, last_faces, last_casters, last_covered;
+		std::vector<unsigned char> last_heights, last_faces, last_bases, last_casters, last_covered;
 		std::vector<Lamp>          last_lamps;
 		std::vector<uint32>        out_overlay, out_glow;    // As last sent to the window.
 
@@ -1370,10 +1386,13 @@ namespace Relight {
 					float     occ = 0;
 					for (const int r : {3, 7}) {
 						for (const auto& d : dirs) {
-							const int dh = height_at(gx + d[0] * r, gy + d[1] * r) - hp;
+							const int qx = gx + d[0] * r, qy = gy + d[1] * r;
+							const int dh = height_at(qx, qy) - hp;
 							// Ignore steps of a lift or so, such as the rows of
-							// a sloped roof; only walls and the like count.
-							if (dh > step_dead_zone) {
+							// a sloped roof; only walls and the like count, and
+							// only rising from about here or below, not
+							// something in the air (the flying carpet).
+							if (dh > step_dead_zone && base_at(qx, qy) <= hp + step_dead_zone) {
 								occ += std::min(1.0f, (dh - step_dead_zone) / (1.5f * r));
 							}
 						}
@@ -1742,12 +1761,13 @@ namespace Relight {
 		// Nothing the light depends on changed (a menu or the cursor moved):
 		// keep the light already worked out.
 		const bool reuse = last_valid && same_key(key, last_key) && heights == last_heights && faces == last_faces
-						   && casters == last_casters && covered == last_covered && same_lamps(lamps, last_lamps);
+						   && bases == last_bases && casters == last_casters && covered == last_covered && same_lamps(lamps, last_lamps);
 		if (!reuse) {
 			compute_light(gwin, x, y, w, h, clock->get_hour() + clock->get_minute() / 60.0f);
 			last_key     = key;
 			last_heights = heights;
 			last_faces   = faces;
+			last_bases   = bases;
 			last_casters = casters;
 			last_covered = covered;
 			last_lamps   = lamps;

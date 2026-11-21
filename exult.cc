@@ -1878,13 +1878,23 @@ enum Friend_item_flags { friend_item_okay_to_take = 1, friend_item_invisible = 2
 // resend whole chunks and delete and remake the parts on a guest
 // (2026-11-01: the vehicle lagged and its riders snapped).
 static Game_object_weak friend_guest_barge;
+// Host: the vehicle guests are told is under way; once it stops, still
+// until it has been still a moment (friend_barge_settle_at), as the flying
+// carpet lands after it stops (2026-11-21: guests' carpet stayed in the
+// air, its parts brought down by item sync but not the carpet itself).
+static Game_object_weak friend_sent_barge;
+static uint32           friend_barge_settle_at = 0;    // Ticks; 0: under way.
 
 static Barge_object* Friend_riding_barge() {
 	if (friend_session.mode() == Friend_mode_session::Mode::guest) {
 		const Game_object_shared barge = friend_guest_barge.lock();
 		return barge ? barge->as_barge() : nullptr;
 	}
-	return gwin->get_moving_barge();
+	if (Barge_object* moving = gwin->get_moving_barge()) {
+		return moving;
+	}
+	const Game_object_shared settling = friend_sent_barge.lock();
+	return settling ? settling->as_barge() : nullptr;
 }
 
 // A world object that item sync covers: movable (ireg), not an actor, egg or
@@ -2191,7 +2201,6 @@ static void Friend_reconcile_contents(Container_game_object* container, const st
 // copy the same way, carrying whoever is aboard, so the riders' positions
 // from the host land where the vehicle already is.
 enum Friend_barge_step : unsigned char { friend_barge_start = 1, friend_barge_step = 2, friend_barge_stop = 3 };
-static Game_object_weak friend_sent_barge;
 static Tile_coord       friend_sent_barge_at;
 static int              friend_sent_barge_dir = -1;
 
@@ -2211,21 +2220,37 @@ static void Friend_send_barge(unsigned char kind, const Tile_coord& from, const 
 }
 
 static void Friend_mode_barge_pass() {
-	Barge_object*            barge = gwin->get_moving_barge();
-	const Game_object_shared was   = friend_sent_barge.lock();
+	constexpr uint32         settle_ms = 1500;    // Still this long after it stops: stopped.
+	Barge_object*            barge     = gwin->get_moving_barge();
+	const Game_object_shared was       = friend_sent_barge.lock();
+	const uint32             now       = SDL_GetTicks();
 	if (Barge_object* old = was ? was->as_barge() : nullptr) {
 		const Tile_coord at = old->get_tile();
 		if (at != friend_sent_barge_at || old->get_dir() != friend_sent_barge_dir) {
 			Friend_send_barge(friend_barge_step, friend_sent_barge_at, at, old->get_dir());
 			friend_sent_barge_at  = at;
 			friend_sent_barge_dir = old->get_dir();
+			if (friend_barge_settle_at) {
+				friend_barge_settle_at = now + settle_ms;    // Still landing.
+			}
 		}
-		if (old != barge) {
-			Friend_send_barge(friend_barge_stop, at, at, old->get_dir());
-			friend_sent_barge.reset();
+		if (old == barge) {
+			friend_barge_settle_at = 0;    // Under way (again).
+		} else {
+			if (!friend_barge_settle_at) {
+				friend_barge_settle_at = now + settle_ms;
+			}
+			// Another vehicle starting, or this one still a while: stopped.
+			if (barge || now >= friend_barge_settle_at) {
+				Friend_send_barge(friend_barge_stop, at, at, old->get_dir());
+				friend_sent_barge.reset();
+				friend_barge_settle_at = 0;
+			}
 		}
+	} else {
+		friend_barge_settle_at = 0;
 	}
-	if (barge && barge != was.get()) {
+	if (barge && barge != friend_sent_barge.lock().get()) {
 		friend_sent_barge     = weak_from_obj(barge);
 		friend_sent_barge_at  = barge->get_tile();
 		friend_sent_barge_dir = barge->get_dir();
