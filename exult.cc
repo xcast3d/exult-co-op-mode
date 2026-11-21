@@ -1565,11 +1565,12 @@ static bool Friend_test_kit_player_has(const Actor* npc) {
 	return false;
 }
 
-// Host debug aid (Alt+F8, Option on a Mac): the party to the next of Black Gate's
-// vehicles as the game starts them (the flying carpet, the ship in
-// Britain's harbour, the cart by Britain), with the deed or title for it
-// in the Avatar's pack, to try their Target System actions.
-static void Friend_mode_visit_next_vehicle() {
+// Host debug aid (Alt+F8, Option on a Mac): a menu of Black Gate's
+// vehicles as the game starts them (the ship in Britain's harbour, the
+// cart by Britain, the flying carpet); the party goes to the one chosen,
+// with the deed or title for it in the Avatar's pack, to try their Target
+// System actions and riding them in co-op.
+static void Friend_mode_visit_vehicle_menu() {
 	if (!GAME_BG) {
 		Friend_mode_notice("The vehicle tour uses Black Gate's map");
 		return;
@@ -1580,13 +1581,15 @@ static void Friend_mode_visit_next_vehicle() {
 		int         owner;    // The part whose quality the deed matches (-1: none).
 	};
 	static const Vehicle vehicles[] = {
-			{"the flying carpet", Tile_coord(625, 1050, 0), -1},
-			{"a ship", Tile_coord(982, 1475, 0), 251},    // The lowered gangplank.
-			{"a cart", Tile_coord(906, 1562, 0), 796},
+			{"the ship", Tile_coord(982, 1475, 0), 251},    // The lowered gangplank.
+			{"the carriage", Tile_coord(906, 1562, 0), 796},
+			{"the magic carpet", Tile_coord(625, 1050, 0), -1},
 	};
-	static int next = 0;
-	const Vehicle& to = vehicles[next];
-	next = (next + 1) % 3;
+	const int chosen = Controller_choose("Test vehicle", {"Ship", "Carriage", "Magic carpet"});
+	if (chosen < 0 || chosen >= 3) {
+		return;
+	}
+	const Vehicle& to = vehicles[chosen];
 	gwin->teleport_party(to.at);
 	Main_actor* avatar = gwin->get_main_actor();
 	std::string note   = std::string("Took the party to ") + to.name;
@@ -14505,7 +14508,7 @@ static void Handle_event(SDL_Event& event) {
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F8
 		&& !(event.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI))) {
 		if (event.key.mod & SDL_KMOD_ALT) {
-			Friend_mode_visit_next_vehicle();    // Carpet, ship, cart (macOS keeps Ctrl+F8).
+			Friend_mode_visit_vehicle_menu();    // Ship, carriage, carpet (macOS keeps Ctrl+F8).
 		} else if (event.key.mod & SDL_KMOD_SHIFT) {
 			Friend_mode_spawn_test_creatures();    // A rat, a wolf and a rabbit.
 		} else {
