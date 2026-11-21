@@ -88,12 +88,17 @@ namespace Relight {
 		// flying carpet's is high off the ground, so the ground beside it
 		// isn't darkened as if by a wall (ambient occlusion).
 		std::vector<unsigned char> bases;
+		// 1 where an actor (a person or creature) is: standing figures cast
+		// shadows right from their feet (see sweep_shadows).
+		std::vector<unsigned char> figures;
+		bool                       stamping_figure = false;
 		// Indoors, the roof Exult hides: its heights still cast shadows
 		// (casters = heights + roofs), and the floor under it is covered.
 		std::vector<unsigned char> casters, covered;
 		unsigned char*             hbase = nullptr;    // At game (0, 0).
 		unsigned char*             fbase = nullptr;
 		unsigned char*             bbase = nullptr;
+		unsigned char*             abase = nullptr;
 		int                        hline = 0;
 		int                        hmin_x = 0, hmin_y = 0, hmax_x = 0, hmax_y = 0;
 
@@ -115,6 +120,7 @@ namespace Relight {
 		bool              pal_valid = false;
 		std::vector<unsigned char> shadow;    // Scratch: 1 = in sun shadow.
 		std::vector<float>         light;     // Scratch: RGB light per pixel.
+		std::vector<float>         lamp_loss, lamp_tmp, lamp_floor;    // Scratch: soft lamp shadows.
 
 		// Full colour: the light layer, and the map as painted, so what is
 		// drawn over it afterwards (gumps, text) can be left unlit.
@@ -137,6 +143,7 @@ namespace Relight {
 				heights.assign(size_t(line) * rows, 0);
 				faces.assign(size_t(line) * rows, face_top);
 				bases.assign(size_t(line) * rows, 0);
+				figures.assign(size_t(line) * rows, 0);
 				casters.assign(size_t(line) * rows, 0);
 				covered.assign(size_t(line) * rows, 0);
 				hline  = line;
@@ -145,6 +152,7 @@ namespace Relight {
 				hbase  = heights.data() - sy * line - sx;
 				fbase  = faces.data() - sy * line - sx;
 				bbase  = bases.data() - sy * line - sx;
+				abase  = figures.data() - sy * line - sx;
 				hmax_x = sx + line;
 				hmax_y = sy + rows;
 			}
@@ -247,7 +255,13 @@ namespace Relight {
                 int       h     = std::min({top, east, south});
                 Face      f     = h == top ? face_top : east <= south ? face_east : face_south;
                 if (h <= base) {
-                    h = base;
+                    // Drawn beyond its box's south or east side: a part
+                    // that overhangs it (a ship's sail).  Hanging at the
+                    // top of it, not lying at its foot, or the lower part
+                    // sat in the shadow of the upper (2026-11-21).  Not a
+                    // figure: drawn bigger than its tile, its overhang
+                    // raised that way cast broken, striped shadows.
+                    h = stamping_figure ? base : top;
                     f = face_top;
                 }
                 // A rim a lift or so deep (the edge of a roof piece) reads
@@ -274,6 +288,7 @@ namespace Relight {
                 hbase[y * hline + x] = hv;
                 fbase[y * hline + x] = f;
                 bbase[y * hline + x] = static_cast<unsigned char>(std::min(base, 255));
+                abase[y * hline + x] = stamping_figure ? 1 : 0;
 			};
 			auto run = [&](int x, int y, int n) {
 				if (y < cy || y >= cy + ch) {
@@ -522,6 +537,7 @@ namespace Relight {
 		std::fill(heights.begin(), heights.end(), 0);
 		std::fill(faces.begin(), faces.end(), face_top);
 		std::fill(bases.begin(), bases.end(), 0);
+		std::fill(figures.begin(), figures.end(), 0);
 		std::fill(covered.begin(), covered.end(), 0);
 		view_x0 = x;
 		view_y0 = y;
@@ -680,8 +696,10 @@ namespace Relight {
 				}
 				int hx, hy;
 				gwin->get_shape_location(obj, hx, hy);
+				stamping_figure = obj->as_actor() != nullptr;
 				stamp(obj->get_shape(), hx, hy, obj->get_lift(), obj->get_info().get_3d_height(), hmin_x, hmin_y,
 					  hmax_x - hmin_x, hmax_y - hmin_y, stamp_outside);
+				stamping_figure = false;
 			}
 		});
 		casters = heights;
@@ -916,7 +934,9 @@ namespace Relight {
 		const Shape_info& info = obj->get_info();
 		int               cx, cy, cw, ch;
 		gwin->get_win()->get_ib8()->get_clip(cx, cy, cw, ch);
+		stamping_figure = obj->as_actor() != nullptr;
 		stamp(obj->get_shape(), hx, hy, obj->get_lift(), info.get_3d_height(), cx, cy, cw, ch);
+		stamping_figure = false;
 	}
 
 	/*
@@ -978,6 +998,16 @@ namespace Relight {
 		}
 		if (lit.empty()) {
 			return;
+		}
+		// Smooth shadows: what each lamp would have lit where it is blocked
+		// goes into 'lamp_loss' as well as 'dest'; blurred (as the sun's
+		// shadows are), it is taken off again, so lamp shadows have soft
+		// edges too (2026-11-21: they were hard and stepped, from the
+		// walk toward the lamp).  'lamp_floor' keeps what was there before.
+		const bool soft = settings().soft;
+		if (soft) {
+			lamp_loss.assign(size_t(w) * h * 3, 0.0f);
+			lamp_floor.assign(dest.begin(), dest.begin() + size_t(w) * h * 3);
 		}
 		// Row by row, every lamp on that row in turn, so each core has rows
 		// of its own and the lamps add up in the same order as before.
@@ -1047,7 +1077,7 @@ namespace Relight {
 								break;
 							}
 						}
-						if (blocked) {
+						if (blocked && !soft) {
 							continue;
 						}
 						float hit;
@@ -1067,6 +1097,53 @@ namespace Relight {
 						out[0] += k * e.lr;
 						out[1] += k * e.lg;
 						out[2] += k * e.lb;
+						if (blocked) {
+							float* lost = &lamp_loss[(size_t(gy - y) * w + (gx - x)) * 3];
+							lost[0] += k * e.lr;
+							lost[1] += k * e.lg;
+							lost[2] += k * e.lb;
+						}
+					}
+				}
+			}
+		});
+		if (!soft) {
+			return;
+		}
+		// The same 5 x 5 box as the sun's shadows, in two passes.
+		constexpr int bb = 2;
+		lamp_tmp.assign(lamp_loss.size(), 0.0f);
+		pool().run(h, [&](int r0, int r1) {
+			for (int py = r0; py < r1; py++) {
+				for (int px = 0; px < w; px++) {
+					float sum[3] = {0, 0, 0};
+					for (int ox = -bb; ox <= bb; ox++) {
+						const float* q = &lamp_loss[(size_t(py) * w + std::clamp(px + ox, 0, w - 1)) * 3];
+						sum[0] += q[0];
+						sum[1] += q[1];
+						sum[2] += q[2];
+					}
+					float* t = &lamp_tmp[(size_t(py) * w + px) * 3];
+					t[0]     = sum[0];
+					t[1]     = sum[1];
+					t[2]     = sum[2];
+				}
+			}
+		});
+		const float n = float((2 * bb + 1) * (2 * bb + 1));
+		pool().run(h, [&](int r0, int r1) {
+			for (int py = r0; py < r1; py++) {
+				for (int px = 0; px < w; px++) {
+					float sum[3] = {0, 0, 0};
+					for (int oy = -bb; oy <= bb; oy++) {
+						const float* q = &lamp_tmp[(size_t(std::clamp(py + oy, 0, h - 1)) * w + px) * 3];
+						sum[0] += q[0];
+						sum[1] += q[1];
+						sum[2] += q[2];
+					}
+					const size_t i = (size_t(py) * w + px) * 3;
+					for (int c = 0; c < 3; c++) {
+						dest[i + c] = std::max(lamp_floor[i + c], dest[i + c] - sum[c] / n);
 					}
 				}
 			}
@@ -1180,7 +1257,7 @@ namespace Relight {
 
 		Light_key                  last_key;
 		bool                       last_valid = false;
-		std::vector<unsigned char> last_heights, last_faces, last_bases, last_casters, last_covered;
+		std::vector<unsigned char> last_heights, last_faces, last_bases, last_figures, last_casters, last_covered;
 		std::vector<Lamp>          last_lamps;
 		std::vector<uint32>        out_overlay, out_glow;    // As last sent to the window.
 
@@ -1215,6 +1292,7 @@ namespace Relight {
 		const int   dir   = dmaj > 0 ? 1 : -1;
 		const float drop  = slope / std::abs(dmaj);    // The ray's climb per pixel.
 		const int   first = std::max(1, int(std::ceil(1.5f * std::abs(dmaj))));
+		const float figure_lift = std::max(0.0f, dead_zone - 1.0f);
 		const int   last  = std::max(first, int(std::ceil(240.0f * std::abs(dmaj))) - 1);
 		std::vector<int> drift(nc);
 		for (int c = 0; c < nc; c++) {
@@ -1240,7 +1318,9 @@ namespace Relight {
 						continue;
 					}
 					const int i = along_x ? r * bw + c : c * bw + r;
-					g.push_back(casters[i] - float(cell.size()) * drop);
+					// A figure's pixels skip most of the dead zone, or the
+					// shadow starts a step away from its feet.
+					g.push_back(casters[i] + (figures[i] ? figure_lift : 0.0f) - float(cell.size()) * drop);
 					cell.push_back(i);
 				}
 				const int n = int(cell.size());
@@ -1266,7 +1346,8 @@ namespace Relight {
 					if (gx < x || gy < y || gx >= x + w || gy >= y + h) {
 						continue;
 					}
-					if (g[dq[head]] + j * drop > heights[i] + dead_zone) {
+					// On a figure, the full dead zone (it doesn't shade itself).
+					if (g[dq[head]] + j * drop > heights[i] + dead_zone + (figures[i] ? figure_lift : 0.0f)) {
 						shadow[size_t(gy - y) * w + (gx - x)] = 1;
 					}
 				}
@@ -1761,13 +1842,14 @@ namespace Relight {
 		// Nothing the light depends on changed (a menu or the cursor moved):
 		// keep the light already worked out.
 		const bool reuse = last_valid && same_key(key, last_key) && heights == last_heights && faces == last_faces
-						   && bases == last_bases && casters == last_casters && covered == last_covered && same_lamps(lamps, last_lamps);
+						   && bases == last_bases && figures == last_figures && casters == last_casters && covered == last_covered && same_lamps(lamps, last_lamps);
 		if (!reuse) {
 			compute_light(gwin, x, y, w, h, clock->get_hour() + clock->get_minute() / 60.0f);
 			last_key     = key;
 			last_heights = heights;
 			last_faces   = faces;
 			last_bases   = bases;
+			last_figures = figures;
 			last_casters = casters;
 			last_covered = covered;
 			last_lamps   = lamps;

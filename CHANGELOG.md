@@ -51,6 +51,10 @@ both in `--version` and the version files saved with each game.
 
 - With lighting on, the flying carpet no longer darkens the ground right
   around it as if it stood there; only its shadow falls on the ground.
+- With lighting on, people's and creatures' shadows start at their feet
+  instead of a step away, a ship's sail is no longer shaded by its own
+  upper half, and with smooth shadows on, the shadows lamps and fires cast
+  have soft edges too, not hard, stepped ones.
 - In co-op, the flying carpet comes down on guests' screens as it lands,
   rather than its shadow staying up in the air where it stopped.
 - With lighting on and Game Mode set to Fill, opening the save menu no
