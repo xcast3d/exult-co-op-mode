@@ -936,6 +936,13 @@ inline void Actor::movef(Map_chunk* old_chunk, Map_chunk* new_chunk, int new_sx,
 	new_chunk->add(this);
 	glide_ms = 0;
 	if (glide) {
+		begin_glide(from, ox, oy);
+	}
+}
+
+void Actor::begin_glide(const Tile_coord& from, int ox, int oy) {
+	glide_ms = 0;
+	{
 		const Tile_coord to = get_tile();
 		int              tx = from.tx - to.tx;
 		int              ty = from.ty - to.ty;
@@ -959,23 +966,44 @@ inline void Actor::movef(Map_chunk* old_chunk, Map_chunk* new_chunk, int new_sx,
 			// ends before the next step comes leaves it standing still for
 			// a moment (stop and go); one a little too long carries on into
 			// the next step without a seam, so err long.
-			int ms = frame_time > 0 ? frame_time : gwin->get_std_delay();
-			if (last_step != 0) {
-				const int since = int(now - last_step);
+			const int std_ms = gwin->get_std_delay();
+			int       ms     = frame_time > 0 ? frame_time : std_ms;
+			const int since  = last_step != 0 ? int(now - last_step) : -1;
+			int       slack  = ms / 4;
+			if (frame_time > 0) {
 				if (since > 0 && since < 2 * ms) {
-					ms = since;
+					ms    = since;
+					slack = ms / 4;
 				}
+			} else {
+				// Moved from outside, by the network (a guest's companion on
+				// the host; everyone but our own on a guest): updates come
+				// unevenly, with the frames and the network, so go by the
+				// average gap rather than the last, and leave more slack, or
+				// a late one stops it for a moment.  Two in one frame don't
+				// count (the second carries on from the first's glide).
+				if (since >= 15 && since < 3 * std_ms) {
+					moved_pace = moved_pace ? (moved_pace * 3 + since) / 4 : since;
+				} else if (since < 0 || since >= 3 * std_ms) {
+					moved_pace = 0;    // Starting off.
+				}
+				if (moved_pace) {
+					ms = moved_pace;
+				}
+				slack = ms / 2;
 			}
 			glide_dx    = ox + tx * c_tilesize - tz * (c_tilesize / 2);
 			glide_dy    = oy + ty * c_tilesize - tz * (c_tilesize / 2);
 			glide_start = now;
-			glide_ms    = std::max(30, ms + ms / 4);
+			glide_ms    = std::max(30, ms + slack);
 			gwin->add_glider(this);
-			if (this == gwin->get_camera_actor() && Glide_log_on()) {
+			// The camera's, and the party's (moved by the network in co-op).
+			if ((this == gwin->get_camera_actor() || npc_num == 0 || is_in_party()) && Glide_log_on()) {
 				Glide_log("%u STEP from %d,%d to %d,%d (by %d,%d) frame %d  %d ms since last  frame_time %d  carry %d,%d  "
-						  "start %d,%d  glide %d ms",
+						  "start %d,%d  glide %d ms  npc %d%s  pace %d",
 						  now, from.tx, from.ty, to.tx, to.ty, -tx, -ty, get_framenum(), last_step ? int(now - last_step) : -1,
-						  frame_time, ox, oy, glide_dx, glide_dy, glide_ms);
+						  frame_time, ox, oy, glide_dx, glide_dy, glide_ms, npc_num,
+						  this == gwin->get_camera_actor() ? " (camera)" : "", moved_pace);
 			}
 		}
 		last_step = SDL_GetTicks();

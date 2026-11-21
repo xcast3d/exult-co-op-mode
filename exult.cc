@@ -8011,6 +8011,27 @@ static void Friend_mode_creature_pass(bool force) {
 }
 
 // Host: send the creatures in the list that moved or changed frame.
+// A move that came over the network: glide there, as a step does, rather
+// than jump a tile (move() doesn't glide; only walking's steps did, so on
+// guests everyone else, and on the host each guest's companion, jumped from
+// tile to tile).  A long way (a teleport) or another map just moves.
+template <typename Move>
+static void Friend_glide_move(Actor* actor, Move&& move) {
+	if (!gwin->is_smooth_walk() || !actor->get_chunk()) {
+		move();
+		return;
+	}
+	const Tile_coord from = actor->get_tile();
+	const int        map  = actor->get_map_num();
+	int              ox   = 0;
+	int              oy   = 0;
+	actor->get_glide_offset(ox, oy);
+	move();
+	if (actor->get_chunk() && actor->get_map_num() == map && actor->get_tile() != from) {
+		actor->begin_glide(from, ox, oy);
+	}
+}
+
 static void Friend_mode_creature_moves() {
 	for (Monster_actor* creature = Monster_actor::get_first_in_world(); creature;
 		 creature = creature->get_next_in_world()) {
@@ -8030,7 +8051,9 @@ static void Friend_mode_creature_moves() {
 // Guest: make a creature's look and place match the host's entry.
 static void Friend_creature_match(Monster_actor* creature, const Friend_creature_entry& entry) {
 	if (creature->get_tile() != entry.tile) {
-		creature->move(entry.tile.tx, entry.tile.ty, entry.tile.tz);
+		Friend_glide_move(creature, [&]() {
+			creature->move(entry.tile.tx, entry.tile.ty, entry.tile.tz);
+		});
 	}
 	if (creature->get_framenum() != entry.frame) {
 		creature->change_frame(entry.frame);
@@ -13055,7 +13078,9 @@ static void Main_loop_pass(bool input) {
 					// The guest already collision-tested this adjacent step. Applying it
 					// directly avoids a second pathfinder disagreeing about door state.
 					const Tile_coord from = actor->get_tile();
-					actor->move(requested.tx, requested.ty, requested.tz);
+					Friend_glide_move(actor, [&]() {
+						actor->move(requested.tx, requested.ty, requested.tz);
+					});
 					actor->change_frame(requested_frame);
 					// Eggs fire as for any party member's step (teleporters and
 					// the like); the guest's own copy leaves them to us.
@@ -13202,8 +13227,19 @@ static void Main_loop_pass(bool input) {
 							avatar_state.tx, avatar_state.ty, avatar_state.tz, avatar_frame);
 				}
 				const uint32 now = SDL_GetTicks();
-				if (last_npc_snapshot == 0 || now - last_npc_snapshot >= 100) {
-					last_npc_snapshot = now;
+				// Everyone near the players every 100 ms; in between, every
+				// 20 ms, whoever moved or changed frame, so each step reaches
+				// guests when it is taken (2026-11-21: on the 100 ms beat
+				// alone, steps a little slower than that came two at once or
+				// none, and walking looked uneven on guests).
+				static uint32                                 last_npc_quick = 0;
+				static std::map<int, std::pair<uint32, int>> npc_sent;    // By NPC: position, frame.
+				const bool full = last_npc_snapshot == 0 || now - last_npc_snapshot >= 100;
+				if (full || now - last_npc_quick >= 20) {
+					last_npc_quick = now;
+					if (full) {
+						last_npc_snapshot = now;
+					}
 					Actor_vector nearby;
 					Friend_npcs_near_players(nearby);
 					// Every guest gets every NPC, including the companions other
@@ -13218,9 +13254,16 @@ static void Main_loop_pass(bool input) {
 							// (so a merchant's shop hours are right on guests).
 							const Schedule* schedule = npc->get_schedule();
 							const int       sched    = schedule ? schedule->get_actual_type(npc) : npc->get_schedule_type();
+							const int       frame    = npc->get_framenum() | (((sched + 1) & 0xff) << 16);
+							const uint32    place    = (static_cast<uint32>(state.tx) << 20) | (static_cast<uint32>(state.ty) << 8)
+												 | static_cast<uint32>(state.tz & 0xff);
+							auto&           sent     = npc_sent[npc->get_npc_num()];
+							if (!full && sent.first == place && sent.second == frame) {
+								continue;
+							}
+							sent = {place, frame};
 							friend_session.send_npc_state(
-									static_cast<uint32>(npc->get_npc_num()), state.tx, state.ty, state.tz,
-									npc->get_framenum() | (((sched + 1) & 0xff) << 16));
+									static_cast<uint32>(npc->get_npc_num()), state.tx, state.ty, state.tz, frame);
 						}
 					}
 					Friend_mode_creature_moves();
@@ -13512,8 +13555,19 @@ static void Main_loop_pass(bool input) {
 					// it was a teleporter.
 					const bool beckoned = actor->get_tile().distance_2d(state) > Game_window::friend_leash_warn_tiles
 										  && gwin->get_main_actor()->get_tile().distance_2d(state) <= 4;
-					actor->move(state.tx, state.ty, state.tz);
-					gwin->set_camera_actor(actor);
+					if (actor->get_tile().distance(state) <= 2 && gwin->get_camera_actor() == actor) {
+						// A step (the host's AI walks us while we follow, Y):
+						// as our own steps are, the view scrolled first, then a
+						// glide, which the view glides with.  Re-centering on
+						// each tile jumped the view a tile at a time.
+						gwin->scroll_if_needed(actor, state);
+						Friend_glide_move(actor, [&]() {
+							actor->move(state.tx, state.ty, state.tz);
+						});
+					} else {
+						actor->move(state.tx, state.ty, state.tz);
+						gwin->set_camera_actor(actor);
+					}
 					if (beckoned) {
 						gwin->get_effects()->add_chat_text("You are beckoned by the Avatar", actor);
 					}
@@ -13540,7 +13594,9 @@ static void Main_loop_pass(bool input) {
 						gwin->set_all_dirty();
 					}
 					if (gwin->is_network_spectating() && friend_watched_npc >= 0) {
-						avatar->Actor::move(state.tx, state.ty, state.tz);    // Watching another player.
+						Friend_glide_move(avatar, [&]() {
+							avatar->Actor::move(state.tx, state.ty, state.tz);    // Watching another player.
+						});
 					} else if (gwin->is_network_spectating()) {
 						// Watching: the view (and roofs) follow the Avatar.
 						const Tile_coord from = avatar->get_tile();
@@ -13553,7 +13609,9 @@ static void Main_loop_pass(bool input) {
 					} else {
 						// This is a remote visual update, not local camera movement.
 						// Bypass Main_actor::move so Iolo's roof state remains local.
-						avatar->Actor::move(state.tx, state.ty, state.tz);
+						Friend_glide_move(avatar, [&]() {
+							avatar->Actor::move(state.tx, state.ty, state.tz);
+						});
 					}
 				}
 				if (avatar && avatar->get_framenum() != frame) {
@@ -13574,7 +13632,9 @@ static void Main_loop_pass(bool input) {
 					npc->stop();
 				}
 				if (npc && npc->get_tile() != state) {
-					npc->move(state.tx, state.ty, state.tz);
+					Friend_glide_move(npc, [&]() {
+						npc->move(state.tx, state.ty, state.tz);
+					});
 				}
 				if (npc && npc->get_framenum() != frame) {
 					npc->change_frame(frame);

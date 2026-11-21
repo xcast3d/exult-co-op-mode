@@ -32,7 +32,9 @@ both in `--version` and the version files saved with each game.
   glide from tile to tile instead of jumping a tile with each step, and
   the view glides with your own steps. NPCs no longer pause on a standing
   frame between steps. It takes the place of smooth scrolling, which now
-  only moves ships and carts.
+  only moves ships and carts. In co-op it works on every side: guests see
+  the Avatar, NPCs and creatures glide, the host sees guests' companions
+  glide, and a guest following the Avatar glides along smoothly.
 - Your party walks in two columns behind the leader along swamps and
   through narrow passages, instead of fanning out into the swamp or
   along the walls. Where the way is too narrow for two, they go in

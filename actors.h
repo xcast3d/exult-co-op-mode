@@ -156,6 +156,7 @@ protected:
 	uint32 glide_start = 0;
 	int    glide_ms    = 0;
 	uint32 last_step   = 0;    // When it last stepped (SDL ticks).
+	int    moved_pace  = 0;    // Moved from outside (the network): its steps' average gap.
 	int qsteps;        // # steps since last quake.
 
 	std::unique_ptr<Npc_timer_list> timers;         // Timers for poison, hunger, etc.
@@ -382,6 +383,10 @@ public:
 	// was to its new tile over the step's time, rather than jumping a whole
 	// tile.  The offset (screen pixels) to draw it at now; false if none.
 	bool get_glide_offset(int& dx, int& dy) const;
+	// Glide from 'from' (drawn offset ox, oy there) to where it is now, if
+	// that is a step's distance.  Steps do it (movef); so do moves that
+	// come over the network in Friend Mode (Friend_glide_move).
+	void begin_glide(const Tile_coord& from, int ox, int oy);
 
 	void stop_glide() {
 		glide_ms = 0;
