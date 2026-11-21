@@ -37,6 +37,13 @@ both in `--version` and the version files saved with each game.
   through narrow passages, instead of fanning out into the swamp or
   along the walls. Where the way is too narrow for two, they go in
   single file, and they step around swamp rather than through it.
+- When the party holds, the Avatar calls out "Hold here!", and anyone
+  walking takes a few more steps and comes to a natural stop instead
+  of freezing mid-stride; "Journey Onward!" sets them following again.
+  Co-op guests' companions are never held. While they wait, they
+  now and then look around, take a step or two, or yawn, but never stray
+  more than a tile from where they stopped. A while after a fight they lower
+  their weapons.
 
 ### Fixed
 

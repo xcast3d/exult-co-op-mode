@@ -117,6 +117,8 @@
 #include <map>
 #include <cctype>
 #include <cmath>
+#include <cstdarg>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <deque>
@@ -6998,14 +7000,51 @@ bool Friend_mode_guest_talk_to_merchant(Actor* npc) {
 
 // Y on the host and in single player: the party holds (step 3 of
 // docs/friend-mode/leading-companions.md).  Everyone but the one played
-// waits where it stands (the Avatar too, while a companion is led; a
-// guest's companion in follow mode too); Y again, or a change of map, and
+// waits where it stands (the Avatar too, while a companion is led; never
+// a guest's companion, even one following); Y again, or a change of map, and
 // they follow.  Held, they strike whatever hostile is within their weapon's
 // reach without moving: at once one attacking them, anything in reach once
 // combat mode is on.
 static bool             friend_holding  = false;
 static std::vector<int> friend_held;           // NPC numbers (0 is the Avatar).
 static int              friend_hold_map = -1;
+
+// Held, each waits as a person would (Friend_mode_hold_idle): now and then
+// it looks another way, or takes a step or two, never more than a tile
+// from where it stopped.
+struct Friend_hold_idle {
+	Tile_coord spot;             // Where it stopped.
+	uint32     next     = 0;     // Ticks of its next idle action.
+	uint32     struck   = 0;     // Ticks of its last strike.
+	int        steps    = 0;     // Steps left in this little walk.
+	bool       placed   = false;    // Spot set (once it has stopped).
+};
+
+static std::map<int, Friend_hold_idle> friend_hold_idle;    // By NPC number.
+static uint32 friend_hold_line_at = 0;    // Ticks: the next idle line, by anyone.
+
+
+// QOTC_HOLD_LOG=<file>: a line per idle action and settle.
+static void Friend_hold_log(const char* fmt, ...) {
+	static FILE* file   = nullptr;
+	static bool  opened = false;
+	if (!opened) {
+		opened = true;
+		if (const char* path = std::getenv("QOTC_HOLD_LOG")) {
+			file = std::fopen(path, "a");
+		}
+	}
+	if (!file) {
+		return;
+	}
+	va_list args;
+	va_start(args, fmt);
+	std::fprintf(file, "%u ", static_cast<unsigned>(SDL_GetTicks()));
+	std::vfprintf(file, fmt, args);
+	std::fputc('\n', file);
+	std::fflush(file);
+	va_end(args);
+}
 
 bool Friend_mode_is_held(const Actor* actor) {
 	return friend_holding && actor
@@ -7022,25 +7061,104 @@ static bool Friend_mode_guest_plays(const Actor* npc) {
 	return false;
 }
 
-static void Friend_mode_hold_one(Actor* npc) {
-	if (!npc || npc->is_dead() || npc == gwin->get_controlled_actor() || Friend_mode_guest_plays(npc)
-		|| std::find(friend_held.begin(), friend_held.end(), npc->get_npc_num()) != friend_held.end()) {
-		return;
-	}
+// Stop where it is.  Stopping sets the standing frame (and the way its
+// walk began), which then slides out the rest of the glide: keep the
+// stride frame until the glide is done (Friend_mode_hold_idle stands it
+// then), facing the way it was going.
+static void Friend_mode_hold_stop(Actor* npc) {
+	const int  frame  = npc->get_framenum();
+	const int  facing = npc->get_dir_facing();
+	int        gx     = 0;
+	int        gy     = 0;
+	const bool stride = (frame & 0xf) == Actor::step_right_frame || (frame & 0xf) == Actor::step_left_frame;
 	npc->stop();
 	npc->set_target(nullptr);
 	npc->set_schedule_type(Schedule::wait);
+	if (stride && npc->get_glide_offset(gx, gy)) {
+		npc->change_frame(frame);
+	} else if ((npc->get_framenum() & 0xf) == Actor::standing) {
+		npc->change_frame(npc->get_dir_framenum(facing, Actor::standing));
+	}
+	friend_hold_idle.erase(npc->get_npc_num());    // A new spot: where it stops.
+}
+
+// A guest's companion, played or following: guests are never held.
+static bool Friend_mode_guest_owns(const Actor* npc) {
+	for (const auto& [player, guest] : friend_guests) {
+		if (guest.actor == npc->get_npc_num()) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static void Friend_mode_hold_one(Actor* npc) {
+	if (!npc || npc->is_dead() || npc == gwin->get_controlled_actor() || Friend_mode_guest_owns(npc)
+		|| std::find(friend_held.begin(), friend_held.end(), npc->get_npc_num()) != friend_held.end()) {
+		return;
+	}
 	friend_held.push_back(npc->get_npc_num());
+	// Walking with the party (in a step, or between the short walks the
+	// party gives followers)?  Then it walks on a few steps the way it was
+	// going, a little slower, and stops there, rather than stopping dead.
+	int        gx      = 0;
+	int        gy      = 0;
+	const bool gliding = npc->get_glide_offset(gx, gy);
+	const bool walking = friend_holding && !gwin->in_combat() && npc->get_schedule_type() == Schedule::follow_avatar
+						 && (gliding || (npc->get_action() && npc->is_moving()));
+	const int  std_ms  = gwin->get_std_delay();
+	const int  speed   = std::clamp(npc->get_frame_time() > 0 ? npc->get_frame_time() : std_ms, std_ms, 2 * std_ms);
+	uint32     glide_start = 0;
+	int        glide_ms    = 0;
+	npc->get_glide_timing(glide_start, glide_ms);
+	const int facing = npc->get_dir_facing();
+	Friend_mode_hold_stop(npc);
+	if (!walking) {
+		return;
+	}
+	// The way it was going: back along its glide (which points to where it
+	// came from), else the way it faces.
+	int dx = gx > 0 ? -1 : gx < 0 ? 1 : 0;
+	int dy = gy > 0 ? -1 : gy < 0 ? 1 : 0;
+	if (!dx && !dy) {
+		static constexpr int fx[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+		static constexpr int fy[8] = {-1, -1, 0, 1, 1, 1, 0, -1};
+		dx                         = fx[facing & 7];
+		dy                         = fy[facing & 7];
+	}
+	// Its next step comes when this one's would have (a glide lasts a
+	// step and a quarter).
+	int delay = 0;
+	if (gliding) {
+		const int gone = static_cast<int>(SDL_GetTicks() - glide_start);
+		delay          = std::max(0, glide_ms * 4 / 5 - gone);
+	}
+	const int        steps = 3 + std::rand() % 2;
+	const Tile_coord from  = npc->get_tile();
+	const Tile_coord dest(from.tx + dx * steps, from.ty + dy * steps, from.tz);
+	npc->walk_to_tile(dest, speed * 6 / 5, delay, 1);
+	Friend_hold_log("%d walks on %d steps %d,%d -> %d,%d (speed %d, delay %d)", npc->get_npc_num(), steps, from.tx,
+					from.ty, dest.tx, dest.ty, speed * 6 / 5, delay);
 }
 
 static void Friend_mode_release_one(int num) {
 	friend_held.erase(std::remove(friend_held.begin(), friend_held.end(), num), friend_held.end());
+	friend_hold_idle.erase(num);
 	Actor* npc = gwin->get_npc(num);
 	if (!npc || npc->is_dead() || npc == gwin->get_controlled_actor() || Friend_mode_guest_plays(npc)
 		|| npc->get_schedule_type() != Schedule::wait) {
 		return;
 	}
 	npc->set_schedule_type(gwin->in_combat() ? Schedule::combat : Schedule::follow_avatar);
+}
+
+// The Avatar calls the party's order out (guests see it too, by say()).
+static void Friend_mode_avatar_calls(const char* text) {
+	Actor* avatar = gwin->get_main_actor();
+	if (avatar && !avatar->is_dead() && avatar->get_chunk() && !gwin->get_usecode()->in_usecode()) {
+		gwin->get_effects()->remove_text_effect(avatar);
+		avatar->say(text);
+	}
 }
 
 static void Friend_mode_set_hold(bool hold) {
@@ -7055,6 +7173,8 @@ static void Friend_mode_set_hold(bool hold) {
 		}
 		Friend_mode_hold_one(gwin->get_main_actor());
 		friend_hold_map = gwin->get_party_leader()->get_map_num();
+		Friend_mode_avatar_calls("Hold here!");
+		friend_hold_line_at = static_cast<uint32>(SDL_GetTicks()) + 20000 + std::rand() % 20000;
 		Friend_mode_notice("The party holds");
 		return;
 	}
@@ -7063,7 +7183,9 @@ static void Friend_mode_set_hold(bool hold) {
 		Friend_mode_release_one(num);
 	}
 	friend_held.clear();
+	friend_hold_idle.clear();
 	friend_holding = false;
+	Friend_mode_avatar_calls("Journey Onward!");
 	Friend_mode_notice("The party follows");
 	gwin->get_leader_followers();
 }
@@ -7158,6 +7280,7 @@ static void Friend_mode_hold_swap(Actor* left, Actor* taken) {
 	}
 	if (taken) {
 		friend_held.erase(std::remove(friend_held.begin(), friend_held.end(), taken->get_npc_num()), friend_held.end());
+		friend_hold_idle.erase(taken->get_npc_num());
 		if (taken == gwin->get_main_actor()) {
 			// Walking the Avatar from 'wait' sets everyone following
 			// (Game_window::start_actor); from 'follow' it doesn't.
@@ -7165,6 +7288,98 @@ static void Friend_mode_hold_swap(Actor* left, Actor* taken) {
 		}
 	}
 	Friend_mode_hold_one(left);
+}
+
+// Held members, every frame: stand once a step's glide is done, put the
+// weapon down a while after the last strike, and now and then look
+// around or take a step or two, within a tile of the spot.  Much quieter
+// than loiter: seconds apart, and never in combat.
+static void Friend_mode_hold_idle(uint32 now) {
+	const bool quiet = !gwin->get_usecode()->in_usecode() && !gwin->get_tqueue()->is_paused()
+					   && !gwin->is_network_dialogue_paused() && !gwin->is_network_host_paused();
+	for (const int num : friend_held) {
+		Actor* npc = gwin->get_npc(num);
+		if (!npc || npc->is_dead() || !npc->can_act() || npc->get_flag(Obj_flags::asleep)
+			|| npc->get_schedule_type() != Schedule::wait) {
+			continue;
+		}
+		int gx = 0;
+		int gy = 0;
+		if (npc->get_action() || npc->get_glide_offset(gx, gy)) {
+			continue;    // Mid-step, or walking on to where it stops.
+		}
+		Friend_hold_idle& idle = friend_hold_idle[num];
+		if (!idle.placed) {
+			idle.placed = true;
+			idle.spot   = npc->get_tile();
+			idle.next   = now + 5000 + std::rand() % 8000;
+		}
+		const int base = npc->get_framenum() & 0xf;
+		const int dir  = npc->get_dir_facing();
+		if (base == Actor::step_right_frame || base == Actor::step_left_frame) {
+			npc->change_frame(npc->get_dir_framenum(dir, Actor::standing));    // The step is done.
+			Friend_hold_log("%d settles at %d,%d", num, npc->get_tile().tx, npc->get_tile().ty);
+		} else if (base >= Actor::ready_frame && base <= Actor::strike2_frame) {
+			if (!gwin->in_combat() && now - idle.struck > 4000) {
+				npc->change_frame(npc->get_dir_framenum(dir, Actor::standing));    // At ease.
+			}
+			continue;
+		} else if (base != Actor::standing) {
+			continue;    // Sitting, kneeling and so on: left as it is.
+		}
+		if (!quiet || gwin->in_combat() || now < idle.next) {
+			continue;
+		}
+		const Tile_coord cur = npc->get_tile();
+		const int        off = std::max(std::abs(cur.tx - idle.spot.tx), std::abs(cur.ty - idle.spot.ty));
+		// Pushed aside further than a tile: back to the spot.
+		bool             step = off > 1 || idle.steps > 0 || std::rand() % 4 == 0;
+		if (step) {
+			Tile_coord dest = idle.spot;
+			if (off <= 1 && !(off == 1 && std::rand() % 3 != 0)) {
+				// Somewhere else within a tile of the spot, next to us.
+				std::vector<Tile_coord> choices;
+				for (int dy = -1; dy <= 1; ++dy) {
+					for (int dx = -1; dx <= 1; ++dx) {
+						const Tile_coord t(idle.spot.tx + dx, idle.spot.ty + dy, cur.tz);
+						if (t != cur && std::abs(t.tx - cur.tx) <= 1 && std::abs(t.ty - cur.ty) <= 1) {
+							choices.push_back(t);
+						}
+					}
+				}
+				dest = choices[std::rand() % choices.size()];
+			}
+			if (dest != cur) {
+				if (idle.steps == 0 && off <= 1) {
+					idle.steps = std::rand() % 3 == 0 ? 2 : 1;    // Now and then a second step.
+				}
+				npc->walk_to_tile(dest, 2 * gwin->get_std_delay(), 0, 1);
+				Friend_hold_log("%d steps %d,%d -> %d,%d (spot %d,%d)", num, cur.tx, cur.ty, dest.tx, dest.ty,
+								idle.spot.tx, idle.spot.ty);
+			}
+			idle.steps = std::max(0, idle.steps - 1);
+			idle.next  = now + (idle.steps > 0 ? 900 + std::rand() % 700 : 9000 + std::rand() % 12000);
+			continue;
+		}
+		// Now and then, one of them says something (one at a time, half a
+		// minute or so apart).
+		static constexpr const char* lines[] = {"*yawn*", "Ho hum...", "*sigh*", "Hmm...", "*stretches*", "*whistles*"};
+		if (now >= friend_hold_line_at && std::rand() % 5 == 0) {
+			const char* line = lines[std::rand() % (sizeof(lines) / sizeof(lines[0]))];
+			gwin->get_effects()->remove_text_effect(npc);
+			npc->say(line);
+			Friend_hold_log("%d says %s", num, line);
+			friend_hold_line_at = now + 25000 + std::rand() % 30000;
+			idle.next           = now + 6000 + std::rand() % 8000;
+			continue;
+		}
+		// Look another way: a quarter or half turn.
+		static constexpr int turns[] = {2, 6, 2, 6, 4};
+		const int            to      = (dir + turns[std::rand() % 5]) % 8;
+		npc->change_frame(npc->get_dir_framenum(to, Actor::standing));
+		Friend_hold_log("%d looks %d -> %d", num, dir, to);
+		idle.next = now + 6000 + std::rand() % 10000;
+	}
 }
 
 // Every frame, on the host and in single player.
@@ -7176,8 +7391,17 @@ static void Friend_mode_hold_frame() {
 		Friend_mode_set_hold(false);    // Another map: nobody is left behind.
 		return;
 	}
+	// A guest took one held: it is theirs now, not the party's to hold.
+	for (const int num : std::vector<int>(friend_held)) {
+		const Actor* npc = gwin->get_npc(num);
+		if (npc && Friend_mode_guest_owns(npc)) {
+			friend_held.erase(std::remove(friend_held.begin(), friend_held.end(), num), friend_held.end());
+			friend_hold_idle.erase(num);
+		}
+	}
 	static uint32 next = 0;
 	const uint32  now  = SDL_GetTicks();
+	Friend_mode_hold_idle(now);
 	if (now < next || gwin->get_usecode()->in_usecode() || gwin->get_tqueue()->is_paused()) {
 		return;
 	}
@@ -7185,7 +7409,7 @@ static void Friend_mode_hold_frame() {
 	static std::map<int, uint32> next_strike;    // By NPC.
 	for (const int num : friend_held) {
 		Actor* npc = gwin->get_npc(num);
-		if (!npc || npc->is_dead() || !npc->can_act() || now < next_strike[num]) {
+		if (!npc || npc->is_dead() || !npc->can_act() || now < next_strike[num] || npc->get_action()) {
 			continue;
 		}
 		int                points = 0;
@@ -7213,6 +7437,7 @@ static void Friend_mode_hold_frame() {
 		npc->change_frame(npc->get_dir_framenum(npc->get_direction(foe), pose));
 		Combat_schedule::attack_target(npc, foe, foe->get_tile(), weapon);
 		next_strike[num] = now + 2000;
+		friend_hold_idle[num].struck = now;
 	}
 }
 
