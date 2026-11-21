@@ -972,9 +972,10 @@ inline void Actor::movef(Map_chunk* old_chunk, Map_chunk* new_chunk, int new_sx,
 			glide_ms    = std::max(30, ms + ms / 4);
 			gwin->add_glider(this);
 			if (this == gwin->get_camera_actor() && Glide_log_on()) {
-				Glide_log("%u STEP to %d,%d  %d ms since last  frame_time %d  carry %d,%d  start %d,%d  glide %d ms", now,
-						  to.tx, to.ty, last_step ? int(now - last_step) : -1, frame_time, ox, oy, glide_dx, glide_dy,
-						  glide_ms);
+				Glide_log("%u STEP from %d,%d to %d,%d (by %d,%d) frame %d  %d ms since last  frame_time %d  carry %d,%d  "
+						  "start %d,%d  glide %d ms",
+						  now, from.tx, from.ty, to.tx, to.ty, -tx, -ty, get_framenum(), last_step ? int(now - last_step) : -1,
+						  frame_time, ox, oy, glide_dx, glide_dy, glide_ms);
 			}
 		}
 		last_step = SDL_GetTicks();

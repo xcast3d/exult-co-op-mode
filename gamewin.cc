@@ -2574,7 +2574,11 @@ void Game_window::start_actor_alt(
 	int  ax;
 	int  ay;
 	bool blocked[8];
-	get_shape_location(actor, ax, ay);
+	// Friend Mode: from its tile, not where it is drawn, which smooth
+	// walking moves up to a tile through each step; aimed from there, the
+	// way to the mouse swung between two directions on alternate steps (a
+	// zigzag that turned the figure back and forth on diagonals).
+	get_shape_location(actor->get_tile(), ax, ay);
 
 	Tile_coord start = actor->get_tile();
 	int        dir;
