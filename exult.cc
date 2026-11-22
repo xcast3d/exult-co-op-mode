@@ -12967,6 +12967,8 @@ static void Main_loop_pass(bool input) {
 				// it gone at once, the same as when a guest picks one up.
 				if (now >= friend_next_item_sync) {
 					friend_next_item_sync = now + friend_item_sync_ms;
+					// Bodies left where a guest was, now that no one is.
+					gwin->cull_skipped_chunks();
 					Friend_mode_item_pass(true);
 					Friend_mode_inventory_pass(true);
 					Friend_mode_status_pass(false);

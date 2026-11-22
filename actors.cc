@@ -5572,7 +5572,10 @@ void Dead_body::write_ireg(ODataSource* out) {
 	Game_object*         first = objects.get_first();    // Guessing: +++++
 	const unsigned short tword = first ? first->get_prev()->get_shapenum() : 0;
 	little_endian::Write2(ptr, tword);
-	Write1(ptr, 0);    // Unknown.
+	// Unknown in the original.  Friend Mode: bit 0, a monster's body stays
+	// temporary, so it is still cleaned up after a load; bit 1, written by a
+	// version that knows this (older saves' bodies are looked at on load).
+	Write1(ptr, (get_flag(Obj_flags::is_temporary) ? 1 : 0) | 2);
 	Write1(ptr, get_quality());
 	const int npc = get_live_npc_num();    // If body, get source.
 	// Here, store NPC # more simply.

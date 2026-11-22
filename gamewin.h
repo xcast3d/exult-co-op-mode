@@ -157,6 +157,18 @@ public:
 
 private:
 	std::vector<Remote_friend> remote_friends;
+	// Friend Mode host: chunks the Avatar left while a guest was near, so
+	// their monster bodies stayed and their eggs weren't reset (map, cx, cy).
+	struct Skipped_chunk {
+		int map;
+		int cx;
+		int cy;
+	};
+	std::vector<Skipped_chunk> skipped_chunks;
+	// Delete a chunk's temporary objects and reset its eggs.
+	void cull_chunk(Game_map* map, int cx, int cy);
+	// Is a chunk within reach of the Avatar (at a chunk) or a guest?
+	bool chunk_kept(Game_map* map, int cx, int cy, const Map_chunk* avatar_chunk) const;
 	Actor*                    camera_actor;    // What to center view around.
 	std::vector<Actor_shared> npcs;            // Array of NPC's + the Avatar.
 	std::vector<Dead_body*>   bodies;          // Corresponding Dead_body's.
@@ -653,6 +665,9 @@ public:
 	const std::vector<Remote_friend>& get_remote_friends() const {
 		return remote_friends;
 	}
+	// Friend Mode host: clean up the chunks left alone because a guest was
+	// near, now that no one is.
+	void cull_skipped_chunks();
 	// Friend Mode host: is this a companion some guest controls?
 	bool is_remote_friend(const Game_object* obj) const;
 	// The schedule a guest's companion has as a plain party member: the

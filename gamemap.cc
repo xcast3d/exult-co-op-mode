@@ -63,6 +63,8 @@
 #include <iomanip>
 #include <memory>
 #include <sstream>
+#include <strings.h>
+#include <unordered_set>
 
 using std::cerr;
 using std::cout;
@@ -902,6 +904,105 @@ inline unsigned long Get_quality_flags(unsigned char qualbyte    // Quality byte
 }
 
 /*
+ *  Friend Mode: where the game's own map data places bodies, as
+ *  (shape << 32) | (tile x << 16) | tile y, read once from INITGAME (or a
+ *  map patch's).  Main map only.
+ */
+
+static uint64 Body_spot(int shnum, int tx, int ty) {
+	return (static_cast<uint64>(shnum) << 32) | (static_cast<uint64>(tx) << 16) | static_cast<uint64>(ty);
+}
+
+static const std::unordered_set<uint64>& Original_body_spots() {
+	static std::unordered_set<uint64> spots;
+	static int                        read_for = -1;    // Game type.
+	if (read_for == Game::get_game_type()) {
+		return spots;
+	}
+	read_for = Game::get_game_type();
+	spots.clear();
+	const bool      patched = is_system_path_defined("<PATCH>") && U7exists(PATCH_INITGAME);
+	IFileDataSource in(patched ? PATCH_INITGAME : INITGAME);
+	if (!in.good()) {
+		return spots;
+	}
+	const size_t size = in.getSize();
+	in.seek(0x54);
+	const uint32 count = in.read4();
+	for (uint32 k = 0; k < count && 0x80 + 8 * (k + 1) <= size; ++k) {
+		in.seek(0x80 + 8 * k);
+		const uint32 off = in.read4();
+		const uint32 len = in.read4();
+		if (len <= 13 || off + len > size) {
+			continue;
+		}
+		in.seek(off);
+		char name[14]{};
+		in.read(name, 13);
+		// Only "u7iregXX", the main map's superchunks.
+		if (strncasecmp(name, "u7ireg", 6) != 0 || std::strlen(name) != 8) {
+			continue;
+		}
+		char*     end = nullptr;
+		const int sc  = static_cast<int>(std::strtol(name + 6, &end, 16));
+		if (*end || sc < 0 || sc >= c_num_schunks * c_num_schunks) {
+			continue;
+		}
+		const int  scx  = (sc % c_num_schunks) * c_chunks_per_schunk;
+		const int  scy  = (sc / c_num_schunks) * c_chunks_per_schunk;
+		const auto data = in.readN(len - 13);
+		const unsigned char* d     = data.get();
+		const size_t         n     = len - 13;
+		size_t               i     = 0;
+		int                  depth = 0;    // Inside containers.
+		while (i < n) {
+			int entlen = d[i++];
+			if (entlen == 0 || entlen == 1) {
+				if (depth > 0) {
+					--depth;
+				}
+				continue;
+			}
+			if (entlen == 2) {
+				i += 2;
+				continue;
+			}
+			if (entlen == IREG_SPECIAL) {
+				if (i + 3 > n) {
+					break;
+				}
+				i += 3 + (d[i + 1] | (d[i + 2] << 8));
+				continue;
+			}
+			int extended = 0;
+			if (entlen == IREG_EXTENDED || entlen == IREG_EXTENDED2) {
+				extended = entlen == IREG_EXTENDED ? 1 : 0;
+				if (i >= n) {
+					break;
+				}
+				entlen = d[i++];
+			}
+			if (i + entlen > n || entlen < 6) {
+				break;
+			}
+			const unsigned char* e = d + i;
+			i += entlen;
+			const int testlen = entlen - extended;
+			const int shnum   = extended ? e[2] + 256 * e[3] : e[2] + 256 * (e[3] & 3);
+			const int x       = (scx + (e[0] >> 4)) * c_tiles_per_chunk + (e[0] & 0xf);
+			const int y       = (scy + (e[1] >> 4)) * c_tiles_per_chunk + (e[1] & 0xf);
+			if (depth == 0 && ShapeID::get_info(shnum).is_body_shape()) {
+				spots.insert(Body_spot(shnum, x, y));
+			}
+			if ((testlen == 12 || testlen == 13) && (e[4 + extended] | e[5 + extended])) {
+				++depth;    // Its contents follow.
+			}
+		}
+	}
+	return spots;
+}
+
+/*
  *  Read a list of ireg objects.  They are either placed in the desired
  *  game chunk, or added to their container.
  */
@@ -1033,6 +1134,12 @@ void Game_map::read_ireg_objects(
 			quality                    = entry[7];
 			oflags                     =    // Override flags (I think).
 					Get_quality_flags(entry[11 + extbody]);
+			// Friend Mode: a monster's body stays temporary through a save
+			// (Exult's own body entry, so this byte was always 0), or it
+			// was never cleaned up after the game was loaded again.
+			if (extbody && (entry[6] & 1)) {
+				oflags |= 1 << Obj_flags::is_temporary;
+			}
 			int npc_num;
 			if (quality == 1 && (extbody || (entry[8] >= 0x80 || Game::get_game_type() == SERPENT_ISLE))) {
 				npc_num = extbody ? (entry[8] + 256 * entry[9]) : ((entry[8] - 0x80) & 0xFF);
@@ -1041,6 +1148,17 @@ void Game_map::read_ireg_objects(
 			}
 			if (!npc_num) {    // Avatar has no body.
 				npc_num = -1;
+			}
+			// Friend Mode (0.8.10): a monster's body from a save made before
+			// bodies kept their temporary flag (bit 1 unset) is temporary
+			// again, unless it is an NPC's or the game's map placed it there.
+			if (extbody && !container && !(entry[6] & 3) && npc_num < 0 && get_num() == 0 && !Game::is_editing()) {
+				const int x = (scx + cx) * c_tiles_per_chunk + tilex;
+				const int y = (scy + cy) * c_tiles_per_chunk + tiley;
+				if (!Original_body_spots().count(Body_spot(shnum, x, y))) {
+					oflags |= 1 << Obj_flags::is_temporary;
+					cout << "Friend Mode: body at " << x << ',' << y << " from an older save will be cleaned up" << endl;
+				}
 			}
 			const Dead_body_shared b = std::make_shared<Dead_body>(shnum, frnum, tilex, tiley, lift, npc_num);
 			obj                      = b;

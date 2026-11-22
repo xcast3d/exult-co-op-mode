@@ -1020,6 +1020,7 @@ void Game_window::clear_world(bool restoremapedit) {
 	controlled_actor = nullptr;
 	controlled_actor_previous_schedule = -1;
 	remote_friends.clear();
+	skipped_chunks.clear();
 	camera_actor = nullptr;
 	num_npcs1    = 0;
 	theft_cx = theft_cy = -1;
@@ -4124,6 +4125,84 @@ void Game_window::plasma(int w, int h, int x, int y, int startc, int endc) {
 	painted = true;
 }
 
+// Friend Mode: temporary objects stay within this many chunks of the
+// Avatar (or a guest's companion).
+constexpr int friend_keep_chunks = 3;
+
+static bool Chunks_near(int cx, int cy, int ax, int ay) {
+	auto chunk_dist = [](int a, int b) {
+		const int d = a > b ? a - b : b - a;
+		return d < c_num_chunks - d ? d : c_num_chunks - d;
+	};
+	return chunk_dist(cx, ax) <= friend_keep_chunks && chunk_dist(cy, ay) <= friend_keep_chunks;
+}
+
+bool Game_window::chunk_kept(Game_map* map, int cx, int cy, const Map_chunk* avatar_chunk) const {
+	if (avatar_chunk && avatar_chunk->get_map() == map
+		&& Chunks_near(cx, cy, avatar_chunk->get_cx(), avatar_chunk->get_cy())) {
+		return true;
+	}
+	for (const Remote_friend& each : remote_friends) {
+		const Actor* guest = each.actor;
+		if (guest->get_map() == map && !guest->is_pos_invalid() && Chunks_near(cx, cy, guest->get_cx(), guest->get_cy())) {
+			return true;
+		}
+	}
+	return false;
+}
+
+void Game_window::cull_chunk(Game_map* map, int cx, int cy) {
+	Map_chunk* list = map->get_chunk_safely(cx, cy);
+	if (!list) {
+		return;
+	}
+	Game_object_vector removes;
+	Object_iterator    it(list->get_objects());
+	Game_object*       each;
+	while ((each = it.get_next()) != nullptr) {
+		Egg_object* egg = each->as_egg();
+		if (egg != nullptr && egg->reset()) {
+			continue;
+		} else if (each->get_flag(Obj_flags::is_temporary)) {
+			removes.push_back(each);
+		}
+	}
+	for (auto* remove : removes) {
+#ifdef DEBUG
+		const Tile_coord t = remove->get_tile();
+		cout << "Culling object: " << remove->get_name() << '(' << remove << ")@" << t.tx << "," << t.ty << "," << t.tz
+			 << endl;
+#endif
+		remove->delete_contents();    // first delete item's contents
+		remove->remove_this(nullptr);
+	}
+}
+
+void Game_window::cull_skipped_chunks() {
+	if (skipped_chunks.empty() || Friend_mode_is_guest() || !main_actor) {
+		return;
+	}
+	const Map_chunk* avatar_chunk = main_actor->is_pos_invalid() ? nullptr : main_actor->get_chunk();
+	auto             done         = std::remove_if(skipped_chunks.begin(), skipped_chunks.end(), [&](const Skipped_chunk& each) {
+        Game_map* map = get_map(each.map);
+        if (!map) {
+            return true;
+        }
+        if (chunk_kept(map, each.cx, each.cy, avatar_chunk)) {
+            return false;    // Someone is still near.
+        }
+        // A chunk not in memory has nothing of ours to clean (one holding
+        // a body is changed, and changed ones aren't swapped out).
+        if (map->is_chunk_read(each.cx, each.cy)) {
+            cout << "Friend Mode: cleaned up chunk " << each.cx << ',' << each.cy << " left while a guest was near"
+                 << endl;
+            cull_chunk(map, each.cx, each.cy);
+        }
+        return true;
+    });
+	skipped_chunks.erase(done, skipped_chunks.end());
+}
+
 /*
  *  Chunk caching emulation: swap out chunks which are now at least
  *  3 chunks away.
@@ -4144,64 +4223,37 @@ void Game_window::emulate_cache(Map_chunk* olist, Map_chunk* nlist) {
 	// Cancel scripts 4 chunks from this.
 	Usecode_script::purge(Tile_coord(newx * c_tiles_per_chunk, newy * c_tiles_per_chunk, 0), 4 * c_tiles_per_chunk);
 	// Temporary objects (monster bodies, spawned items) in chunks we left
-	// behind are deleted, as in the original.  Friend Mode keeps them one
-	// chunk further out (3 instead of 2), and also around a guest's
-	// companion.  A guest's world follows the host's, so it deletes nothing.
-	constexpr int keep_chunks = 3;
+	// behind are deleted, and their eggs reset, as in the original.  Friend
+	// Mode keeps them one chunk further out (3 instead of 2), and also
+	// around a guest's companion.  A guest's world follows the host's, so
+	// it deletes nothing.
 	if (!Friend_mode_is_guest()) {
-		auto chunk_dist = [](int a, int b) {
-			const int d = a > b ? a - b : b - a;
-			return d < c_num_chunks - d ? d : c_num_chunks - d;
-		};
-		auto near_chunk = [&](int cx, int cy, int ax, int ay) {
-			return chunk_dist(cx, ax) <= keep_chunks && chunk_dist(cy, ay) <= keep_chunks;
-		};
-		auto near_guest = [&](int cx, int cy) {
-			for (const Remote_friend& each : remote_friends) {
-				const Actor* guest = each.actor;
-				if (guest->get_map() == omap && !guest->is_pos_invalid()
-					&& near_chunk(cx, cy, guest->get_cx(), guest->get_cy())) {
-					return true;
-				}
-			}
-			return false;
-		};
-		Game_object_vector removes;
-		for (int dy = -keep_chunks; dy <= keep_chunks; dy++) {
-			for (int dx = -keep_chunks; dx <= keep_chunks; dx++) {
+		for (int dy = -friend_keep_chunks; dy <= friend_keep_chunks; dy++) {
+			for (int dx = -friend_keep_chunks; dx <= friend_keep_chunks; dx++) {
 				const int cx = (oldx + dx + c_num_chunks) % c_num_chunks;
 				const int cy = (oldy + dy + c_num_chunks) % c_num_chunks;
-				if (nmap == omap && near_chunk(cx, cy, newx, newy)) {
+				if (nmap == omap && Chunks_near(cx, cy, newx, newy)) {
 					continue;    // Still near.
 				}
-				if (near_guest(cx, cy)) {
-					continue;    // Near a guest's companion.
-				}
-				Map_chunk* list = omap->get_chunk_safely(cx, cy);
-				if (!list) {
+				if (chunk_kept(omap, cx, cy, nullptr)) {
+					// Near a guest's companion: left for now, and looked at
+					// again until no one is near (it was never looked at
+					// again, so the bodies stayed and nothing respawned).
+					const int  mapnum = omap->get_num();
+					const bool known  = std::any_of(
+                            skipped_chunks.begin(), skipped_chunks.end(), [&](const Skipped_chunk& each) {
+                                return each.map == mapnum && each.cx == cx && each.cy == cy;
+                            });
+					if (!known) {
+						skipped_chunks.push_back({mapnum, cx, cy});
+						cout << "Friend Mode: left chunk " << cx << ',' << cy << " as is (a guest is near)" << endl;
+					}
 					continue;
 				}
-				Object_iterator it(list->get_objects());
-				Game_object*    each;
-				while ((each = it.get_next()) != nullptr) {
-					Egg_object* egg = each->as_egg();
-					if (egg != nullptr && egg->reset()) {
-						continue;
-					} else if (each->get_flag(Obj_flags::is_temporary)) {
-						removes.push_back(each);
-					}
-				}
+				cull_chunk(omap, cx, cy);
 			}
 		}
-		for (auto* remove : removes) {
-#ifdef DEBUG
-			const Tile_coord t = remove->get_tile();
-			cout << "Culling object: " << remove->get_name() << '(' << remove << ")@" << t.tx << "," << t.ty << "," << t.tz
-				 << endl;
-#endif
-			remove->delete_contents();    // first delete item's contents
-			remove->remove_this(nullptr);
-		}
+		cull_skipped_chunks();
 	}
 
 	if (omap == nmap) {

@@ -24,6 +24,19 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.10)
+
+### Fixed
+
+- In co-op, monster bodies no longer stay forever where you fought, and
+  monsters there spawn again. When the host walked away while a guest was
+  still close by, those places were never cleaned up afterwards; now
+  they are once everyone has left.
+- Monster bodies lying around when you save are cleaned up after you load
+  the game again, as they are before saving. Until now they stayed
+  forever. Bodies stuck that way in older saves are cleaned up too; the
+  bodies of people, and those the game's map places, still stay.
+
 ## 0.8.9, 2026-11-21 (build 291)
 
 ### Added
