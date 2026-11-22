@@ -1606,6 +1606,37 @@ static void Friend_mode_visit_vehicle_menu() {
 	Friend_mode_notice(note);
 }
 
+// Host debug aid (Alt+F9, Option on a Mac): a menu of the game's weather,
+// as a weather egg sets it, lasting until another is picked (Clear ends
+// it).  The old weather goes first, so each choice is seen on its own.
+// Guests follow it with the host's clock, as they do an egg's.  Fog is
+// daytime only, as in the original (the clock clears it at night).
+static void Friend_mode_weather_menu() {
+	struct Weather {
+		const char* label;
+		int         num;    // As Egg_object::set_weather takes it.
+	};
+	static const Weather choices[] = {
+			{"Fog", 4}, {"Rain storm", 2}, {"Snow", 1}, {"Overcast", 5}, {"Clouds", 6}, {"Clear", 0},
+	};
+	std::vector<std::string> labels;
+	for (const auto& w : choices) {
+		labels.emplace_back(w.label);
+	}
+	const int chosen = Controller_choose("Test weather", labels);
+	if (chosen < 0 || chosen >= static_cast<int>(std::size(choices))) {
+		return;
+	}
+	gwin->get_effects()->remove_weather_effects();
+	Egg_object::set_weather(choices[chosen].num, 0, nullptr);
+	const int hour = gwin->get_clock()->get_hour();
+	if (choices[chosen].num == 4 && (hour < 6 || hour > 20)) {
+		Friend_mode_notice("Fog only shows by day (6 am to 9 pm)");
+	} else {
+		Friend_mode_notice(std::string("Weather: ") + choices[chosen].label);
+	}
+}
+
 // Host debug aid (F9 and F8, for the Class System): one group of
 // companions stands by the Avatar and joins the party, at level 7 or more
 // so all their skills are open; the Avatar at level 5 or more (Great
@@ -7417,6 +7448,115 @@ static void Friend_mode_hold_idle(uint32 now) {
 	}
 }
 
+// Weather remarks (2026-11-22): a few seconds after the weather turns (as
+// its colours fade in), one companion says something about it, picked at
+// random from those in the party near the Avatar that no player plays.
+// Host and single player; guests hear it as any speech.  Not during a
+// fight or a conversation (it waits a little, then lets it go), and fog
+// at night, which doesn't show, says nothing.
+static void Friend_mode_weather_remark_frame() {
+	enum Kind {
+		unknown = -1,
+		clear,
+		fog,
+		rain,
+		snow,
+		overcast
+	};
+	static int    last     = unknown;
+	static int    pending  = unknown;
+	static uint32 say_at   = 0;    // Ticks: when to say it.
+	static uint32 give_up  = 0;
+	const uint32  now      = SDL_GetTicks();
+	const Game_clock* clock = gwin->get_clock();
+	int               kind  = last;
+	switch (gwin->get_effects()->get_weather()) {
+	case 0:
+	case 6:    // Clouds passing: still fair.
+		kind = clear;
+		break;
+	case 1:
+		kind = snow;
+		break;
+	case 2:
+		kind = rain;
+		break;
+	case 4:
+		kind = clock->is_foggy() ? fog : clear;
+		break;
+	case 5:
+		kind = overcast;
+		break;
+	default:
+		break;    // Sparkles (Ambrosia): no change.
+	}
+	if (kind != last) {
+		// Starting up, or right after loading: no remark.
+		pending = last == unknown ? unknown : kind;
+		last    = kind;
+		say_at  = now + 2500 + std::rand() % 1500;
+		give_up = say_at + 15000;
+	}
+	if (pending == unknown || now < say_at) {
+		return;
+	}
+	if (now > give_up) {
+		pending = unknown;
+		return;
+	}
+	if (gwin->in_combat() || gwin->get_usecode()->in_usecode() || gwin->get_tqueue()->is_paused()
+		|| !gwin->main_actor_can_act()) {
+		return;    // Later, if it's soon enough.
+	}
+	Actor*           members[9];
+	const int        count  = gwin->get_party(members, 0);
+	const Actor*     avatar = gwin->get_main_actor();
+	std::vector<Actor*> speakers;
+	for (int i = 0; i < count; i++) {
+		Actor* npc = members[i];
+		if (npc && npc != avatar && !npc->is_dead() && npc->can_act() && !npc->get_flag(Obj_flags::asleep)
+			&& !gwin->is_remote_friend(npc) && !Friend_mode_guest_owns(npc) && npc != Friend_mode_led_companion()
+			&& npc->distance(avatar) <= 12) {
+			speakers.push_back(npc);
+		}
+	}
+	const int remark = pending;
+	pending          = unknown;
+	if (speakers.empty()) {
+		return;
+	}
+	const int  hour = clock->get_hour();
+	const bool day  = hour >= 6 && hour < 20;
+	static const std::vector<const char*> fog_lines  = {"I can barely see!", "Where did this fog come from?",
+                                                        "Stay close, everyone.", "This fog is thick."};
+	static const std::vector<const char*> rain_lines = {"Rainstorm!", "We're going to get soaked!", "Here comes the rain!"};
+	static const std::vector<const char*> snow_lines = {"Snow!", "Brr! It's getting cold.", "Look, it's snowing!"};
+	static const std::vector<const char*> grey_lines = {"Looks like rain.", "The sky is turning grey."};
+	static const std::vector<const char*> sun_lines  = {"Beautiful weather!", "It's nice out!", "Ah, the sun is back."};
+	static const std::vector<const char*> sky_lines  = {"The sky has cleared.", "Look at the stars!"};
+	const std::vector<const char*>*       lines      = nullptr;
+	switch (remark) {
+	case fog:
+		lines = &fog_lines;
+		break;
+	case rain:
+		lines = &rain_lines;
+		break;
+	case snow:
+		lines = &snow_lines;
+		break;
+	case overcast:
+		lines = &grey_lines;
+		break;
+	default:
+		lines = day ? &sun_lines : &sky_lines;
+		break;
+	}
+	Actor* npc = speakers[std::rand() % speakers.size()];
+	gwin->get_effects()->remove_text_effect(npc);
+	npc->say((*lines)[std::rand() % lines->size()]);
+}
+
 // Every frame, on the host and in single player.
 static void Friend_mode_hold_frame() {
 	if (!friend_holding) {
@@ -7944,6 +8084,8 @@ static void Friend_mode_apply_clock(const std::vector<unsigned char>& data) {
 	const int weather = data[7];
 	if (weather != friend_guest_weather) {
 		friend_guest_weather = weather;
+		// Only the host's one weather: fog after rain doesn't keep the rain.
+		gwin->get_effects()->remove_weather_effects();
 		Egg_object::set_weather(weather, 0, nullptr);    // Lasts until the host's changes.
 	}
 	if (data.size() >= 13) {
@@ -14171,6 +14313,9 @@ static void Main_loop_pass(bool input) {
 			}
 		}
 		if ((!lerp || !didlerp) && !didglide) {    // No lerping
+			if (Relight::fading()) {
+				gwin->set_all_dirty();    // Shadows fading as fog comes or goes.
+			}
 			if (gwin->is_dirty()) {    // Note the ending else in the above #if!
 				gwin->paint_dirty();
 			}
@@ -14196,6 +14341,7 @@ static void Main_loop_pass(bool input) {
 		Friend_mode_face_hover_frame();
 		if (!Friend_mode_is_guest()) {
 			Friend_mode_hold_frame();
+			Friend_mode_weather_remark_frame();
 			Friend_mode_lead_watch_frame();
 			// Leading a companion: the guests' leash (none while the Avatar is played).
 			Actor* led = Friend_mode_led_companion();
@@ -14719,7 +14865,9 @@ static void Handle_event(SDL_Event& event) {
 	}
 #ifdef FRIEND_TEST_KEYS    // Host test keys (F8, F9, with Shift or Ctrl): not in release builds.
 	if (arg_friend_host && !friend_chat_active && event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_F9) {
-		if (event.key.mod & SDL_KMOD_SHIFT) {
+		if (event.key.mod & SDL_KMOD_ALT) {
+			Friend_mode_weather_menu();    // Fog, rain, snow, clouds, clear.
+		} else if (event.key.mod & SDL_KMOD_SHIFT) {
 			Friend_mode_test_fight_menu();    // A list of fights.
 		} else if (event.key.mod & SDL_KMOD_CTRL) {
 			Friend_mode_spawn_test_kit();    // Doors, chests, keys, teleporters...

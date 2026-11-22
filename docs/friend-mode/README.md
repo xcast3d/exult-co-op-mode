@@ -53,6 +53,10 @@ a wolf and a rabbit.
 **Alt+F8** (Option+F8 on a Mac, which keeps Ctrl+F8) opens a menu of the game's vehicles (a ship in Britain's
 harbour, a carriage by Britain, the magic carpet); the party goes to the one
 chosen, with the deed or title in the Avatar's pack.
+**Alt+F9** (Option+F9 on a Mac) opens a menu of weather: fog, a rain storm,
+snow, overcast, clouds, or clear; it lasts until another is picked, and
+guests get it with the host's clock as they get a weather egg's. Fog shows
+by day only (6 am to 9 pm), as in the original.
 For now (2026-10-28, demo videos) every build has a temporary **F9** that
 places that fight in any game, co-op or not, ahead of the test keys; it is
 removed before a release ([Before a

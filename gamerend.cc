@@ -473,7 +473,40 @@ namespace Relight {
 			using clk = std::chrono::steady_clock;
 			return std::chrono::duration<double, std::milli>(clk::now().time_since_epoch()).count();
 		}
+
+		// Weather (2026-11-22): sunlight through fog is scattered, so it
+		// casts no shadows; under an overcast sky (a rain storm too) they
+		// are about half as strong.  How hazy it is (0 clear, 1 thick fog)
+		// follows the clock's weather, easing over the same four seconds as
+		// the weather palette (20 ticks of 200 ms), so the shadows fade as
+		// it rolls in.
+		constexpr double fog_fade_ms = 4000.0;
+		float            fog_now     = 0.0f;
+		double           fog_last_ms = -1e9;
+
+		float fog_target(const Game_window* gwin) {
+			const Game_clock* clock = gwin->get_clock();
+			return clock->is_foggy() ? 1.0f : clock->is_overcast() ? 0.5f : 0.0f;
+		}
+
+		void update_fog(const Game_window* gwin) {
+			const float  target = fog_target(gwin);
+			const double t      = now_ms();
+			const double dt     = t - fog_last_ms;
+			fog_last_ms         = t;
+			if (dt > 1000.0) {
+				fog_now = target;    // Just loaded, or lighting just turned on.
+			} else if (fog_now < target) {
+				fog_now = std::min(target, fog_now + float(dt / fog_fade_ms));
+			} else if (fog_now > target) {
+				fog_now = std::max(target, fog_now - float(dt / fog_fade_ms));
+			}
+		}
 	}    // namespace
+
+	bool fading() {
+		return active() && fog_now != fog_target(Game_window::get_instance());
+	}
 
 	const Settings& settings() {
 		read_settings();
@@ -1222,6 +1255,7 @@ namespace Relight {
 		struct Light_key {
 			int      x = 0, y = 0, w = 0, h = 0, hx = 0, hy = 0, hl = 0;
 			int      hour = -1, minute = -1;
+			int      fog  = 0;    // fog_now in 1/64ths.
 			bool     dungeon = false, special = false, roofed = false;
 			int      roof_floor = 0;
 			Settings set;
@@ -1231,7 +1265,7 @@ namespace Relight {
 
 		bool same_key(const Light_key& a, const Light_key& b) {
 			return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h && a.hx == b.hx && a.hy == b.hy && a.hl == b.hl
-				   && a.hour == b.hour && a.minute == b.minute && a.dungeon == b.dungeon && a.special == b.special
+				   && a.hour == b.hour && a.minute == b.minute && a.fog == b.fog && a.dungeon == b.dungeon && a.special == b.special
 				   && a.roofed == b.roofed && a.roof_floor == b.roof_floor && a.set.enabled == b.set.enabled
 				   && a.set.soft == b.set.soft && a.set.strength == b.set.strength
 				   && a.set.full_colour == b.set.full_colour && a.set.sunlight == b.set.sunlight
@@ -1398,13 +1432,19 @@ namespace Relight {
 		// Sunlight: brightens what the sun reaches (not shadows, not
 		// indoors), fading in after dawn like the shadows.
 		static const float boosts[3] = {0.0f, 0.12f, 0.25f};
+		// In fog the sun's direction is lost: shadows, sunlight, the sun's
+		// warmth and the faces it lights fade out (clear = 1, thick fog = 0);
+		// overcast, halfway.
+		const float        fog   = fog_now * fog_now * (3.0f - 2.0f * fog_now);
+		const float        clear = 1.0f - fog;
 		const float        sun_boost
-				= 1.0f + (sunlit ? boosts[set.sunlight] * std::min(1.0f, sun_up * 4.0f) : 0.0f);
-		const float shadow_amt = sunlit ? strengths[set.strength] * std::min(1.0f, sun_up * 4.0f) : 0.0f;
+				= 1.0f + (sunlit ? clear * boosts[set.sunlight] * std::min(1.0f, sun_up * 4.0f) : 0.0f);
+		const float shadow_amt = sunlit ? clear * strengths[set.strength] * std::min(1.0f, sun_up * 4.0f) : 0.0f;
 		// Under a roof by day the room is dimmer than outside, enough that
 		// light through a door or window shows, whatever the strength.
 		float indoor_dim = sunlit ? (0.2f + 0.4f * strengths[set.strength]) * std::min(1.0f, sun_up * 4.0f) : 0.0f;
-		const float ao_amt     = 0.15f + 0.5f * strengths[set.strength];
+		// Some contact shade stays in fog, so things still stand on the ground.
+		const float ao_amt     = (0.15f + 0.5f * strengths[set.strength]) * (1.0f - 0.5f * fog);
 		const float elev       = 0.10f + 0.78f * sun_up;    // Radians.
 		const float slope      = std::tan(elev);
 		const float ux = std::cos(a), uy = -std::sin(a);
@@ -1417,14 +1457,17 @@ namespace Relight {
 		const float hit_south = std::max(0.0f, uy / un / sn);
 		auto        facing   = [&](int f) {
             const float hit = f == face_east ? hit_east : f == face_south ? hit_south : hit_top;
-            return std::clamp(1.0f + 0.6f * (hit - hit_top), 0.75f, 1.3f);
+            return 1.0f + clear * (std::clamp(1.0f + 0.6f * (hit - hit_top), 0.75f, 1.3f) - 1.0f);
 		};
 		// Warm sun (golden when low), cool sky in the shade.
 		const float t     = std::clamp(sun_up * 2.0f, 0.0f, 1.0f);
-		const float sun_r = 1.12f + (1.03f - 1.12f) * t;
-		const float sun_g = 0.92f + (1.00f - 0.92f) * t;
-		const float sun_b = 0.72f + (0.95f - 0.72f) * t;
-		const float sky_r = 0.92f, sky_g = 0.97f, sky_b = 1.10f;
+		auto        haze  = [clear](float v) {    // Toward white light in fog.
+            return 1.0f + clear * (v - 1.0f);
+		};
+		const float sun_r = haze(1.12f + (1.03f - 1.12f) * t);
+		const float sun_g = haze(0.92f + (1.00f - 0.92f) * t);
+		const float sun_b = haze(0.72f + (0.95f - 0.72f) * t);
+		const float sky_r = haze(0.92f), sky_g = haze(0.97f), sky_b = haze(1.10f);
 
 		shadow.assign(size_t(w) * h, 0);
 		const int   blur           = set.soft ? 2 : 0;
@@ -1590,7 +1633,7 @@ namespace Relight {
 		// or window (walls in the way block it, and the ray must leave
 		// below the eaves, not through the roof) gets a patch of direct
 		// sunlight, slanting in with the time of day.
-		if (sunlit && roofed && indoor_dim > 0) {
+		if (sunlit && roofed && indoor_dim > 0 && clear > 0.0f) {
 			const float eaves = roof_floor + 26.0f;    // About a door's height.
 			beam.assign(size_t(w) * h, 0);
 			pool().run(h, [&](int r0, int r1) {
@@ -1642,7 +1685,7 @@ namespace Relight {
 							continue;
 						}
 						// A touch brighter than open ground, as a sunbeam reads.
-						const float k   = 0.9f * fade * sum / float((2 * bb + 1) * (2 * bb + 1));
+						const float k   = 0.9f * clear * fade * sum / float((2 * bb + 1) * (2 * bb + 1));
 						const float hi  = sun_boost * 1.08f;
 						float*      out = &light[(size_t(py) * w + px) * 3];
 						out[0] += k * (tr * hi - out[0]);
@@ -1825,6 +1868,8 @@ namespace Relight {
 		key.hl         = hline;
 		key.hour       = clock->get_hour();
 		key.minute     = clock->get_minute();
+		update_fog(gwin);
+		key.fog        = int(std::lround(fog_now * 64.0f));
 		key.dungeon    = gwin->is_in_dungeon();
 		key.special    = gwin->is_special_light();
 		key.roofed     = roofed;

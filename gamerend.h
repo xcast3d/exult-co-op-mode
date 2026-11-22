@@ -95,6 +95,7 @@ namespace Relight {
 	void            cycle_view();
 	const char*     view_name();
 	bool            active();    // Anything to do?
+	bool            fading();    // Shadows fading with fog: repaint each frame.
 
 	// Lighting is left out while one of these is alive (save thumbnails).
 	struct Pause {

@@ -33,6 +33,9 @@ both in `--version` and the version files saved with each game.
   Y ring. The arrows or D-pad choose a companion, Space or Cross / A
   picks them up and puts them down in a new place, and Escape or
   Circle / B finishes. In co-op the host sets it and guests see it.
+- Companions remark on the weather when it turns: fog rolling in, a rain
+  storm, snow, a grey sky, or the sun coming back out. One of them says
+  it, picked at random, and in co-op everyone sees it.
 
 ### Changed
 
@@ -58,6 +61,12 @@ both in `--version` and the version files saved with each game.
 - Companions no longer face a different way from you when walking
   diagonally, and one at the edge of the formation no longer steps in
   toward the middle and back out when something small is in its way.
+- With the experimental lighting on, fog no longer looks broken. Sun
+  shadows, sunlight and the sun's warm colour fade out as the fog rolls
+  in, and come back as it clears, instead of hard dark shadows over a
+  pale screen. Under an overcast sky or in a rain storm they are softer
+  too, about half as strong. In co-op, guests no longer keep rain or snow
+  when the host's weather turns to fog.
 - Companions no longer get stuck out of the formation for a while after
   walking diagonally.
 

@@ -124,6 +124,14 @@ public:
 
 	void set_overcast(bool onoff);      // Start/end cloud cover.
 	void set_fog(bool onoff);           // Start/end cloud cover.
+
+	bool is_foggy() const {
+		return fog > 0;
+	}
+
+	bool is_overcast() const {    // Overcast, a rain storm or snow.
+		return overcast > 0;
+	}
 	void increment(int num_minutes);    // Increment clock.
 	void handle_event(unsigned long curtime, uintptr udata) override;
 	void fake_next_period();    // For debugging.
