@@ -7531,9 +7531,9 @@ static void Friend_mode_weather_remark_frame() {
                                                         "Stay close, everyone.", "This fog is thick."};
 	static const std::vector<const char*> rain_lines = {"Rainstorm!", "We're going to get soaked!", "Here comes the rain!"};
 	static const std::vector<const char*> snow_lines = {"Snow!", "Brr! It's getting cold.", "Look, it's snowing!"};
-	static const std::vector<const char*> grey_lines = {"Looks like rain.", "The sky is turning grey."};
+	static const std::vector<const char*> grey_lines = {"Looks like rain.", "Where did the sun go?"};
 	static const std::vector<const char*> sun_lines  = {"Beautiful weather!", "It's nice out!", "Ah, the sun is back."};
-	static const std::vector<const char*> sky_lines  = {"The sky has cleared.", "Look at the stars!"};
+	static const std::vector<const char*> sky_lines  = {"What a clear night!", "Look at the stars!"};
 	const std::vector<const char*>*       lines      = nullptr;
 	switch (remark) {
 	case fog:
