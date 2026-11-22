@@ -127,7 +127,10 @@ in [running your own lobby](lobby-protocol.md).
 Limits, so a public lobby can't be flooded: 8 guests per code, 16 KB a
 message, 240 messages a minute per connection, a guest's lobby connection
 at most 60 seconds (the game needs one or two, then closes it itself),
-codes end when the host leaves or after 12 hours.
+codes end when the host leaves or after 12 hours. Per internet address:
+3 codes open at once, 10 new games and 20 joins a minute. An IPv6 address
+counts by its /64 network, since one home or phone is given a whole /64
+and picks new addresses in it as it likes.
 
 ## Security
 

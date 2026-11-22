@@ -45,6 +45,11 @@ do in the world).
   60 seconds.
 - **Limits:** 8 guests a code, 16 KB a message, 240 messages a minute a
   connection, codes end when the host leaves or after 12 hours.
+- **Per address means per place:** an IPv4 address, or an IPv6 /64 (one
+  home or phone is given a whole /64 and picks addresses in it freely, so
+  counting each IPv6 address would be no limit). At most 3 codes open at
+  once per address, counted by one Durable Object that takes one request
+  at a time (2026-11-22, see below).
 - **`/ip`** only ever tells a computer its own address, refuses browsers,
   and shares the join rate limit.
 - **No secrets in the repo:** TURN keys are Worker secrets; wrangler's
@@ -114,6 +119,20 @@ lobby's codes, signals and address lookup.
 
 Still to do for this sweep: try the save fix with a deliberately broken
 save (it was checked by reading the code and builds).
+
+## The cap on codes, 2026-11-22
+
+The smoke test sometimes got a fourth code from one computer. Two causes,
+both fixed in `tools/lobby/src/index.js`:
+
+| Found | Risk | Fix |
+| --- | --- | --- |
+| Limits counted each IPv6 address apart. A Mac uses several "temporary" IPv6 addresses, and two connections seconds apart can come from two of them | Anyone with IPv6 could open any number of codes (and get past the rate limits) by picking new addresses in their /64 | IPv6 counts by its /64 (`addressKey`), for the code cap and both rate limits |
+| The Hosts object let a second request in while asking lobby objects whether old codes were still open, and a code just handed out (host still connecting, longer with TURN) looked closed | Hosts opening at the same moment all got codes: 6 of 6 in a test | One request at a time; a code counts for its first 30 s without asking; a lobby that doesn't answer counts as open |
+
+The smoke test checks both now (a neighbour in the same /64, and six hosts
+at once; the second only against `wrangler dev`, where the test can choose
+its addresses).
 
 ## Still open
 

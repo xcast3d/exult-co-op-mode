@@ -5,6 +5,17 @@
 
 const base = process.argv[2] || "ws://127.0.0.1:8787";
 
+// The address this run's connections say they come from, sent only to a
+// lobby on this machine (`wrangler dev`, plain ws://), which takes it: each
+// run gets an IPv6 network of its own, so runs back to back don't share
+// limits.  Cloudflare refuses any request that carries one (error 1000),
+// so against a real lobby the test is simply this computer.
+const local = /^ws:\/\/(127\.0\.0\.1|localhost|\[::1\])(:|\/|$)/.test(base);
+const word = () => Math.floor(Math.random() * 0x10000).toString(16);
+const network = `2001:db8:${word()}:${word()}`;
+const me = `${network}::1`;
+const neighbour = `${network}::2`;    // Same /64: counted as the same place.
+
 let failures = 0;
 function check(what, ok) {
 	console.log(`${ok ? "ok  " : "FAIL"} ${what}`);
@@ -14,9 +25,13 @@ function check(what, ok) {
 }
 
 // A socket with a queue of the messages it got, and a way to wait for one.
-function open(path) {
+function connect(path, address = me) {
+	return local ? new WebSocket(base + path, { headers: { "CF-Connecting-IP": address } }) : new WebSocket(base + path);
+}
+
+function open(path, address = me) {
 	return new Promise((resolve, reject) => {
-		const ws = new WebSocket(base + path);
+		const ws = connect(path, address);
 		const queue = [];
 		const waiters = [];
 		ws.addEventListener("message", (event) => {
@@ -128,23 +143,33 @@ try {
 	// The game's web build (BROWSER_ORIGINS) joins, and only joins.
 	check("the web build may join", await status("/join/NOWHERE-0000", "http://127.0.0.1:8642") === 101);
 	check("the web build can't host", await status("/host", "http://127.0.0.1:8642") === 403);
-	const asked = await fetch(base.replace(/^ws/, "http") + "/ip");
-	check("the caller's own address is given", asked.ok && (await asked.text()).endsWith("\n"));
+	const asked = await fetch(base.replace(/^ws/, "http") + "/ip", local ? { headers: { "CF-Connecting-IP": me } } : {});
+	const shown = await asked.text();
+	check("the caller's own address is given", asked.ok && shown.endsWith("\n"));
+	if (local) {
+		check("the local lobby takes the test address", shown.trim() === me);
+	}
 
 	// The host's keep-alive is answered (without waking the game).
 	host.send('{"type":"keepalive"}');
 	check("the keep-alive is answered", (await host.next("keepalive_ok")).type === "keepalive_ok");
 
 	// At most three codes open from one address: this host and two more,
-	// then a fourth is refused until one closes.
-	const more = [await open("/host"), await open("/host")];
-	await Promise.all(more.map((ws) => ws.next("code")));
-	const fourth = await new Promise((resolve) => {
-		const ws = new WebSocket(base + "/host");
+	// then a fourth is refused until one closes, also from another address
+	// in the same IPv6 /64 (one home or phone).
+	const tryHost = (address) => new Promise((resolve) => {
+		const ws = connect("/host", address);
 		ws.addEventListener("open", () => resolve(ws));
 		ws.addEventListener("error", () => resolve(null));
 	});
+	const more = [await open("/host"), await open("/host")];
+	await Promise.all(more.map((ws) => ws.next("code")));
+	const fourth = await tryHost(me);
 	check("a fourth code from one address is refused", fourth === null);
+	fourth?.close();
+	const nextDoor = await tryHost(neighbour);
+	check("and from another address in its /64", nextDoor === null);
+	nextDoor?.close();
 	more[0].close();
 	await more[0].closed;
 	await new Promise((r) => setTimeout(r, 300));
@@ -152,6 +177,16 @@ try {
 	check("closing one makes room again", typeof (await again.next("code")).code === "string");
 	again.close();
 	more[1].close();
+
+	// Many hosts at once from one place: still only three codes.
+	// (Only where test addresses count: a network of its own, six addresses
+	// in it.)
+	if (local) {
+		const crowd = `2001:db8:${word()}:${word()}`;
+		const burst = await Promise.all(Array.from({ length: 6 }, (_, i) => tryHost(`${crowd}::${i + 1}`)));
+		check(`six hosts at once get three codes (${burst.filter(Boolean).length})`, burst.filter(Boolean).length === 3);
+		burst.forEach((ws) => ws?.close());
+	}
 
 	// A guest leaving is told to the host.
 	guest2.close();

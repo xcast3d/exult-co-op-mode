@@ -30,9 +30,11 @@
  * Security (anyone on the internet can reach this):
  * - Codes come from crypto.getRandomValues, a word and four digits
  *   (32 x 9000), and the rate limits below make guessing one slow.
+ * - "Per address" is an IPv4 address, or an IPv6 /64 (see addressKey).
  * - Per address: opening games and joining are rate limited (the
  *   HOST_LIMITER and JOIN_LIMITER bindings in wrangler.toml).
- * - Per address: at most 3 codes open at once (the Hosts object).
+ * - Per address: at most 3 codes open at once (the Hosts object, which
+ *   takes one request at a time).
  * - Per connection: 16 KB a message, 240 a minute; a guest's lobby
  *   connection ends after 60 s (it needs a few to connect); codes end when
  *   the host leaves or after 12 hours.
@@ -66,6 +68,7 @@ const MAX_MESSAGE_BYTES = 16 * 1024;  // An SDP is a few kilobytes.
 const MAX_MESSAGES_PER_MINUTE = 240;  // Per socket: candidates come in bursts.
 const GAME_HOURS = 12;              // A code lasts this long at most.
 const CODES_PER_ADDRESS = 3;        // Open at once, from one internet address.
+const CONNECT_SECONDS = 30;         // A code just handed out counts while its host connects.
 // The host's keep-alive, answered without waking the object (see
 // friendrtc.cc: the game sends exactly this).
 const KEEPALIVE = '{"type":"keepalive"}';
@@ -110,13 +113,58 @@ function normalCode(code) {
 	return CODE_PATTERN.test(text) ? text : null;
 }
 
+// Who the per-address limits count against: an IPv4 address as it is, an
+// IPv6 one by its /64 network.  A home or phone is given a whole /64 and
+// picks new addresses in it freely (a Mac makes "temporary" ones, and two
+// connections a second apart can come from two of them), so counting each
+// IPv6 address apart would be no limit at all.  CF-Connecting-IP is set by
+// Cloudflare, never by the caller.
+function addressKey(request) {
+	const address = (request.headers.get("CF-Connecting-IP") || "").trim().toLowerCase();
+	if (!address) {
+		return "unknown";
+	}
+	if (!address.includes(":")) {
+		return address;
+	}
+	const mapped = address.match(/^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/);
+	if (mapped) {
+		return mapped[1];
+	}
+	// Spell out the eight groups ("::" stands for as many zero groups as
+	// are missing; a trailing IPv4 part is two), then keep the first four.
+	const halves = address.split("::");
+	if (halves.length > 2) {
+		return address;
+	}
+	const groups = (text) => (text ? text.split(":") : []);
+	const ipv4Tail = (list) => (list.length && list[list.length - 1].includes(".")
+		? [...list.slice(0, -1), "0", "0"] : list);
+	let left = groups(halves[0]);
+	let right = halves.length === 2 ? groups(halves[1]) : [];
+	if (halves.length === 2) {
+		right = ipv4Tail(right);
+	} else {
+		left = ipv4Tail(left);
+	}
+	const missing = 8 - left.length - right.length;
+	if (missing < 0 || (halves.length === 1 && missing !== 0) || (halves.length === 2 && missing < 1)) {
+		return address;
+	}
+	const all = [...left, ...Array(missing).fill("0"), ...right];
+	if (!all.every((group) => /^[0-9a-f]{1,4}$/.test(group))) {
+		return address;
+	}
+	return `${all.slice(0, 4).map((group) => parseInt(group, 16).toString(16)).join(":")}::/64`;
+}
+
 // True when this address may go on; false when it is over its rate limit.
-// Without the binding (wrangler dev, older wrangler) there is no limit.
+// Without the binding (older wrangler) there is no limit.
 async function allowed(limiter, request) {
 	if (!limiter) {
 		return true;
 	}
-	const address = request.headers.get("CF-Connecting-IP") || "unknown";
+	const address = addressKey(request);
 	try {
 		const { success } = await limiter.limit({ key: address });
 		return success;
@@ -231,7 +279,7 @@ export default {
 			if (!(await allowed(env.HOST_LIMITER, request))) {
 				return new Response("Too many games from this address; wait a minute", { status: 429 });
 			}
-			const address = request.headers.get("CF-Connecting-IP") || "unknown";
+			const address = addressKey(request);
 			// A free code: a few tries, in case one is taken.
 			for (let tries = 0; tries < 8; ++tries) {
 				const code = newCode();
@@ -478,41 +526,70 @@ export class Lobby {
 	}
 }
 
-// One internet address: its open codes (and when each would end anyway),
-// so one address can't hold more than CODES_PER_ADDRESS at once.
+// One internet address (see addressKey): its open codes, so one address
+// can't hold more than CODES_PER_ADDRESS at once.  Each code is kept with
+// when it was handed out and when it would end anyway.
+//
+// One request at a time, start to finish: asking the lobby objects below
+// lets other requests in meanwhile, and two at once would each count from
+// the same old list (so a burst of hosts all got codes).
 export class Hosts {
 	constructor(state, env) {
 		this.state = state;
 		this.env = env;
+		this.queue = Promise.resolve();
 	}
 
-	async fetch(request) {
+	fetch(request) {
+		const turn = this.queue.then(() => this.handle(request));
+		this.queue = turn.catch(() => {});
+		return turn;
+	}
+
+	// Older entries were just the end time.
+	static entry(value) {
+		return typeof value === "number" ? { since: 0, expires: value } : value;
+	}
+
+	async handle(request) {
 		const url = new URL(request.url);
 		const code = url.searchParams.get("code") || "";
 		const now = Date.now();
 		const open = (await this.state.storage.get("open")) || {};
-		for (const [each, expires] of Object.entries(open)) {
-			if (expires <= now) {
+		for (const [each, value] of Object.entries(open)) {
+			if (!value || Hosts.entry(value).expires <= now) {
 				delete open[each];
 			}
 		}
 		if (url.pathname === "/open") {
 			if (Object.keys(open).length >= CODES_PER_ADDRESS) {
 				// Codes whose host went without a goodbye (a lobby
-				// redeploy, say) don't count: ask each.
-				for (const each of Object.keys(open)) {
-					const lobby = this.env.LOBBY.get(this.env.LOBBY.idFromName(each));
-					const probe = await lobby.fetch(`https://lobby/taken?code=${each}`);
-					if ((await probe.text()) === "free") {
+				// redeploy, say) don't count: ask each.  Not one just
+				// handed out, whose host may still be connecting (its
+				// lobby says "free" until then), and not one whose
+				// lobby doesn't answer: when in doubt, it counts.
+				const settled = Object.keys(open)
+					.filter((each) => now - Hosts.entry(open[each]).since >= CONNECT_SECONDS * 1000);
+				const answers = await Promise.all(settled.map(async (each) => {
+					try {
+						const lobby = this.env.LOBBY.get(this.env.LOBBY.idFromName(each));
+						const probe = await lobby.fetch(`https://lobby/taken?code=${encodeURIComponent(each)}`);
+						return (await probe.text()) === "free";
+					} catch {
+						return false;
+					}
+				}));
+				settled.forEach((each, i) => {
+					if (answers[i]) {
 						delete open[each];
 					}
-				}
+				});
 			}
 			if (Object.keys(open).length >= CODES_PER_ADDRESS) {
 				await this.state.storage.put("open", open);
 				return new Response("full");
 			}
-			open[code] = now + GAME_HOURS * 3600 * 1000;
+			open[code] = { since: now, expires: now + GAME_HOURS * 3600 * 1000 };
 		} else if (url.pathname === "/close") {
 			delete open[code];
 		}
