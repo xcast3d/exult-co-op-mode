@@ -170,6 +170,7 @@ const struct Action {
 		{        "TOGGLE_PETRA",              ActionPetra,           nullptr, 0x844,   Action::cheat_keys, SERPENT_ISLE, false,  true,  true, false},
 		{         "CHANGE_SKIN",         ActionSkinColour,           nullptr, 0x845,   Action::cheat_keys,         NONE, false,  true,  true, false},
 		{            "NOTEBOOK",           ActionNotebook,           nullptr, 0x846,  Action::normal_keys,         NONE, false, false, false, false},
+		{         "PARTY_ORDER",         ActionPartyOrder,           nullptr, 0x800,    Action::dont_show,         NONE, false, false, false, false},
 		{        "SOUND_TESTER",        ActionSoundTester,           nullptr, 0x847,   Action::cheat_keys,         NONE, false,  true,  true, false},
 		{                "TEST",               ActionTest,           nullptr, 0x848,    Action::dont_show,         NONE, false,  true,  true, false},
 

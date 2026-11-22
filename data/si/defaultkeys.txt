@@ -86,6 +86,7 @@ Shift-H		mapedit_help
 Ctrl-Alt-H	party_heal
 Alt-I		toggle_infravision
 I		inventory
+Shift-O		party_order		# Friend Mode: put the party in order
 J		useitem			555	# Show Jawbone
 K		useitem			485	# Use keyring
 Alt-K		try_keys

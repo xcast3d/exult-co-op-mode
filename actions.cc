@@ -304,13 +304,26 @@ int Path_walking_actor_action::handle_event(Actor* actor) {
 		step_index = frames->find_unrotated(actor->get_framenum());
 	}
 	// Get next (updates step_index).
-	const int frame     = frames->get_next(step_index);
-	const int cur_speed = speed;    // Step() might delete us!
-	if (from_offscreen) {           // Teleport to 1st spot.
+	const int frame = frames->get_next(step_index);
+	// Friend Mode: a diagonal step goes about 1.4 times as far as a
+	// straight one, so the party's leader (and the party, stepping with
+	// it) takes that much longer over it; diagonals were noticeably faster.
+	const bool diagonal  = get_party && tile.tx != cur.tx && tile.ty != cur.ty;
+	const int  cur_speed = diagonal ? speed * 141 / 100 : speed;    // Step() might delete us!
+	// Its glide lasts as long, going between straight and diagonal steps
+	// too (it goes by the time since the last step otherwise).
+	static bool last_diagonal = false;
+	if (get_party) {
+		Actor::next_step_ms = diagonal || last_diagonal ? cur_speed : 0;
+		last_diagonal       = diagonal;
+	}
+	if (from_offscreen) {    // Teleport to 1st spot.
+		Actor::next_step_ms = 0;
 		from_offscreen = false;
 		actor->move(tile.tx, tile.ty, tile.tz);
 		return cur_speed;
 	} else if (actor->step(tile, frame)) {    // Successful.
+		Actor::next_step_ms = 0;
 		if (deleted) {
 			return 0;
 		}
@@ -326,6 +339,7 @@ int Path_walking_actor_action::handle_event(Actor* actor) {
 		}
 		return cur_speed;
 	}
+	Actor::next_step_ms = 0;
 	if (deleted) {
 		return 0;
 	}

@@ -114,6 +114,7 @@ void ActionNaked(const int* params);
 void ActionPetra(const int* params);
 void ActionSkinColour(const int* params);
 void ActionNotebook(const int* params);
+void ActionPartyOrder(const int* params);
 void ActionSoundTester(const int* params);
 void ActionTest(const int* params);
 

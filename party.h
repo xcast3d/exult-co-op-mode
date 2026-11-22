@@ -97,6 +97,11 @@ public:
 		return party[i];
 	}
 
+	// Friend Mode: move the member at place 'from' to place 'to' (from 0),
+	// the ones between shifting over one.  The places are the formation's
+	// and the faces bar's order.  False if nothing moved.
+	bool move_member(int from, int to);
+
 	int get_dead_count() const {    // Same for dead party members.
 		return dead_party_count;
 	}

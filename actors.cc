@@ -941,6 +941,7 @@ inline void Actor::movef(Map_chunk* old_chunk, Map_chunk* new_chunk, int new_sx,
 }
 
 int Actor::follow_glide_ms = 0;
+int Actor::next_step_ms    = 0;
 
 void Actor::begin_glide(const Tile_coord& from, int ox, int oy) {
 	glide_ms = 0;
@@ -993,6 +994,10 @@ void Actor::begin_glide(const Tile_coord& from, int ox, int oy) {
 					ms = moved_pace;
 				}
 				slack = ms / 2;
+			}
+			if (next_step_ms > 0) {
+				ms    = next_step_ms;
+				slack = ms / 4;
 			}
 			glide_dx    = ox + tx * c_tilesize - tz * (c_tilesize / 2);
 			glide_dy    = oy + ty * c_tilesize - tz * (c_tilesize / 2);

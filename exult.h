@@ -115,6 +115,8 @@ void Friend_mode_request_main_menu();
 // This instance joined a Friend Mode host: the host owns the world, so
 // monster and weather eggs (among others) do nothing here.
 bool Friend_mode_is_guest();
+// Put the party in order (its formation) with the keyboard or the pad.
+void Friend_party_order_start();
 // Hosting or joined: a co-op session is on.
 bool Friend_mode_in_session();
 // Co-op: the next modal window, a short list or prompt, doesn't stop the game.

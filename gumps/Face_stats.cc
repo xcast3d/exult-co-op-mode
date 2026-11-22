@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA  02111-1307, USA.
 #include "friendclass.h"
 #include "game.h"
 #include "gamewin.h"
+#include "palette.h"
 #include "party.h"
 #include "shapeid.h"
 
@@ -445,6 +446,32 @@ void Face_stats::paint() {
 		if (act) {
 			act->paint();
 		}
+	}
+	// Friend Mode: the face chosen while ordering the party, ringed (gold;
+	// green while picked up).
+	if (order_place >= 0 && order_place + 1 < 8 && party[order_place + 1]) {
+		const TileRect r   = party[order_place + 1]->get_rect();
+		Palette*       pal = gwin->get_pal();
+		const auto     c   = static_cast<unsigned char>(order_held ? pal->find_color(20, 60, 20) : pal->find_color(63, 50, 16));
+		Image_buffer8* ib8 = gwin->get_win()->get_ib8();
+		for (int t = 0; t < 2; ++t) {
+			ib8->fill8(c, r.w + 2 * t, 1, r.x - t, r.y - 1 - t);
+			ib8->fill8(c, r.w + 2 * t, 1, r.x - t, r.y + r.h + t);
+			ib8->fill8(c, 1, r.h + 2 + 2 * t, r.x - 1 - t, r.y - 1 - t);
+			ib8->fill8(c, 1, r.h + 2 + 2 * t, r.x + r.w + t, r.y - 1 - t);
+		}
+	}
+}
+
+int  Face_stats::order_place = -1;
+bool Face_stats::order_held  = false;
+
+void Face_stats::set_order_highlight(int place, bool held) {
+	order_place = place;
+	order_held  = held;
+	if (self) {
+		gwin->add_dirty(self->get_rect());
+		gwin->set_all_dirty();
 	}
 }
 

@@ -3563,6 +3563,10 @@ static void Friend_mode_target_notice(const std::string& text, bool hint = false
 	friend_hint_changed = true;
 }
 
+// Putting the party in order (Shift+O; defined with the pad's keys).
+static bool Friend_party_ordering();
+static void Friend_party_order_frame();
+
 // A pick's name for the notices.
 static std::string Friend_target_name(const Actor* actor) {
 	const std::string name = actor->get_name();
@@ -6077,6 +6081,9 @@ void Friend_mode_class_hint(const std::string& text, const std::string& hint) {
 static Game_object_weak friend_face_hovered;
 
 static void Friend_mode_face_hover_frame() {
+	if (Friend_party_ordering()) {
+		return;    // Its lines stay up.
+	}
 	Gump_manager* gumps = gwin->get_gump_man();
 	Actor*        actor = nullptr;
 	if (!gumps->modal_gump_mode() && gwin->get_main_actor()) {
@@ -9425,6 +9432,7 @@ static void Friend_mode_paint_chat_log(bool restore = true) {
 		}
 	}
 	Friend_mode_keep_pick_lines();
+	Friend_party_order_frame();
 	Friend_mode_expire_lines(friend_chat_log, friend_chat_log_ms, friend_chat_log_changed);
 	Friend_mode_expire_lines(friend_notices, friend_notice_ms, friend_notices_changed);
 	// The log's bottom 20 pixels above the bottom of the view, 6 from the
@@ -10160,6 +10168,24 @@ static void Friend_apply_party_members(const std::vector<uint32>& members) {
 		if (actor && actor != gwin->get_main_actor() && !actor->is_in_party()) {
 			party->add_to_party(actor);
 		}
+	}
+	// And in the host's order (the host can change it; see move_member).
+	int place = 0;
+	for (uint32 npc_num : members) {
+		int at = -1;
+		for (int i = 0; i < party->get_count(); ++i) {
+			if (static_cast<uint32>(party->get_member(i)) == npc_num) {
+				at = i;
+				break;
+			}
+		}
+		if (at < 0) {
+			continue;
+		}
+		if (at != place) {
+			party->move_member(at, place);
+		}
+		++place;
 	}
 }
 
@@ -11750,6 +11776,12 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 							   found->activate();
 						   }
 					   })});
+	// The party's order (its formation), the host's or one's alone.
+	if (!Friend_mode_is_guest()) {
+		entries.push_back({"Party order", {}, {}, true, []() {
+							   Friend_party_order_start();
+						   }});
+	}
 	// (Hold / Follow isn't here: D-pad up held does it.)  The spellbook is
 	// the Avatar's only: dimmed while leading a companion, left out on a
 	// guest (2026-11-01).
@@ -11803,6 +11835,170 @@ static bool Controller_spellbook_key(SDL_Keycode key, bool down) {
 	book->handle_kbd_event(&press);
 	gwin->set_all_dirty();
 	return true;
+}
+
+// Friend Mode: the party's order (its formation) from the keyboard or the
+// pad; the mouse drags faces on the bar (drag.cc).  A ring on the faces
+// bar moves along them; picked up, the companion moves with it, the others
+// shifting over.  The host's, or one playing alone; guests get the host's.
+static bool friend_ordering   = false;
+static int  friend_order_from = -1;    // Where the one picked up was.
+
+static bool Friend_party_ordering() {
+	return friend_ordering;
+}
+
+static const char* const friend_order_title = "Change Party Formation";
+
+// The context hint: what the keys (or the pad's buttons) do now.
+static void Friend_party_order_lines() {
+	std::string keys;
+	if (Controller_last_input_is_pad()) {
+		std::string south = Controller_label(Controller_action::target_act, nullptr);
+		std::string east  = Controller_label(Controller_action::close_window, nullptr);
+		south             = south.empty() ? "South" : south;
+		east              = east.empty() ? "East" : east;
+		keys              = Face_stats::order_held ? "Change Position (D-pad)  Confirm (" + south + ")"
+												   : "Navigate (D-pad)  Select (" + south + ")  Finalize (" + east + ")";
+	} else {
+		keys = Face_stats::order_held ? "Change Position (arrows)  Confirm (space)"
+									  : "Navigate (arrows)  Select (space)  Finalize (Escape)";
+	}
+	Friend_mode_class_hint(friend_order_title, keys);
+}
+
+// Each frame: the lines stay up while ordering (notices fade otherwise).
+static void Friend_party_order_frame() {
+	if (!friend_ordering) {
+		return;
+	}
+	if (friend_context_line != friend_order_title) {
+		Friend_party_order_lines();    // Something else replaced them.
+		return;
+	}
+	const uint32 now = static_cast<uint32>(SDL_GetTicks());
+	for (Friend_log_line& line : friend_notices) {
+		if (line.text == friend_context_line) {
+			line.time = now;
+		}
+	}
+	friend_hint_at = now;
+}
+
+static void Friend_party_order_stop() {
+	friend_ordering   = false;
+	friend_order_from = -1;
+	Face_stats::set_order_highlight(-1, false);
+	// Its lines go at once.
+	friend_notices.erase(std::remove_if(friend_notices.begin(), friend_notices.end(),
+								 [](const Friend_log_line& line) {
+									 return line.text == friend_order_title;
+								 }),
+						 friend_notices.end());
+	friend_notices_changed = true;
+	if (friend_context_line == friend_order_title) {
+		friend_context_line.clear();
+		friend_hint_shown.clear();
+		friend_hint_changed = true;
+	}
+}
+
+void Friend_party_order_start() {
+	if (Friend_mode_is_guest()) {
+		Friend_mode_target_notice("Only the host changes the party's order");
+		return;
+	}
+	if (gwin->get_party_man()->get_count() < 2) {
+		Friend_mode_target_notice("Too few companions to put in order");
+		return;
+	}
+	if (!Face_stats::Visible()) {
+		Face_stats::CreateGump();
+	}
+	friend_ordering   = true;
+	friend_order_from = -1;
+	Face_stats::set_order_highlight(0, false);
+	Friend_party_order_lines();
+}
+
+// A key while ordering (the pad's D-pad, south and east come as arrows,
+// Space and Escape); true if used.
+static bool Friend_party_order_key(SDL_Keycode key, bool down) {
+	if (!friend_ordering) {
+		return false;
+	}
+	Party_manager* party = gwin->get_party_man();
+	const int      count = party->get_count();
+	if (count < 2 || Friend_mode_is_guest() || friend_chat_active) {
+		Friend_party_order_stop();
+		return false;
+	}
+	int  place = std::clamp(Face_stats::order_place, 0, count - 1);
+	bool held  = Face_stats::order_held;
+	int  step  = 0;
+	switch (key) {
+	case SDLK_LEFT:
+	case SDLK_UP:
+		step = -1;
+		break;
+	case SDLK_RIGHT:
+	case SDLK_DOWN:
+		step = 1;
+		break;
+	case SDLK_SPACE:
+	case SDLK_RETURN:
+	case SDLK_KP_ENTER:
+		if (down) {
+			if (held) {
+				held = false;    // Put down.
+			} else {
+				held              = true;    // Picked up.
+				friend_order_from = place;
+			}
+		}
+		break;
+	case SDLK_ESCAPE:
+		if (down) {
+			if (held) {    // Back where it was.
+				if (friend_order_from >= 0 && friend_order_from < count) {
+					party->move_member(place, friend_order_from);
+					place = friend_order_from;
+				}
+				held = false;
+			} else {
+				Friend_party_order_stop();
+				return true;
+			}
+		}
+		break;
+	default:
+		return false;
+	}
+	if (down && step) {
+		const int to = std::clamp(place + step, 0, count - 1);
+		if (held && to != place) {
+			party->move_member(place, to);
+		}
+		place = to;
+	}
+	const bool was_held = Face_stats::order_held;
+	Face_stats::set_order_highlight(place, held);
+	if (held != was_held) {
+		Friend_party_order_lines();
+	}
+	return true;
+}
+
+// The pad's buttons for an open window: the party order first, then the
+// spellbook (east, Escape, closes the newest window as before).
+static bool Controller_window_keys(SDL_Keycode key, bool down) {
+	if (Friend_party_order_key(key, down)) {
+		return true;
+	}
+	if (key == SDLK_ESCAPE) {
+		return false;
+	}
+	return Controller_spellbook_key(key, down);
 }
 
 // The open spellbook on the pad: its bookmarked spell at the top, and under
@@ -12220,7 +12416,7 @@ static void Init() {
 	// buttons to the game.
 	Controller_init();
 	Controller_set_game_hooks(Controller_run, Controller_switched_input);
-	Controller_set_window_hook(Controller_spellbook_key);
+	Controller_set_window_hook(Controller_window_keys);
 	// Listen for game controller device connection and disconnection
 	// events. Registering a listener allows these events to be received
 	// and processed via any event-processing loop, of which Exult has
@@ -15010,6 +15206,11 @@ static void Handle_event(SDL_Event& event) {
 		break;
 	case SDL_EVENT_KEY_DOWN:    // Keystroke.
 	case SDL_EVENT_KEY_UP:
+		// Friend Mode: putting the party in order takes the arrows, Space
+		// and Escape.
+		if (!dragging && Friend_party_order_key(event.key.key, event.type == SDL_EVENT_KEY_DOWN)) {
+			break;
+		}
 		// Experimental relighting: Ctrl+Shift+L turns it on or off;
 		// with Alt as well it cycles the debug views.
 		if (event.type == SDL_EVENT_KEY_DOWN && event.key.key == SDLK_L && !event.key.repeat

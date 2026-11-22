@@ -26,6 +26,14 @@ both in `--version` and the version files saved with each game.
 
 ## Unreleased (0.8.10)
 
+### Added
+
+- Change the party's formation (the order of the faces along the
+  bottom): press Shift+O, or choose Party order on the pad's Triangle /
+  Y ring. The arrows or D-pad choose a companion, Space or Cross / A
+  picks them up and puts them down in a new place, and Escape or
+  Circle / B finishes. In co-op the host sets it and guests see it.
+
 ### Changed
 
 - The party turns around naturally. Companions keep to their side of the
@@ -34,6 +42,8 @@ both in `--version` and the version files saved with each game.
   everyone turns through a sideways step instead of flipping at once.
 - Companions walking with you glide in step with you (they used to float
   behind, most of all while turning).
+- Walking diagonally is no longer faster than walking straight: a
+  diagonal step covers more ground, so it takes a little longer.
 
 ### Fixed
 

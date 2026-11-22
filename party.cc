@@ -82,6 +82,38 @@ bool Party_manager::add_to_party(Actor* npc    // (Should not be the Avatar.)
 }
 
 /*
+ *  Friend Mode: change the party's order.
+ */
+
+bool Party_manager::move_member(int from, int to) {
+	const int count = static_cast<int>(party_count);
+	if (from < 0 || to < 0 || from >= count || to >= count || from == to) {
+		return false;
+	}
+	const int num = party[from];
+	if (from < to) {
+		for (int i = from; i < to; ++i) {
+			party[i] = party[i + 1];
+		}
+	} else {
+		for (int i = from; i > to; --i) {
+			party[i] = party[i - 1];
+		}
+	}
+	party[to] = num;
+	for (int i = std::min(from, to); i <= std::max(from, to); ++i) {
+		if (Actor* npc = gwin->get_npc(party[i])) {
+			npc->set_party_id(i);
+		}
+	}
+	if (g_shortcutBar) {
+		g_shortcutBar->set_changed();
+	}
+	Face_stats::UpdateButtons();
+	return true;
+}
+
+/*
  *  Remove party member.
  *
  *  Output: false if not found.

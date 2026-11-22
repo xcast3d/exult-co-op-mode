@@ -1050,6 +1050,12 @@ void ActionSkinColour(const int* params) {
 	cheat.change_skin();
 }
 
+// Friend Mode: put the party in order (its formation).
+void ActionPartyOrder(const int* params) {
+	ignore_unused_variable_warning(params);
+	Friend_party_order_start();
+}
+
 //   { ActionNotebook, 0, "Show notebook", normal_keys, NONE, false },
 void ActionNotebook(const int* params) {
 	ignore_unused_variable_warning(params);

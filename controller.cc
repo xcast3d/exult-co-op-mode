@@ -688,6 +688,8 @@ static SDL_Keycode Window_key(int input) {
 	switch (Mapped_input(input)) {
 	case SDL_GAMEPAD_BUTTON_SOUTH:
 		return SDLK_SPACE;
+	case SDL_GAMEPAD_BUTTON_EAST:    // (Only the party order takes it.)
+		return SDLK_ESCAPE;
 	case SDL_GAMEPAD_BUTTON_DPAD_UP:
 		return SDLK_UP;
 	case SDL_GAMEPAD_BUTTON_DPAD_DOWN:

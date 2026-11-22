@@ -116,6 +116,13 @@ public:
 	static bool Visible();
 	static void save_config(Configuration* config);
 	static void load_config(Configuration* config);
+
+	// Friend Mode: putting the party in order (its formation) with the
+	// keyboard or pad: the face at party place 'place' is ringed ('held':
+	// picked up), or none with -1.
+	static void set_order_highlight(int place, bool held);
+	static int  order_place;
+	static bool order_held;
 };
 
 #endif    // FACE_STATS_H

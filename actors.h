@@ -390,6 +390,9 @@ public:
 	// Friend Mode: while the party walks in formation, its followers'
 	// glides last as long as the leader's step (0 otherwise).
 	static int follow_glide_ms;
+	// Friend Mode: how long until the party leader's next step, when it
+	// knows (going between straight and diagonal steps), for its glide.
+	static int next_step_ms;
 
 	void stop_glide() {
 		glide_ms = 0;
