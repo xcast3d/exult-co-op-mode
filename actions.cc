@@ -296,7 +296,9 @@ int Path_walking_actor_action::handle_event(Actor* actor) {
 	}
 	const Tile_coord cur        = actor->get_tile();
 	const int        newdir     = static_cast<int>(Get_direction4(cur.ty - tile.ty, tile.tx - cur.tx));
-	Frames_sequence* frames     = actor->get_frames(newdir);
+	// Friend Mode: the party's leader turns about through a sideways step.
+	const int        face       = get_party ? Turning_facing(actor->get_dir_facing(), newdir) : newdir;
+	Frames_sequence* frames     = actor->get_frames(face);
 	int&             step_index = actor->get_step_index();
 	if (!step_index) {    // First time?  Init.
 		step_index = frames->find_unrotated(actor->get_framenum());

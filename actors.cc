@@ -940,6 +940,8 @@ inline void Actor::movef(Map_chunk* old_chunk, Map_chunk* new_chunk, int new_sx,
 	}
 }
 
+int Actor::follow_glide_ms = 0;
+
 void Actor::begin_glide(const Tile_coord& from, int ox, int oy) {
 	glide_ms = 0;
 	{
@@ -996,6 +998,12 @@ void Actor::begin_glide(const Tile_coord& from, int ox, int oy) {
 			glide_dy    = oy + ty * c_tilesize - tz * (c_tilesize / 2);
 			glide_start = now;
 			glide_ms    = std::max(30, ms + slack);
+			if (follow_glide_ms > 0) {
+				// Stepped along with the leader: in time with its glide, not
+				// paced like a network move (half again as long, and a slow
+				// slide after any pause, so followers floated when turning).
+				glide_ms = follow_glide_ms;
+			}
 			gwin->add_glider(this);
 			// The camera's, and the party's (moved by the network in co-op).
 			if ((this == gwin->get_camera_actor() || npc_num == 0 || is_in_party()) && Glide_log_on()) {

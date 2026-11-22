@@ -387,6 +387,9 @@ public:
 	// that is a step's distance.  Steps do it (movef); so do moves that
 	// come over the network in Friend Mode (Friend_glide_move).
 	void begin_glide(const Tile_coord& from, int ox, int oy);
+	// Friend Mode: while the party walks in formation, its followers'
+	// glides last as long as the leader's step (0 otherwise).
+	static int follow_glide_ms;
 
 	void stop_glide() {
 		glide_ms = 0;

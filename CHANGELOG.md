@@ -26,6 +26,15 @@ both in `--version` and the version files saved with each game.
 
 ## Unreleased (0.8.10)
 
+### Changed
+
+- The party turns around naturally. Companions keep to their side of the
+  formation and stay in their row instead of swinging across to the
+  other side, step out of the way when you walk back through them, and
+  everyone turns through a sideways step instead of flipping at once.
+- Companions walking with you glide in step with you (they used to float
+  behind, most of all while turning).
+
 ### Fixed
 
 - In co-op, monster bodies no longer stay forever where you fought, and
@@ -36,6 +45,11 @@ both in `--version` and the version files saved with each game.
   the game again, as they are before saving. Until now they stayed
   forever. Bodies stuck that way in older saves are cleaned up too; the
   bodies of people, and those the game's map places, still stay.
+- Companions no longer face a different way from you when walking
+  diagonally, and one at the edge of the formation no longer steps in
+  toward the middle and back out when something small is in its way.
+- Companions no longer get stuck out of the formation for a while after
+  walking diagonally.
 
 ## 0.8.9, 2026-11-21 (build 291)
 

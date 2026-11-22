@@ -129,3 +129,10 @@ int Get_direction16(int deltay, int deltax) {
 	}
 	return angle % 16;
 }
+
+int Turning_facing(int from, int to) {
+	if ((to - from + 8) % 8 != 4) {
+		return to;
+	}
+	return to == east || to == west ? south : east;
+}

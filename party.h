@@ -60,7 +60,23 @@ class Party_manager : public Game_singletons {
 	// (the Avatar, or a companion led in Friend Mode, whose place the
 	// Avatar takes).
 	int formation_slot(const Actor* npc) const;
-	int  step(Actor* npc, Actor* leader, int dir, const Tile_coord& dest) const;
+	// 'aside': out of the way of one it follows walking toward it.
+	int  step(Actor* npc, Actor* leader, int dir, const Tile_coord& dest, bool aside = false) const;
+	// Friend Mode: the leader's last direction, and steps left after it
+	// turned (90 degrees or more), when followers don't trade places.
+	mutable int        last_dir        = -1;
+	mutable int        turn_steps_left = 0;
+	mutable Tile_coord last_lead_pos{-1, -1, -1};
+	// While followers step: the leader, and which way it really went (0-7;
+	// the direction it is given is only one of four).
+	mutable Actor* lead     = nullptr;
+	mutable int    lead_dir = 0;
+	mutable int    lead_face = 0;    // And which way it faces (one of four).
+	// The formation mirrored (left and right exchanged), and choosing that
+	// on a turn.
+	mutable bool mirrored   = false;
+	mutable int  mirror_dir = -1;    // Which way it went when last chosen.
+	void         choose_mirror(Actor* leader, int dir) const;
 
 public:
 	Party_manager();

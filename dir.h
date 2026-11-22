@@ -42,4 +42,10 @@ Direction Get_direction4(int deltay, int deltax);
 
 int Get_direction16(int deltay, int deltax);
 
+// Friend Mode: the facing for a walker's step from facing 'from' to 'to'
+// (one of four each).  Turning right around, it first faces sideways for
+// a step: through south (toward the viewer), or between north and south,
+// through east.
+int Turning_facing(int from, int to);
+
 #endif
