@@ -73,6 +73,8 @@
 	#backup-game.due::after { content:""; width:.45rem; height:.45rem; margin-left:.5rem; border-radius:50%; background:var(--gold); }
 	.fullscreen-icon { margin-right:.5rem; color:var(--gold); font-size:1rem; line-height:0; }
 	.game-frame { width:max-content; max-width:100%; margin:1rem auto 0; padding:6px; border:1px solid #9a7548; background:#281b10; box-shadow:inset 0 0 0 2px #0b0906,0 18px 55px #000c; }
+	.setup-footer a,.game-footer a { color:inherit; text-decoration:underline; text-underline-offset:.2em; }
+	.setup-footer a:hover,.game-footer a:hover { color:var(--paper); }
 	.game-footer { display:flex; justify-content:space-between; gap:1rem; max-width:1100px; margin:.8rem auto 0; color:#666971; font: .62rem/1.4 ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace; letter-spacing:.06em; text-transform:uppercase; }
 	/* No border or padding on the canvas, or mouse positions are off. */
 	canvas { display:block; margin:0 auto; border:0; background:#000; }
@@ -131,7 +133,7 @@
 				<p id="saves-message" role="status" aria-live="polite"></p>
 			</div>
 		</section>
-		<footer class="setup-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D</span></footer>
+		<footer class="setup-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D · <a href="https://github.com/xcast3d/exult-co-op-mode" target="_blank" rel="noopener">Source code</a> · <a href="licenses.txt" target="_blank" rel="noopener">Licences</a></span></footer>
 	</div>
 </main>
 <main id="game-shell" hidden>
@@ -146,7 +148,7 @@
 		<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" hidden></canvas>
 		<button id="exit-fullscreen" type="button" tabindex="-1">Exit fullscreen</button>
 	</div>
-	<footer class="game-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D</span></footer>
+	<footer class="game-footer"><span>An unofficial fan project</span><span>Built on Exult · Made by XCAST3D · <a href="https://github.com/xcast3d/exult-co-op-mode" target="_blank" rel="noopener">Source code</a> · <a href="licenses.txt" target="_blank" rel="noopener">Licences</a></span></footer>
 </main>
 <script>
 	var Module = {

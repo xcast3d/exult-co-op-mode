@@ -64,4 +64,47 @@ cp "$MAIN/web/quest-of-the-companions-title.avif" "$OUT/"
 # Exult's own icon, the ankh, as the page's (desktop/, win32/).
 cp "$MAIN/desktop/info.exult.exult.svg" "$OUT/favicon.svg"
 cp "$MAIN/win32/exult.ico" "$OUT/favicon.ico"
+cp "$MAIN/web/htaccess" "$OUT/.htaccess"
+
+# Licences for everything the page ships (GPL-2 asks for Exult's, and the
+# libraries linked in ask for theirs), taken from the copies that were
+# actually built: Exult, Emscripten's runtime and C/C++ libraries, and its
+# SDL3, zlib, libogg and libvorbis ports.
+EMROOT=$(em-config EMSCRIPTEN_ROOT)
+EMCACHE=$(em-config CACHE)
+licence() {    # Title, file.
+	if [ ! -f "$2" ]; then
+		echo "Licence file missing: $2" >&2
+		exit 1
+	fi
+	printf '\n\n==============================================================================\n%s\n==============================================================================\n\n' "$1"
+	cat "$2"
+}
+EMLICENCE="$EMROOT/LICENSE"
+[ -f "$EMLICENCE" ] || EMLICENCE="$EMROOT/../LICENSE"    # Homebrew keeps it one level up.
+port() {    # The licence file of an Emscripten port: port folder, file name.
+	find "$EMCACHE/ports/$1" -maxdepth 2 -name "$2" | head -1
+}
+{
+	echo "Quest of the Companions in the browser: licences"
+	echo
+	echo "Quest of the Companions is built on Exult and is free software under the GNU"
+	echo "General Public License, version 2. Its source code:"
+	echo "https://github.com/xcast3d/exult-co-op-mode"
+	echo
+	echo "It is an unofficial fan project. Ultima VII's own game files are not part of"
+	echo "it: each player brings their own."
+	echo
+	echo "Below: Exult's licence, then those of the libraries built into this page."
+	licence "Exult and Quest of the Companions (GNU General Public License, version 2)" "$MAIN/COPYING"
+	licence "Emscripten" "$EMLICENCE"
+	licence "LLVM libc++ (Emscripten)" "$EMROOT/system/lib/libcxx/LICENSE.TXT"
+	licence "LLVM libc++abi (Emscripten)" "$EMROOT/system/lib/libcxxabi/LICENSE.TXT"
+	licence "LLVM compiler-rt (Emscripten)" "$EMROOT/system/lib/compiler-rt/LICENSE.TXT"
+	licence "musl libc (Emscripten)" "$EMROOT/system/lib/libc/musl/COPYRIGHT"
+	licence "SDL 3" "$(port sdl3 LICENSE.txt)"
+	licence "zlib" "$(port zlib LICENSE)"
+	licence "libogg" "$(port ogg COPYING)"
+	licence "libvorbis" "$(port vorbis COPYING)"
+} > "$OUT/licenses.txt"
 ls -la "$OUT"

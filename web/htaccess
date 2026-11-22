@@ -1,0 +1,24 @@
+# Apache settings for the browser version's folder on the website
+# (xcast3d.com/u7-quest-of-the-companions/play/).  web/build.sh copies this
+# to web/out/.htaccess.
+
+DirectoryIndex index.html
+
+# The browser compiles the game while it downloads only when the type is right.
+AddType application/wasm .wasm
+AddType application/octet-stream .data
+
+# Sent compressed: the game is about 11 MB, about 3 MB compressed.
+<IfModule mod_deflate.c>
+	AddOutputFilterByType DEFLATE application/wasm application/octet-stream application/javascript text/javascript text/html text/plain image/svg+xml
+</IfModule>
+
+# The files keep their names from build to build, so browsers check for a
+# newer copy on each visit (a quick "not modified" when there is none).
+# Compression changes the ETag, which breaks that check on some Apache
+# versions, so the date is used instead.
+FileETag None
+<IfModule mod_headers.c>
+	Header unset ETag
+	Header set Cache-Control "no-cache"
+</IfModule>

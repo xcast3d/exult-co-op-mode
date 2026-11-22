@@ -265,13 +265,17 @@ shortcut may land on a different key: check.
 - [x] First visit: the settings file is copied once the page's data has
       loaded. Before, an empty browser stopped the setup with an error and
       Start never worked (2026-11-01).
-- [ ] Hosting as a static site (Cloudflare Pages), built from `web/out`.
-      The page files should be sent compressed (2.7 MB instead of 11 MB for
-      the game).
-- [ ] Exult is GPL-2, so the page needs a link to its source code, so it
-      can't go public until the repo does. Ship a licences file for the
-      parts linked in: Emscripten (MIT), libogg and libvorbis (BSD), SDL3
-      and zlib (zlib licence).
+- [x] Hosting on the website, at xcast3d.com/u7-quest-of-the-companions/play/
+      (2026-11-22): after the site's `npm run build`, `web/copy-to-site.sh`
+      copies `web/out` into the site's `dist/play/` (the page as
+      `index.html`), then `dist/` is uploaded as usual. Its `.htaccess`
+      (`web/htaccess`) gives `.wasm` its type, sends the files compressed
+      (about 3 MB instead of 11 MB for the game) and has browsers check for
+      a newer build on each visit. Not yet tried on the live server.
+- [x] The page links to the source code on GitHub and to `licenses.txt`,
+      which `web/build.sh` assembles from the copies built in: Exult (GPL-2),
+      Emscripten and its libc++, libc++abi, compiler-rt and musl, SDL3,
+      zlib, libogg and libvorbis (2026-11-22).
 - [ ] Serpent Isle (only Black Gate today).
 - [ ] Speed while walking and fighting, and on a slower computer.
 - [ ] Other browsers: Safari, Firefox, Windows.
