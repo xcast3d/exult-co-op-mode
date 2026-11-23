@@ -13,7 +13,7 @@
 #include <string>
 
 #define QOTC_NAME    "Quest of the Companions"
-#define QOTC_VERSION "0.8.10"
+#define QOTC_VERSION "0.8.11"
 
 // The build number (0 if unknown).
 int QOTC_build();
