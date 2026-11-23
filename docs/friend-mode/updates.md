@@ -135,7 +135,7 @@ The usual release build ([macOS setup](macos-setup.md#the-mac-build)),
 after `tools/friend-mode/get-sparkle.sh` once, then:
 
 ```sh
-tools/downloads/deploy.sh Exult-U7-QOTC-macOS-arm64-<commit>.dmg Exult-U7-QOTC-Windows-x64-<commit>-setup.exe
+tools/downloads/deploy.sh Exult-U7-QOTC-macOS-universal-<commit>.dmg Exult-U7-QOTC-Windows-x64-<commit>-setup.exe
 ```
 
 The installer is the workflow's `exult-friend-mode-windows-setup-<commit>`

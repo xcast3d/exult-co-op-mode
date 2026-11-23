@@ -5,21 +5,6 @@ Take an item off this list once it's on the site.
 
 ## To add
 
-### New app names (0.8.11, with the release)
-
-Near the download buttons, when 0.8.11 goes live: a short line that the
-game is now **Quest of the Companions.app** (Mac) and
-**Quest of the Companions.exe** (Windows) instead of Exult, so it no
-longer clashes with an Exult you already have installed. Suggested text:
-
-> The app is now called Quest of the Companions instead of Exult, so it
-> can sit next to Exult itself. Installed it before? It updates itself as
-> usual. If you download it fresh instead, you can delete the old
-> Exult.app (Mac); your saves and settings are kept.
-
-Also the system requirement for the Mac download: macOS 12 or newer,
-Apple Silicon.
-
 ### Lighting (new in 0.8.6, experimental)
 
 Written on the site 2026-11-19: a Lighting chapter on the home page

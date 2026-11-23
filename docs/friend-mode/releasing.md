@@ -59,13 +59,13 @@ as usual between releases.
 4. **Mac build** here, meanwhile, from the same commit ([The Mac
    build](macos-setup.md#the-mac-build)): `get-sparkle.sh` and
    `build-macos-deps.sh` once, then `tools/friend-mode/make-macos-release.sh`,
-   which gives `Exult-U7-QOTC-macOS-arm64-<commit>.dmg` (for macOS 12 and
-   newer). Check the build number it prints is the new one.
+   which gives `Exult-U7-QOTC-macOS-universal-<commit>.dmg` (universal: macOS 12 and
+   newer, Apple Silicon or Intel). Check the build number it prints is the new one.
 5. **Try both** before they go online: install, start, play a little.
 6. **Deploy** (needs wrangler logged in, and the update key in
    `~/.u7-qotc/sparkle-private-key`):
    ```sh
-   tools/downloads/deploy.sh Exult-U7-QOTC-macOS-arm64-<commit>.dmg Exult-U7-QOTC-Windows-x64-<commit>-setup.exe
+   tools/downloads/deploy.sh Exult-U7-QOTC-macOS-universal-<commit>.dmg Exult-U7-QOTC-Windows-x64-<commit>-setup.exe
    ```
    It signs both, writes `appcast-macos.xml` and `appcast-windows.xml`
    with the release notes, refuses a build number that isn't higher than

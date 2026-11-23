@@ -1,12 +1,13 @@
 #!/bin/bash
 # The Mac release: configure, build, bundle, sign and the disk image, from
-# the libraries build-macos-deps.sh made for macOS $QOTC_MACOS_MIN:
+# the libraries build-macos-deps.sh made for macOS $QOTC_MACOS_MIN.  One
+# universal app: the game is built for Apple Silicon and Intel together.
 #
 #   tools/friend-mode/get-sparkle.sh          # once
 #   tools/friend-mode/build-macos-deps.sh     # once (and when a library changes)
 #   tools/friend-mode/make-macos-release.sh
 #
-# Gives Exult-U7-QOTC-macOS-<cpu>-<commit>.dmg here, holding
+# Gives Exult-U7-QOTC-macOS-universal-<commit>.dmg here, holding
 # "Quest of the Companions.app" (docs/friend-mode/releasing.md).  It leaves
 # the tree configured for the release (-O2, our updater); plain ./configure
 # goes back to a development build.
@@ -14,8 +15,8 @@ set -euo pipefail
 
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 min="${QOTC_MACOS_MIN:-12.0}"
-cpu="$(uname -m)"
-prefix="${QOTC_MACOS_DEPS:-$root/third_party/build/macos${min%%.*}-$cpu}"
+archs="${QOTC_MACOS_ARCHS:-arm64 x86_64}"
+prefix="${QOTC_MACOS_DEPS:-$root/third_party/build/macos${min%%.*}-universal}"
 app_name="Quest of the Companions.app"
 jobs="$(sysctl -n hw.ncpu)"
 cd "$root"
@@ -36,9 +37,17 @@ export MACOSX_DEPLOYMENT_TARGET="$min"
 export PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig"
 unset PKG_CONFIG_PATH
 
+# Every -arch at once makes each file universal; dependency tracking
+# can't work that way (it's only for rebuilding, and we make clean).
+arch_flags=""
+for arch in $archs; do
+	arch_flags="$arch_flags -arch $arch"
+done
 ./configure --with-optimization=normal \
 	--with-qotc-services=tools/friend-mode/qotc-release.env \
-	--with-friend-rtc="$prefix"
+	--with-friend-rtc="$prefix" \
+	--disable-dependency-tracking \
+	CC="clang$arch_flags" CXX="clang++$arch_flags"
 if grep -qE '^[A-Z_]*(CFLAGS|LIBS) = .*(/opt/homebrew|/usr/local)' Makefile; then
 	echo "configure picked up Homebrew libraries:" >&2
 	grep -E '^[A-Z_]*(CFLAGS|LIBS) = .*(/opt/homebrew|/usr/local)' Makefile >&2
@@ -53,6 +62,9 @@ make -j "$jobs"
 rm -rf Exult.app "$app_name"
 make bundle_shared
 mv Exult.app "$app_name"
+# Without its symbols (a third of its size): the disk image has to stay
+# under the download server's 25 MiB a file.
+strip -S -x "$app_name/Contents/MacOS/exult"
 /usr/libexec/PlistBuddy -c "Add :LSMinimumSystemVersion string $min" "$app_name/Contents/Info.plist"
 
 # Each library by itself (dylibbundler's changes break their signatures,
@@ -64,7 +76,8 @@ done
 codesign --force --sign - "$app_name"
 codesign --verify --deep --strict "$app_name"
 
-# Nothing from Homebrew, and nothing newer than $min.
+# Nothing from Homebrew, every part for each processor, and nothing newer
+# than $min.
 bad=0
 while IFS= read -r -d '' f; do
 	file -b "$f" | grep -q Mach-O || continue
@@ -73,7 +86,13 @@ while IFS= read -r -d '' f; do
 		otool -L "$f" | grep -E '/opt/homebrew|/usr/local|third_party/build' >&2
 		bad=1
 	fi
-	for v in $(otool -l "$f" | awk '/LC_BUILD_VERSION/{b=1} b&&/minos/{print $2; b=0}' | sort -u); do
+	for arch in $archs; do
+		if ! lipo "$f" -verify_arch "$arch"; then
+			echo "$f has no $arch half" >&2
+			bad=1
+		fi
+	done
+	for v in $(otool -arch all -l "$f" | awk '/LC_BUILD_VERSION/{b=1} b&&/minos/{print $2; b=0}' | sort -u); do
 		if [ "$(printf '%s\n%s\n' "$v" "$min" | sort -V | tail -1)" != "$min" ]; then
 			echo "$f is for macOS $v" >&2
 			bad=1
@@ -87,7 +106,7 @@ plist="$app_name/Contents/Info.plist"
 commit="$(git rev-parse --short HEAD)"
 # Never the name of a real release's image.
 [ -z "$(git status --porcelain --untracked-files=no)" ] || commit="$commit-dirty"
-name="Exult-U7-QOTC-macOS-$cpu-$commit"
+name="Exult-U7-QOTC-macOS-universal-$commit"
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
 ditto "$app_name" "$stage/$app_name"
@@ -95,7 +114,10 @@ ln -s /Applications "$stage/Applications"
 cp README.md README.macOS COPYING "$stage/"
 git rev-parse HEAD >"$stage/COMMIT.txt"
 rm -f "$name.dmg"
-hdiutil create -quiet -volname "Quest of the Companions" -srcfolder "$stage" -format UDZO "$name.dmg"
+# LZMA (ULMO, macOS 10.15 and newer): about 18 MiB, where zlib (UDZO)
+# makes 24, close to the download server's 25 MiB a file.
+hdiutil create -quiet -volname "Quest of the Companions" -srcfolder "$stage" -format ULMO "$name.dmg"
 echo "$name.dmg: build $(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$plist")," \
 	"version $(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$plist")," \
-	"for macOS $min and newer ($cpu)"
+	"for macOS $min and newer ($archs)," \
+	"$(($(stat -f %z "$name.dmg") / 1048576)) MiB"

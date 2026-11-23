@@ -24,7 +24,7 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## 0.8.11, 2026-11-23 (build 302)
+## 0.8.11, 2026-11-23 (build 303)
 
 ### Changed
 
@@ -38,8 +38,10 @@ both in `--version` and the version files saved with each game.
 
 ### Fixed
 
-- The Mac version starts on macOS 12 (Monterey) and newer. 0.8.10 needed
-  macOS 27 and showed a stop sign on the app on older Macs.
+- The Mac version runs on every Mac with macOS 12 (Monterey) or newer,
+  Intel as well as Apple Silicon: one download for both. 0.8.10 needed
+  macOS 27 on Apple Silicon and showed a stop sign on the app on other
+  Macs.
 - The Windows installer's last page named the wrong folder for your
   saves and settings: they're in %LOCALAPPDATA%\Quest of the Companions.
 

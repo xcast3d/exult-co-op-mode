@@ -100,22 +100,28 @@ One script, from a commit:
 
 ```sh
 tools/friend-mode/get-sparkle.sh          # once: the updater (docs: updates.md)
-tools/friend-mode/build-macos-deps.sh     # once: the libraries, for macOS 12
+tools/friend-mode/build-macos-deps.sh     # once: the libraries, for macOS 12 (about 30 min)
 tools/friend-mode/make-macos-release.sh
 ```
 
-That gives `Exult-U7-QOTC-macOS-arm64-<commit>.dmg` holding
+That gives `Exult-U7-QOTC-macOS-universal-<commit>.dmg` holding
 `Quest of the Companions.app`, a link to `/Applications`, `README.md`,
 `README.macOS`, `COPYING` and the commit.
 
-**Why its own libraries.** Homebrew builds its libraries for the macOS it
-runs on, so 0.8.10, made with them, only started on macOS 27 (older Macs
-showed a stop sign on the app in the disk image). `build-macos-deps.sh`
-builds the libraries the game bundles (SDL3, libpng, Ogg/Vorbis, FLAC,
-Opus, libsndfile, FluidSynth, MT32emu) from their sources, pinned to
-Homebrew's versions and checksums, plus the WebRTC libraries, all for
-macOS 12 (`QOTC_MACOS_MIN`; 12.0 is the lowest Sparkle supports), into
-`third_party/build/macos12-arm64/` (git-ignored). Only FluidSynth's
+**One app for every Mac.** Like Exult's own downloads, the app is
+universal: Apple Silicon and Intel in one, and each Mac runs its own half.
+
+**Why its own libraries.** Homebrew builds its libraries for the macOS and
+the processor it runs on, so 0.8.10, made with them, only started on
+macOS 27 on Apple Silicon (other Macs showed a stop sign on the app in the
+disk image). `build-macos-deps.sh` builds the libraries the game bundles
+(SDL3, libpng, Ogg/Vorbis, FLAC, Opus, libsndfile, FluidSynth, MT32emu)
+from their sources, pinned to Homebrew's versions and checksums, plus the
+WebRTC libraries, all for macOS 12 (`QOTC_MACOS_MIN`; 12.0 is the lowest
+Sparkle supports). It builds them once for each processor (in `arch/`;
+the Intel half needs Rosetta, which runs some of CMake's test programs)
+and joins each pair with `lipo` into
+`third_party/build/macos12-universal/` (git-ignored). Only FluidSynth's
 Core Audio and SoundFont (`.sf2`/`.sf3`) parts are built.
 
 **What the release script does:**
@@ -123,19 +129,24 @@ Core Audio and SoundFont (`.sf2`/`.sf3`) parts are built.
   `--with-qotc-services=tools/friend-mode/qotc-release.env` (our updater:
   without it deploy.sh refuses the app; [updates](updates.md#the-pieces))
   and those libraries only (`PKG_CONFIG_LIBDIR`, `--with-friend-rtc`),
-  with `MACOSX_DEPLOYMENT_TARGET=12.0`; it stops if Homebrew's crept in;
+  with `MACOSX_DEPLOYMENT_TARGET=12.0` and `-arch arm64 -arch x86_64`
+  (so every file is universal; that needs `--disable-dependency-tracking`);
+  it stops if Homebrew's crept in;
 - `make clean`, `make`, `make bundle_shared` (dylibbundler copies the
   libraries in), and renames `Exult.app` to `Quest of the Companions.app`.
   A build with the updater has our bundle ID, `com.xcast3d.qotc`, and
   name (`macosx/macosx.am`), so it never replaces or passes for Exult's
-  own app (`info.exult`); the script adds `LSMinimumSystemVersion`;
+  own app (`info.exult`); the script adds `LSMinimumSystemVersion` and
+  strips the game's symbols, to keep the disk image well under the
+  download server's 25 MiB a file;
 - signs ad-hoc, each library by itself and then the app: `dylibbundler`
   rewrites the libraries' paths, which breaks their signatures, and
   `codesign --deep` doesn't reach `Contents/Resources/lib`; an unsigned
   library gets the app killed at launch ("Code Signature Invalid").
   Sparkle.framework keeps its own signature;
 - checks every binary in the app: nothing links to Homebrew or
-  `third_party/build`, and none needs a macOS newer than 12;
+  `third_party/build`, each has both halves, and none needs a macOS newer
+  than 12;
 - makes the disk image with `hdiutil`.
 
 It leaves the tree configured for the release; plain `./configure` goes
@@ -143,7 +154,11 @@ back to a development build. To put the build online, and in the update
 feed, see [updates](updates.md#releasing-a-mac-build).
 (`make osxdmg` is upstream's "Git Snapshot" image and needs `create-dmg`.)
 
-The build is arm64 only, for macOS 12 and newer, and ad-hoc signed, not
+To try the Intel half on an Apple Silicon Mac:
+`arch -x86_64 "Quest of the Companions.app/Contents/MacOS/exult"`
+(through Rosetta).
+
+The build is for macOS 12 and newer, Apple Silicon or Intel, and ad-hoc signed, not
 notarized: on first launch players right-click → Open, or allow it under
 System Settings → Privacy & Security. Notarizing needs an Apple Developer
 ID. The Windows release is the `friend-mode-windows` workflow's artifact

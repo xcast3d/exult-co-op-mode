@@ -1,7 +1,7 @@
 #!/bin/bash
 # Put Quest of the Companions builds online at downloads.xcast3d.com/u7-qotc/:
 #
-#   tools/downloads/deploy.sh Exult-U7-QOTC-macOS-arm64-abc1234.dmg Exult-U7-QOTC-Windows-x64-abc1234-setup.exe
+#   tools/downloads/deploy.sh Exult-U7-QOTC-macOS-universal-abc1234.dmg Exult-U7-QOTC-Windows-x64-abc1234-setup.exe
 #
 # The builds are copied into public/u7-qotc/ (git-ignored), which keeps
 # every build ever deployed; the whole folder is uploaded each time, so a
@@ -77,6 +77,13 @@ add_mac_update() {
 	zip="$builds/$(basename "${dmg%.dmg}")-update.zip"
 	ditto -c -k --sequesterRsrc --keepParent "$app" "$zip"
 	hdiutil detach -quiet "$mount"
+	# The zip is less compressed than the dmg (22 MiB for 0.8.11's
+	# universal app): it has to fit too.
+	if [ "$(stat -f %z "$zip")" -gt "$max_bytes" ]; then
+		rm -f "$zip"
+		echo "The update zip is too big for Cloudflare (25 MiB a file)" >&2
+		exit 1
+	fi
 
 	# Only the existing feed and the new zip, so older builds aren't rescanned.
 	work="$(mktemp -d)"
