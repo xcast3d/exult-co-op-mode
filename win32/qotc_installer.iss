@@ -6,7 +6,8 @@
 ;            -DQOTC_APPID=<GUID> -DOUTNAME=<name> qotc_installer.iss
 ;
 ; It installs for this user only, with no administrator prompt, so updates
-; need none either.  Saves and settings live in %LOCALAPPDATA%\Exult, apart
+; need none either.  Saves and settings live in
+; %LOCALAPPDATA%\Quest of the Companions, apart
 ; from the install; the game data players copy into blackgate\ and
 ; serpentisle\ is theirs and stays through updates and uninstalling.
 
@@ -22,6 +23,8 @@
 #ifndef QOTC_APPID
   #error Pass -DQOTC_APPID=<GUID> (ours: tools/friend-mode/qotc-release.env)
 #endif
+; The game's file name: ours, not Exult's (the workflow renames Exult.exe).
+#define EXENAME "Quest of the Companions.exe"
 #ifndef OUTNAME
   #define OUTNAME "QOTC-Setup"
 #endif
@@ -48,7 +51,7 @@ ArchitecturesInstallIn64BitMode=x64
 ; The game is closed by InitializeSetup below, not Windows' Restart Manager.
 CloseApplications=no
 SetupIconFile=exult.ico
-UninstallDisplayIcon={app}\Exult.exe
+UninstallDisplayIcon={app}\{#EXENAME}
 OutputBaseFilename={#OUTNAME}
 OutputDir=.
 Compression=lzma2/max
@@ -56,7 +59,7 @@ SolidCompression=yes
 WizardStyle=modern
 
 [Messages]
-FinishedLabel=Quest of the Companions is installed.%n%nBefore you play, copy the STATIC folder of your own Ultima VII: The Black Gate into the blackgate folder there (Serpent Isle's into serpentisle). Your saves and settings are kept separately, in %LOCALAPPDATA%\Exult.
+FinishedLabel=Quest of the Companions is installed.%n%nBefore you play, copy the STATIC folder of your own Ultima VII: The Black Gate into the blackgate folder there (Serpent Isle's into serpentisle). Your saves and settings are kept separately, in %LOCALAPPDATA%\Quest of the Companions.
 
 [Tasks]
 Name: desktopicon; Description: "Create a desktop shortcut"; Flags: unchecked
@@ -68,13 +71,17 @@ Name: "{app}\serpentisle"
 [Files]
 Source: "{#SRCDIR}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
+[InstallDelete]
+; Builds up to 0.8.10 were Exult.exe.
+Type: files; Name: "{app}\Exult.exe"
+
 [Icons]
-Name: "{autoprograms}\Quest of the Companions"; Filename: "{app}\Exult.exe"; WorkingDir: "{app}"
-Name: "{autodesktop}\Quest of the Companions"; Filename: "{app}\Exult.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\Quest of the Companions"; Filename: "{app}\{#EXENAME}"; WorkingDir: "{app}"
+Name: "{autodesktop}\Quest of the Companions"; Filename: "{app}\{#EXENAME}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
 ; Run silently too, so the game starts again after an update.
-Filename: "{app}\Exult.exe"; WorkingDir: "{app}"; Description: "Start Quest of the Companions"; Flags: nowait postinstall
+Filename: "{app}\{#EXENAME}"; WorkingDir: "{app}"; Description: "Start Quest of the Companions"; Flags: nowait postinstall
 Filename: "{app}"; Description: "Open the install folder, to add the game data"; Flags: shellexec postinstall skipifsilent unchecked
 
 [Code]

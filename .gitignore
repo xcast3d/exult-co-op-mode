@@ -315,6 +315,7 @@ docs/xml/*.dat
 docs/xml/*.html
 gitinfo.h
 qotcbuild.h
+qotcrc.h
 
 #Android
 android/app/build.gradle

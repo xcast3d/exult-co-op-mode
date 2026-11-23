@@ -37,9 +37,13 @@ IDI_ICON1               ICON    DISCARDABLE     "exult.ico"
 // Version
 //
 
+// Quest of the Companions' version and build: qotcrc.h is written by
+// Makefile.mingw from qotcversion.h and qotcbuild.h.
+#include "qotcrc.h"
+
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,13,1,0
- PRODUCTVERSION 1,13,1,0
+ FILEVERSION QOTC_RC_NUMBER
+ PRODUCTVERSION QOTC_RC_NUMBER
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -54,14 +58,14 @@ BEGIN
     BEGIN
         BLOCK "040904b0"
         BEGIN
-            //VALUE "CompanyName", "The Exult Team\0"
-            VALUE "FileDescription", "Exult Ultima VII Engine\0"
-            VALUE "FileVersion", "1.13.1git\0"
-            VALUE "InternalName", "Exult\0"
-            VALUE "LegalCopyright", "Copyright © 1998-2025\0"
-            VALUE "OriginalFilename", "Exult.exe\0"
-            VALUE "ProductName", "Exult Ultima VII Engine\0"
-            VALUE "ProductVersion", "1.13.1git\0"
+            VALUE "CompanyName", "XCAST3D"
+            VALUE "FileDescription", "Quest of the Companions"
+            VALUE "FileVersion", QOTC_RC_VERSION
+            VALUE "InternalName", "Quest of the Companions"
+            VALUE "LegalCopyright", "Copyright © 1998-2026 The Exult Team and XCAST3D"
+            VALUE "OriginalFilename", "Quest of the Companions.exe"
+            VALUE "ProductName", "Quest of the Companions"
+            VALUE "ProductVersion", QOTC_RC_VERSION
         END
     END
     BLOCK "VarFileInfo"

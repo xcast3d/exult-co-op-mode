@@ -8,6 +8,10 @@ exult_studio = $(top_builddir)/mapedit/exult_studio$(EXEEXT)
 # always a higher number.  The feed (QOTC_FEED_MACOS) and the public half of
 # the signing key (QOTC_UPDATE_KEY) come from configure
 # --with-qotc-services; ours are in tools/friend-mode/qotc-release.env.
+# A build with the updater is ours, so it also gets our name and bundle ID,
+# not Exult's (info.exult): it mustn't replace or pass for Exult itself.
+# tools/friend-mode/make-macos-release.sh renames the bundle.
+QOTC_BUNDLE_ID = com.xcast3d.qotc
 
 $(top_builddir)/mapedit/exult_studio$(EXEEXT):
 	+(cd $(top_builddir)/mapedit;$(MAKE) exult_studio$(EXEEXT))
@@ -46,6 +50,9 @@ if QOTC_SPARKLE
 	build=`sed -n 's/^#define QOTC_BUILD //p' qotcbuild.h`; \
 	version=`sed -n 's/^#define QOTC_VERSION "\(.*\)"/\1/p' $(srcdir)/qotcversion.h`; \
 	/usr/libexec/PlistBuddy \
+	  -c "Set :CFBundleIdentifier $(QOTC_BUNDLE_ID)" \
+	  -c "Set :CFBundleName 'Quest of the Companions'" \
+	  -c "Add :CFBundleDisplayName string 'Quest of the Companions'" \
 	  -c "Set :CFBundleVersion $$build" \
 	  -c "Set :CFBundleShortVersionString $$version" \
 	  -c "Add :SUBundleName string 'Quest of the Companions'" \

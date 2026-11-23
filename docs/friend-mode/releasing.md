@@ -15,7 +15,10 @@ step.
 - **Updates:** a build with the updater checks its feed daily and offers
   newer builds; the game menu's **Check Updates** checks at once (and, on a
   Mac, the app menu's Check for Updates…). Mac: Sparkle replaces
-  `Exult.app`. Windows: WinSparkle runs our installer quietly over the
+  the app (`Quest of the Companions.app`; `Exult.app` up to 0.8.10, and
+  an update keeps the name it was installed under: an `Exult.app` 0.8.10
+  took the renamed build, with its new bundle ID, as an update on
+  2026-11-23, and stayed `Exult.app`). Windows: WinSparkle runs our installer quietly over the
   install and starts the game again. Saves and settings are outside both
   and stay ([updates](updates.md)).
 - **The first updating release is 0.8.2.** Builds up to 0.8.1 (`d2597e4`)
@@ -54,12 +57,10 @@ as usual between releases.
    That gives `Exult-U7-QOTC-Windows-x64-<commit>-setup.exe` (about
    16 MB). About 13 minutes.
 4. **Mac build** here, meanwhile, from the same commit ([The Mac
-   build](macos-setup.md#the-mac-build)): `get-sparkle.sh` once, configure
-   with `--with-optimization=normal
-   --with-qotc-services=tools/friend-mode/qotc-release.env` (our updater),
-   `make bundle_shared`, sign each library then the app, and the dmg named
-   `Exult-U7-QOTC-macOS-arm64-<commit>.dmg`. Check `CFBundleVersion` in
-   its Info.plist is the new build number, and `SUFeedURL` is there.
+   build](macos-setup.md#the-mac-build)): `get-sparkle.sh` and
+   `build-macos-deps.sh` once, then `tools/friend-mode/make-macos-release.sh`,
+   which gives `Exult-U7-QOTC-macOS-arm64-<commit>.dmg` (for macOS 12 and
+   newer). Check the build number it prints is the new one.
 5. **Try both** before they go online: install, start, play a little.
 6. **Deploy** (needs wrangler logged in, and the update key in
    `~/.u7-qotc/sparkle-private-key`):
@@ -89,10 +90,11 @@ restarted). Windows, from a Command Prompt:
 ```
 cd /d "%LOCALAPPDATA%\Programs\Quest of the Companions"
 set QOTC_UPDATE_FEED=https://downloads.xcast3d.com/u7-qotc/test/appcast-windows.xml
-Exult.exe
+"Quest of the Companions.exe"
 ```
 
-On a Mac: `QOTC_UPDATE_FEED=<url> Exult.app/Contents/MacOS/exult`. The Mac's
+(`Exult.exe` up to 0.8.10.) On a Mac:
+`QOTC_UPDATE_FEED=<url> "Quest of the Companions.app/Contents/MacOS/exult"`. The Mac's
 interactive path (Check for Updates → Install and Relaunch) hasn't been
 tried yet, only its install on quit ([updates](updates.md#trying-an-update-locally)).
 

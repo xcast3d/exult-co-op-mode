@@ -81,8 +81,10 @@ jobs:
           make -j 4 -f Makefile.mingw U7PATH=out/Exult QOTC_SERVICES=tools/friend-mode/qotc-release.env install
           test -f out/Exult/data/friend/cacert.pem
           test -f out/Exult/WinSparkle.dll
-          grep -aqF "$QOTC_FEED_WINDOWS" out/Exult/Exult.exe
-          out/Exult/Exult.exe --version
+          # Our own name, not Exult's (win32/qotc_installer.iss).
+          mv out/Exult/Exult.exe "out/Exult/Quest of the Companions.exe"
+          grep -aqF "$QOTC_FEED_WINDOWS" "out/Exult/Quest of the Companions.exe"
+          "out/Exult/Quest of the Companions.exe" --version
       - name: Add notes
         run: |
           cp COPYING out/Exult/COPYING.txt

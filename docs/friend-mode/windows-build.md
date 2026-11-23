@@ -53,7 +53,7 @@ gh workflow run friend-mode-windows.yml -R xcast3d/exult-co-op-mode --ref featur
 
 The workflow uses MSYS2 UCRT64 (64-bit Windows 10 and 11, including Windows on
 Arm through emulation) and `Makefile.mingw`, like upstream's
-`ci-windows.yml`, but builds only `Exult.exe` (no Exult Studio, tools or
+`ci-windows.yml`, but builds only the game, `Exult.exe`, renamed `Quest of the Companions.exe` (no Exult Studio, tools or
 Exult's own installers) to save minutes. It also fetches WinSparkle
 (`tools/friend-mode/get-winsparkle.sh`) and makes our installer
 (`win32/qotc_installer.iss`, with the Inno Setup the runner has). A run takes about 15–25 minutes, most of it
@@ -78,17 +78,17 @@ run on.
    From the Mac, `gh run download <run id> -R xcast3d/exult-co-op-mode`
    fetches both.
 3. Run the installer (it installs for you alone, no administrator), or
-   unzip the folder anywhere. The `Exult` folder has `Exult.exe`, the DLLs it
+   unzip the folder anywhere. The `Exult` folder has `Quest of the Companions.exe`, the DLLs it
    needs, `data/` (Exult's own data, not Ultima VII), `COPYING.txt`,
    `README.windows.txt`, these Friend Mode notes and `FRIEND-MODE-COMMIT.txt`
    (the commit it was built from).
 4. Add the game: copy the `STATIC` folder of your own Ultima VII into
    `blackgate\` in the install folder (Serpent Isle into `serpentisle\`),
-   as `README.windows.txt` says, then run `Exult.exe`. Game files are never
+   as `README.windows.txt` says, then run `Quest of the Companions.exe`. Game files are never
    in the zip.
 
 If a run fails, open it and read the **Build Exult** step; `stdout.txt` and
-`stderr.txt` next to `Exult.exe` help when the game itself misbehaves.
+`stderr.txt` next to the game's exe help when the game itself misbehaves.
 
 ### Actions minutes
 

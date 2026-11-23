@@ -24,6 +24,25 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.11)
+
+### Changed
+
+- The game has its own name: on a Mac the app is now
+  Quest of the Companions.app, and on Windows the game is
+  Quest of the Companions.exe (both were called Exult). It no longer
+  replaces Exult itself if you have that installed too. Windows shortcuts
+  move to the new name by themselves, and Task Manager and the file's
+  Properties show Quest of the Companions with its version. A game you
+  pinned to the Windows taskbar needs pinning again.
+
+### Fixed
+
+- The Mac version starts on macOS 12 (Monterey) and newer. 0.8.10 needed
+  macOS 27 and showed a stop sign on the app on older Macs.
+- The Windows installer's last page named the wrong folder for your
+  saves and settings: they're in %LOCALAPPDATA%\Quest of the Companions.
+
 ## 0.8.10, 2026-11-22 (build 299)
 
 ### Added

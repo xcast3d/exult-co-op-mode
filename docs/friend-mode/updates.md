@@ -14,7 +14,7 @@ A Mac build checks
 feed has a higher build, Sparkle downloads it, checks its signature and
 offers it; installed on quit or with Install and Relaunch.
 
-Only `Exult.app` is replaced. Saves, settings (`exult.cfg`) and game
+Only the app (`Quest of the Companions.app`, `Exult.app` up to 0.8.10) is replaced. Saves, settings (`exult.cfg`) and game
 data in `~/Library/Application Support/Quest of the Companions` are
 outside the app and untouched (checked in the test below, when they were
 still in Exult's folders; see [Our own folder](#our-own-folder)).
@@ -63,7 +63,9 @@ On Windows:
   `Makefile.mingw` finds it and, when given a feed and key
   (`QOTC_SERVICES=tools/friend-mode/qotc-release.env`, as the workflow
   does), defines `QOTC_WINSPARKLE`, links `WinSparkle.dll` and installs it
-  next to `Exult.exe`.
+  next to the game (`Quest of the Companions.exe`; the workflow renames
+  the `Exult.exe` the makefile builds, and the installer removes an old
+  `Exult.exe`).
 - **The code**: `win32/qotcupdates.cc`, from the same place in `Init()`. It
   takes the feed and the public key from the build (`QOTC_FEED_WINDOWS`,
   `QOTC_UPDATE_KEY`), gives WinSparkle the build number
@@ -127,7 +129,7 @@ The steps from commit to deploy are in [releasing](releasing.md); this is
 what deploy.sh does with the builds. It refuses a Mac build without our
 feed and key (one built without `--with-qotc-services`): it would never
 find another update. The Windows workflow fails the same way, and checks
-`Exult.exe` holds our feed.
+the game's exe holds our feed.
 
 The usual release build ([macOS setup](macos-setup.md#the-mac-build)),
 after `tools/friend-mode/get-sparkle.sh` once, then:
@@ -180,7 +182,9 @@ live one. How it was tested on 2026-11-02:
      --download-url-prefix http://127.0.0.1:8650/ --maximum-deltas 0 -o appcast-macos.xml)
    python3 -m http.server 8650 --bind 127.0.0.1 --directory feed
    ```
-3. To skip the wait for the daily check and install without asking:
+3. To skip the wait for the daily check and install without asking
+   (with the installed copy's bundle ID: `com.xcast3d.qotc`, or
+   `info.exult` for 0.8.10 and earlier):
    `defaults write info.exult SUHasLaunchedBefore -bool YES`,
    `SUAutomaticallyUpdate -bool YES`, and `SULastCheckTime` set to a past
    date. Then run
