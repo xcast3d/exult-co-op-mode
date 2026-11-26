@@ -513,6 +513,21 @@ static void Friend_mode_notice(const std::string& text) {
 	Friend_mode_top_line(text);
 }
 
+// Who one leads: replaces the last such notice, so switching through the
+// party shows only where it ended (2026-11-25: each switch added a line).
+static void Friend_mode_lead_notice(const std::string& text) {
+	const size_t before = friend_notices.size();
+	friend_notices.erase(std::remove_if(friend_notices.begin(), friend_notices.end(),
+								 [](const Friend_log_line& line) {
+									 return line.text.rfind("Leading ", 0) == 0;
+								 }),
+						 friend_notices.end());
+	if (friend_notices.size() != before) {
+		friend_notices_changed = true;
+	}
+	Friend_mode_notice(text);
+}
+
 // A session notice (joins, leaves, companion changes): in the chat log, or
 // near the top while the log is hidden; not both.
 static void Friend_mode_session_notice(const std::string& text) {
@@ -918,6 +933,9 @@ bool Friend_mode_guest_usable_shape(int shape) {
 	case 267:    // The mysterious craft: its tune.
 	case 888:    // The ferry's horn: frame 1 also calls the Ferryman (the
 				 // host's camera stays put: Friend_mode_walker_is_guest).
+	case 410:    // Mining machine (2026-11-25): makes ore beside it from
+				 // the conveyer belt (411) within 10 tiles; nothing else
+				 // (its close_gumps is skipped run for a guest).
 	case 873:    // Chair (2026-11-12): the host sits the guest's companion
 				 // alone (Friend_mode_use_object_for_guest), not the script,
 				 // which sits the whole party too.
@@ -1090,7 +1108,7 @@ static void Friend_mode_lead(Actor* target) {
 	friend_lead_watch.reset();
 	if (target && gwin->take_friend_mode_control(target->get_npc_num())) {
 		friend_lead_watch = weak_from_obj(target);
-		Friend_mode_notice("Leading " + target->get_npc_name());
+		Friend_mode_lead_notice("Leading " + target->get_npc_name());
 		// The Avatar follows the one led, as the party does (in combat it
 		// fights as U7's party does, and follows again after).
 		const int sched = avatar->get_schedule_type();
@@ -1103,7 +1121,7 @@ static void Friend_mode_lead(Actor* target) {
 		if (current != avatar) {
 			gwin->release_friend_mode_control();
 		}
-		Friend_mode_notice("Leading the Avatar");
+		Friend_mode_lead_notice("Leading the Avatar");
 	}
 	if (left && left != gwin->get_controlled_actor() && gwin->in_combat()
 		&& left->get_schedule_type() == Schedule::follow_avatar) {
@@ -2886,7 +2904,7 @@ static void Friend_mode_perform_guest_move(
 		const std::string reason(why);
 		Friend_mode_tell_guest(player, reason == "too heavy"                ? "Too heavy"
 									   : reason == "drop spot out of reach" ? "Too far away to drop there"
-									   : reason == "no room"                ? "No room"
+									   : reason == "no room"                ? "Won't fit"
 									   : reason.find("out of reach") != std::string::npos ? "Too far away"
 																						  : "Couldn't move that");
 		Friend_force_item_resync(actor);
@@ -3120,6 +3138,7 @@ static bool Friend_is_wand(const Game_object* obj) {
 }
 
 static bool Friend_is_wearable(Actor* own, Game_object* obj);
+static bool Friend_is_hand_light(const Game_object* obj);
 static void Friend_mode_give(Game_object* obj);
 
 // An action on the pick: the item menu's entries, and in the party's packs
@@ -4580,6 +4599,12 @@ static bool Friend_is_wearable(Actor* own, Game_object* obj) {
 			   && prefered != belt && prefered >= 0);
 }
 
+// A torch (lit or not) or another light held in the hand: readied, though
+// neither weapon nor armour (Friend_is_wearable leaves hand-held things out).
+static bool Friend_is_hand_light(const Game_object* obj) {
+	return obj->get_info().is_light_source() || (GAME_BG && (obj->get_shapenum() == 595 || obj->get_shapenum() == 701));
+}
+
 // The spot an item would go in, if free; -1 if none is.
 static int Friend_free_spot(Actor* own, Game_object* obj) {
 	int prefered;
@@ -4654,7 +4679,23 @@ static void Friend_mode_equip(Actor* own, Game_object* obj, Gump* window) {
 	}
 	int spot = Friend_free_spot(own, obj);
 	std::vector<Game_object_shared> swapped;    // Taken off to make room.
-	if (spot < 0) {
+	if (Friend_is_hand_light(obj)) {
+		// A light gives light only in a hand (2026-11-25: with a weapon
+		// held, a torch went on the belt and the world stayed dark).  The
+		// free hand, the off hand first; with both full, what the off hand
+		// holds goes to the pack (the weapon's hand, if it is two-handed).
+		spot = own->fits_in_spot(obj, rhand) ? rhand : own->fits_in_spot(obj, lhand) ? lhand : -1;
+		if (spot < 0) {
+			const int    hand = own->get_readied(rhand) ? rhand : lhand;
+			Game_object* worn = own->get_readied(hand);
+			if (worn && pack != own && gwin->move_object(worn, gwin->get_gump_man()->find_gump(worn), pack)) {
+				swapped.push_back(worn->shared_from_this());
+				spot = own->fits_in_spot(obj, rhand) ? rhand : own->fits_in_spot(obj, lhand) ? lhand : -1;
+			} else {
+				Friend_mode_target_notice("No room");
+			}
+		}
+	} else if (spot < 0) {
 		int prefered;
 		int alt1;
 		int alt2;
@@ -5304,6 +5345,10 @@ static bool Friend_mode_space(bool shift, bool alt) {
 		} else {
 			friend_object_target.reset();
 		}
+	} else if (count > 0) {
+		// Why (2026-11-25: a backpack with a bag worn in its place was
+		// silently not taken: it didn't fit in the bag).
+		Friend_mode_target_notice(gwin->move_refused ? gwin->move_refused : "Can't take that");
 	}
 	return true;
 }
@@ -5736,6 +5781,19 @@ static std::vector<Game_object*> Friend_object_candidates(Actor* own) {
 		}
 		const Tile_coord         at    = obj->get_tile();
 		const Friend_thing_group group = Friend_thing_group_of(obj);
+#ifdef FRIEND_TEST_KEYS
+		// Test builds: QOTC_TEST_E_SHAPE=<shape> says why E offers it or not.
+		if (const char* want = std::getenv("QOTC_TEST_E_SHAPE"); want && obj->get_shapenum() == std::atoi(want)) {
+			const TileRect foot = obj->get_footprint();
+			cout << "E test: shape " << obj->get_shapenum() << " at " << at.tx << ',' << at.ty << ',' << at.tz << " foot "
+				 << foot.x << ',' << foot.y << ' ' << foot.w << 'x' << foot.h << " height "
+				 << obj->get_info().get_3d_height() << " from " << from.tx << ',' << from.ty << ',' << from.tz
+				 << ": group " << static_cast<int>(group) << " on " << Friend_thing_group_on(group) << " dist "
+				 << from.distance(at) << " roof " << Friend_is_hidden_by_roof(obj) << " view "
+				 << view.has_point(at.tx, at.ty) << " dz " << std::abs(at.tz - from.tz) << " walkable "
+				 << walkable.near(obj, 5) << " grabable " << Fast_pathfinder_client::is_grabable(own, obj) << endl;
+		}
+#endif
 		// Containers, bodies, signs, things one can pick up, and doors,
 		// lamps and levers to use, on screen within 18 tiles (2026-10-29;
 		// containers and signs were the whole screen).  All
@@ -9139,6 +9197,13 @@ static int friend_status_bar_top = -1;    // Its top this frame, or -1: the chat
 
 static void Friend_mode_paint_dialogue_wait() {
 	friend_status_bar_top = -1;
+	// Not under a menu that keeps the world going (2026-11-25): its own
+	// repaints leave the bar out, so drawn in the world's passes between
+	// them it flickered ("Following the Avatar" under a window's menu while
+	// the Avatar walked).
+	if (Friend_mode_in_live_pass()) {
+		return;
+	}
 	if (friend_session.mode() == Friend_mode_session::Mode::off) {
 		return;
 	}
@@ -9991,6 +10056,14 @@ bool Friend_mode_collect_connection_details() {
 		SDL_StopTextInput(window);
 		return true;
 	};
+#ifdef FRIEND_TEST_KEYS
+	if (std::getenv("QOTC_TEST_AUTOSTART")) {    // Test builds: as typed last time.
+		if (values[0].empty()) {
+			values[0] = "Tester";
+		}
+		return join();
+	}
+#endif
 	for (;;) {
 		gwin->clear_screen(false);
 		Image_buffer8* buffer  = gwin->get_win()->get_ib8();
@@ -11478,6 +11551,13 @@ static std::vector<Friend_menu_choice> Friend_inventory_actions(Actor* own, cons
 		acts.push_back({"Open", use});
 	} else if (mine ? obj->usecode_exists() : Friend_window_use(member, obj)) {
 		acts.push_back({Friend_use_word(obj), use});
+		// Something worn with a use of its own (a torch: Light) is readied
+		// too (2026-11-25: torches had no Ready).
+		if (Friend_is_wearable(wearer, obj) || Friend_is_hand_light(obj)) {
+			acts.push_back({wearer->find_readied(obj) >= 0 ? "Put away" : "Ready", [thing, wearer, window]() {
+								Friend_mode_equip(wearer, thing.get(), window());
+							}});
+		}
 	} else if (Friend_is_wearable(wearer, obj)) {
 		acts.push_back({wearer->find_readied(obj) >= 0 ? "Put away" : "Ready", [thing, wearer, window]() {
 							Friend_mode_equip(wearer, thing.get(), window());
@@ -13499,7 +13579,10 @@ static void Main_loop_pass(bool input) {
 																	 : "Y: off")
 							 << ')' << endl;
 						if (what == friend_follow_menu_open) {
-							if (!guest->following) {    // Not if it follows already (Y).
+							// Only in a fight (2026-11-25): out of one, a guest
+							// in a menu stays where it is, and the leash
+							// brings it back if the party walks on.
+							if (!guest->following && gwin->in_combat()) {    // Not if it follows already (Y).
 								Friend_mode_set_follow(requester, *guest, true, true, false);
 								guest->menu_following = true;
 							}
@@ -13849,7 +13932,14 @@ static void Main_loop_pass(bool input) {
 			} else if (input && friend_session.roster_ready() && !friend_selection_shown) {
 				friend_selection_shown = true;
 				friend_session.take_roster_update();
-				const int selected = Select_friend_actor(friend_session.party_roster());
+				int selected = -1;
+#ifdef FRIEND_TEST_KEYS
+				// Test builds: the first companion, without the picker.
+				if (std::getenv("QOTC_TEST_AUTOSTART") && !friend_session.party_roster().empty()) {
+					selected = static_cast<int>(friend_session.party_roster().front());
+				} else
+#endif
+					selected = Select_friend_actor(friend_session.party_roster());
 				if (selected >= 0) {
 					friend_session.request_actor(static_cast<uint32>(selected));
 				} else {
@@ -14179,6 +14269,73 @@ static void Main_loop_pass(bool input) {
 			}
 		}
 
+#ifdef FRIEND_TEST_KEYS
+		// Test builds: QOTC_TEST_WALK on a guest walks by itself, east as
+		// WASD does, then west as the pad does, to compare the two in the
+		// glide log (QOTC_GLIDE_LOG).
+		if (std::getenv("QOTC_TEST_WALK")
+			&& (Friend_mode_is_guest() ? gwin->has_network_friend_control()
+												&& gwin->get_controlled_actor() != gwin->get_main_actor()
+									   : gwin->get_main_actor() && gwin->get_main_actor()->get_chunk())) {
+			static uint32 walk_t0    = 0;
+			static int    walk_phase = -1;
+			if (!walk_t0) {
+				walk_t0 = ticks;
+			}
+			const uint32 e     = ticks - walk_t0;
+			const int    phase = e < 4000 ? 0 : e < 10000 ? 1 : e < 12000 ? 2 : e < 18000 ? 3 : 4;
+			if (phase != walk_phase) {
+				walk_phase = phase;
+				Glide_log("%u TEST phase %d (%s)", ticks, phase,
+						  phase == 1 ? "keys east" : phase == 3 ? "pad west" : "still");
+				cout << "Friend Mode: test walk phase " << phase << endl;
+				if (phase == 2 || phase == 4) {
+					joy_aim_x = joy_aim_y = 0;
+					gwin->stop_actor();
+				}
+			}
+			// QOTC_TEST_GOTO=x,y,z: the Avatar there first; QOTC_TEST_E_SHAPE
+			// logs what E makes of a shape there (no walking then).
+			if (const char* go = std::getenv("QOTC_TEST_GOTO"); go && !Friend_mode_is_guest()) {
+				static bool went = false;
+				int         gx = 0, gy = 0, gz = 0;
+				if (!went && std::sscanf(go, "%d,%d,%d", &gx, &gy, &gz) == 3) {
+					went = true;
+					gwin->teleport_party(Tile_coord(gx, gy, gz), false, -1, false);
+				}
+				if (phase == 2 && std::getenv("QOTC_TEST_E_SHAPE")) {
+					static bool scanned = false;
+					if (!scanned) {
+						scanned = true;
+						const auto found = Friend_object_candidates(gwin->get_main_actor());
+						cout << "E test: " << found.size() << " offered:";
+						for (Game_object* each : found) {
+							cout << ' ' << each->get_shapenum();
+						}
+						cout << endl;
+					}
+				}
+			} else if (std::getenv("QOTC_TEST_E_SHAPE")) {
+				static bool scanned = false;
+				if (phase == 2 && !scanned) {
+					scanned          = true;
+					Actor*     own   = gwin->get_controlled_actor();
+					const auto found = Friend_object_candidates(own);
+					cout << "E test (guest " << own->get_name() << "): " << found.size() << " offered:";
+					for (Game_object* each : found) {
+						cout << ' ' << each->get_shapenum();
+					}
+					cout << endl;
+				}
+			} else if (phase == 1) {
+				gwin->start_actor(gwin->get_width() / 2 + 50, gwin->get_height() / 2, get_walking_speed(nullptr));
+			} else if (phase == 3) {
+				joy_aim_x        = gwin->get_width() / 2 - 50;
+				joy_aim_y        = gwin->get_height() / 2;
+				joy_speed_factor = Mouse::fast_speed_factor;
+			}
+		}
+#endif
 		// WASD movement: walk toward the held keys every frame, as the arrow
 		// keys do (two keys walk diagonally), so a new direction takes effect
 		// at once.  Read from the keyboard itself, so a key let go while a
@@ -14234,6 +14391,7 @@ static void Main_loop_pass(bool input) {
 			gwin->start_actor(joy_aim_x, joy_aim_y, speed);
 		}
 
+		gwin->get_clock()->light_fade_frame();    // Night light changing.
 		// Smooth walking: repaint actors gliding between tiles, and glide
 		// the view on the camera actor's steps (in place of smooth
 		// scrolling, except on a moving ship or cart).

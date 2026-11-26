@@ -739,7 +739,20 @@ namespace Relight {
 		roofed  = gwin->is_main_actor_inside();
 		if (roofed) {
 			const Actor* viewer = gwin->get_camera_actor() ? gwin->get_camera_actor() : gwin->get_main_actor();
-			const int    floor  = viewer ? 4 * viewer->get_lift() : 0;
+			// The storey's floor (a storey is 5 lifts), not the height the
+			// viewer stands at (2026-11-25): on stairs that rose a lift a
+			// step, and the roof's cover and the room's light were worked
+			// out again at each tread, flickering up and down the stairs.
+			const int lift  = viewer ? viewer->get_lift() : 0;
+			int       storey = lift - lift % 5;
+			// Part way up the stairs with the floor above already shown (the
+			// roof hidden is above it): that floor is the one lit, or the
+			// cover was cast a storey low and a shadow lay across the upper
+			// floor until the top (2026-11-25).
+			if (lift % 5 != 0 && skip > storey + 5) {
+				storey += 5;
+			}
+			const int floor = 4 * storey;
 			roof_floor          = floor;
 			for_chunks(gwin, [&](Map_chunk* chunk) {
 				Nonflat_object_iterator next(chunk);
@@ -1835,7 +1848,10 @@ namespace Relight {
 	void apply(Game_window* gwin, int x, int y, int w, int h) {
 		const double   t0 = bench_wanted() ? now_ms() : 0;
 		Image_buffer8* ib = gwin->get_win()->get_ib8();
-		rebuild_tables(gwin->get_pal());
+		// The colours on screen: part way through a fade they aren't the
+		// game palette's (2026-11-25).
+		const Palette* shown = gwin->get_clock()->shown_palette();
+		rebuild_tables(shown ? shown : gwin->get_pal());
 		ov_pending = false;
 		x          = std::max(x, hmin_x);
 		y          = std::max(y, hmin_y);

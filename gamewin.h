@@ -1077,6 +1077,10 @@ public:
 	bool start_dragging(int x, int y);
 	// Friend Mode targeting: a drag and drop without the mouse (drag.cc).
 	bool move_object(Game_object* object, Gump* from, Container_game_object* dest, int spot = -1, int count = 0);
+	// Why the last move_object refused, for a notice ("Too heavy", "Won't
+	// fit"), or null.  A drag flashes the mouse; the keys and the pad don't
+	// show it.
+	const char* move_refused = nullptr;
 	// Friend Mode targeting: as a drag let go at (x, y), or onto 'on' if given.
 	bool drop_object_at(Game_object* object, Gump* from, int x, int y, int count, Game_object* on = nullptr,
 			bool inside = false);

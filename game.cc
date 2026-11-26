@@ -771,7 +771,18 @@ bool Game::show_menu(bool skip, bool friend_guest) {
 			}
 		}
 
-		int choice = menu->handle_events(gwin);
+		int choice;
+#ifdef FRIEND_TEST_KEYS
+		// Test builds: QOTC_TEST_AUTOSTART goes straight in, the host's last
+		// game opened to Co-Op, a guest to Connect (for runs nobody
+		// watches).
+		static bool test_started = false;
+		if (std::getenv("QOTC_TEST_AUTOSTART") && !test_started) {
+			test_started = true;
+			choice       = friend_guest ? 7 : 9;
+		} else
+#endif
+			choice = menu->handle_events(gwin);
 		if (choice == -1 && host_menu) {
 			choice = 12;    // Escape: back to the Co-Op choices.
 		} else if (choice == -1 && coop_menu) {

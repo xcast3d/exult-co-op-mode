@@ -49,6 +49,16 @@ class Game_clock : public Time_sensitive {
 	int                                 fog;    // >0 if there is fog.
 	bool                                was_foggy;
 	std::unique_ptr<Palette_transition> transition;    // For smooth palette transitions.
+	// Friend Mode (2026-11-25): a change of light at night (moving toward or
+	// away from lamps and torches) fades over a moment instead of cutting
+	// from one palette to the next.  Real time, from the main loop, so it
+	// runs on guests too (their clock is the host's).
+	std::unique_ptr<Palette> light_fade_from, light_fade_to, light_fade_now;
+	int                      light_fade_target = -1;    // The palette it ends on.
+	uint32                   light_fade_start  = 0;
+	int                      light_fade_pos    = -1;
+	void                     start_light_fade(int palette);
+	void                     end_light_fade(bool apply);
 	unsigned short                      time_rate;
 	bool                                network_follower = false;    // Friend Mode guest.
 	void                                set_time_palette(bool force);
@@ -120,7 +130,14 @@ public:
 		old_invisible            = false;
 		dungeon                  = 255;
 		transition.reset();
+		end_light_fade(false);
 	}
+
+	// Each frame: the next step of a light fade, if one is going.
+	void light_fade_frame();
+	// The palette on screen when it isn't the game's own (a fade or a
+	// transition part way), else null.
+	const Palette* shown_palette() const;
 
 	void set_overcast(bool onoff);      // Start/end cloud cover.
 	void set_fog(bool onoff);           // Start/end cloud cover.

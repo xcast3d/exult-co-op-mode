@@ -2594,6 +2594,10 @@ void Game_window::start_actor_alt(
 	}
 
 	dir = Get_direction_NoWrap(ay - winy, winx - ax);
+	if (Glide_log_on()) {
+		Glide_log("%u aim dir %d from %d,%d to %d,%d  tile %d,%d", static_cast<unsigned>(SDL_GetTicks()), dir, ax, ay,
+				  winx, winy, start.tx, start.ty);
+	}
 
 	if (blocked[dir] && !cheat.in_map_editor() && Open_door_ahead(this, actor, start.get_neighbor(dir))) {
 		return;    // Walks through once it is open.

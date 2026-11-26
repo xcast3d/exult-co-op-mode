@@ -1528,6 +1528,14 @@ void Actor::follow(const Actor* leader) {
 	const Tile_coord leaderpos = leader->get_tile();
 	const Tile_coord pos       = get_tile();
 	Tile_coord       goal;
+	// Friend Mode (2026-11-25): walking in formation, the leader's steps
+	// move the party (Party_manager), and one that walked back to its spot
+	// steps with them again.  Its schedule was asked what next when that
+	// walk ended, and it set off on its own for the leader's destination,
+	// out of the formation until the leader stopped.
+	if (gwin->walk_in_formation && party_id >= 0 && leader->is_moving() && distance(leader) <= 12) {
+		return;
+	}
 	if (leader->is_moving()) {    // Figure where to aim.
 		// Aim for leader's dest.
 		dist    = 2 + party_id / 3;
@@ -1546,8 +1554,16 @@ void Actor::follow(const Actor* leader) {
 		// The Avatar (no party number) following a companion takes the
 		// leader's place.
 		const int place = party_id >= 0 ? party_id : std::max(0, leader->get_party_id());
-		goal.tx += xoffs[place % 10] + 1 - rand() % 3;
-		goal.ty += yoffs[place % 10] + 1 - rand() % 3;
+		// Friend Mode (2026-11-25): one walking in formation goes to its
+		// spot in it, not near the leader somewhere at random (it came
+		// back to the wrong place, then stepped across to its own).
+		Tile_coord spot;
+		if (gwin->walk_in_formation && party_id >= 0 && partyman->formation_spot(this, spot)) {
+			goal = spot;
+		} else {
+			goal.tx += xoffs[place % 10] + 1 - rand() % 3;
+			goal.ty += yoffs[place % 10] + 1 - rand() % 3;
+		}
 		dist = 1;
 	}
 	// Already aiming along a path?

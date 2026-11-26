@@ -270,44 +270,85 @@ void Party_manager::link_party() {
 	}
 }
 
-/*
- *  For each party member, this array has the party ID's (or -1) of the
- *  two member's followers, arrayed as follows:
- *          A
- *             0 1
- *            2 3 4
- *           7 5 6 8
- */
-static const int followers[EXULT_PARTY_MAX + 1][2] = {
-		{ 0,  1}, // These follow Avatar (ID = -1).
-		{ 2,  3}, // Follow 0.
-		{-1,  4}, // Follow 1.
-		{ 7, -1}, // Follow 2.
-		{ 5,  6}, // Follow 3.
-		{-1,  8}, // Follow 4.
-		{-1, -1},
-        {-1, -1},
-        {-1, -1}
-};
+// QOTC_PARTY_LOG=<file>: why the party walks as it does, step by step.
+static std::FILE* Party_log() {
+	static std::FILE* log = [] {
+		const char* name = std::getenv("QOTC_PARTY_LOG");
+		return name ? std::fopen(name, "w") : nullptr;
+	}();
+	return log;
+}
 
 /*
- *  Offsets for the follower, depending on direction (0-3, with
- *  0 = North, 1 = East, 2 = South, 3 = West).
+ *  Friend Mode (2026-11-25): the formation as the original game has it
+ *  (checked in DOSBox), one shape for each number of followers, rather
+ *  than Exult's tree (each member two tiles behind and to one side of
+ *  another, so a big party fanned out into a wide triangle).  Spots are
+ *  tiles from the leader with it facing north: x to its right, y behind
+ *  it.  The first followers are nearest the leader; the order is the
+ *  party's (Shift+O).  Seven followers at most (eight with the Avatar).
  */
-static const int left_offsets[4][2] = {
-		// Follower is behind and to left.
-		{-2,  2}, // North.
-		{-2, -2}, // East.
-		{ 2, -2}, // South.
-		{ 2,  2}
-};     // West.
-static const int right_offsets[4][2] = {
-		// Follower is behind and to right.
-		{ 2,  2}, // North.
-		{-2,  2}, // East.
-		{-2, -2}, // South.
-		{ 2, -2}
-};    // West.
+namespace {
+	struct Formation_spot {
+		int x, y;
+	};
+
+	constexpr int formation_max = 7;
+	// Straight steps the new way before the formation turns.
+	constexpr int formation_turn_steps = 2;
+
+	const Formation_spot formation_spots[formation_max][formation_max] = {
+			{{2, 2}},
+			{{-2, 2}, {2, 2}},
+			{{-2, 2}, {2, 2}, {0, 4}},
+			{{-2, 2}, {2, 2}, {-1, 4}, {1, 4}},
+			{{-2, 2}, {2, 2}, {-2, 4}, {2, 4}, {0, 6}},
+			{{-2, 2}, {2, 2}, {-1, 4}, {1, 4}, {-2, 6}, {2, 6}},
+			{{-2, 2}, {2, 2}, {-3, 4}, {0, 4}, {3, 4}, {-2, 6}, {2, 6}},
+	};
+
+	/*
+	 *  A spot as tiles from the leader, for the way the formation faces
+	 *  (0-3: north, east, south, west), mirrored (left and right
+	 *  exchanged) or not.
+	 */
+	Tile_coord Formation_offset(const Formation_spot& spot, int face, bool mirror) {
+		const int x = mirror ? -spot.x : spot.x;
+		const int y = spot.y;
+		switch (face) {
+		case 1:    // East: its right is south, behind it west.
+			return Tile_coord(-y, x, 0);
+		case 2:    // South.
+			return Tile_coord(-x, -y, 0);
+		case 3:    // West: its right is north, behind it east.
+			return Tile_coord(y, -x, 0);
+		default:    // North.
+			return Tile_coord(x, y, 0);
+		}
+	}
+
+	/*
+	 *  Who a spot's follower keeps near, stepping: the nearest spot in a
+	 *  row ahead of it, or the leader (-1).
+	 */
+	int Formation_guide(int count, int k) {
+		const Formation_spot& me   = formation_spots[count - 1][k];
+		int                   best = -1;
+		int                   dist = me.x * me.x + me.y * me.y;
+		for (int i = 0; i < count; ++i) {
+			const Formation_spot& o = formation_spots[count - 1][i];
+			if (o.y >= me.y) {
+				continue;
+			}
+			const int d = (o.x - me.x) * (o.x - me.x) + (o.y - me.y) * (o.y - me.y);
+			if (d < dist) {
+				dist = d;
+				best = i;
+			}
+		}
+		return best;
+	}
+}    // namespace
 
 /*
  *  This should be called each time the Avatar takes a step while under
@@ -334,10 +375,14 @@ void Party_manager::get_followers(int dir    // Direction (0-7) Avatar just step
 			continue;
 		}
 		const int sched = npc->get_schedule_type();
-		// Skip if in combat or set to 'wait'.
+		// Skip if in combat or set to 'wait'.  Friend Mode (2026-11-25):
+		// one walking a path back to the party (catching up to its spot,
+		// see move_followers) keeps its place in the formation; it just
+		// isn't stepped.
 		if (sched != Schedule::combat && sched != Schedule::wait &&
 			// Loiter added for SI.
-			sched != Schedule::loiter && !npc->in_queue()) {    // Already walking?
+			sched != Schedule::loiter
+			&& (!npc->in_queue() || sched == Schedule::follow_avatar)) {    // Already walking?
 			valid[validcnt++] = npc;
 		}
 	}
@@ -361,18 +406,50 @@ void Party_manager::get_followers(int dir    // Direction (0-7) Avatar just step
 		}
 	}
 	last_dir = move_dir;
-	// Mirrored or not: looked at again once the way it goes is 90 degrees or
-	// more from the last time (a curve, 45 degrees a step, never counted as
-	// a turn, and everyone swung across).
-	if (mirror_dir < 0) {
-		mirror_dir = move_dir;
-	} else {
-		const int diff = (move_dir - mirror_dir + 8) % 8;
-		if (std::min(diff, 8 - diff) >= 2) {
-			turn_steps_left = 4;
-			choose_mirror(leader, dir);
-			mirror_dir = move_dir;
+	// Friend Mode (2026-11-25): the formation faces one of four ways, as in
+	// the original.  A straight step turns it that way; a diagonal one
+	// keeps the way it faces when that is one of the diagonal's two (going
+	// northeast facing north, it slides along), else the way the leader
+	// faces.
+	int        face     = formation_face;
+	const bool diagonal = move_dir % 2 != 0;
+	const int  vert     = (move_dir == 1 || move_dir == 7) ? 0 : 2;    // A diagonal's two ways.
+	const int  horiz    = (move_dir == 1 || move_dir == 3) ? 1 : 3;
+	if (!diagonal) {
+		face = move_dir / 2;
+	} else if (face != vert && face != horiz) {
+		face = (dir / 2) % 4;
+	}
+	// Friend Mode (2026-11-25): a little grace before it turns.  The
+	// formation turns only after a few steps the new way: with WASD a key
+	// tapped on the way into a diagonal (east, then north and east) was a
+	// straight step, and the party swung round for it.  A diagonal step
+	// leaning the new way neither counts nor cancels it; a step any other
+	// way does.
+	if (formation_face >= 0 && face != formation_face) {
+		if (face == pending_face) {
+			++pending_steps;
+		} else {
+			pending_face  = face;
+			pending_steps = 1;
 		}
+		if (pending_steps < formation_turn_steps) {
+			face = formation_face;
+		}
+	} else if (pending_face >= 0 && !(diagonal && (pending_face == vert || pending_face == horiz))) {
+		pending_face  = -1;
+		pending_steps = 0;
+	}
+	if (face != formation_face) {
+		pending_face  = -1;
+		pending_steps = 0;
+		// Turning: the formation or its mirror image, whichever is nearer
+		// where everyone is.
+		if (formation_face >= 0 && leader) {
+			turn_steps_left = 4;
+			choose_mirror(leader, face);
+		}
+		formation_face = face;
 	}
 	lead      = leader;
 	lead_dir  = move_dir;
@@ -389,6 +466,27 @@ void Party_manager::get_followers(int dir    // Direction (0-7) Avatar just step
 }
 
 /*
+ *  Friend Mode: the followers walking in formation, in its order (nearest
+ *  the leader first), seven at most.
+ */
+
+std::vector<Actor*> Party_manager::formation_members(const Actor* leader) const {
+	std::vector<Actor*> line;
+	for (size_t i = 0; i < validcnt; ++i) {
+		if (valid[i] != leader && !valid[i]->is_dead()) {
+			line.push_back(valid[i]);
+		}
+	}
+	std::stable_sort(line.begin(), line.end(), [this](const Actor* a, const Actor* b) {
+		return formation_slot(a) < formation_slot(b);
+	});
+	if (line.size() > static_cast<size_t>(formation_max)) {
+		line.resize(formation_max);
+	}
+	return line;
+}
+
+/*
  *  Friend Mode (2026-11-22): on a turn, the formation or its mirror image,
  *  whichever is nearer where everyone is.  Turning around, the spots to
  *  the left and right change sides, and everyone swung across to keep
@@ -397,53 +495,29 @@ void Party_manager::get_followers(int dir    // Direction (0-7) Avatar just step
  *  side, in the same row.
  */
 
-void Party_manager::choose_mirror(Actor* leader, int dir) const {
-	const int dir4 = dir / 2;
-	// Where each place in the formation (valid's order) would be.
-	auto spots = [&](bool mirror) {
-		const int(*loff)[2] = mirror ? right_offsets : left_offsets;
-		const int(*roff)[2] = mirror ? left_offsets : right_offsets;
-		std::array<Tile_coord, EXULT_PARTY_MAX + 1> at;
-		std::array<bool, EXULT_PARTY_MAX + 1>       known{};
-		// at[1 + n]: place n; at[0], the leader.
-		at[0]    = leader->get_tile();
-		known[0] = true;
-		for (int round = 0; round < 4; ++round) {    // (The tree is 4 deep.)
-			for (int id = -1; id < EXULT_PARTY_MAX; ++id) {
-				if (!known[1 + id]) {
-					continue;
-				}
-				for (int side = 0; side < 2; ++side) {
-					const int n = followers[1 + id][side];
-					if (n >= 0 && n < EXULT_PARTY_MAX && !known[1 + n]) {
-						const int(*off)[2] = side ? roff : loff;
-						at[1 + n]          = at[1 + id] + Tile_coord(off[dir4][0], off[dir4][1], 0);
-						known[1 + n]       = true;
-					}
-				}
-			}
-		}
-		return at;
+void Party_manager::choose_mirror(Actor* leader, int face) const {
+	const std::vector<Actor*> line = formation_members(leader);
+	if (line.empty()) {
+		return;
+	}
+	const int        count = static_cast<int>(line.size());
+	const Tile_coord lpos  = leader->get_tile();
+	auto             cost  = [&](bool mirror) {
+        int total = 0;
+        for (int k = 0; k < count; ++k) {
+            const Tile_coord at = lpos + Formation_offset(formation_spots[count - 1][k], face, mirror);
+            const Tile_coord t  = line[k]->get_tile();
+            const int        dx = Tile_coord::delta(t.tx, at.tx);
+            const int        dy = Tile_coord::delta(t.ty, at.ty);
+            total += dx * dx + dy * dy;
+        }
+        return total;
 	};
-	auto cost = [&](bool mirror) {
-		const auto at    = spots(mirror);
-		int        total = 0;
-		for (size_t k = 0; k < validcnt && k < EXULT_PARTY_MAX; ++k) {
-			if (valid[k] == leader || valid[k]->is_dead()) {
-				continue;
-			}
-			const Tile_coord t  = valid[k]->get_tile();
-			const int        dx = Tile_coord::delta(t.tx, at[1 + k].tx);
-			const int        dy = Tile_coord::delta(t.ty, at[1 + k].ty);
-			total += dx * dx + dy * dy;
-		}
-		return total;
-	};
-	const bool flip = cost(!mirrored) < cost(mirrored);
-	if (flip) {
+	if (cost(!mirrored) < cost(mirrored)) {
 		mirrored = !mirrored;
 	}
 }
+
 
 int Party_manager::formation_slot(const Actor* npc) const {
 	const Actor* leader = gwin->get_party_leader();
@@ -460,50 +534,114 @@ int Party_manager::formation_slot(const Actor* npc) const {
 }
 
 /*
- *  To walk in formation, each party member will have one or two other
- *  party members who will follow him on each step.
+ *  Friend Mode (2026-11-25): each follower steps toward its own spot in
+ *  the formation, measured from the leader, front rows first.  (Exult's
+ *  tree had each follow another member, looked up by party number in a
+ *  list that leaves out the guests' companions and the busy: in co-op one
+ *  could be stepped twice toward two spots, back and forth, and another
+ *  never, left behind.)
  */
 
 void Party_manager::move_followers(
-		Actor* npc,       // Party member who just stepped.
-		int    vindex,    // Index within 'valid'.
-		int    dir        // Direction (0-7) he stepped in.
+		Actor* npc,       // The leader, who just stepped.
+		int    vindex,    // (Unused.)
+		int    dir        // Direction (0-7) it stepped in.
 ) const {
 	ignore_unused_variable_warning(vindex);
-	const int        id   = formation_slot(npc);    // (-1 if the leader).
-	if (id == -1 && single_file(npc, dir)) {
+	if (single_file(npc, dir)) {
 		return;
 	}
-	const Tile_coord pos  = npc->get_tile();
-	const int        lnum = followers[1 + id][0];
-	const int        rnum = followers[1 + id][1];
-	if (lnum == -1 && rnum == -1) {
-		return;    // Nothing to do.
+	const std::vector<Actor*> line = formation_members(npc);
+	if (line.empty()) {
+		return;
 	}
-	const int dir4 = dir / 2;    // 0-3 now.
-	Actor*    lnpc = (lnum == -1 || static_cast<unsigned>(lnum) >= validcnt) ? nullptr : valid[lnum];
-	Actor*    rnpc = (rnum == -1 || static_cast<unsigned>(rnum) >= validcnt) ? nullptr : valid[rnum];
-	int       ldir = -1;
-	int       rdir = -1;
-	// Friend Mode: mirrored (left and right exchanged), when the party
-	// turned that way, so each keeps to its side (see get_followers).
-	const int(*loff)[2]      = mirrored ? right_offsets : left_offsets;
-	const int(*roff)[2]      = mirrored ? left_offsets : right_offsets;
-	const Tile_coord ltarget = pos + Tile_coord(loff[dir4][0], loff[dir4][1], 0);
-	const Tile_coord rtarget = pos + Tile_coord(roff[dir4][0], roff[dir4][1], 0);
-	// Have each take a step.
-	if (lnpc) {
-		ldir = step(lnpc, npc, dir, ltarget, true);
+	const int        count = static_cast<int>(line.size());
+	const int        face  = formation_face >= 0 ? formation_face : (dir / 2) % 4;
+	const Tile_coord pos   = npc->get_tile();
+	if (std::FILE* log = Party_log()) {
+		std::fprintf(log, "%d,%d facing %d%s (waiting %d/%d) going %d\n", pos.tx, pos.ty, face, mirrored ? " mirrored" : "",
+					 pending_face, pending_steps, lead_dir);
+		std::fflush(log);
 	}
-	if (rnpc) {
-		rdir = step(rnpc, npc, dir, rtarget, true);
+	// The leader's step, to aim ahead of a spot that moves with it.
+	const Tile_coord next  = pos.get_neighbor(lead_dir);
+	const int        ahead_x = Tile_coord::delta(pos.tx, next.tx);
+	const int        ahead_y = Tile_coord::delta(pos.ty, next.ty);
+	int              speed = npc->get_frame_time();
+	if (speed <= 0) {
+		speed = gwin->get_std_delay();
 	}
-	if (ldir >= 0 && !lnpc->is_dead()) {
-		move_followers(lnpc, lnum, ldir);
+	for (int k = 0; k < count; ++k) {
+		Actor* each = line[k];
+		if (each->is_dead() || each->in_queue()) {
+			continue;    // (Walking a path back to its spot.)
+		}
+		Tile_coord spot = pos + Formation_offset(formation_spots[count - 1][k], face, mirrored);
+		spot.tz         = pos.tz;
+		// Friend Mode (2026-11-25): one step a step never closes the gap to
+		// a spot that moves as fast (after a turn, a follower was left half
+		// way, the party strung out in a line).  Three tiles or more off,
+		// it walks there half again as fast as the leader, aiming where the
+		// spot will be, then steps with the rest.
+		const Tile_coord at  = each->get_tile();
+		const int        off = at.distance(spot);
+		// Is its spot ahead of it, the way the leader goes (moving away), or
+		// behind it (coming toward it)?
+		const int toward = ahead_x * Tile_coord::delta(at.tx, spot.tx) + ahead_y * Tile_coord::delta(at.ty, spot.ty);
+		// Not to a spot coming toward it: the path goes where the spot was.
+		// Turning around, the last in the formation walked back the whole
+		// length of it while the party went the other way, and was left
+		// far behind.  Stepping, they meet half way.
+		if (off >= 3 && toward >= 0) {
+			const int  lead_steps = std::min(off / 2, 3);
+			Tile_coord goal       = spot + Tile_coord(ahead_x * lead_steps, ahead_y * lead_steps, 0);
+			// A few tiles at a time, so it aims again as the spot moves.
+			constexpr int leg = 4;
+			goal.tx           = at.tx + std::clamp(Tile_coord::delta(at.tx, goal.tx), -leg, leg);
+			goal.ty           = at.ty + std::clamp(Tile_coord::delta(at.ty, goal.ty), -leg, leg);
+			goal.tz           = pos.tz;
+			if (each->walk_path_to_tile(goal, std::max(speed * 2 / 3, 50), 0, 1, 1)) {
+				if (std::FILE* log = Party_log()) {
+					std::fprintf(log, "  %d %s at %d,%d spot %d,%d off %d: path to %d,%d\n", k, each->get_name().c_str(),
+								 at.tx, at.ty, spot.tx, spot.ty, off, goal.tx, goal.ty);
+				}
+				continue;
+			}
+		}
+		const int guide = Formation_guide(count, k);
+		Actor*    near  = guide >= 0 && !line[guide]->is_dead() ? line[guide] : npc;
+		step(each, near, dir, spot, true);
+		if (std::FILE* log = Party_log()) {
+			const Tile_coord now = each->get_tile();
+			std::fprintf(log, "  %d %s at %d,%d spot %d,%d off %d: %s\n", k, each->get_name().c_str(), at.tx, at.ty,
+						 spot.tx, spot.ty, off, now == at ? "no step" : "step");
+		}
 	}
-	if (rdir >= 0 && !rnpc->is_dead()) {
-		move_followers(rnpc, rnum, rdir);
+}
+
+
+/*
+ *  Friend Mode (2026-11-25): where a follower's spot in the formation is
+ *  now, for one walking back to the party (Actor::follow).
+ *
+ *  Output: false if it has none (not walking in formation).
+ */
+
+bool Party_manager::formation_spot(const Actor* npc, Tile_coord& spot) const {
+	const Actor* leader = gwin->get_party_leader();
+	if (!leader || npc == leader || formation_face < 0) {
+		return false;
 	}
+	const std::vector<Actor*> line = formation_members(leader);
+	const auto                it   = std::find(line.begin(), line.end(), npc);
+	if (it == line.end()) {
+		return false;
+	}
+	const int count = static_cast<int>(line.size());
+	spot            = leader->get_tile()
+			+ Formation_offset(formation_spots[count - 1][it - line.begin()], formation_face, mirrored);
+	spot.tz = leader->get_lift();
+	return true;
 }
 
 /*
@@ -674,9 +812,8 @@ bool Party_manager::single_file(Actor* leader, int dir) const {
 			other = other || (!door && (near_swamp(valid[i]) || in_passage(valid[i])));
 		}
 	}
-	if (const char* log_name = std::getenv("QOTC_PARTY_LOG")) {
-		static std::FILE* log = std::fopen(log_name, "w");
-		if (log) {
+	if (std::FILE* log = Party_log()) {
+		{
 			std::fprintf(
 					log, "%d,%d,%d dir %d  leader: door %d swamp %d walls %d/%d  party: door %d other %d  left %d/%d\n",
 					pos.tx, pos.ty, pos.tz, dir, lead_door, lead_swamp, wall_side(leader, (dir + 6) % 8),
@@ -712,6 +849,13 @@ bool Party_manager::single_file(Actor* leader, int dir) const {
 		Tile_coord left  = pos.get_neighbor((dir + 4) % 8);    // Where the leader came from.
 		for (Actor* each : line) {
 			const Tile_coord was = each->get_tile();
+			if (each->in_queue()) {
+				// Walking a path back to the party: it goes on, keeping its
+				// place in the line.
+				left  = was;
+				ahead = each;
+				continue;
+			}
 			step(each, ahead, each->get_direction(left), left);
 			if (each->is_dead()) {
 				break;
@@ -764,6 +908,10 @@ bool Party_manager::single_file(Actor* leader, int dir) const {
 			row_ahead = ahead;
 		}
 		Actor* each = line[k];
+		if (each->in_queue()) {
+			ahead = each;    // Walking a path back to the party.
+			continue;
+		}
 		step(each, row_ahead, each->get_direction(dest[k]), dest[k]);
 		if (!each->is_dead()) {
 			ahead = each;

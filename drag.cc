@@ -1002,7 +1002,10 @@ bool Dragging_info::place(Container_game_object* dest, int spot, int count) {
 			placed        = spot >= 0 ? holder && holder->add_readied(to_drop, spot) : dest->add(to_drop, false, true);
 			if (!placed) {
 				Mouse::mouse()->flash_shape(Mouse::wontfit);
+				gwin->move_refused = "Won't fit";
 			}
+		} else {
+			gwin->move_refused = "Too heavy";
 		}
 	} else {
 		Actor*           actor = gwin->get_controlled_actor();
@@ -1056,6 +1059,7 @@ bool Game_window::move_object(Game_object* object, Gump* from, Container_game_ob
 	if (!object || (dragging && dragging->has_object())) {
 		return false;
 	}
+	move_refused = nullptr;
 	Dragging_info info(object, from);
 	return info.lift() && info.place(dest, spot, count);
 }

@@ -26,6 +26,7 @@
 
 #include "actors.h"
 #include "cheat.h"
+#include "fnames.h"
 #include "game.h"
 #include "gamewin.h"
 
@@ -129,10 +130,12 @@ void Game_clock::set_time_palette(bool force) {
 	};
 	if (invis_change || infra_change || gwin->get_pal()->is_faded_out()) {
 		transition.reset();
+		end_light_fade(false);
 		apply_palette(new_palette);
 		return;
 	}
 	if (weather_change) {
+		end_light_fade(false);
 		// TODO: Maybe implement smoother transition from
 		// weather to/from dawn/sunrise/sundown/dusk.
 		// Right now, it works like the original.
@@ -142,7 +145,14 @@ void Game_clock::set_time_palette(bool force) {
 	}
 	if (light_change) {
 		transition.reset();
-		apply_palette(new_palette);
+		// Fade to a new palette (night, candle, one light, many lights);
+		// the level changes all the time as one walks, the palette seldom.
+		if (light_fade_from ? new_palette != light_fade_target
+							: new_palette != gwin->get_pal()->get_palette_index()) {
+			start_light_fade(new_palette);
+		} else if (!light_fade_from) {
+			apply_palette(new_palette);
+		}
 		return;
 	}
 	if (transition) {
@@ -152,11 +162,79 @@ void Game_clock::set_time_palette(bool force) {
 		transition.reset();
 	}
 	if (force || old_palette != new_palette) {    // Do we have a transition?
+		end_light_fade(false);
 		transition = std::make_unique<Palette_transition>(
 				old_palette, new_palette, hour, minute, ticks, ticks_per_minute, 60, hour, 0, 0);
-	} else {
+	} else if (!light_fade_from) {    // (A light fade ends on it.)
 		apply_palette(new_palette);
 	}
+}
+
+void Game_clock::start_light_fade(int palette) {
+	Game_window* gwin = Game_window::get_instance();
+	// From what shows now: a fade under way, the hour's or weather's
+	// transition, or the palette as set.
+	Palette* shown = light_fade_now ? light_fade_now.get()
+				   : transition && transition->get_current_palette() ? transition->get_current_palette()
+																	   : gwin->get_pal();
+	light_fade_from = std::make_unique<Palette>(shown);
+	light_fade_to   = std::make_unique<Palette>();
+	light_fade_to->load(PALETTES_FLX, PATCH_PALETTES, palette);
+	light_fade_target = palette;
+	light_fade_start  = SDL_GetTicks();
+	light_fade_pos    = -1;
+	light_fade_frame();
+}
+
+void Game_clock::end_light_fade(bool apply) {
+	const int target = light_fade_target;
+	const bool going = light_fade_from != nullptr;
+	light_fade_from.reset();
+	light_fade_to.reset();
+	light_fade_now.reset();
+	light_fade_target = -1;
+	light_fade_pos    = -1;
+	if (!going || !apply || target < 0) {
+		return;
+	}
+	Game_window* gwin = Game_window::get_instance();
+	Palette*     pal  = gwin->get_pal();
+	pal->set(target, -1, false);
+	if (!pal->is_faded_out()) {
+		pal->apply(false);    // (set does nothing if it was the same.)
+	}
+	gwin->set_all_dirty();
+}
+
+void Game_clock::light_fade_frame() {
+	if (!light_fade_from) {
+		return;
+	}
+	Game_window* gwin = Game_window::get_instance();
+	if (gwin->get_pal()->is_faded_out()) {
+		end_light_fade(false);
+		return;
+	}
+	constexpr uint32 fade_ms = 600;
+	constexpr int    steps   = 30;
+	const uint32     e       = SDL_GetTicks() - light_fade_start;
+	if (e >= fade_ms) {
+		end_light_fade(true);
+		return;
+	}
+	const int pos = static_cast<int>(e * steps / fade_ms);
+	if (pos != light_fade_pos) {
+		light_fade_pos = pos;
+		light_fade_now = light_fade_from->create_intermediate(*light_fade_to, steps, pos, false);
+		gwin->set_all_dirty();    // (The lighting takes its colours from it too.)
+	}
+}
+
+const Palette* Game_clock::shown_palette() const {
+	if (light_fade_now) {
+		return light_fade_now.get();
+	}
+	return transition ? transition->get_current_palette() : nullptr;
 }
 
 /*

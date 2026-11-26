@@ -131,7 +131,22 @@ USECODE_INTRINSIC(delayed_execute_usecode_array) {
 		&& parms[1].get_elem(2).get_int_value() == 0x6f7) {
 		return no_ret;
 	}
-	const int delay = parms[2].get_int_value();
+	int delay = parms[2].get_int_value();
+	// Friend Mode (2026-11-25): torches burn twice as long.  A lit torch
+	// (701) loses a point of its quality (30 to 60 when lit) each time
+	// function 0x600 runs, every 50 ticks; candles and lamps share it.
+	if (Game::get_game_type() == BLACK_GATE) {
+		Game_object* item = get_item(parms[0]);
+		if (item && item->get_shapenum() == 701) {
+			const Usecode_value& arr = parms[1];
+			for (size_t i = 0; i < arr.get_array_size(); ++i) {
+				if (arr.get_elem(i).get_int_value() == 0x600) {
+					delay *= 2;
+					break;
+				}
+			}
+		}
+	}
 	create_script(parms[0], parms[1], delay * gwin->get_std_delay());
 	COUT("Executing intrinsic 2");
 
@@ -3076,6 +3091,11 @@ USECODE_INTRINSIC(close_gump2) {
 
 USECODE_INTRINSIC(close_gumps) {
 	ignore_unused_variable_warning(parms);
+	// Friend Mode (2026-11-25): not the host's windows for a script it runs
+	// for a guest (the mining machine's closes them first).
+	if (Friend_mode_walker_is_guest()) {
+		return no_ret;
+	}
 	if (!gwin->is_dragging()) {    // NOT while dragging stuff.
 		gumpman->close_all_gumps();
 	}

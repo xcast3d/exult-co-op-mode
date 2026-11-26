@@ -14,6 +14,7 @@
 #include <chrono>
 #include <cstddef>
 #include <deque>
+#include <map>
 #include <memory>
 #include <set>
 #include <string>
@@ -292,6 +293,11 @@ private:
 		std::size_t                            received = 0;
 		std::size_t                            sent     = 0;
 		std::deque<std::vector<unsigned char>> outgoing;
+		// The link was full last time (the other side isn't reading, as a
+		// guest in one of Exult's menus): positions wait in 'held', the
+		// newest for each one, and go once the rest has (2026-11-25).
+		bool                                   backed_up = false;
+		std::map<uint64, std::vector<unsigned char>> held;
 		bool                                   handshake_complete = false;
 		// Host: waiting for the answer to the password question.
 		bool                                   awaiting_password = false;

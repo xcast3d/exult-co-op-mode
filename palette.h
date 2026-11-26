@@ -115,7 +115,7 @@ public:
 	void                     fade_out(int cycles);
 	int                      find_color(int r, int g, int b, int last = 0xe0) const;
 	void                     create_palette_map(const Palette* to, unsigned char* buf) const;
-	std::unique_ptr<Palette> create_intermediate(const Palette& to, int nsteps, int pos) const;
+	std::unique_ptr<Palette> create_intermediate(const Palette& to, int nsteps, int pos, bool repaint = true) const;
 	void                     create_trans_table(unsigned char br, unsigned bg, unsigned bb, int alpha, unsigned char* table) const;
 	void                     show();
 

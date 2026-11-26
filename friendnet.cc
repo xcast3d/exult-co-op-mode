@@ -367,8 +367,37 @@ void Friend_mode_session::stage_text(
 	}
 }
 
+// A packet that only says where someone is (and so can be replaced by a
+// newer one for the same): its key, type and who.
+static bool Position_key(const std::vector<unsigned char>& packet, uint64& key) {
+	if (packet.size() < 12) {
+		return false;
+	}
+	const unsigned char type = packet[6];
+	uint32              who  = 0;
+	switch (type) {
+	case actor_state_packet:     // One's own companion: one a link.
+	case avatar_state_packet:    // The Avatar.
+		break;
+	case npc_state_packet:
+	case creature_state_packet:
+		who = static_cast<uint32>(packet[8]) | (static_cast<uint32>(packet[9]) << 8)
+			  | (static_cast<uint32>(packet[10]) << 16) | (static_cast<uint32>(packet[11]) << 24);
+		break;
+	default:
+		return false;
+	}
+	key = (static_cast<uint64>(type) << 32) | who;
+	return true;
+}
+
 // Hand the staged packets to every recipient: the host's guests past the
 // handshake ('to' one of them, or everyone but 'except'), or the host.
+// Friend Mode (2026-11-25): to one that isn't reading (its link full), a
+// position replaces the one waiting for the same, so when it reads again
+// it gets where everyone is, not every step they took (a guest back from
+// a menu saw half the party snap into place and the rest fly in from off
+// screen, catching up step by step).
 void Friend_mode_session::deliver(int to, int except) {
 	for (auto& peer : peers) {
 		if (!peer->link) {
@@ -378,7 +407,14 @@ void Friend_mode_session::deliver(int to, int except) {
 			&& (!peer->handshake_complete || (to != everyone && peer->player != to) || peer->player == except)) {
 			continue;
 		}
-		peer->outgoing.insert(peer->outgoing.end(), staged.begin(), staged.end());
+		for (const auto& packet : staged) {
+			uint64 key = 0;
+			if (peer->backed_up && Position_key(packet, key)) {
+				peer->held[key] = packet;    // The newest for each.
+			} else {
+				peer->outgoing.push_back(packet);
+			}
+		}
 	}
 	staged.clear();
 }
@@ -1083,10 +1119,21 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 		authoritative_avatar_position = game;
 		authoritative_avatar_frame    = second;
 		avatar_state_pending          = true;
-	} else if (guest && ready && type == npc_state_packet) {
-		npc_states.push_back({game, second, third});
-	} else if (guest && ready && type == creature_state_packet) {
-		creature_states.push_back({game, second, third});
+	} else if (guest && ready && (type == npc_state_packet || type == creature_state_packet)) {
+		// Friend Mode (2026-11-25): only the newest for each waits.  Each
+		// is applied with a glide that carries on from the last one's, so
+		// after a menu (the host's steps piled up) a companion was drawn
+		// as many tiles back as it had steps and came flying in.
+		auto& states = type == npc_state_packet ? npc_states : creature_states;
+		auto  same   = std::find_if(states.begin(), states.end(), [&](const Npc_state& each) {
+            return each.npc == game;
+        });
+		if (same != states.end()) {
+			same->position = second;
+			same->frame    = third;
+		} else {
+			states.push_back({game, second, third});
+		}
 	} else if (guest && ready && type == dialogue_begin_packet) {
 		dialogue_events.push_back({Dialogue_event_type::begin});
 	} else if (guest && ready && type == dialogue_end_packet) {
@@ -1122,22 +1169,34 @@ void Friend_mode_session::handle_packet(Peer& peer) {
 }
 
 void Friend_mode_session::flush(Peer& peer) {
-	while (!peer.outgoing.empty() && peer.link) {
-		const std::vector<unsigned char>& front = peer.outgoing.front();
-		const int count = peer.link->write(front.data() + peer.sent, front.size() - peer.sent);
-		if (count < 0) {
-			std::cout << "Friend Mode: peer disconnected" << std::endl;
-			close_peer(peer);
+	for (;;) {
+		while (!peer.outgoing.empty() && peer.link) {
+			const std::vector<unsigned char>& front = peer.outgoing.front();
+			const int count = peer.link->write(front.data() + peer.sent, front.size() - peer.sent);
+			if (count < 0) {
+				std::cout << "Friend Mode: peer disconnected" << std::endl;
+				close_peer(peer);
+				return;
+			}
+			if (count == 0) {
+				peer.backed_up = true;    // Full for now.
+				return;
+			}
+			peer.sent += static_cast<std::size_t>(count);
+			if (peer.sent == front.size()) {
+				peer.outgoing.pop_front();
+				peer.sent = 0;
+			}
+		}
+		if (!peer.link || peer.held.empty()) {
+			peer.backed_up = false;
 			return;
 		}
-		if (count == 0) {
-			break;    // Full for now.
+		// All else went: now where everyone is.
+		for (auto& [key, packet] : peer.held) {
+			peer.outgoing.push_back(std::move(packet));
 		}
-		peer.sent += static_cast<std::size_t>(count);
-		if (peer.sent == front.size()) {
-			peer.outgoing.pop_front();
-			peer.sent = 0;
-		}
+		peer.held.clear();
 	}
 }
 
@@ -1262,6 +1321,8 @@ void Friend_mode_session::close_peer(Peer& peer) {
 		peer.link.reset();
 	}
 	peer.outgoing.clear();
+	peer.held.clear();
+	peer.backed_up      = false;
 	peer.sent           = 0;
 	peer.received       = 0;
 	peer.blob_remaining = 0;

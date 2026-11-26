@@ -28,6 +28,7 @@
 
 #include <array>
 #include <cstddef>
+#include <vector>
 
 class Actor;
 
@@ -74,9 +75,15 @@ class Party_manager : public Game_singletons {
 	mutable int    lead_face = 0;    // And which way it faces (one of four).
 	// The formation mirrored (left and right exchanged), and choosing that
 	// on a turn.
-	mutable bool mirrored   = false;
-	mutable int  mirror_dir = -1;    // Which way it went when last chosen.
-	void         choose_mirror(Actor* leader, int dir) const;
+	mutable bool mirrored = false;
+	void         choose_mirror(Actor* leader, int face) const;
+	// Which way the formation faces (0-3: N, E, S, W; -1 not yet).
+	int formation_face = -1;
+	// A turn waiting (see get_followers): which way, and steps that way.
+	int pending_face  = -1;
+	int pending_steps = 0;
+	// The followers walking in formation, in its order.
+	std::vector<Actor*> formation_members(const Actor* leader) const;
 
 public:
 	Party_manager();
@@ -197,6 +204,8 @@ public:
 	void link_party();    // Set party's id's.
 	// Formation-walking:
 	void get_followers(int dir);
+	// Friend Mode: where a follower's spot in the formation is now.
+	bool formation_spot(const Actor* npc, Tile_coord& spot) const;
 };
 
 #endif

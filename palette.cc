@@ -568,7 +568,7 @@ void Palette::create_palette_map(const Palette* to, unsigned char* buf) const {
  *  Creates a palette in-between two palettes.
  */
 
-std::unique_ptr<Palette> Palette::create_intermediate(const Palette& to, int nsteps, int pos) const {
+std::unique_ptr<Palette> Palette::create_intermediate(const Palette& to, int nsteps, int pos, bool repaint) const {
 	auto newpal = std::make_unique<Palette>();
 	if (fades_enabled) {
 		for (int c = 0; c < 768; c++) {
@@ -587,7 +587,13 @@ std::unique_ptr<Palette> Palette::create_intermediate(const Palette& to, int nst
 	// Reset palette data and set.
 	memset(newpal->pal2, 0, 768);
 	newpal->border255 = true;
-	newpal->apply(true);
+	// Between two of the game's palettes: the layers with a fixed palette
+	// (the day one) keep it.  As a plain palette they followed the fade and
+	// snapped back at its end (2026-11-25: the status bar, skills bar and
+	// minimap went dark with each light fade).  Brightness as set, too.
+	newpal->game_pal   = game_pal && to.game_pal;
+	newpal->brightness = brightness;
+	newpal->apply(repaint);
 	return newpal;
 }
 

@@ -24,6 +24,44 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
+## Unreleased (0.8.12)
+
+### Changed
+
+- The party walks in the original game's formations: one shape for each
+  number of companions, instead of a triangle that grew wider with every
+  companion. Walking diagonally, the formation keeps its facing and slides
+  along rather than swinging from side to side.
+- Torches burn twice as long.
+- At night, walking toward or away from lamps and torches, the light fades
+  softly instead of jumping in three steps.
+
+### Fixed
+
+- In co-op, after changing the party's order, companions no longer walk
+  back and forth between their old and new places, or fall behind with
+  nothing in their way.
+- After a turn, companions catch up to their places in the formation
+  instead of trailing behind in a line.
+- In co-op, a guest coming back from a menu sees the whole party where it
+  is, instead of some companions flying in from off screen. Outside a
+  fight, the guest's companion now stays where it is while the guest is in
+  a menu.
+- Torches can be readied from the item menu (Ready), as well as lit, and
+  always go in a hand, where they give light (the off hand, if a weapon
+  is held).
+- Switching between party members shows only who you lead now, instead of
+  a line for every switch.
+- Taking something that won't fit or is too heavy says so, instead of
+  nothing happening (a backpack with a bag worn in its place).
+- Guests can use the mining machine.
+- In co-op, the "Following the Avatar" bar no longer flickers under a
+  window's menu.
+- Lighting on stairs indoors no longer flickers at every step, or leaves
+  a shadow on the floor above until the top.
+- With the interface kept in the day palette, the status bar, skills bar
+  and minimap no longer darken while the night light fades.
+
 ## 0.8.11, 2026-11-23 (build 303)
 
 ### Changed
