@@ -1,6 +1,9 @@
 # Playing in a web browser
 
-**Status (2026-10-30):** single player runs in a browser. The page asks
+**Status (2026-11-26):** live on the website (/play): single player, and
+co-op as a guest (browsers don't host).
+
+**Earlier (2026-10-30):** single player runs in a browser. The page asks
 for the player's own Ultima VII folder, Start runs Exult, and a game in
 progress survives a reload. Tested only in Chromium (the desktop app's
 browser pane) on an Apple Silicon Mac. Background, the spike's findings and

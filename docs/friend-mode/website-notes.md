@@ -5,6 +5,44 @@ Take an item off this list once it's on the site.
 
 ## To add
 
+### 0.8.12 (not released yet)
+
+Changes since 0.8.11, from the changelog's Unreleased section.
+
+**New**
+- A keyring (from the Keyring mod), sold wherever lockpicks are (Budo,
+  Dell, Greg, Jehanne), 20 gold. The keys belong to the party, so a lost
+  keyring is bought again with every key still on it. Keys go on by
+  dropping one on it, "Add to keyring" on a key, or "Add keys" for all of
+  them; "Remove keys" puts them back in the pack. Keys on the ring open
+  doors and chests like keys in a pack: K, the Target System, or
+  double-click the keyring. Inn keys and Alagner's key stay off it.
+
+**Changed**
+- The party walks in the original game's formations, one for each party
+  size; on diagonals it keeps its facing and slides along.
+- Torches burn twice as long.
+- At night, light from lamps and torches fades softly instead of jumping
+  in three steps.
+
+**Fixed**
+- After changing the party's order, companions no longer walk back and
+  forth or fall behind.
+- After a turn, companions catch up to their places instead of trailing
+  in a line.
+- In co-op, a guest back from a menu sees the whole party in place (no
+  one flies in); outside a fight, the guest's companion stays put while
+  the guest is in a menu.
+- Torches can be readied from the item menu and always go in a hand (the
+  off hand if a weapon is held).
+- Switching party members shows only the latest "Leading" notice.
+- Taking something that won't fit or is too heavy says so.
+- Guests can use the mining machine.
+- The guest's "Following the Avatar" bar no longer flickers under a menu.
+- Stairs indoors no longer flicker or leave a shadow on the floor above.
+- With the interface kept in the day palette, the status bar, skills bar
+  and minimap no longer darken during the night-light fade.
+
 ### Lighting (new in 0.8.6, experimental)
 
 Written on the site 2026-11-19: a Lighting chapter on the home page

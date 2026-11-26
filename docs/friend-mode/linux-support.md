@@ -3,6 +3,9 @@
 Status (2026-11-20): **not started**. A redditor asked for Linux, ideally
 a Flatpak for the Steam Deck. These are notes for when we take it on.
 
+Decided (2026-11-26): **AppImage** is the Linux download (see the plan).
+A Flatpak can wait.
+
 ## Today: Steam Deck through Proton
 
 The Windows installer should run on a Steam Deck (or any Linux with
@@ -37,11 +40,14 @@ Friend Mode adds looks portable:
 1. **Build.** Add a Linux job to GitHub Actions on an Ubuntu runner,
    started by hand like `friend-mode-windows.yml`. Install the SDL and
    build dependencies, run `build-rtc.sh`, then `configure` and `make`.
-2. **Test on the Raspberry Pi.** Raspberry Pi OS is a real Linux. It's
-   ARM, where the Deck is x86-64, but it's the same code, so it should
-   catch nearly every Linux problem. Play a Friend Mode session against
-   the Mac (both direct and through a lobby code) and run the
-   [test checklist](test-checklist.md).
+2. **Test in a virtual machine on the Mac.** Ubuntu Desktop (ARM) in UTM,
+   with Rosetta for Linux turned on so the Deck's x86-64 AppImage runs
+   as is. Play a Friend Mode session against the Mac (both direct and
+   through a lobby code) and run the [test checklist](test-checklist.md).
+   The GitHub job can also start the AppImage once on its x86-64 runner,
+   without a screen, to catch crashes at startup. Not the Raspberry Pi:
+   it's the user's media server, and a past experiment meant rebuilding
+   it (2026-11-26).
 3. **AppImage first.** It's one file, easy to add to Steam as a
    non-Steam game, and needs no store review. Attach it to the GitHub
    release next to the Mac and Windows downloads.
