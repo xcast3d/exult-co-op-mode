@@ -156,7 +156,8 @@ public:
 		scene           = 36,   // Host: the Avatar is in a scene; the Avatar hidden (opening).
 		barge_step      = 37,   // Host: a vehicle under way started, stepped or stopped.
 		npc_roster      = 38,   // Host: NPCs' met flag, and where they are when far or gone.
-		guest_speech    = 39    // Guest: what its own scripts said (the watch, a coin toss).
+		guest_speech    = 39,   // Guest: what its own scripts said (the watch, a coin toss).
+		keyring         = 40    // Host: the keys on the party's keyring; guest: put keys on it.
 	};
 	void send_blob(Blob_kind kind, const std::vector<unsigned char>& data, int to = everyone, int except = -1);
 	// 'from' (optional) is the sending player; on a guest always the host.

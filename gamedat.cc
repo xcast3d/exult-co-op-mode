@@ -376,7 +376,8 @@ void Game_window::save_gamedat(
 	// First map outputs IREG's directly to
 	// gamedat flex, while all others have a flex
 	// of their own contained in gamedat flex.
-	size_t count = savefiles.size() + 12 * 12 + 2 + 1;    // + Friend Mode's bar.
+	// + Friend Mode's bar, + Black Gate's keyring (SI's is in its list).
+	size_t count = savefiles.size() + 12 * 12 + 2 + 2;
 	for (auto* map : maps) {
 		if (map) {
 			count++;
@@ -403,6 +404,10 @@ void Game_window::save_gamedat(
 	}
 	if (U7exists(FRIENDBARDAT)) {    // Friend Mode's bar, if any.
 		Savefile(flex, FRIENDBARDAT);
+	}
+	// Black Gate's keyring (Quest of the Companions' keyring item).
+	if (Game::get_game_type() == BLACK_GATE && U7exists(KEYRINGDAT)) {
+		Savefile(flex, KEYRINGDAT);
 	}
 	// Now the Ireg's.
 	for (auto* map : maps) {
@@ -1208,6 +1213,10 @@ bool Game_window::save_gamedat_zip(
 		if (U7exists(FRIENDBARDAT)) {    // Friend Mode's bar, if any.
 			Save_level1(zipfile, FRIENDBARDAT);
 		}
+		// Black Gate's keyring (Quest of the Companions' keyring item).
+		if (Game::get_game_type() == BLACK_GATE && U7exists(KEYRINGDAT)) {
+			Save_level1(zipfile, KEYRINGDAT);
+		}
 
 		// Now the Ireg's.
 		for (auto* map : maps) {
@@ -1234,6 +1243,10 @@ bool Game_window::save_gamedat_zip(
 		}
 		if (U7exists(FRIENDBARDAT)) {    // Friend Mode's bar, if any.
 			Save_level2(zipfile, FRIENDBARDAT);
+		}
+		// Black Gate's keyring (Quest of the Companions' keyring item).
+		if (Game::get_game_type() == BLACK_GATE && U7exists(KEYRINGDAT)) {
+			Save_level2(zipfile, KEYRINGDAT);
 		}
 
 		// Now the Ireg's.

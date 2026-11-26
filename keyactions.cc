@@ -480,7 +480,7 @@ bool Try_keys_on(Game_object* obj) {
 			Friend_mode_request_item_use(keys[0], obj);
 			return true;
 		}
-		return false;
+		return Friend_keyring_try_on(obj);    // Or the keyring's.
 	}
 	Actor*    party[10];                    // Get ->party members.
 	const int party_cnt = gwin->get_party(&party[0], 1);
@@ -503,7 +503,7 @@ bool Try_keys_on(Game_object* obj) {
 			}
 		}
 	}
-	return false;
+	return Friend_keyring_try_on(obj);    // Or one on a keyring.
 }
 
 //  { ActionStats, 1, "Show stats", normal_keys, NONE },

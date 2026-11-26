@@ -30,6 +30,10 @@ public:
 	void addkey(int qual);       // add key to keyring
 	bool checkkey(int qual);     // is key on keyring?
 	bool removekey(int qual);    // remove key.
+
+	const std::set<int>& get_keys() const {    // Every key on it.
+		return keys;
+	}
 private:
 	std::set<int> keys;
 };

@@ -71,6 +71,8 @@ content/demo/static/sprites_vga.h
 content/demo/static/usecode
 data/bg/bg_mr_faces.vga
 data/bg/bg_mr_faces_vga.h
+data/bg/qotc_shapes.vga
+data/bg/qotc_shapes_vga.h
 data/bg/bg_paperdol.vga
 data/bg/bg_paperdol_vga.h
 data/bg/introsfx_mt32.flx

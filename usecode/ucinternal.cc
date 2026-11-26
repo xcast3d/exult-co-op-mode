@@ -1896,6 +1896,9 @@ void Usecode_internal::read_usecode() {
 		}
 		auto& file = *pFile;
 		read_usecode(file);
+		if (Game::get_game_type() == BLACK_GATE && !Game::is_editing()) {
+			friend_shops_sell_keyrings();    // Before the patch's: it may replace them.
+		}
 	} catch (const file_exception& /*f*/) {
 		if (!Game::is_editing()) {    // Ok if map-editing.
 			throw;
@@ -3323,10 +3326,9 @@ bool Usecode_internal::in_usecode_for(Game_object* item, Usecode_events event) {
  */
 
 void Usecode_internal::write() {
-	// Assume new games will have keyring.
-	if (Game::get_game_type() != BLACK_GATE) {
-		keyring->write();    // write keyring data
-	}
+	// Assume new games will have keyring.  Black Gate's too: Quest of the
+	// Companions sells one (2026-11-25).
+	keyring->write();    // write keyring data
 
 	{
 		compact_global_flags();
@@ -3398,8 +3400,8 @@ void Usecode_internal::write() {
  */
 
 void Usecode_internal::read() {
-	if (Game::get_game_type() != BLACK_GATE && !Game::is_si_beta()) {
-		keyring->read();    // read keyring data
+	if (!Game::is_si_beta()) {
+		keyring->read();    // read keyring data (Black Gate's too)
 	}
 
 	try {
@@ -3584,3 +3586,4 @@ int Usecode_internal::set_location_breakpoint(int funcid, int ip) {
 }
 
 #endif
+

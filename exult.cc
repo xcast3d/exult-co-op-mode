@@ -102,6 +102,7 @@
 #include "touchui.h"
 #include "u7drag.h"
 #include "usecode/conversation.h"
+#include "usecode/keyring.h"
 #include "ucmachine.h"
 #include "utils.h"
 #include "verify.h"
@@ -1468,6 +1469,7 @@ static void Friend_mode_spawn_test_kit() {
 		Friend_test_kit_fill(supplies, 641, 0, 1, chest_lock);    // Key: locked chest.
 		Friend_test_kit_fill(supplies, 641, 0, 1, door_lock);     // Key: locked door.
 		Friend_test_kit_fill(supplies, 627, 0, 5);                // Lockpicks.
+		Friend_test_kit_fill(supplies, 1100, 0, 1);               // Keyring (ours).
 		for (int frame = 0; frame < 8; ++frame) {
 			Friend_test_kit_fill(supplies, 340, frame, 1);    // Potions.
 		}
@@ -2734,8 +2736,14 @@ void Friend_mode_note_drag_put_back() {
 	friend_guest_lifted = false;
 }
 
+static bool Friend_keyring_note_drop();
+
 void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container, bool whole) {
 	if (!dropped || !friend_guest_lifted || !friend_session.connected()) {
+		return;
+	}
+	if (Friend_keyring_note_drop()) {    // A key onto a keyring: the host puts it on.
+		friend_guest_lifted = false;
 		return;
 	}
 	// The source is the item the host is holding for us.
@@ -3195,8 +3203,9 @@ Friend_item_use Friend_mode_guest_item_use(int shape, int frame) {
 	case 693:    // Whistle: frame 0 a tune; frame 1 also stirs the wisps
 				 // nearby (closes windows, sets their schedule), the Avatar's.
 		return frame == 0 ? Friend_item_use::on_self : Friend_item_use::none;
-	case 641:    // Key.
-	case 627:    // Lockpick.
+	case 641:     // Key.
+	case 627:     // Lockpick.
+	case 1100:    // Keyring (ours): the key on it (Friend_keyring_open).
 		return Friend_item_use::on_target;
 	// Crafting (2026-11-08; Friend_craft_target says what each wants).  Each
 	// script takes the thing into the user's pack (walking to it if on the
@@ -3326,6 +3335,8 @@ void Friend_mode_request_item_use(Game_object* item, Game_object* target, Game_o
 }
 
 // Host: use an item for a guest after checking it.
+static bool Friend_keyring_open(Actor* holder, Game_object* target);
+
 static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& data, Actor* actor) {
 	auto refuse = [&](const char* why) {
 		cout << "Friend Mode: refused guest item use (" << why << ')' << endl;
@@ -3394,6 +3405,13 @@ static void Friend_mode_use_item_for_guest(const std::vector<unsigned char>& dat
 		return refuse("keys and lockpicks work on doors and chests");
 	} else if (!Friend_guest_may_touch(actor, target)) {
 		return refuse("target out of reach");
+	}
+	if (Friend_is_keyring(item)) {    // No script: the key on it, if there is one.
+		if (!Friend_keyring_open(actor, target)) {
+			return refuse("that key isn't on the keyring");
+		}
+		gwin->set_all_dirty();
+		return;
 	}
 	Usecode_machine* usecode = gwin->get_usecode();
 	friend_usecode_walker    = actor;
@@ -5065,6 +5083,347 @@ static Game_object* Friend_lock_tool(Actor* own, int shape, int quality) {
 	return nullptr;
 }
 
+// The keyring (2026-11-25, the Keyring mod's keyring, sold where lockpicks
+// are).  One list of keys for the party (Exult's Keyring, Serpent Isle's,
+// saved as keyring.dat): any keyring opens what is on it, so a lost one is
+// bought again with every key still on it.  A key dropped on a keyring
+// goes onto it; the item menu adds all of them, or removes them.  The
+// host keeps the list and sends it to guests (Blob_kind::keyring).
+constexpr int friend_keyring_shape = 1100;
+constexpr int friend_key_shape     = 641;
+
+bool Friend_is_keyring(const Game_object* obj) {
+	return GAME_BG && obj && obj->get_shapenum() == friend_keyring_shape;
+}
+
+static Keyring* Friend_keyring_keys() {
+	return gwin->get_usecode()->getKeyring();
+}
+
+// Why this key stays off the ring (the mod's rules), or null.
+static const char* Friend_keyring_refusal(const Game_object* key) {
+	switch (key->get_quality()) {
+	case 255:    // Inn rooms: the innkeeper takes it back.
+		return "The innkeeper wants that key back";
+	case 254:    // Alagner's storeroom.
+		return "That key goes back to Alagner";
+	default:
+		return nullptr;
+	}
+}
+
+// The keyrings the party carries show how many keys (frames 0 to 4).
+static void Friend_keyring_show() {
+	const int count = static_cast<int>(Friend_keyring_keys()->get_keys().size());
+	Actor*    party[10];
+	const int members = gwin->get_party(&party[0], 1);
+	for (int i = 0; i < members; ++i) {
+		Game_object_vector rings;
+		party[i]->get_objects(rings, friend_keyring_shape, c_any_qual, c_any_framenum);
+		for (Game_object* ring : rings) {
+			const int frame = std::min(count, ring->get_num_frames() - 1);
+			if (frame >= 0 && ring->get_framenum() != frame) {
+				ring->change_frame(frame);
+			}
+		}
+	}
+}
+
+// Host and single player: 'key' onto the ring.  True if it went (it is gone).
+static bool Friend_keyring_add(Game_object* key, bool say) {
+	if (!key || key->get_shapenum() != friend_key_shape) {
+		return false;
+	}
+	if (const char* why = Friend_keyring_refusal(key)) {
+		if (say) {
+			Friend_mode_target_notice(why);
+		}
+		return false;
+	}
+	Friend_keyring_keys()->addkey(key->get_quality());
+	key->remove_this();
+	Friend_keyring_show();
+	return true;
+}
+
+// Host and single player: every key 'who' carries (the whole party's, when
+// null) onto the ring.  How many went.
+static int Friend_keyring_add_all(Actor* who) {
+	Actor*    party[10];
+	int       members = 1;
+	if (who) {
+		party[0] = who;
+	} else {
+		members = gwin->get_party(&party[0], 1);
+	}
+	int added = 0;
+	for (int i = 0; i < members; ++i) {
+		Game_object_vector keys;
+		party[i]->get_objects(keys, friend_key_shape, c_any_qual, c_any_framenum);
+		for (Game_object* key : keys) {
+			if (!key->inside_locked() && Friend_keyring_add(key, false)) {
+				++added;
+			}
+		}
+	}
+	return added;
+}
+
+// Host and single player: every key off the ring, into 'who's pack (no
+// bag: 2026-11-25, a bag each time piled up bags).  Keys that don't fit
+// stay on the ring.  How many came off.
+static int Friend_keyring_take_off(Actor* who) {
+	const std::set<int> keys = Friend_keyring_keys()->get_keys();
+	if (keys.empty() || !who) {
+		return 0;
+	}
+	Container_game_object* pack  = Friend_pack_of(who);
+	int                    taken = 0;
+	for (const int qual : keys) {
+		Game_object_shared key = gwin->get_map()->create_ireg_object(friend_key_shape, qual % 32);
+		key->set_quality(qual);
+		if (!pack->add(key.get(), false)) {
+			break;    // Full: the rest stay on.
+		}
+		Friend_keyring_keys()->removekey(qual);
+		++taken;
+	}
+	Friend_keyring_show();
+	return taken;
+}
+
+// Does 'own' (a guest: its companion; else the party) carry a keyring with
+// the key to 'quality' on it?  The keyring, or null.
+static Game_object* Friend_keyring_with(Actor* own, int quality) {
+	if (!GAME_BG || quality == c_any_qual || !Friend_keyring_keys()->checkkey(quality)) {
+		return nullptr;
+	}
+	return Friend_lock_tool(own, friend_keyring_shape, c_any_qual);
+}
+
+// Host and single player: open (or lock) 'target' with its key from the
+// ring, as the key itself does (its script, with the click answered).
+// 'holder' carries the keyring.  False if the key isn't on it.
+static bool Friend_keyring_open(Actor* holder, Game_object* target) {
+	const int quality = target->get_quality();
+	if (!holder || !Friend_keyring_keys()->checkkey(quality)) {
+		return false;
+	}
+	// A key for the moment, in the holder's pack, used and taken away.
+	Game_object_shared key = gwin->get_map()->create_ireg_object(friend_key_shape, quality % 32);
+	key->set_quality(quality);
+	key->set_flag(Obj_flags::is_temporary);
+	// In the pack, not a free hand (readying it would run its script).
+	Container_game_object* pack = Friend_pack_of(holder);
+	if (!pack->add(key.get(), true)) {
+		return false;
+	}
+	Usecode_machine* usecode = gwin->get_usecode();
+	Game_object*     old_target;
+	Tile_coord*      old_tile;
+	usecode->save_intercept(old_target, old_tile);
+	usecode->intercept_click_on_item(target);
+	key->activate();
+	usecode->restore_intercept(old_target, old_tile);
+	key->remove_this();
+	return true;
+}
+
+// K, E's unlock, or a keyring used: the key to 'target' from a keyring the
+// party (a guest: its companion) carries.  False if none has it.
+bool Friend_keyring_try_on(Game_object* target) {
+	if (!target || !GAME_BG) {
+		return false;
+	}
+	Actor*       own  = gwin->get_controlled_actor();
+	Game_object* ring = Friend_keyring_with(own, target->get_quality());
+	if (!ring) {
+		return false;
+	}
+	if (Friend_mode_is_guest()) {
+		Friend_mode_request_item_use(ring, target);    // The host turns it.
+		return true;
+	}
+	Actor* holder = ring->get_outermost()->as_actor();
+	return Friend_keyring_open(holder ? holder : own, target);
+}
+
+// A keyring double-clicked: as K, a click on what to open.
+bool Friend_keyring_activate(Game_object* ring) {
+	if (!Friend_is_keyring(ring)) {
+		return false;
+	}
+	ActionTryKeys(nullptr);
+	return true;
+}
+
+// A guest dropped a key on this keyring: the host, which holds the key,
+// puts it on (Friend_mode_note_drag_drop).
+static Game_object_weak friend_keyring_drop_ring;
+
+// Game_object::drop: 'key' dropped on 'ring'.  True if it went onto the ring.
+bool Friend_keyring_drop(Game_object* ring, Game_object* key) {
+	if (!Friend_is_keyring(ring) || !key || key->get_shapenum() != friend_key_shape) {
+		return false;
+	}
+	if (const char* why = Friend_keyring_refusal(key)) {
+		Friend_mode_target_notice(why);
+		return false;
+	}
+	if (!Friend_mode_is_guest()) {
+		return Friend_keyring_add(key, true);
+	}
+	friend_keyring_drop_ring = weak_from_obj(ring);
+	key->remove_this();    // On our copy; the host's list follows.
+	return true;
+}
+
+// Guest: what the keyring message asks of the host.
+enum Friend_keyring_request : unsigned char {
+	friend_keyring_list     = 0,    // Host: the keys on it.
+	friend_keyring_held_key = 1,    // Guest: the key the host holds for us, onto this keyring.
+	friend_keyring_add_mine = 2,    // Guest: every key our companion carries.
+	friend_keyring_add_one  = 3     // Guest: this key (its path follows the keyring's).
+};
+
+// Guest: ask the host to put keys on the ring ('ring': the keyring used;
+// 'key': the one key, for friend_keyring_add_one).
+static void Friend_keyring_request(Friend_keyring_request what, Game_object* ring, Game_object* key = nullptr) {
+	std::vector<unsigned char> payload{static_cast<unsigned char>(what)};
+	if (!Friend_put_path(payload, ring) || (key && !Friend_put_path(payload, key))) {
+		return;
+	}
+	friend_session.send_blob(Friend_mode_session::Blob_kind::keyring, payload);
+}
+
+// Guest: a drop that put a key on a keyring.  True if it was one (sent).
+static bool Friend_keyring_note_drop() {
+	const Game_object_shared ring = friend_keyring_drop_ring.lock();
+	friend_keyring_drop_ring.reset();
+	if (!ring) {
+		return false;
+	}
+	Friend_keyring_request(friend_keyring_held_key, ring.get());
+	return true;
+}
+
+// Host: the keys on the ring, to guests when they change ('force': to all).
+static std::vector<unsigned char> friend_keyring_sent;
+
+static void Friend_mode_keyring_pass(bool force) {
+	if (!GAME_BG) {
+		return;
+	}
+	const std::set<int>&       keys = Friend_keyring_keys()->get_keys();
+	std::vector<unsigned char> payload{friend_keyring_list};
+	Friend_put16(payload, static_cast<int>(keys.size()));
+	for (const int qual : keys) {
+		Friend_put16(payload, qual);
+	}
+	if (force || payload != friend_keyring_sent) {
+		friend_session.send_blob(Friend_mode_session::Blob_kind::keyring, payload);
+		friend_keyring_sent = std::move(payload);
+	}
+}
+
+static int Friend_get16(const std::vector<unsigned char>& data, size_t& pos);
+
+// Guest: the host's list of keys on the ring.
+static void Friend_mode_apply_keyring(const std::vector<unsigned char>& data) {
+	if (data.size() < 3 || data[0] != friend_keyring_list) {
+		return;
+	}
+	size_t    pos   = 1;
+	const int count = Friend_get16(data, pos);
+	if (count < 0 || data.size() < 3 + 2 * static_cast<size_t>(count)) {
+		return;
+	}
+	Keyring* keys = Friend_keyring_keys();
+	keys->clear();
+	for (int i = 0; i < count; ++i) {
+		keys->addkey(Friend_get16(data, pos));
+	}
+}
+
+// Host: a guest's keyring message.
+static void Friend_mode_keyring_for_guest(
+		const std::vector<unsigned char>& data, Actor* actor, Friend_held_item& held, int player) {
+	if (!actor || data.empty() || !GAME_BG) {
+		return;
+	}
+	size_t       pos  = 1;
+	Game_object* ring = nullptr;
+	Tile_coord   tile;
+	if (!Friend_read_path(data, pos, ring, tile) || !Friend_is_keyring(ring) || !Friend_guest_may_touch(actor, ring)) {
+		cout << "Friend Mode: refused guest keyring (no keyring of theirs)" << endl;
+		if (data[0] == friend_keyring_held_key) {
+			Friend_return_held_item(held);
+		}
+		Friend_force_item_resync(actor);
+		return;
+	}
+	if (data[0] == friend_keyring_held_key) {
+		Game_object* key = held.obj.get();
+		if (!key || key->get_shapenum() != friend_key_shape) {
+			Friend_return_held_item(held);
+			Friend_force_item_resync(actor);
+			return;
+		}
+		if (const char* why = Friend_keyring_refusal(key)) {
+			Friend_mode_tell_guest(player, why);
+			Friend_return_held_item(held);
+			Friend_force_item_resync(actor);
+			return;
+		}
+		const Game_object_shared keep = std::move(held.obj);    // Out of the hand...
+		held                          = Friend_held_item();
+		Friend_keyring_keys()->addkey(keep->get_quality());     // ...onto the ring.
+		Friend_keyring_show();
+	} else if (data[0] == friend_keyring_add_one) {
+		Game_object* key = nullptr;
+		if (!Friend_read_path(data, pos, key, tile) || !key || key->get_shapenum() != friend_key_shape
+			|| key->get_outermost() != actor) {
+			cout << "Friend Mode: refused guest keyring (not a key of theirs)" << endl;
+		} else if (const char* why = Friend_keyring_refusal(key)) {
+			Friend_mode_tell_guest(player, why);
+		} else {
+			Friend_keyring_add(key, false);
+		}
+	} else if (data[0] == friend_keyring_add_mine) {
+		const int added = Friend_keyring_add_all(actor);
+		Friend_mode_tell_guest(player, added ? "Added " + std::to_string(added) + (added == 1 ? " key" : " keys")
+											 : std::string("No keys to add"));
+	}
+	Friend_force_item_resync(actor);
+	Friend_mode_keyring_pass(false);
+}
+
+// The keyring's item menu: Add keys (everyone's, or a guest's own), and
+// Remove keys (the host and single player: the ring is the party's).
+static void Friend_keyring_actions(std::vector<Friend_menu_choice>& acts, Actor* own, const Game_object_shared& thing) {
+	acts.push_back({"Add keys", [thing]() {
+						if (Friend_mode_is_guest()) {
+							Friend_keyring_request(friend_keyring_add_mine, thing.get());
+							return;
+						}
+						const int added = Friend_keyring_add_all(nullptr);
+						// The keyring stays picked, its hint with it (2026-11-25).
+						Friend_mode_target_notice(added ? "Added " + std::to_string(added) + (added == 1 ? " key" : " keys")
+														: std::string("No keys to add"),
+												  true);
+					}});
+	if (!Friend_mode_is_guest()) {
+		acts.push_back({"Remove keys", [own]() {
+							const bool any   = !Friend_keyring_keys()->get_keys().empty();
+							const int  taken = Friend_keyring_take_off(own);
+							Friend_mode_target_notice(!any     ? std::string("No keys on the keyring")
+													  : taken ? "Removed " + std::to_string(taken) + (taken == 1 ? " key" : " keys")
+															  : std::string("No room for the keys"),
+													  true);
+						}});
+	}
+}
+
 static Friend_lock Friend_lock_of(Actor* own, Game_object* obj) {
 	if (!GAME_BG || !own || !obj) {
 		return Friend_lock::none;
@@ -5076,7 +5435,7 @@ static Friend_lock Friend_lock_of(Actor* own, Game_object* obj) {
 		return Friend_lock::none;
 	}
 	const int quality = obj->get_quality();
-	if (Friend_lock_tool(own, 641, quality)) {
+	if (Friend_lock_tool(own, 641, quality) || Friend_keyring_with(own, quality)) {    // A key, or on the keyring.
 		return Friend_lock::key;
 	}
 	// The lockpick's script (shape 627): the locked chest (522) of quality
@@ -8914,6 +9273,7 @@ static void Friend_mode_send_world(int to = Friend_mode_session::everyone) {
 		Friend_mode_journal_open_pass(true);
 		Friend_mode_send_music();    // Join mid-tune.
 		Friend_mode_story_flags_pass(true);
+		Friend_mode_keyring_pass(true);
 		Friend_mode_npc_roster_pass(true);
 		Friend_mode_scene_pass(true);    // Joining mid-scene: watch it.
 		friend_health_sent.clear();
@@ -11547,6 +11907,8 @@ static std::vector<Friend_menu_choice> Friend_inventory_actions(Actor* own, cons
 						}});
 	} else if (GAME_BG && obj->get_shapenum() == 863 && obj->get_framenum() == 0) {
 		acts.push_back({"Pour Flour", use});
+	} else if (Friend_is_keyring(obj)) {
+		Friend_keyring_actions(acts, wearer, thing);
 	} else if (obj->as_container()) {
 		acts.push_back({"Open", use});
 	} else if (mine ? obj->usecode_exists() : Friend_window_use(member, obj)) {
@@ -11562,6 +11924,19 @@ static std::vector<Friend_menu_choice> Friend_inventory_actions(Actor* own, cons
 		acts.push_back({wearer->find_readied(obj) >= 0 ? "Put away" : "Ready", [thing, wearer, window]() {
 							Friend_mode_equip(wearer, thing.get(), window());
 						}});
+	}
+	// A key, with a keyring in the party (a guest: its own): onto the ring.
+	if (GAME_BG && obj->get_shapenum() == friend_key_shape) {
+		if (Game_object* ring = Friend_lock_tool(own, friend_keyring_shape, c_any_qual)) {
+			const Game_object_shared ring_shared = ring->shared_from_this();
+			acts.push_back({"Add to keyring", [thing, ring_shared]() {
+								if (Friend_mode_is_guest()) {
+									Friend_keyring_request(friend_keyring_add_one, ring_shared.get(), thing.get());
+								} else if (Friend_keyring_add(thing.get(), true)) {
+									Friend_mode_target_notice("Added to the keyring");
+								}
+							}});
+		}
 	}
 	if (!obj->is_dragable()) {
 		return acts;
@@ -11975,7 +12350,9 @@ static std::vector<Controller_ring_entry> Controller_utility_entries() {
 	entries.push_back({"Journal", Controller_bar_picture(6), {}, true, action("NOTEBOOK")});
 	entries.push_back({"Lockpick", Controller_shape_picture(627, 7, SF_SHAPES_VGA), {}, has(627),
 					   or_say(has(627), "No lockpick", on_pick(627))});
-	entries.push_back({"Keys", Controller_bar_picture(5), {}, has(641), or_say(has(641), "No keys", []() {
+	// Keys, or the keyring (whose keys Try_keys_on uses too).
+	const bool keys = has(641) || (GAME_BG && has(1100));
+	entries.push_back({"Keys", Controller_bar_picture(5), {}, keys, or_say(keys, "No keys", []() {
 						   Game_object* pick = Friend_mode_object_target();
 						   if (!pick) {
 							   Friend_mode_target_notice("Select a target first");
@@ -13399,6 +13776,7 @@ static void Main_loop_pass(bool input) {
 					friend_next_clock_sync = now + friend_clock_sync_ms;
 					Friend_mode_clock_pass(false);
 					Friend_mode_story_flags_pass(false);
+					Friend_mode_keyring_pass(false);
 					Friend_mode_npc_roster_pass(false);
 				}
 				if (now >= friend_next_journal_sync) {
@@ -13417,6 +13795,7 @@ static void Main_loop_pass(bool input) {
 				friend_journal_sent.clear();
 				friend_health_sent.clear();
 				friend_flags_sent.clear();
+				friend_keyring_sent.clear();
 				friend_player_list_sent.clear();
 				if (!friend_journal_writers.empty()) {
 					friend_journal_writers.clear();
@@ -13561,6 +13940,8 @@ static void Main_loop_pass(bool input) {
 						Friend_return_held_item(guest->held);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_use_item) {
 						Friend_mode_use_item_for_guest(request, guest_actor);
+					} else if (kind == Friend_mode_session::Blob_kind::keyring) {
+						Friend_mode_keyring_for_guest(request, guest_actor, guest->held, requester);
 					} else if (kind == Friend_mode_session::Blob_kind::guest_speech) {
 						Friend_mode_guest_speech(request, *guest, requester);
 					} else if (kind == Friend_mode_session::Blob_kind::roster_request) {
@@ -13798,6 +14179,8 @@ static void Main_loop_pass(bool input) {
 					Friend_mode_apply_sound(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::story_flags) {
 					Friend_mode_apply_story_flags(blob);
+				} else if (blob_kind == Friend_mode_session::Blob_kind::keyring) {
+					Friend_mode_apply_keyring(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::npc_roster) {
 					Friend_mode_apply_npc_roster(blob);
 				} else if (blob_kind == Friend_mode_session::Blob_kind::scene) {

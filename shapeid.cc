@@ -115,7 +115,8 @@ Shape_manager::Shape_manager() {
 
 void Shape_manager::read_shape_info() {
 	// Want space for extra shapes if BG multiracial enabled.
-	shapes.init();
+	// Black Gate in play: with Quest of the Companions' own shapes.
+	shapes.init(Game::get_game_type() == BLACK_GATE && !Game::is_editing());
 	// Read in shape information.
 	shapes.read_info(Game::get_game_type(), Game::is_editing());
 

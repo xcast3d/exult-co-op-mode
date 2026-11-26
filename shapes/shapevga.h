@@ -56,7 +56,9 @@ class Shapes_vga_file : public Vga_file {
 public:
 	Shapes_vga_file() = default;
 	Shapes_vga_file(const char* nm, int u7drag = -1, const char* nm2 = nullptr);
-	void init();
+	// qotc_shapes: add Quest of the Companions' own Black Gate shapes (the
+	// keyring, 1100) from exult_bg.flx; not for editing.
+	void init(bool qotc_shapes = false);
 	// Read additional data files.
 	void reload_info(Exult_Game game);
 	void fix_old_shape_info(Exult_Game game);

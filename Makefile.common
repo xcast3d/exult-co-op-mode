@@ -406,6 +406,7 @@ EXULT_BG_FLX_OBJECTS := \
 	data/bg/u7menupal.pal \
 	data/bg/bg_paperdol.vga \
 	data/bg/bg_mr_faces.vga \
+	data/bg/qotc_shapes.vga \
 	data/bg/bodies.txt \
 	data/bg/shape_files.txt \
 	data/bg/avatar_data.txt \
@@ -663,6 +664,9 @@ $(BG_PAPERDOLL): expack$(EXEEXT) $(EXULT_BG_PAPERDOL_VGA_OBJECTS)
 $(BG_MR_FACES): expack$(EXEEXT) $(EXULT_BG_MR_FACES_VGA_OBJECTS)
 	$(SRC)/expack$(EXEEXT) -i data/bg/bg_mr_faces.in
 
+data/bg/qotc_shapes.vga: expack$(EXEEXT) data/bg/keyring.shp data/bg/qotc_shapes.in
+	$(SRC)/expack$(EXEEXT) -i data/bg/qotc_shapes.in
+
 cmanip$(EXEEXT) : tools/cmanip.o $(CONF_OBJS) $(FILE_OBJS)
 	$(CXX) $(LDFLAGS) -o $(@) tools/cmanip.o $(CONF_OBJS) $(FILE_OBJS)
 
@@ -843,7 +847,7 @@ qotcbuild.h: .git/index .git/HEAD Makefile.common
 	fi
 
 clean:
-	rm -f $(OBJS) $(OBJS:%.o=%.d) tools/expack.o $(EXEC) expack$(EXEEXT) tools/ipack.o ipack$(EXEEXT) data/exult.flx data/exult_flx.h data/exult_bg.flx data/exult_bg_flx.h data/exult_si.flx data/exult_si_flx.h data/bg/bg_paperdol.vga data/bg/bg_mr_faces.vga data/bg/bg_paperdol_vga.h data/bg/bg_mr_faces_vga.h gitinfo.h qotcbuild.h qotcrc.h data/fonts_original.vga data/fonts_original.vga.h data/fonts_serif.vga data/fonts_serif.vga.h data/shortcutbar.vga data/shortcutbar.vga.h
+	rm -f $(OBJS) $(OBJS:%.o=%.d) tools/expack.o $(EXEC) expack$(EXEEXT) tools/ipack.o ipack$(EXEEXT) data/exult.flx data/exult_flx.h data/exult_bg.flx data/exult_bg_flx.h data/exult_si.flx data/exult_si_flx.h data/bg/bg_paperdol.vga data/bg/bg_mr_faces.vga data/bg/qotc_shapes.vga data/bg/qotc_shapes_vga.h data/bg/bg_paperdol_vga.h data/bg/bg_mr_faces_vga.h gitinfo.h qotcbuild.h qotcrc.h data/fonts_original.vga data/fonts_original.vga.h data/fonts_serif.vga data/fonts_serif.vga.h data/shortcutbar.vga data/shortcutbar.vga.h
 
 tools:  expack$(EXEEXT) cmanip$(EXEEXT) ipack$(EXEEXT) mklink$(EXEEXT) mockup$(EXEEXT) rip$(EXEEXT) shp2pcx$(EXEEXT) smooth$(EXEEXT) splitshp$(EXEEXT) textpack$(EXEEXT) wuc$(EXEEXT) u7voice2syx$(EXEEXT) ucc$(EXEEXT) ucxt$(EXEEXT)  \
 	$(SRC)/head2data$(EXEEXT) head2data.test libsmooth_randomize$(LIBEXT) libsmooth_smooth$(LIBEXT) libsmooth_stream$(LIBEXT)

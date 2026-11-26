@@ -23,6 +23,8 @@
 #	include <config.h>
 #endif
 
+#include <cstring>
+
 #include "shapevga.h"
 
 #include "ammoinf.h"
@@ -779,6 +781,19 @@ bool Shapes_vga_file::read_info(
 		}
 	}
 
+	// Quest of the Companions' keyring (1100, from the Keyring mod), when
+	// nothing else set it: carried like a key, a lift high, 2 by 2.
+	constexpr size_t keyring = 1100;
+	if (game == BLACK_GATE && !editing && keyring < shapes.size() && !info[keyring].tfa[0] && !info[keyring].tfa[1]) {
+		static constexpr unsigned char keyring_tfa[3] = {0x28, 0x02, 0x09};
+		memcpy(info[keyring].tfa, keyring_tfa, sizeof(keyring_tfa));
+		info[keyring].set_tfa_data();
+		info[keyring].weight     = 1;
+		info[keyring].volume     = 0;
+		info[keyring].shpdims[0] = 1;
+		info[keyring].shpdims[1] = 1;
+	}
+
 	if (game == BLACK_GATE || game == SERPENT_ISLE) {
 		// Animation data at the end of BG and SI TFA.DAT
 		// We *should* blow up if TFA not there.
@@ -970,12 +985,16 @@ Shapes_vga_file::Shapes_vga_file(
 		)
 		: Vga_file(nm, u7drag, nm2) {}
 
-void Shapes_vga_file::init() {
-	if (is_system_path_defined("<PATCH>") && U7exists(PATCH_SHAPES)) {
-		load(SHAPES_VGA, PATCH_SHAPES);
-	} else {
-		load(SHAPES_VGA);
+void Shapes_vga_file::init(bool qotc_shapes) {
+	std::vector<std::pair<std::string, int>> sources{{SHAPES_VGA, -1}};
+	if (qotc_shapes) {
+		// After the game's own, before the patch's (2026-11-25: the keyring).
+		sources.emplace_back(BUNDLE_CHECK(BUNDLE_EXULT_BG_FLX, EXULT_BG_FLX), EXULT_BG_FLX_QOTC_SHAPES_VGA);
 	}
+	if (is_system_path_defined("<PATCH>") && U7exists(PATCH_SHAPES)) {
+		sources.emplace_back(PATCH_SHAPES, -1);
+	}
+	load(sources);
 	info_read = false;
 }
 

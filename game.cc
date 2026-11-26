@@ -217,6 +217,10 @@ void Game::setup_text() {
 	Setup_text(
 			get_game_type() == SERPENT_ISLE, has_expansion(), get_game_type() == SERPENT_ISLE && is_si_beta(),
 			get_game_message_language(), use_special_chars);
+	// Quest of the Companions' own shapes (shapevga.cc).
+	if (get_game_type() == BLACK_GATE && (get_num_item_names() <= 1100 || !*get_item_name(1100))) {
+		Set_item_name(1100, "keyring");
+	}
 }
 
 void Game::setup_fonts() {

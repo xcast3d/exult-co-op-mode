@@ -424,6 +424,8 @@ class Usecode_internal : public Usecode_machine {
 	void              clear_usevars();
 	void              read_usevars();    // Read static variables.
 	Usecode_function* find_function(int funcid);
+	// Quest of the Companions: the lockpick sellers sell keyrings too.
+	void friend_shops_sell_keyrings();
 
 	Game_object* intercept_item = nullptr;
 	Tile_coord*  intercept_tile = nullptr;

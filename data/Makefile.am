@@ -227,6 +227,11 @@ EXULT_BG_MR_FACES_VGA_OBJECTS = \
 	bg/mr_faces.shp \
 	bg/bg_mr_faces.in
 
+# Quest of the Companions' own shapes, added to shapes.vga (the keyring).
+EXULT_BG_QOTC_SHAPES_VGA_OBJECTS = \
+	bg/keyring.shp \
+	bg/qotc_shapes.in
+
 ESTUDIO_NEW_FILES = \
 	estudio/new/avatar_data.txt \
 	estudio/new/combos.flx \
@@ -279,9 +284,10 @@ else
 estudionew_DATA =
 endif
 
-CLEANFILES = exult.flx exult_bg.flx exult_si.flx bg/bg_paperdol.vga bg/bg_mr_faces.vga bg/introsfx_mt32.flx bg/introsfx_mt.flx fonts_original.vga fonts_serif.vga shortcutbar.vga *~
+CLEANFILES = exult.flx exult_bg.flx exult_si.flx bg/bg_paperdol.vga bg/bg_mr_faces.vga bg/qotc_shapes.vga bg/introsfx_mt32.flx bg/introsfx_mt.flx fonts_original.vga fonts_serif.vga shortcutbar.vga *~
 
 EXTRA_DIST = flx.in $(EXULT_FLX_OBJECTS) $(EXULT_BG_FLX_OBJECTS) \
+	$(EXULT_BG_QOTC_SHAPES_VGA_OBJECTS) \
 	$(EXULT_SI_FLX_OBJECTS) $(ESTUDIO_NEW_FILES) midisfx.flx \
 	$(EXULT_BG_INTROSFX_MT32_OBJECTS) $(EXULT_BG_INTROSFX_SB_OBJECTS) \
 	exultmsg.txt bginclude.uc marketpl.mid myusecode.uc \
@@ -304,6 +310,9 @@ bg/bg_paperdol.vga: $(expack) $(EXULT_BG_PAPERDOL_VGA_OBJECTS)
 bg/bg_mr_faces.vga: $(expack) $(EXULT_BG_MR_FACES_VGA_OBJECTS)
 	$(expack) -i $(srcdir)/bg/bg_mr_faces.in
 
+bg/qotc_shapes.vga: $(expack) $(EXULT_BG_QOTC_SHAPES_VGA_OBJECTS)
+	$(expack) -i $(srcdir)/bg/qotc_shapes.in
+
 fonts_original.vga: $(expack) $(EXULT_FONTS_ORIGINAL_VGA_OBJECTS)
 	$(expack) -i $(srcdir)/fonts/original.in
 
@@ -316,7 +325,7 @@ shortcutbar.vga:  $(expack) $(EXULT_SHORTCUTBAR_VGA_OBJECTS)
 exult.flx: $(expack) $(EXULT_FLX_OBJECTS) fonts_original.vga fonts_serif.vga shortcutbar.vga
 	$(expack) -i $(srcdir)/flx.in
 
-exult_bg.flx: $(expack) $(EXULT_BG_FLX_OBJECTS) bg/bg_paperdol.vga bg/bg_mr_faces.vga bg/introsfx_mt32.flx bg/introsfx_sb.flx
+exult_bg.flx: $(expack) $(EXULT_BG_FLX_OBJECTS) bg/bg_paperdol.vga bg/bg_mr_faces.vga bg/qotc_shapes.vga bg/introsfx_mt32.flx bg/introsfx_sb.flx
 	$(expack) -i $(srcdir)/bg/flx.in
 
 bg/introsfx_mt32.flx: $(expack) $(EXULT_BG_INTROSFX_MT32_OBJECTS)

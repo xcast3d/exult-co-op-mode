@@ -76,6 +76,15 @@ void Friend_mode_note_drag_put_back();
 // (a dropped stack that merged into another is left detached).
 void Friend_mode_note_drag_drop(Game_object* dropped, int quantity, Game_object* gump_container, bool whole);
 
+// The keyring (Black Gate, shape 1100): one list of keys for the party.
+bool Friend_is_keyring(const Game_object* obj);
+// A key dropped on a keyring goes onto it: true if it did (the key is gone).
+bool Friend_keyring_drop(Game_object* ring, Game_object* key);
+// A keyring double-clicked: as K.  False if it isn't one.
+bool Friend_keyring_activate(Game_object* ring);
+// The key to 'target' from a keyring carried: false if none has it.
+bool Friend_keyring_try_on(Game_object* target);
+
 // Game Input option "WASD movement" (config/gameplay/wasd_movement, on by
 // default): W, A, S and D walk (two at once diagonally), and Shift with one
 // of them does what the key alone did (Shift+W the watch, Shift+S Save).

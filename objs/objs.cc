@@ -1004,6 +1004,10 @@ void Game_object::activate(int event) {
 	if (get_shapenum() == 675 && get_framenum() == 20) {
 		bell_just_rung = weak_from_this();
 	}
+	// Quest of the Companions' keyring has no script: used, it tries its keys.
+	if (event == Usecode_machine::double_click && Friend_keyring_activate(this)) {
+		return;
+	}
 
 	ucmachine->call_usecode(get_usecode(), this, static_cast<Usecode_machine::Usecode_events>(event));
 }
@@ -1180,6 +1184,9 @@ bool Game_object::add(
 
 bool Game_object::drop(Game_object* obj    // This may be deleted.
 ) {
+	if (Friend_keyring_drop(this, obj)) {    // A key onto a keyring.
+		return true;
+	}
 	const Shape_info& inf      = get_info();
 	const int         shapenum = get_shapenum();    // It's possible if shapes match.
 	if (obj->get_shapenum() != shapenum || !inf.has_quantity()
