@@ -43,6 +43,26 @@ Changes since 0.8.11, from the changelog's Unreleased section.
 - With the interface kept in the day palette, the status bar, skills bar
   and minimap no longer darken during the night-light fade.
 
+**For the site (tested by the user 2026-11-28: keyring using, adding,
+removing and buying all work):**
+- **Keyring**, the headline. A card on the home page ("A keyring, at
+  last": buy it from a provisioner, drop keys on it, never dig for a key
+  again; a lost one comes back with every key). In the guide: where to
+  buy it (Budo, Dell, Greg, Jehanne, 20 gold), the item menu (Add keys,
+  Remove keys, and Add to keyring on any key), and that K, E and a
+  double-click use its keys. Credit the Keyring mod (Exult team) for the
+  picture. No screenshots: Exult players know the keyring, and anyone
+  else gets the idea (one ring instead of a pile of keys).
+- **Formations**: update the party-order section (Shift+O): the original
+  game's formation for each party size, turning only after two steps the
+  new way, and sliding along diagonals. A screenshot of a full party of
+  eight in formation.
+- **Lighting**: a line in the lamps and torches card: light now fades in
+  as you walk toward a lamp, instead of stepping. Torches burn twice as
+  long, and Ready puts one in a hand.
+- **At release**: the guide's "Written for version", and changelog.html
+  (`node scripts/changelog.mjs`).
+
 ### Lighting (new in 0.8.6, experimental)
 
 Written on the site 2026-11-19: a Lighting chapter on the home page
