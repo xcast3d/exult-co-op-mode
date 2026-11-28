@@ -24,7 +24,7 @@ upstream has it). It lives in `qotcversion.h` (`QOTC_VERSION`); the build
 number is counted when the game is built (`qotcbuild.h`). The game shows
 both in `--version` and the version files saved with each game.
 
-## Unreleased (0.8.12)
+## 0.8.12, 2026-11-28 (build 310)
 
 ### Added
 
@@ -32,8 +32,8 @@ both in `--version` and the version files saved with each game.
   (Budo, Dell, Greg and Jehanne), 20 gold. Drop a key on it and the key
   goes on the ring, or choose "Add to keyring" on a key; "Add keys" in
   the keyring's menu collects every key the party carries, and "Remove
-  keys" puts them back in the pack. The keys belong to the party, not to one keyring: a lost
-  keyring is bought again with every key still on it. Keys on the ring
+  keys" puts them back in the pack. The keys belong to the party, not to
+  one keyring: a lost keyring is bought again with every key still on it. Keys on the ring
   open doors and chests like keys in a pack (K, the Target System, or
   double-click the keyring). Inn keys and Alagner's key stay off it.
 
