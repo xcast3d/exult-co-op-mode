@@ -5,9 +5,17 @@ Take an item off this list once it's on the site.
 
 ## To add
 
-### 0.8.12 (not released yet)
+### 0.8.12 (released 2026-11-28, build 310)
 
-Changes since 0.8.11, from the changelog's Unreleased section.
+Written on the site 2026-11-28 (site 2d3234d): a "A keyring, at last" card
+with the Target System's, the formations in the movement chapter and Party
+order, the night fade and longer torches in Lamps and torches, and in the
+guide the keyring, torches and night light under Everyday changes and the
+original formations under Party movement. Version 0.8.12 on the home page
+and guide; changelog page rebuilt; dist/ built with play/ (web 0.8.12). Not
+done: a screenshot of a full party of eight in formation.
+
+Changes since 0.8.11, from the changelog.
 
 **New**
 - A keyring (from the Keyring mod), sold wherever lockpicks are (Budo,
